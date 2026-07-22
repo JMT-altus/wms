@@ -46,7 +46,8 @@ export function IncentiveDashboard({ data, myId }: { data: IncentiveDashboardDat
             <Empty />
           ) : (
             <div className="overflow-hidden rounded-section border border-hairline bg-surface-card">
-              <table className="w-full border-collapse">
+              <div className="max-md:overflow-x-auto">
+              <table className="w-full border-collapse max-md:min-w-[480px]">
                 <thead>
                   <tr className="border-b border-hairline bg-black/[0.015]">
                     <Th w={60}>#</Th><Th>Team member</Th>
@@ -69,6 +70,7 @@ export function IncentiveDashboard({ data, myId }: { data: IncentiveDashboardDat
                   ))}
                 </tbody>
               </table>
+              </div>
             </div>
           )}
         </section>

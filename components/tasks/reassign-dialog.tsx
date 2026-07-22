@@ -99,7 +99,7 @@ export function ReassignDialog({
           style={{ background: "rgba(15, 23, 42, 0.45)", backdropFilter: "blur(4px)" }}
         />
         <Dialog.Content
-          className="fixed left-1/2 top-1/2 z-[70] w-[min(520px,calc(100vw-32px))] -translate-x-1/2 -translate-y-1/2 rounded-section border border-hairline bg-surface-card p-6 shadow-xl"
+          className="fixed left-1/2 top-1/2 z-[70] w-[min(520px,calc(100vw-32px))] -translate-x-1/2 -translate-y-1/2 rounded-section border border-hairline bg-surface-card p-6 shadow-xl max-sm:max-h-[90dvh] max-sm:overflow-y-auto"
         >
           <div className="flex items-start justify-between mb-4">
             <div>

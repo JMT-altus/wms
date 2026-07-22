@@ -64,6 +64,7 @@ export function HolidayList({
           className="overflow-hidden rounded-section border border-hairline bg-surface-card"
           style={{ boxShadow: "0 14px 32px -20px rgba(10, 108, 255, 0.16), 0 2px 6px -2px rgba(15, 23, 42, 0.06)" }}
         >
+          <div className="overflow-x-auto">
           <table className="w-full text-[15px]">
             <thead>
               <tr
@@ -90,6 +91,7 @@ export function HolidayList({
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
 

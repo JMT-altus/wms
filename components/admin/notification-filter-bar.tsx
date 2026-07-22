@@ -128,7 +128,7 @@ export function NotificationFilterBar({ employees, initial }: Props) {
 
   return (
     <div
-      className="sticky top-0 z-30 border-b border-hairline -mx-8 px-8 mb-4"
+      className="sticky top-0 max-md:top-14 z-30 border-b border-hairline -mx-8 px-8 mb-4 max-md:-mx-4 max-md:px-4"
       style={{
         backgroundColor: "rgba(250, 251, 252, 0.85)",
         backdropFilter: "blur(20px) saturate(150%)",

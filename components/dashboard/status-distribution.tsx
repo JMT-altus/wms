@@ -52,7 +52,7 @@ export function StatusDistributionChart({
   if (rows.length === 0) {
     return (
       <section
-        className="rounded-section bg-surface-card border border-hairline p-8"
+        className="rounded-section bg-surface-card border border-hairline p-8 max-md:p-5"
         style={{ boxShadow: "0 14px 32px -20px rgba(10, 108, 255, 0.16), 0 2px 6px -2px rgba(15, 23, 42, 0.06)" }}
       >
         <Header isAdmin={isAdmin} />

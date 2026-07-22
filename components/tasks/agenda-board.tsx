@@ -211,7 +211,7 @@ export function AgendaBoard({ todayYmd, days, tasks, isAdmin }: Props) {
       </div>
 
       {/* Day-count selector */}
-      <div className="mb-5 flex items-center gap-2">
+      <div className="mb-5 flex items-center gap-2 max-sm:flex-wrap">
         <span className="text-[15px] font-semibold text-ink-subtle mr-1">Show</span>
         {DAY_CHOICES.map((n) => (
           <button

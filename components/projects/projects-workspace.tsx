@@ -2192,7 +2192,7 @@ function NewProjectControl({
 function EmptyState() {
   return (
     <div
-      className="rounded-section bg-surface-card border border-hairline px-12 py-20 text-center max-w-[680px] mx-auto mt-10 relative overflow-hidden"
+      className="rounded-section bg-surface-card border border-hairline px-12 py-20 max-sm:px-5 max-sm:py-12 text-center max-w-[680px] mx-auto mt-10 relative overflow-hidden"
       style={{
         boxShadow:
           "0 14px 32px -20px rgba(10, 108, 255, 0.16), 0 2px 6px -2px rgba(15, 23, 42, 0.06), 0 16px 40px -16px rgba(15, 23, 42, 0.08)",

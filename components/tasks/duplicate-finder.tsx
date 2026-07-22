@@ -258,7 +258,7 @@ function GroupCard({
           return (
             <li
               key={t.id}
-              className="flex items-center gap-3 rounded-chip px-2 py-2 hover:bg-surface-soft transition-colors"
+              className="flex items-center gap-3 rounded-chip px-2 py-2 hover:bg-surface-soft transition-colors max-sm:flex-wrap"
             >
               {keeper ? (
                 <span
