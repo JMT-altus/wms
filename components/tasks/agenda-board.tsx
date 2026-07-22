@@ -170,10 +170,11 @@ export function AgendaBoard({ todayYmd, days, tasks, isAdmin }: Props) {
           return (
             <div
               key={b.key}
-              className="relative bg-surface-card rounded-section overflow-hidden"
+              className="relative rounded-section overflow-hidden"
               style={{
-                border: "1px solid var(--color-hairline)",
-                boxShadow: "0 1px 3px rgba(15, 23, 42, 0.04)",
+                background: `linear-gradient(158deg, #ffffff 0%, color-mix(in srgb, var(--color-${b.tone}) 10%, #ffffff) 100%)`,
+                border: `1.5px solid color-mix(in srgb, var(--color-${b.tone}) 42%, rgba(52, 82, 201, 0.35))`,
+                boxShadow: `0 14px 30px -18px color-mix(in srgb, var(--color-${b.tone}) 60%, transparent), 0 1px 2px rgba(15,23,42,0.05)`,
                 padding: "20px 22px",
               }}
             >
@@ -355,9 +356,14 @@ function Column({
                     }
                   : undefined
               }
-              className={`rounded-chip bg-white border border-hairline p-4 transition-shadow hover:shadow-md block ${
+              className={`rounded-chip bg-white p-4 transition-shadow hover:shadow-md block ${
                 canReschedule ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"
               }`}
+              style={{
+                background: "linear-gradient(158deg, #ffffff 0%, #eef3ff 100%)",
+                border: "1.5px solid rgba(52, 82, 201, 0.42)",
+                boxShadow: "0 8px 20px -10px rgba(52, 82, 201, 0.35), 0 1px 2px rgba(15,23,42,0.05)",
+              }}
             >
               <span
                 className="text-[16.5px] font-semibold text-ink-strong block"

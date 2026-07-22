@@ -57,18 +57,18 @@ export function KpiStrip({ kpis, summary }: { kpis: KpiSet; summary: WmsSummary 
               <div
                 className="group relative overflow-hidden rounded-2xl transition-all duration-200"
                 style={{
-                  background: "var(--color-surface-card)",
-                  border: `1px solid ${isOpen ? `rgb(${neonDeep})` : "var(--color-hairline-strong)"}`,
+                  background: `linear-gradient(158deg, #ffffff 0%, color-mix(in srgb, rgb(${neon}) 11%, #ffffff) 100%)`,
+                  border: `1px solid ${isOpen ? `rgb(${neonDeep})` : `color-mix(in srgb, rgb(${neon}) 32%, var(--color-hairline-strong))`}`,
                   boxShadow: isOpen
-                    ? `0 0 0 1px rgb(${neonDeep}), 0 12px 28px -16px rgb(${neon} / 0.6)`
-                    : "0 1px 2px rgba(15,23,42,0.05)",
+                    ? `0 0 0 1px rgb(${neonDeep}), 0 18px 38px -18px rgb(${neon} / 0.72)`
+                    : `0 12px 28px -16px rgb(${neon} / 0.45), 0 1px 2px rgba(15,23,42,0.05)`,
                 }}
               >
                 {/* top accent rail */}
                 <span
                   aria-hidden
-                  className="absolute inset-x-0 top-0 h-[3px]"
-                  style={{ background: `linear-gradient(90deg, rgb(${neon}), rgb(${neonDeep}))` }}
+                  className="absolute inset-x-0 top-0 h-[4px]"
+                  style={{ background: `linear-gradient(90deg, rgb(${neon}), rgb(${neonDeep}))`, boxShadow: `0 1px 8px rgb(${neon} / 0.55)` }}
                 />
                 <div className="flex items-start justify-between gap-2 px-4 pt-4 pb-3.5">
                   <Link
