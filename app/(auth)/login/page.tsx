@@ -48,7 +48,7 @@ export default async function LoginPage({ searchParams }: PageProps) {
             src="/altus-corp-logo-white.png"
             alt="Altus Corp"
             style={{
-              height: 22,
+              height: 38,
               width: "auto",
               display: "block",
               filter: "drop-shadow(0 0 10px rgba(10, 108, 255, 0.55))",
