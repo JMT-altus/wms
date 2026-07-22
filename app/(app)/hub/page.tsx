@@ -113,7 +113,7 @@ export default async function HubPage() {
         </header>
 
         {/* Hero greeting */}
-        <div className="mx-auto max-w-[1440px] px-8 max-md:px-4 text-center mt-10 mb-14 max-md:mt-6 max-md:mb-10">
+        <div className="mx-auto max-w-[1440px] px-8 max-md:px-4 text-center mt-6 mb-8 max-md:mt-5 max-md:mb-6">
           <div
             style={{
               fontFamily: "var(--font-mono-display), ui-monospace, monospace",
@@ -148,7 +148,7 @@ export default async function HubPage() {
         </div>
 
         {/* Module tiles */}
-        <div className="mx-auto max-w-[1440px] px-8 max-md:px-4 pb-24 grid gap-6 grid-cols-1 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="mx-auto max-w-[1440px] px-8 max-md:px-4 pb-10 grid gap-6 grid-cols-1 sm:grid-cols-2 xl:grid-cols-4">
           {MODULES.map((m) => {
             const s = STYLES[m.id];
             const Icon = s.Icon;
@@ -161,7 +161,7 @@ export default async function HubPage() {
                   background: s.bg,
                   border: "1px solid rgba(255,255,255,0.7)",
                   boxShadow: `0 26px 60px -30px ${s.glow}, 0 2px 8px rgba(15,23,42,0.06), inset 0 1px 0 rgba(255,255,255,0.9)`,
-                  minHeight: 268,
+                  minHeight: 232,
                 }}
               >
                 {/* glass sheen across the top */}

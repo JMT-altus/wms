@@ -55,15 +55,16 @@ export default async function LoginPage({ searchParams }: PageProps) {
             }}
           />
           <span style={{ fontSize: 11, letterSpacing: "0.24em", color: "rgba(255,255,255,0.85)", fontFamily: "var(--font-mono-display)", fontWeight: 700 }}>
-            JMT · DRIVE SOLUTIONS
+            ALTUS · CORP
           </span>
         </div>
       </div>
 
-      {/* Layer 2 — centred dark card */}
-      <main className="relative z-20 flex h-full w-full items-center justify-center px-5 py-16">
+      {/* Layer 2 — centred dark card. Natural zoom (fonts scale up as you zoom
+          in); the card fills more of the vertical space with generous padding. */}
+      <main className="relative z-20 flex h-full w-full items-center justify-center px-5 py-6">
         <div
-          className="w-full max-w-[440px] px-9 py-11 max-md:px-7 max-md:py-9"
+          className="w-full max-w-[464px] px-10 py-16 max-md:px-7 max-md:py-11"
           style={{
             background: "linear-gradient(180deg, rgba(28,22,20,0.97), rgba(18,13,12,0.98))",
             backdropFilter: "blur(10px)",

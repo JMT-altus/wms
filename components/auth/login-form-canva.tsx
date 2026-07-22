@@ -164,7 +164,7 @@ export function LoginFormCanva() {
           disabled={isPending}
           className="group relative flex w-full items-center justify-center gap-2 overflow-hidden transition-transform active:scale-[0.99] disabled:opacity-70"
           style={{
-            background: "linear-gradient(135deg, #4C9AFF 0%, #0A6CFF 50%, #0751BE 100%)",
+            background: "linear-gradient(135deg, #4C9AFF 0%, #0A6CFF 48%, #17B6A0 100%)",
             color: "#fff",
             padding: "15px 22px",
             borderRadius: 13,
