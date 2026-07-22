@@ -302,8 +302,13 @@ function Column({
     <div
       className="flex-shrink-0 w-[360px] max-md:w-[300px] rounded-section p-4 transition-colors"
       style={{
-        background: isOver ? "var(--color-blue-bg)" : "var(--color-surface-soft)",
-        border: `1px solid ${isOver ? "var(--color-blue)" : "var(--color-hairline)"}`,
+        background: isOver
+          ? "var(--color-blue-bg)"
+          : "linear-gradient(180deg, #ffffff 0%, #fbfcff 100%)",
+        border: `1px solid ${isOver ? "var(--color-blue)" : "rgba(52, 82, 201, 0.16)"}`,
+        boxShadow: isOver
+          ? "0 0 0 3px rgba(10, 108, 255, 0.14)"
+          : "0 14px 34px -22px rgba(10, 108, 255, 0.40), 0 1px 2px rgba(15, 23, 42, 0.04)",
       }}
       onDragOver={
         droppable

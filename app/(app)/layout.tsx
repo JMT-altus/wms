@@ -9,12 +9,12 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   await requireUser();
   const settings = await getOrgSettings();
   return (
-    <>
+    <div className="app-wallpaper">
       <IdleTimerClient timeoutMinutes={settings.idleTimeoutMinutes} />
       <KeyboardShortcuts />
       {/* Brand header band on every app page. Self-hides on /hub + focus mode. */}
       <BrandHero companyName="JMT DRIVE SOLUTIONS" />
       {children}
-    </>
+    </div>
   );
 }

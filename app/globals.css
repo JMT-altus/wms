@@ -991,6 +991,17 @@ html[data-density="compact"] body {
   color: rgba(255, 255, 255, 0.92);
 }
 
+/* App wallpaper — a soft blue/teal gradient behind every (app) page so
+   content cards read with depth instead of floating on flat white. The
+   navy BrandHero sits on top; content below shows the wallpaper. */
+.app-wallpaper {
+  min-height: 100vh;
+  background:
+    radial-gradient(1100px 520px at 12% -4%, rgba(10, 108, 255, 0.14), transparent 60%),
+    radial-gradient(880px 460px at 92% 3%, rgba(56, 229, 198, 0.10), transparent 60%),
+    linear-gradient(180deg, #e8effd 0%, #f1f5fd 45%, #e6edf8 100%);
+}
+
 /* Header in light mode — nav pills read as highlighted cyan-tinted
    chips by default (not transparent), so the nav has visible weight
    on the white surface. Active pill stays full cyan gradient. */

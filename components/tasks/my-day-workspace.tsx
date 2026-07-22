@@ -67,7 +67,6 @@ export function MyDayWorkspace({
   const overdue = agendaTasks.filter((t) => t.dueYmd < todayYmd).length;
 
   return (
-    <div className="w-full" style={{ background: "linear-gradient(180deg, #eaeffb 0%, #f3f6fc 55%)" }}>
     <main className="mx-auto max-w-[1600px] px-8 max-md:px-4 pt-8 pb-16">
       {/* Welcome banner + view toggle */}
       <div className="mb-7 flex items-end justify-between gap-4 flex-wrap">
@@ -131,7 +130,6 @@ export function MyDayWorkspace({
         />
       )}
     </main>
-    </div>
   );
 }
 
