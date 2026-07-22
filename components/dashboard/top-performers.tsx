@@ -129,7 +129,7 @@ function PodiumCard({
     <Link
       href={`/tasks?initiator=${performer.employeeId}` as Route}
       aria-label={`Open ${performer.employeeName}'s tasks (rank ${performer.rank}, ${performer.doneCount} done)`}
-      className="podium-card group relative block cursor-pointer rounded-leader overflow-hidden bg-surface-card"
+      className="podium-card group relative block cursor-pointer rounded-leader overflow-hidden bg-surface-card transition-all duration-200 hover:-translate-y-1"
       style={{
         border: `1.5px solid ${theme.border}`,
         boxShadow: isChampion

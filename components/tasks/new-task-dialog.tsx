@@ -123,7 +123,7 @@ export function NewTaskDialog({ employees, clients, subjects, projectNodes, defa
                     fontSize: 14,
                     letterSpacing: "0.005em",
                     background:
-                      "linear-gradient(135deg, rgb(2, 99, 204), rgb(0, 66, 138))",
+                      "linear-gradient(135deg, #0A6CFF 0%, #0A6CFF 42%, #17B6A0 100%)",
                     boxShadow:
                       "0 4px 14px rgba(10, 108, 255, 0.45), inset 0 0 0 1px rgba(255,255,255,0.22)",
                     transition:

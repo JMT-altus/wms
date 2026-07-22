@@ -175,7 +175,7 @@ export function UserMenu({
                   className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-semibold tracking-wide text-white"
                   style={{
                     background:
-                      "linear-gradient(135deg, var(--color-altus-red), var(--color-altus-red-deep))",
+                      "linear-gradient(135deg, #0A6CFF 0%, #0A6CFF 42%, #17B6A0 100%)",
                     boxShadow: "0 1px 4px rgba(10, 108, 255, 0.35)",
                   }}
                 >

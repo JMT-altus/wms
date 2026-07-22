@@ -174,7 +174,7 @@ export function DuplicateFinder({
                 type="button"
                 disabled={pending || selected.size === 0}
                 onClick={deleteSelected}
-                className="inline-flex items-center gap-2 rounded-pill bg-altus-red px-5 h-11 text-[14.5px] font-bold text-white transition-colors hover:bg-altus-red-deep disabled:opacity-45 disabled:cursor-not-allowed"
+                className="inline-flex items-center gap-2 rounded-pill bg-gradient-to-br from-[#0A6CFF] via-[#0A6CFF] to-[#17B6A0] px-5 h-11 text-[14.5px] font-bold text-white transition-all hover:brightness-105 disabled:opacity-45 disabled:cursor-not-allowed"
               >
                 {pending ? (
                   <Loader2 size={16} strokeWidth={2.4} className="animate-spin" />

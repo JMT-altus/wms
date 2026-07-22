@@ -361,14 +361,9 @@ function Column({
                     }
                   : undefined
               }
-              className={`rounded-chip bg-white p-4 transition-shadow hover:shadow-md block ${
+              className={`rounded-chip bg-gradient-to-b from-white to-[#eef3ff] border border-hairline p-4 shadow-[0_4px_14px_-10px_rgba(10,108,255,0.32)] transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 block ${
                 canReschedule ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"
               }`}
-              style={{
-                background: "linear-gradient(158deg, #ffffff 0%, #eef3ff 100%)",
-                border: "1.5px solid rgba(52, 82, 201, 0.42)",
-                boxShadow: "0 8px 20px -10px rgba(52, 82, 201, 0.35), 0 1px 2px rgba(15,23,42,0.05)",
-              }}
             >
               <span
                 className="text-[16.5px] font-semibold text-ink-strong block"

@@ -167,7 +167,7 @@ export function ReassignDialog({
                 className="px-5 py-2.5 rounded-md text-[14px] font-medium text-white disabled:opacity-50"
                 style={{
                   background:
-                    "linear-gradient(135deg, var(--color-altus-red), var(--color-altus-red-deep))",
+                    "linear-gradient(135deg, #0A6CFF 0%, #0A6CFF 42%, #17B6A0 100%)",
                 }}
               >
                 {pending ? "Saving…" : "Reassign"}

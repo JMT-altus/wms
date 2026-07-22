@@ -516,8 +516,19 @@ function Segment({
   const showLabel = widthPct > 8;
   const isCritical = CRITICAL_BUCKETS.includes(bucketId);
 
+  const [open, setOpen] = React.useState(false);
+  // Close the panel on any scroll — once the bar it anchors to scrolls away,
+  // a detached floating popover is confusing. Capture phase catches scrolls
+  // in nested containers too.
+  React.useEffect(() => {
+    if (!open) return;
+    const close = () => setOpen(false);
+    window.addEventListener("scroll", close, true);
+    return () => window.removeEventListener("scroll", close, true);
+  }, [open]);
+
   return (
-    <Popover.Root>
+    <Popover.Root open={open} onOpenChange={setOpen}>
       <Popover.Trigger asChild>
         <button
           type="button"

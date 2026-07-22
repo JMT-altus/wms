@@ -1067,7 +1067,7 @@ function QuickActions({
             style={{
               background: commentSent
                 ? "linear-gradient(135deg, #10b981, #047857)"
-                : "linear-gradient(135deg, var(--color-altus-red), var(--color-altus-red-deep))",
+                : "linear-gradient(135deg, #0A6CFF 0%, #0A6CFF 42%, #17B6A0 100%)",
               color: "#fff",
               boxShadow: "0 6px 18px -8px rgba(10, 108, 255, 0.45)",
             }}

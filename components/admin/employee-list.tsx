@@ -78,7 +78,7 @@ function AdminCell({ isAdmin }: { isAdmin: boolean }) {
     <span
       className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[12px] font-semibold text-white"
       style={{
-        background: "linear-gradient(135deg, var(--color-altus-red), var(--color-altus-red-deep))",
+        background: "linear-gradient(135deg, #0A6CFF 0%, #0A6CFF 42%, #17B6A0 100%)",
         boxShadow: "0 1px 4px rgba(10, 108, 255, 0.30)",
       }}
     >

@@ -95,7 +95,7 @@ export function MobileToday({
           without scrolling past the task backlog. */}
       <Link
         href={"/attendance" as Route}
-        className="mt-5 inline-flex h-[52px] w-full items-center justify-center gap-2 rounded-pill bg-altus-red font-semibold text-white transition-colors hover:bg-altus-red-deep"
+        className="mt-5 inline-flex h-[52px] w-full items-center justify-center gap-2 rounded-pill bg-gradient-to-br from-[#0A6CFF] via-[#0A6CFF] to-[#17B6A0] font-semibold text-white transition-all hover:brightness-105"
         style={{ fontSize: 16 }}
       >
         <Fingerprint size={19} strokeWidth={2.2} aria-hidden />

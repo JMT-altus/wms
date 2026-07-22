@@ -12,7 +12,7 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
 
 const variantClass: Record<Variant, string> = {
   primary:
-    "bg-ink-strong text-white hover:opacity-90 transition-opacity duration-150",
+    "text-white bg-gradient-to-br from-[#0A6CFF] via-[#0A6CFF] to-[#17B6A0] shadow-[0_10px_22px_-12px_rgba(10,108,255,0.65)] hover:brightness-[1.06] hover:-translate-y-px transition-all duration-150",
   ghost:
     "bg-transparent text-ink-strong hover:bg-surface-soft transition-colors duration-150",
   outline:

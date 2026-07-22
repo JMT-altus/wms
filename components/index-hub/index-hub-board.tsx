@@ -72,7 +72,7 @@ export function IndexHubBoard({ sections, isAdmin }: Props) {
               editing
                 ? {
                     background:
-                      "linear-gradient(135deg, var(--color-altus-red), var(--color-altus-red-deep))",
+                      "linear-gradient(135deg, #0A6CFF 0%, #0A6CFF 42%, #17B6A0 100%)",
                     color: "#fff",
                     boxShadow: "0 6px 18px -6px rgba(10, 108, 255, 0.55)",
                   }
@@ -358,7 +358,7 @@ function AddLink({ sectionId }: { sectionId: string }) {
         onClick={submit}
         disabled={pending}
         className="inline-flex items-center gap-1.5 rounded-full px-4 py-1.5 text-[13.5px] font-bold text-white transition-all hover:brightness-110 disabled:opacity-60"
-        style={{ background: "linear-gradient(135deg, var(--color-altus-red), var(--color-altus-red-deep))" }}
+        style={{ background: "linear-gradient(135deg, #0A6CFF 0%, #0A6CFF 42%, #17B6A0 100%)" }}
       >
         {pending ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
         Add button
@@ -406,7 +406,7 @@ function AddSection() {
         onClick={submit}
         disabled={pending}
         className="inline-flex items-center gap-2 rounded-full px-5 py-2 text-[14px] font-bold text-white transition-all hover:brightness-110 disabled:opacity-60"
-        style={{ background: "linear-gradient(135deg, var(--color-altus-red), var(--color-altus-red-deep))" }}
+        style={{ background: "linear-gradient(135deg, #0A6CFF 0%, #0A6CFF 42%, #17B6A0 100%)" }}
       >
         {pending ? <Loader2 size={15} className="animate-spin" /> : <Plus size={15} />}
         Add section

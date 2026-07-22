@@ -290,7 +290,7 @@ function Header({ isAdmin }: { isAdmin: boolean }) {
           href={"/tasks/kanban" as Route}
           className="shrink-0 inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-[14px] font-semibold text-white transition-all hover:-translate-y-0.5"
           style={{
-            background: "linear-gradient(135deg, var(--color-altus-red), var(--color-altus-red-deep))",
+            background: "linear-gradient(135deg, #0A6CFF 0%, #0A6CFF 42%, #17B6A0 100%)",
             boxShadow: "0 4px 12px rgba(10, 108, 255, 0.25)",
           }}
         >

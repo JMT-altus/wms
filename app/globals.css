@@ -595,7 +595,7 @@ html[data-density="compact"] body {
   }
 }
 @utility audit-filter-chip-active {
-  background: linear-gradient(135deg, var(--color-altus-red), var(--color-altus-red-deep));
+  background: linear-gradient(135deg, #0A6CFF 0%, #0A6CFF 42%, #17B6A0 100%);
   color: #ffffff;
   border-color: transparent;
   box-shadow: 0 4px 10px -4px rgba(10, 108, 255, 0.4);
@@ -924,20 +924,21 @@ html[data-density="compact"] body {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 10px;
-  background: var(--color-surface-card);
-  border: 1px solid var(--color-hairline);
+  padding: 7px 12px;
+  background: linear-gradient(160deg, #ffffff 0%, #eef4ff 100%);
+  border: 1px solid rgba(37, 71, 178, 0.18);
   border-radius: var(--radius-chip);
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
-  transition: box-shadow 180ms ease, transform 180ms ease, border-color 180ms ease;
+  box-shadow: 0 8px 18px -12px rgba(10, 108, 255, 0.28), 0 1px 2px rgba(15, 23, 42, 0.05);
+  transition: box-shadow 180ms ease, transform 180ms ease, border-color 180ms ease, background 180ms ease;
   cursor: pointer;
   color: var(--color-ink-strong);
 }
 @utility filter-chip {
   &:hover {
     transform: translateY(-1px);
-    border-color: var(--color-hairline-strong);
-    box-shadow: 0 4px 10px rgba(15, 23, 42, 0.06);
+    border-color: rgba(10, 108, 255, 0.55);
+    background: linear-gradient(160deg, #ffffff 0%, #e6efff 100%);
+    box-shadow: 0 13px 26px -12px rgba(10, 108, 255, 0.42), 0 1px 2px rgba(15, 23, 42, 0.05);
   }
 }
 
@@ -998,6 +999,18 @@ html[data-density="compact"] body {
    Components that set their own inline background override this cleanly. */
 .bg-surface-card {
   background-image: linear-gradient(160deg, rgba(255, 255, 255, 0) 34%, rgba(10, 108, 255, 0.05) 100%);
+}
+
+/* Premium text depth — a subtle shadow on strong/heading text (dark ink on
+   light surfaces), so titles and big stat numbers read lifted, not flat.
+   Applies app-wide via the shared `text-ink-strong` class. */
+.text-ink-strong {
+  text-shadow: 0 1px 2px rgba(15, 23, 42, 0.16);
+}
+/* Big display headings get an embossed, premium look: a bright top edge on
+   the light surface + a soft dark drop below. Clearly visible on titles. */
+.text-display-xl, .text-display-lg, .text-display-md, .text-display-sm {
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.6), 0 2px 6px rgba(15, 23, 42, 0.30);
 }
 
 /* Animated brand wordmark — the "JMT DRIVE SOLUTIONS" gradient flows
@@ -1078,26 +1091,27 @@ html[data-density="compact"] body {
    subtle blue-glass fill for rest, and a vivid blue gradient for the active
    pill so the current section reads unmistakably on the dark bar. */
 .header-navy .nav-pill {
-  background: linear-gradient(160deg, rgba(76, 154, 255, 0.15), rgba(10, 108, 255, 0.05));
-  border: 1px solid rgba(124, 184, 255, 0.20);
-  color: rgba(255, 255, 255, 0.82);
+  background: linear-gradient(160deg, rgba(90, 165, 255, 0.18), rgba(10, 108, 255, 0.06));
+  border: 1px solid rgba(124, 184, 255, 0.22);
+  color: rgba(255, 255, 255, 0.85);
+  box-shadow: 0 2px 8px rgba(2, 12, 30, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.10);
 }
 .header-navy .nav-pill:hover {
-  background: linear-gradient(160deg, rgba(76, 154, 255, 0.26), rgba(10, 108, 255, 0.13));
-  border-color: rgba(124, 184, 255, 0.40);
+  background: linear-gradient(160deg, rgba(90, 165, 255, 0.30), rgba(10, 108, 255, 0.15));
+  border-color: rgba(124, 184, 255, 0.45);
   color: #ffffff;
   transform: translateY(-1px);
-  box-shadow: 0 6px 16px rgba(10, 108, 255, 0.30);
+  box-shadow: 0 8px 20px rgba(10, 108, 255, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.16);
 }
 .header-navy .nav-pill-active,
 .header-navy .nav-pill-active:hover {
-  background: linear-gradient(135deg, #4C9AFF 0%, #0A6CFF 55%, #0751BE 100%);
+  background: linear-gradient(135deg, #4C9AFF 0%, #0A6CFF 52%, #17B6A0 100%);
   border-color: transparent;
   color: #ffffff;
   box-shadow:
-    0 10px 26px rgba(10, 108, 255, 0.50),
-    0 0 0 4px rgba(10, 108, 255, 0.18),
-    inset 0 1px 0 rgba(255, 255, 255, 0.28);
+    0 12px 28px -6px rgba(10, 108, 255, 0.60),
+    0 0 0 4px rgba(10, 108, 255, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35);
   transform: translateY(-1px);
 }
 .header-navy .nav-pill-count {

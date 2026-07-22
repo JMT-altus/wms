@@ -1430,7 +1430,7 @@ function DeleteNodeDialog({
                   className="rounded-pill px-5 py-2.5 text-[14px] font-bold text-white transition-all hover:-translate-y-px"
                   style={{
                     background:
-                      "linear-gradient(135deg, var(--color-altus-red), var(--color-altus-red-deep))",
+                      "linear-gradient(135deg, #0A6CFF 0%, #0A6CFF 42%, #17B6A0 100%)",
                   }}
                 >
                   Continue
@@ -1471,7 +1471,7 @@ function DeleteNodeDialog({
                   className="rounded-pill px-5 py-2.5 text-[14px] font-bold text-white transition-all disabled:opacity-40 disabled:cursor-not-allowed enabled:hover:-translate-y-px"
                   style={{
                     background:
-                      "linear-gradient(135deg, var(--color-altus-red), var(--color-altus-red-deep))",
+                      "linear-gradient(135deg, #0A6CFF 0%, #0A6CFF 42%, #17B6A0 100%)",
                   }}
                 >
                   {pending ? "Deleting…" : `Permanently delete`}
@@ -1915,7 +1915,7 @@ function NotesEditor({ node, big }: { node: ProjectTreeNode; big: boolean }) {
             className="inline-flex items-center gap-1.5 rounded-pill px-3 py-1 text-[13.5px] font-bold text-white disabled:opacity-50"
             style={{
               background:
-                "linear-gradient(135deg, var(--color-altus-red), var(--color-altus-red-deep))",
+                "linear-gradient(135deg, #0A6CFF 0%, #0A6CFF 42%, #17B6A0 100%)",
             }}
           >
             <Check size={13} strokeWidth={3} />
@@ -2046,7 +2046,7 @@ function NewProjectButton({ hero = false }: { hero?: boolean }) {
               className="group relative inline-flex items-center gap-2 px-5 py-3 rounded-pill text-white font-bold text-[13.5px] transition-all hover:-translate-y-px shrink-0"
               style={{
                 background:
-                  "linear-gradient(135deg, var(--color-altus-red), var(--color-altus-red-deep))",
+                  "linear-gradient(135deg, #0A6CFF 0%, #0A6CFF 42%, #17B6A0 100%)",
                 boxShadow:
                   "0 8px 24px -8px rgba(10, 108, 255, 0.55), inset 0 1px 0 rgba(255,255,255,0.18)",
                 letterSpacing: "0.01em",
@@ -2164,10 +2164,10 @@ function NewProjectControl({
         onClick={add}
         disabled={pending || !name.trim()}
         aria-label="Save"
-        className="size-7 inline-flex items-center justify-center rounded-full bg-altus-red text-white hover:opacity-90 disabled:opacity-40"
+        className="size-7 inline-flex items-center justify-center rounded-full bg-gradient-to-br from-[#0A6CFF] to-[#17B6A0] text-white hover:brightness-105 disabled:opacity-40"
         style={{
           background:
-            "linear-gradient(135deg, var(--color-altus-red), var(--color-altus-red-deep))",
+            "linear-gradient(135deg, #0A6CFF 0%, #0A6CFF 42%, #17B6A0 100%)",
         }}
       >
         <Check size={14} strokeWidth={2.6} />
@@ -2343,7 +2343,7 @@ function ProjectIncentivePanel({ projectId, projectName }: { projectId: string; 
         </p>
         <button type="button" onClick={save} disabled={pending}
           className="rounded-pill px-4 py-2 text-[13px] font-bold text-white disabled:opacity-50"
-          style={{ background: "linear-gradient(135deg, var(--color-altus-red), var(--color-altus-red-deep))" }}>
+          style={{ background: "linear-gradient(135deg, #0A6CFF 0%, #0A6CFF 42%, #17B6A0 100%)" }}>
           {pending ? "Saving…" : "Save incentives"}
         </button>
       </div>

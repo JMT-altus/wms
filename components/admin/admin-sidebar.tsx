@@ -131,7 +131,7 @@ export function AdminSidebar({ adminName, adminEmail, avatarUrl }: Props) {
               className="inline-flex items-center text-[10px] font-bold uppercase text-white px-2 py-0.5 rounded-full"
               style={{
                 background:
-                  "linear-gradient(135deg, var(--color-altus-red), var(--color-altus-red-deep))",
+                  "linear-gradient(135deg, #0A6CFF 0%, #0A6CFF 42%, #17B6A0 100%)",
                 boxShadow: "0 2px 8px rgba(10, 108, 255, 0.35)",
                 letterSpacing: "0.08em",
               }}
@@ -204,7 +204,7 @@ export function AdminSidebar({ adminName, adminEmail, avatarUrl }: Props) {
                   active
                     ? {
                         background:
-                          "linear-gradient(135deg, var(--color-altus-red), var(--color-altus-red-deep))",
+                          "linear-gradient(135deg, #0A6CFF 0%, #0A6CFF 42%, #17B6A0 100%)",
                         color: "#ffffff",
                         boxShadow:
                           "0 8px 22px -10px rgba(10, 108, 255, 0.55), inset 0 1px 0 rgba(255,255,255,0.14)",

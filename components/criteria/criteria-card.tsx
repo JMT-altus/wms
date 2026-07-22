@@ -98,7 +98,7 @@ export function CriteriaCard({
           <div className="flex items-center gap-2">
             <button type="button" onClick={save} disabled={pending}
               className="inline-flex items-center gap-1.5 rounded-full px-4 py-1.5 text-[13px] font-bold text-white disabled:opacity-60"
-              style={{ background: "linear-gradient(135deg, var(--color-altus-red), var(--color-altus-red-deep))" }}>
+              style={{ background: "linear-gradient(135deg, #0A6CFF 0%, #0A6CFF 42%, #17B6A0 100%)" }}>
               {pending ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />} Save
             </button>
             <button type="button" onClick={() => { setEditing(false); setValue(criteria ?? ""); setKraValue(kra ?? ""); }}

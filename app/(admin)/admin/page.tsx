@@ -181,7 +181,7 @@ export default async function AdminOverviewPage() {
                     isAltus
                       ? {
                           background:
-                            "linear-gradient(135deg, var(--color-altus-red), var(--color-altus-red-deep))",
+                            "linear-gradient(135deg, #0A6CFF 0%, #0A6CFF 42%, #17B6A0 100%)",
                           color: "#ffffff",
                           boxShadow:
                             "0 4px 10px -4px rgba(10, 108, 255, 0.45)",

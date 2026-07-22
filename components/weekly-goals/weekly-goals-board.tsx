@@ -107,7 +107,7 @@ export function WeeklyGoalsBoard(props: Props) {
             className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-[14.5px] font-bold text-white transition-all hover:brightness-110 active:scale-[0.98]"
             style={{
               background:
-                "linear-gradient(135deg, var(--color-altus-red), var(--color-altus-red-deep))",
+                "linear-gradient(135deg, #0A6CFF 0%, #0A6CFF 42%, #17B6A0 100%)",
               boxShadow: "0 6px 18px -6px rgba(10, 108, 255, 0.55)",
             }}
           >
@@ -821,7 +821,7 @@ function DeleteGoalDialog({
                 </button>
                 <button type="button" onClick={() => setStep(2)}
                   className="rounded-pill px-5 py-2.5 text-[14px] font-bold text-white transition-all hover:-translate-y-px"
-                  style={{ background: "linear-gradient(135deg, var(--color-altus-red), var(--color-altus-red-deep))" }}>
+                  style={{ background: "linear-gradient(135deg, #0A6CFF 0%, #0A6CFF 42%, #17B6A0 100%)" }}>
                   Continue
                 </button>
               </div>
@@ -847,7 +847,7 @@ function DeleteGoalDialog({
                 </button>
                 <button type="button" onClick={onConfirm} disabled={!confirmable || pending}
                   className="rounded-pill px-5 py-2.5 text-[14px] font-bold text-white transition-all disabled:opacity-40 disabled:cursor-not-allowed enabled:hover:-translate-y-px"
-                  style={{ background: "linear-gradient(135deg, var(--color-altus-red), var(--color-altus-red-deep))" }}>
+                  style={{ background: "linear-gradient(135deg, #0A6CFF 0%, #0A6CFF 42%, #17B6A0 100%)" }}>
                   {pending ? "Deleting…" : "Permanently delete"}
                 </button>
               </div>
@@ -984,7 +984,7 @@ function AddRow({
           disabled={pending}
           className="inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-[14px] font-bold text-white transition-all hover:brightness-110 active:scale-[0.98] disabled:opacity-60"
           style={{
-            background: "linear-gradient(135deg, var(--color-altus-red), var(--color-altus-red-deep))",
+            background: "linear-gradient(135deg, #0A6CFF 0%, #0A6CFF 42%, #17B6A0 100%)",
           }}
         >
           {pending ? <Loader2 size={15} className="animate-spin" /> : <Plus size={15} />}

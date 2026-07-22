@@ -34,7 +34,7 @@ export function HubSignOut() {
       onClick={handleSignOut}
       disabled={busy}
       className="inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-white text-[14.5px] font-semibold transition-opacity disabled:opacity-60"
-      style={{ background: "linear-gradient(135deg, #0A6CFF, #0047B3)", boxShadow: "0 6px 16px -6px rgba(10,108,255,0.5)" }}
+      style={{ background: "linear-gradient(135deg, #0A6CFF 0%, #0A6CFF 42%, #17B6A0 100%)", boxShadow: "0 8px 20px -8px rgba(10,108,255,0.55)" }}
     >
       <LogOut size={16} strokeWidth={2.4} />
       {busy ? "Signing out…" : "Sign out"}

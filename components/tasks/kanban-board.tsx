@@ -468,14 +468,7 @@ function KanbanCard({
     >
       <Tooltip.Root delayDuration={220}>
         <Tooltip.Trigger asChild>
-          <div
-            className="group rounded-chip p-3.5 transition-all duration-200 hover:-translate-y-0.5"
-            style={{
-              background: "linear-gradient(160deg, #ffffff 0%, #f5f8ff 100%)",
-              border: "1px solid rgba(52, 82, 201, 0.18)",
-              boxShadow: "0 12px 26px -16px rgba(10, 108, 255, 0.38), 0 1px 2px rgba(15, 23, 42, 0.05)",
-            }}
-          >
+          <div className="group rounded-chip bg-gradient-to-b from-white to-[#f5f8ff] border border-hairline p-3.5 shadow-[0_4px_14px_-10px_rgba(10,108,255,0.35)] transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5 hover:border-altus-red/40">
             <div className="flex items-start justify-between gap-2">
               <Link
                 href={`/tasks/${t.id}/focus` as Route}

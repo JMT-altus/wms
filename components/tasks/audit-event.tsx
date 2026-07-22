@@ -83,7 +83,7 @@ export function AuditEvent({ row, fresh, statusLabels, me }: Props) {
             className="text-[11px] uppercase tracking-[0.08em] font-bold px-2 py-0.5 rounded-full"
             style={{
               background:
-                "linear-gradient(135deg, var(--color-altus-red), var(--color-altus-red-deep))",
+                "linear-gradient(135deg, #0A6CFF 0%, #0A6CFF 42%, #17B6A0 100%)",
               color: "#ffffff",
               letterSpacing: "0.06em",
             }}

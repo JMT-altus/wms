@@ -17,35 +17,26 @@ export function Spinner({
     <span
       role="status"
       aria-label="Loading"
-      className={className || "text-altus-red"}
+      className={className}
       style={{ display: "inline-flex", lineHeight: 0 }}
     >
-      <svg
-        width={size}
-        height={size}
-        viewBox="0 0 24 24"
+      {/* Comet-tail gradient ring — a blue→teal arc fading to transparent,
+          spun by `animate-spin`. A radial mask cuts the centre to a ring so
+          it reads as a premium branded loader, not a plain grey spinner. */}
+      <span
         className="animate-spin"
-        style={{ display: "block" }}
-      >
-        {/* Track */}
-        <circle
-          cx="12"
-          cy="12"
-          r="9.5"
-          fill="none"
-          stroke="currentColor"
-          strokeOpacity="0.16"
-          strokeWidth={strokeWidth}
-        />
-        {/* Spinning arc (a quarter turn with rounded caps) */}
-        <path
-          d="M12 2.5 a 9.5 9.5 0 0 1 9.5 9.5"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth={strokeWidth}
-          strokeLinecap="round"
-        />
-      </svg>
+        style={{
+          width: size,
+          height: size,
+          borderRadius: "50%",
+          background:
+            "conic-gradient(from 90deg, rgba(76,154,255,0) 0deg, #4C9AFF 210deg, #38E5C6 320deg, rgba(56,229,198,0) 360deg)",
+          WebkitMask: `radial-gradient(farthest-side, #0000 calc(100% - ${strokeWidth + 1}px), #000 calc(100% - ${strokeWidth}px))`,
+          mask: `radial-gradient(farthest-side, #0000 calc(100% - ${strokeWidth + 1}px), #000 calc(100% - ${strokeWidth}px))`,
+          display: "block",
+          filter: "drop-shadow(0 0 6px rgba(10, 108, 255, 0.35))",
+        }}
+      />
     </span>
   );
 }

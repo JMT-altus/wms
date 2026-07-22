@@ -972,7 +972,7 @@ function TopHeaderStrip({
             className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full text-[13px] font-semibold text-white transition-all hover:-translate-y-px"
             style={{
               background:
-                "linear-gradient(135deg, var(--color-altus-red), var(--color-altus-red-deep))",
+                "linear-gradient(135deg, #0A6CFF 0%, #0A6CFF 42%, #17B6A0 100%)",
               boxShadow:
                 "0 6px 18px -8px rgba(10, 108, 255, 0.55), inset 0 1px 0 rgba(255,255,255,0.18)",
             }}

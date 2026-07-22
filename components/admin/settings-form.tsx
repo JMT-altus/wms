@@ -255,7 +255,7 @@ export function SettingsForm({ current }: Props) {
                         ? {
                             borderColor: "transparent",
                             background:
-                              "linear-gradient(135deg, var(--color-altus-red), var(--color-altus-red-deep))",
+                              "linear-gradient(135deg, #0A6CFF 0%, #0A6CFF 42%, #17B6A0 100%)",
                             color: "#ffffff",
                             boxShadow:
                               "0 4px 10px -4px rgba(10, 108, 255, 0.40)",
@@ -386,7 +386,7 @@ export function SettingsForm({ current }: Props) {
             className="rounded-lg py-3 px-6 text-[15px] font-semibold text-white disabled:opacity-50 transition-transform hover:-translate-y-px"
             style={{
               background:
-                "linear-gradient(135deg, var(--color-altus-red), var(--color-altus-red-deep))",
+                "linear-gradient(135deg, #0A6CFF 0%, #0A6CFF 42%, #17B6A0 100%)",
               boxShadow: "0 8px 22px -10px rgba(10, 108, 255, 0.55)",
             }}
           >

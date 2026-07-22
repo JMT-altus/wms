@@ -453,7 +453,7 @@ function DeleteIncentiveDialog({
                 </button>
                 <button type="button" onClick={() => setStep(2)}
                   className="rounded-pill px-5 py-2.5 text-[14px] font-bold text-white transition-all hover:-translate-y-px"
-                  style={{ background: "linear-gradient(135deg, var(--color-altus-red), var(--color-altus-red-deep))" }}>
+                  style={{ background: "linear-gradient(135deg, #0A6CFF 0%, #0A6CFF 42%, #17B6A0 100%)" }}>
                   Continue
                 </button>
               </div>
@@ -479,7 +479,7 @@ function DeleteIncentiveDialog({
                 </button>
                 <button type="button" onClick={onConfirm} disabled={!confirmable || pending}
                   className="rounded-pill px-5 py-2.5 text-[14px] font-bold text-white transition-all disabled:opacity-40 disabled:cursor-not-allowed enabled:hover:-translate-y-px"
-                  style={{ background: "linear-gradient(135deg, var(--color-altus-red), var(--color-altus-red-deep))" }}>
+                  style={{ background: "linear-gradient(135deg, #0A6CFF 0%, #0A6CFF 42%, #17B6A0 100%)" }}>
                   {pending ? "Deleting…" : "Permanently delete"}
                 </button>
               </div>

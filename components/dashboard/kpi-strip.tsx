@@ -55,7 +55,7 @@ export function KpiStrip({ kpis, summary }: { kpis: KpiSet; summary: WmsSummary 
           return (
             <div role="listitem" key={item.key}>
               <div
-                className="group relative overflow-hidden rounded-2xl transition-all duration-200"
+                className="group relative overflow-hidden rounded-2xl transition-all duration-200 hover:-translate-y-1"
                 style={{
                   background: `linear-gradient(158deg, #ffffff 0%, color-mix(in srgb, rgb(${neon}) 11%, #ffffff) 100%)`,
                   border: `1px solid ${isOpen ? `rgb(${neonDeep})` : `color-mix(in srgb, rgb(${neon}) 32%, var(--color-hairline-strong))`}`,
