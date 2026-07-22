@@ -1172,6 +1172,34 @@ html[data-density="compact"] body {
 .mobile-menu-body nav[aria-label="Primary"] .nav-pill {
   justify-content: flex-start;
   font-size: 15px;
+  padding: 12px 16px;
+  /* The drawer is a LIGHT surface, so pills need dark ink on a light fill —
+     the base .nav-pill is white-on-transparent for the navy header and was
+     invisible here. */
+  background: rgba(10, 108, 255, 0.06);
+  border: 1px solid rgba(10, 108, 255, 0.16);
+  color: var(--color-ink-strong);
+  font-weight: 700;
+}
+.mobile-menu-body nav[aria-label="Primary"] .nav-pill:hover {
+  background: rgba(10, 108, 255, 0.12);
+  border-color: rgba(10, 108, 255, 0.30);
+  color: var(--color-ink-strong);
+  transform: none;
+}
+.mobile-menu-body nav[aria-label="Primary"] .nav-pill-active,
+.mobile-menu-body nav[aria-label="Primary"] .nav-pill-active:hover {
+  background: linear-gradient(135deg, #4C9AFF 0%, #0A6CFF 52%, #17B6A0 100%);
+  color: #ffffff;
+  border-color: transparent;
+}
+.mobile-menu-body nav[aria-label="Primary"] .nav-pill-count {
+  background: rgba(10, 108, 255, 0.14);
+  color: #0751BE;
+}
+.mobile-menu-body nav[aria-label="Primary"] .nav-pill-active .nav-pill-count {
+  background: rgba(255, 255, 255, 0.28);
+  color: #ffffff;
 }
 .mobile-menu-body nav[aria-label="Primary"] .nav-pill > span:not(.nav-pill-badge) {
   display: inline-flex !important;
