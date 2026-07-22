@@ -23,7 +23,7 @@ import {
   editIndexLink,
   deleteIndexLink,
   reorderIndexSections,
-} from "@/app/(app)/index/actions";
+} from "@/app/(app)/directory/actions";
 
 interface Props {
   sections: IndexSectionView[];

@@ -22,7 +22,7 @@ const ROUTES = process.env.SMOKE_ROUTES ? process.env.SMOKE_ROUTES.split(",") : 
   // Training module
   "/training",
   // Shared / utility
-  "/profile", "/inbox", "/documents", "/archived", "/index", "/search",
+  "/profile", "/inbox", "/documents", "/archived", "/directory", "/search",
   // Admin
   "/admin", "/admin/employees", "/admin/settings", "/admin/clients", "/admin/departments",
 ];

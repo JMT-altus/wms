@@ -257,7 +257,7 @@ export function UserMenu({
           {/* Index — the Ecosystem Index of every sheet / folder / tool. */}
           <DropdownMenu.Item asChild>
             <Link
-              href={"/index" as Route}
+              href={"/directory" as Route}
               className="flex items-center justify-between gap-2.5 px-3.5 py-2.5 text-[15px] rounded-lg cursor-pointer outline-none text-[#0F172A] data-[highlighted]:bg-[#F1F5F9]"
             >
               <span className="inline-flex items-center gap-2">
