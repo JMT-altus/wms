@@ -73,7 +73,7 @@ export const MODULES: ModuleDef[] = [
   },
   {
     id: "sales",
-    label: "Sales",
+    label: "Incentive Tracker",
     tagline: "Collections, references & breakthroughs.",
     icon: "TrendingUp",
     landing: "/outstanding",
