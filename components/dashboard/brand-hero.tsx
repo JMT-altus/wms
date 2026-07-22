@@ -93,7 +93,7 @@ export function BrandHero({ companyName = "JMT DRIVE SOLUTIONS" }: { companyName
             src="/logo.png"
             alt="JMT Drive Solutions"
             style={{
-              height: 50,
+              height: 64,
               width: "auto",
               display: "block",
               filter: "drop-shadow(0 0 16px rgba(120,220,255,0.35)) drop-shadow(0 2px 6px rgba(0,0,0,0.5))",
@@ -118,7 +118,7 @@ export function BrandHero({ companyName = "JMT DRIVE SOLUTIONS" }: { companyName
           <img
             src="/altus-corp-logo-white.png"
             alt="Altus Corp"
-            style={{ height: 38, width: "auto", display: "block", filter: "drop-shadow(0 2px 6px rgba(0,0,0,0.4))" }}
+            style={{ height: 64, width: "auto", display: "block", filter: "drop-shadow(0 2px 6px rgba(0,0,0,0.4))" }}
           />
         </div>
       </div>
