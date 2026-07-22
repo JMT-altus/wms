@@ -16,9 +16,11 @@
   --color-ink-muted:       #475569;
   --color-ink-subtle:      #64748b;
 
-  /* hairlines */
-  --color-hairline:        rgba(15, 23, 42, 0.06);
-  --color-hairline-strong: rgba(15, 23, 42, 0.10);
+  /* hairlines — subtly blue-tinted + more visible so every bordered panel
+     reads with a defined edge across the whole app (pairs with the card
+     wash + elevated shadows for a consistent dimensional look). */
+  --color-hairline:        rgba(37, 71, 178, 0.13);
+  --color-hairline-strong: rgba(37, 71, 178, 0.24);
 
   /* JMT brand accent (teal) — token name kept (--color-altus-red) for
      back-compat with ~50 component refs; value matches the JMT Drive Solutions logo. */
@@ -989,6 +991,32 @@ html[data-density="compact"] body {
   letter-spacing: 0;
   font-variant-numeric: tabular-nums;
   color: rgba(255, 255, 255, 0.92);
+}
+
+/* Every white card surface gets a faint blue dimensional wash so panels
+   read with depth (pairs with the visible hairline + elevated shadows).
+   Components that set their own inline background override this cleanly. */
+.bg-surface-card {
+  background-image: linear-gradient(160deg, rgba(255, 255, 255, 0) 34%, rgba(10, 108, 255, 0.05) 100%);
+}
+
+/* Animated brand wordmark — the "JMT DRIVE SOLUTIONS" gradient flows
+   slowly left-to-right for a living, premium header. */
+@keyframes brandFlow {
+  0%   { background-position: 0% 50%; }
+  100% { background-position: 200% 50%; }
+}
+.brand-wordmark {
+  background: linear-gradient(100deg, #7BB8FF 0%, #4C9AFF 22%, #38E5C6 44%, #4C9AFF 66%, #7BB8FF 88%, #38E5C6 100%);
+  background-size: 220% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  animation: brandFlow 7s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .brand-wordmark { animation: none; }
 }
 
 /* App wallpaper — a soft blue/teal gradient behind every (app) page so

@@ -66,13 +66,9 @@ export function BrandHero({ companyName = "JMT DRIVE SOLUTIONS" }: { companyName
               fontSize: 38,
               lineHeight: 1.0,
               letterSpacing: "-0.02em",
-              background: "linear-gradient(100deg, #7BB8FF 0%, #4C9AFF 40%, #38E5C6 100%)",
-              WebkitBackgroundClip: "text",
-              WebkitTextFillColor: "transparent",
-              backgroundClip: "text",
               display: "inline-block",
             }}
-            className="max-md:!text-[24px]"
+            className="brand-wordmark max-md:!text-[24px]"
           >
             {companyName}
           </h1>
