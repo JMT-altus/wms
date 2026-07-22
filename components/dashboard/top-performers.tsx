@@ -59,9 +59,11 @@ export function TopPerformersSection({
 
   return (
     <section
-      className="rounded-section bg-surface-card border border-hairline p-7 flex flex-col"
+      className="rounded-section border p-7 flex flex-col"
       style={{
-        boxShadow: "0 1px 3px rgba(15, 23, 42, 0.04)",
+        background: "linear-gradient(160deg, #ffffff 0%, #f2f6ff 100%)",
+        borderColor: "color-mix(in srgb, #0A6CFF 18%, var(--color-hairline))",
+        boxShadow: "0 18px 42px -26px rgba(10, 108, 255, 0.30), 0 1px 3px rgba(15, 23, 42, 0.05)",
         opacity: 0,
         animation: "fadeUp 500ms ease-out 500ms forwards",
       }}
@@ -121,6 +123,7 @@ function PodiumCard({
   stagger: number;
 }) {
   const theme = themeForRank(performer.rank);
+  const isChampion = performer.rank === 1;
   const animated = useCountUp(performer.doneCount, 900 + stagger * 120);
   return (
     <Link
@@ -129,7 +132,12 @@ function PodiumCard({
       className="podium-card group relative block cursor-pointer rounded-leader overflow-hidden bg-surface-card"
       style={{
         border: `1.5px solid ${theme.border}`,
-        boxShadow: theme.glow,
+        boxShadow: isChampion
+          ? `0 26px 54px -22px rgba(8, 32, 74, 0.72), ${theme.glow}`
+          : theme.glow,
+        ...(isChampion
+          ? { background: "linear-gradient(155deg, #0c336e 0%, #0a2350 55%, #071a3d 100%)" }
+          : {}),
       }}
     >
       {/* Top color bar — medal gradient */}
@@ -178,7 +186,7 @@ function PodiumCard({
         {/* Name */}
         <span
           className="block leading-tight text-ink-strong font-bold"
-          style={{ fontSize: 17, maxWidth: "100%" }}
+          style={{ fontSize: 17, maxWidth: "100%", color: isChampion ? "#ffffff" : undefined }}
         >
           {performer.employeeName}
         </span>
@@ -190,6 +198,7 @@ function PodiumCard({
             fontFamily: "var(--font-display), system-ui, sans-serif",
             fontSize: 56,
             letterSpacing: "-0.03em",
+            color: isChampion ? "#ffffff" : undefined,
           }}
         >
           {animated}
@@ -200,7 +209,7 @@ function PodiumCard({
           style={{
             fontFamily: "var(--font-mono-display), ui-monospace, monospace",
             fontSize: 12,
-            color: "var(--color-ink-muted)",
+            color: isChampion ? "rgba(255, 255, 255, 0.62)" : "var(--color-ink-muted)",
           }}
         >
           Tasks Done

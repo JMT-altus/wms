@@ -1032,8 +1032,41 @@ html[data-density="compact"] body {
 }
 
 /* Navy header — the interactive chrome (search chip, kbd hint) reads as
-   translucent-white glass on the dark bar. Nav pills fall back to the
-   default (white-text) `.nav-pill` styling, which already suits navy. */
+   translucent-white glass on the dark bar. Nav pills are enriched here: a
+   subtle blue-glass fill for rest, and a vivid blue gradient for the active
+   pill so the current section reads unmistakably on the dark bar. */
+.header-navy .nav-pill {
+  background: linear-gradient(160deg, rgba(76, 154, 255, 0.15), rgba(10, 108, 255, 0.05));
+  border: 1px solid rgba(124, 184, 255, 0.20);
+  color: rgba(255, 255, 255, 0.82);
+}
+.header-navy .nav-pill:hover {
+  background: linear-gradient(160deg, rgba(76, 154, 255, 0.26), rgba(10, 108, 255, 0.13));
+  border-color: rgba(124, 184, 255, 0.40);
+  color: #ffffff;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(10, 108, 255, 0.30);
+}
+.header-navy .nav-pill-active,
+.header-navy .nav-pill-active:hover {
+  background: linear-gradient(135deg, #4C9AFF 0%, #0A6CFF 55%, #0751BE 100%);
+  border-color: transparent;
+  color: #ffffff;
+  box-shadow:
+    0 10px 26px rgba(10, 108, 255, 0.50),
+    0 0 0 4px rgba(10, 108, 255, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.28);
+  transform: translateY(-1px);
+}
+.header-navy .nav-pill-count {
+  background: rgba(255, 255, 255, 0.16);
+  color: rgba(255, 255, 255, 0.92);
+}
+.header-navy .nav-pill-active .nav-pill-count {
+  background: rgba(255, 255, 255, 0.28);
+  color: #ffffff;
+}
+
 .header-navy button[aria-label="Search"] {
   background: rgba(255, 255, 255, 0.08);
   border-color: rgba(255, 255, 255, 0.16);
