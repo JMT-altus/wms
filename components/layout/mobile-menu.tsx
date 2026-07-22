@@ -74,12 +74,14 @@ export function MobileMenu({ children }: { children: React.ReactNode }) {
               </button>
             </Dialog.Close>
           </div>
-          {/* Tapping any link inside fires this — pointerdown closes the
-              drawer before next-router begins navigation, so the user
-              sees a clean transition rather than menu-then-page-flash. */}
+          {/* Close the drawer when a link is tapped. Must be onClick, NOT
+              onPointerDown: closing on pointerdown unmounts the <a> before the
+              tap's click fires, so on touch devices the navigation never
+              happens. onClick lets the Link start navigation first, then we
+              close. */}
           <div
             className="flex-1 overflow-y-auto p-4 mobile-menu-body"
-            onPointerDown={(e) => {
+            onClick={(e) => {
               const target = e.target as HTMLElement;
               if (target.closest("a")) setOpen(false);
             }}
