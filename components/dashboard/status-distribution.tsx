@@ -53,7 +53,7 @@ export function StatusDistributionChart({
     return (
       <section
         className="rounded-section bg-surface-card border border-hairline p-8"
-        style={{ boxShadow: "0 1px 3px rgba(15, 23, 42, 0.04)" }}
+        style={{ boxShadow: "0 14px 32px -20px rgba(10, 108, 255, 0.16), 0 2px 6px -2px rgba(15, 23, 42, 0.06)" }}
       >
         <Header isAdmin={isAdmin} />
         <p className="mt-3 text-body-lg text-ink-subtle">
@@ -67,7 +67,7 @@ export function StatusDistributionChart({
     <section
       className="rounded-section bg-surface-card border border-hairline p-7 max-md:p-5"
       style={{
-        boxShadow: "0 1px 3px rgba(15, 23, 42, 0.04)",
+        boxShadow: "0 14px 32px -20px rgba(10, 108, 255, 0.16), 0 2px 6px -2px rgba(15, 23, 42, 0.06)",
         opacity: 0,
         animation: "fadeUp 500ms ease-out 500ms forwards",
       }}

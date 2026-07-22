@@ -368,7 +368,7 @@ export function TaskDetailView({
                   ease: [0.2, 0.7, 0.3, 1],
                 }}
                 className="rounded-section border border-hairline bg-surface-card p-6"
-                style={{ boxShadow: "0 1px 3px rgba(15, 23, 42, 0.04)" }}
+                style={{ boxShadow: "0 14px 32px -20px rgba(10, 108, 255, 0.16), 0 2px 6px -2px rgba(15, 23, 42, 0.06)" }}
               >
                 <div className="flex items-center justify-between mb-5">
                   <h1
@@ -442,7 +442,7 @@ export function TaskDetailView({
                   className="rounded-section bg-surface-card border border-hairline px-8 py-7 max-md:px-5 max-md:py-6 relative overflow-hidden"
                   style={{
                     boxShadow:
-                      "0 1px 3px rgba(15, 23, 42, 0.04), 0 12px 32px -16px rgba(15, 23, 42, 0.08)",
+                      "0 14px 32px -20px rgba(10, 108, 255, 0.16), 0 2px 6px -2px rgba(15, 23, 42, 0.06), 0 12px 32px -16px rgba(15, 23, 42, 0.08)",
                   }}
                 >
                   {/* Top red accent strip — ties the card to the brand */}
@@ -489,7 +489,7 @@ export function TaskDetailView({
               className="rounded-section border border-hairline bg-surface-card px-5 py-4 relative overflow-hidden"
               style={{
                 boxShadow:
-                  "0 1px 3px rgba(15, 23, 42, 0.04), 0 8px 24px -16px rgba(15, 23, 42, 0.08)",
+                  "0 14px 32px -20px rgba(10, 108, 255, 0.16), 0 2px 6px -2px rgba(15, 23, 42, 0.06), 0 8px 24px -16px rgba(15, 23, 42, 0.08)",
               }}
             >
               <InteractiveStatusPill
@@ -555,7 +555,7 @@ export function TaskDetailView({
             {anyAction && (
               <section
                 className="rounded-section border border-hairline bg-surface-card"
-                style={{ boxShadow: "0 1px 3px rgba(15, 23, 42, 0.04)" }}
+                style={{ boxShadow: "0 14px 32px -20px rgba(10, 108, 255, 0.16), 0 2px 6px -2px rgba(15, 23, 42, 0.06)" }}
               >
                 <ActionRail
                   taskId={task.id}
@@ -1012,7 +1012,7 @@ function ActivityCard({
       className="rounded-section bg-surface-card border border-hairline px-8 py-7 max-md:px-5 max-md:py-6"
       style={{
         boxShadow:
-          "0 1px 3px rgba(15, 23, 42, 0.04), 0 12px 32px -16px rgba(15, 23, 42, 0.08)",
+          "0 14px 32px -20px rgba(10, 108, 255, 0.16), 0 2px 6px -2px rgba(15, 23, 42, 0.06), 0 12px 32px -16px rgba(15, 23, 42, 0.08)",
       }}
     >
       <h2

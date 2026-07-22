@@ -671,7 +671,7 @@ export function TaskTable({
         // Cap the table to the viewport and scroll it internally so the
         // sticky header row below stays frozen while you page through rows.
         className="bg-surface-card rounded-section border border-hairline overflow-auto max-h-[calc(100vh-260px)] max-md:hidden"
-        style={{ boxShadow: "0 1px 3px rgba(15, 23, 42, 0.04)" }}
+        style={{ boxShadow: "0 14px 32px -20px rgba(10, 108, 255, 0.16), 0 2px 6px -2px rgba(15, 23, 42, 0.06)" }}
       >
       <table className="min-w-full">
         <thead>

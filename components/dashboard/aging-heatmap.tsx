@@ -95,7 +95,7 @@ export function AgingHeatmap({
             "linear-gradient(160deg, #fffefb 0%, #fef7ed 60%, #eff6ff 100%)",
           border: "1px solid var(--color-hairline)",
           boxShadow:
-            "0 1px 3px rgba(15, 23, 42, 0.04), 0 20px 50px -28px rgba(10, 108, 255, 0.15)",
+            "0 14px 32px -20px rgba(10, 108, 255, 0.16), 0 2px 6px -2px rgba(15, 23, 42, 0.06), 0 20px 50px -28px rgba(10, 108, 255, 0.15)",
         }}
       >
         {/* Heat wash backdrop */}

@@ -58,7 +58,7 @@ function Stat({
       className="relative bg-surface-card rounded-section overflow-hidden"
       style={{
         border: "1px solid var(--color-hairline)",
-        boxShadow: "0 1px 3px rgba(15, 23, 42, 0.04)",
+        boxShadow: "0 14px 32px -20px rgba(10, 108, 255, 0.16), 0 2px 6px -2px rgba(15, 23, 42, 0.06)",
         padding: "32px 32px 28px",
       }}
     >

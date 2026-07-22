@@ -400,7 +400,7 @@ export function SettingsForm({ current }: Props) {
         <div className="lg:sticky lg:top-10 flex flex-col gap-4">
           <section
             className="rounded-section border border-hairline bg-surface-card p-5"
-            style={{ boxShadow: "0 1px 3px rgba(15, 23, 42, 0.04)" }}
+            style={{ boxShadow: "0 14px 32px -20px rgba(10, 108, 255, 0.16), 0 2px 6px -2px rgba(15, 23, 42, 0.06)" }}
           >
             <div className="flex items-center gap-2 text-[12px] uppercase tracking-[0.12em] text-ink-subtle font-bold">
               <Info size={13} strokeWidth={2.4} />
@@ -428,7 +428,7 @@ export function SettingsForm({ current }: Props) {
 
           <section
             className="rounded-section border border-hairline bg-surface-card p-5"
-            style={{ boxShadow: "0 1px 3px rgba(15, 23, 42, 0.04)" }}
+            style={{ boxShadow: "0 14px 32px -20px rgba(10, 108, 255, 0.16), 0 2px 6px -2px rgba(15, 23, 42, 0.06)" }}
           >
             <div className="text-[12px] uppercase tracking-[0.12em] text-ink-subtle font-bold">
               Last updated
@@ -462,7 +462,7 @@ function Section({
   return (
     <fieldset
       className="rounded-section border border-hairline bg-surface-card p-6 space-y-5"
-      style={{ boxShadow: "0 1px 3px rgba(15, 23, 42, 0.04)" }}
+      style={{ boxShadow: "0 14px 32px -20px rgba(10, 108, 255, 0.16), 0 2px 6px -2px rgba(15, 23, 42, 0.06)" }}
     >
       <legend
         className="inline-flex items-center gap-1.5 px-2 text-[12px] uppercase tracking-[0.12em] text-ink-subtle font-bold"

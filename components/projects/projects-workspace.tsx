@@ -511,7 +511,7 @@ function ProjectDetail({ project }: { project: ProjectTreeNode }) {
       className="relative rounded-section bg-surface-card border border-hairline overflow-hidden"
       style={{
         boxShadow:
-          "0 1px 3px rgba(15, 23, 42, 0.04), 0 12px 32px -16px rgba(15, 23, 42, 0.08)",
+          "0 14px 32px -20px rgba(10, 108, 255, 0.16), 0 2px 6px -2px rgba(15, 23, 42, 0.06), 0 12px 32px -16px rgba(15, 23, 42, 0.08)",
         opacity: 0,
         animation: "fadeUp 700ms ease-out 300ms forwards",
       }}
@@ -2195,7 +2195,7 @@ function EmptyState() {
       className="rounded-section bg-surface-card border border-hairline px-12 py-20 text-center max-w-[680px] mx-auto mt-10 relative overflow-hidden"
       style={{
         boxShadow:
-          "0 1px 3px rgba(15, 23, 42, 0.04), 0 16px 40px -16px rgba(15, 23, 42, 0.08)",
+          "0 14px 32px -20px rgba(10, 108, 255, 0.16), 0 2px 6px -2px rgba(15, 23, 42, 0.06), 0 16px 40px -16px rgba(15, 23, 42, 0.08)",
         opacity: 0,
         animation: "fadeUp 700ms ease-out 200ms forwards",
       }}

@@ -296,7 +296,7 @@ export function FilterBar({
               className="inline-flex items-center bg-surface-card border border-hairline rounded-chip relative"
               style={{
                 padding: 4,
-                boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+                boxShadow: "0 12px 28px -18px rgba(10, 108, 255, 0.15), 0 1px 4px -1px rgba(15, 23, 42, 0.06)",
               }}
               aria-label="Task scope"
             >
@@ -363,7 +363,7 @@ export function FilterBar({
             className="inline-flex items-center bg-surface-card border border-hairline rounded-chip relative"
             style={{
               padding: 4,
-              boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+              boxShadow: "0 12px 28px -18px rgba(10, 108, 255, 0.15), 0 1px 4px -1px rgba(15, 23, 42, 0.06)",
             }}
           >
             <SegButton active={view === "doer"} onClick={() => setView("doer")}>
@@ -402,7 +402,7 @@ export function FilterBar({
                         aria-label="Import and export"
                         title="Import / export"
                         className="inline-flex items-center justify-center h-9 w-9 rounded-chip border border-hairline bg-surface-card text-ink-soft hover:text-ink-strong hover:border-altus-red transition-colors"
-                        style={{ boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)" }}
+                        style={{ boxShadow: "0 12px 28px -18px rgba(10, 108, 255, 0.15), 0 1px 4px -1px rgba(15, 23, 42, 0.06)" }}
                       >
                         <MoreHorizontal size={16} strokeWidth={2.4} />
                       </button>

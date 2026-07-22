@@ -21,7 +21,7 @@ type ActionOk<T> = T extends undefined ? { ok: true } : { ok: true } & T;
 type ActionResult<T = undefined> = ActionOk<T> | { ok: false; error: string };
 
 function revalidateIndex() {
-  revalidatePath("/index");
+  revalidatePath("/directory");
   updateTag(CACHE_TAGS.indexHub);
 }
 

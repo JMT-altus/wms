@@ -218,7 +218,7 @@ export function StatusTable({
       {filtered.length === 0 ? (
         <div
           className="bg-surface-card rounded-section border border-hairline p-10 text-center"
-          style={{ boxShadow: "0 1px 3px rgba(15, 23, 42, 0.04)" }}
+          style={{ boxShadow: "0 14px 32px -20px rgba(10, 108, 255, 0.16), 0 2px 6px -2px rgba(15, 23, 42, 0.06)" }}
         >
           <p className="text-body-lg text-ink-subtle">
             {rows.length === 0
@@ -241,7 +241,7 @@ export function StatusTable({
       ) : (
         <div
           className="bg-surface-card rounded-section border border-hairline overflow-x-auto"
-          style={{ boxShadow: "0 1px 3px rgba(15, 23, 42, 0.04)" }}
+          style={{ boxShadow: "0 14px 32px -20px rgba(10, 108, 255, 0.16), 0 2px 6px -2px rgba(15, 23, 42, 0.06)" }}
         >
           <table className="w-full min-w-[720px]">
             <thead>
@@ -343,8 +343,8 @@ function FilterBar({
         className="relative flex items-center bg-surface-card border border-hairline rounded-chip pl-3 pr-2 h-10 min-w-[260px] max-md:min-w-full max-md:w-full transition-shadow focus-within:border-hairline-strong"
         style={{
           boxShadow: query
-            ? "0 0 0 3px color-mix(in srgb, var(--color-altus-red) 12%, transparent), 0 1px 2px rgba(15,23,42,0.04)"
-            : "0 1px 2px rgba(15,23,42,0.04)",
+            ? "0 0 0 3px color-mix(in srgb, var(--color-altus-red) 12%, transparent), 0 12px 28px -18px rgba(10, 108, 255, 0.15), 0 1px 4px -1px rgba(15, 23, 42, 0.06)"
+            : "0 12px 28px -18px rgba(10, 108, 255, 0.15), 0 1px 4px -1px rgba(15, 23, 42, 0.06)",
         }}
       >
         <Search className="size-4 text-ink-subtle shrink-0" />

@@ -58,7 +58,7 @@ export function ActivityList({ events, hasMore, loadOlderHref, statusLabels }: P
     return (
       <div
         className="text-center py-16 rounded-section border border-hairline bg-surface-card"
-        style={{ boxShadow: "0 1px 3px rgba(15, 23, 42, 0.04)" }}
+        style={{ boxShadow: "0 14px 32px -20px rgba(10, 108, 255, 0.16), 0 2px 6px -2px rgba(15, 23, 42, 0.06)" }}
       >
         <p className="text-[15px] text-ink-subtle italic">No activity yet.</p>
       </div>
@@ -91,7 +91,7 @@ export function ActivityList({ events, hasMore, loadOlderHref, statusLabels }: P
           <ul
             className="rounded-section bg-surface-card border border-hairline overflow-hidden divide-y"
             style={{
-              boxShadow: "0 1px 3px rgba(15, 23, 42, 0.04)",
+              boxShadow: "0 14px 32px -20px rgba(10, 108, 255, 0.16), 0 2px 6px -2px rgba(15, 23, 42, 0.06)",
               borderColor: "transparent",
             }}
           >
@@ -107,7 +107,7 @@ export function ActivityList({ events, hasMore, loadOlderHref, statusLabels }: P
           <Link
             href={loadOlderHref as Route}
             className="inline-flex items-center gap-2 px-5 py-2.5 rounded-chip bg-surface-card border border-hairline-strong text-chip text-ink-strong hover:border-ink-subtle transition-colors"
-            style={{ boxShadow: "0 1px 3px rgba(15, 23, 42, 0.04)" }}
+            style={{ boxShadow: "0 14px 32px -20px rgba(10, 108, 255, 0.16), 0 2px 6px -2px rgba(15, 23, 42, 0.06)" }}
           >
             Load older
             <span aria-hidden>↓</span>

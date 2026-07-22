@@ -70,7 +70,7 @@ export function NotificationList({ rows, hasMore, loadOlderHref }: Props) {
     return (
       <div
         className="text-center py-16 rounded-section border border-hairline bg-surface-card"
-        style={{ boxShadow: "0 1px 3px rgba(15, 23, 42, 0.04)" }}
+        style={{ boxShadow: "0 14px 32px -20px rgba(10, 108, 255, 0.16), 0 2px 6px -2px rgba(15, 23, 42, 0.06)" }}
       >
         <p className="text-[15px] text-ink-subtle italic">
           No notifications match these filters.
@@ -82,7 +82,7 @@ export function NotificationList({ rows, hasMore, loadOlderHref }: Props) {
   return (
     <ul
       className="divide-y divide-hairline rounded-section border border-hairline bg-surface-card overflow-hidden"
-      style={{ boxShadow: "0 1px 3px rgba(15, 23, 42, 0.04)" }}
+      style={{ boxShadow: "0 14px 32px -20px rgba(10, 108, 255, 0.16), 0 2px 6px -2px rgba(15, 23, 42, 0.06)" }}
     >
       {rows.map((n) => {
         const isOpen = expandedId === n.id;

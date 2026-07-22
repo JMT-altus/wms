@@ -50,7 +50,7 @@ export function AdminKpiTile({
     const el = ref.current;
     if (!el) return;
     el.style.transform = "translateY(0)";
-    el.style.boxShadow = "0 1px 3px rgba(15, 23, 42, 0.04)";
+    el.style.boxShadow = "0 14px 32px -20px rgba(10, 108, 255, 0.16), 0 2px 6px -2px rgba(15, 23, 42, 0.06)";
   }
 
   const inner = (
@@ -96,7 +96,7 @@ export function AdminKpiTile({
     "block rounded-kpi bg-surface-card p-5 transition-all w-full focus-visible:outline-2 focus-visible:outline-offset-2";
   const baseStyle: React.CSSProperties = {
     border: `1px solid color-mix(in srgb, ${c("")} 18%, transparent)`,
-    boxShadow: "0 1px 3px rgba(15, 23, 42, 0.04)",
+    boxShadow: "0 14px 32px -20px rgba(10, 108, 255, 0.16), 0 2px 6px -2px rgba(15, 23, 42, 0.06)",
     outlineColor: c(""),
     opacity: 0,
     animation: "fadeUp 500ms ease-out forwards",

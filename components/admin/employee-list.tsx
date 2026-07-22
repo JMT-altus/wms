@@ -176,7 +176,7 @@ export function EmployeeList({
     return (
       <div
         className="rounded-section border border-dashed border-hairline-strong bg-surface-card px-6 py-14 text-center"
-        style={{ boxShadow: "0 1px 3px rgba(15, 23, 42, 0.04)" }}
+        style={{ boxShadow: "0 14px 32px -20px rgba(10, 108, 255, 0.16), 0 2px 6px -2px rgba(15, 23, 42, 0.06)" }}
       >
         <p
           className="font-serif text-ink-strong"
@@ -226,7 +226,7 @@ export function EmployeeList({
       {/* Table */}
       <div
         className="rounded-section border border-hairline bg-surface-card overflow-x-auto"
-        style={{ boxShadow: "0 1px 3px rgba(15, 23, 42, 0.04)" }}
+        style={{ boxShadow: "0 14px 32px -20px rgba(10, 108, 255, 0.16), 0 2px 6px -2px rgba(15, 23, 42, 0.06)" }}
       >
         <table className="w-full min-w-[720px] text-[15px]">
           <thead>

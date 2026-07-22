@@ -87,7 +87,7 @@ export function VelocityHero({
           ? undefined
           : {
               border: "1px solid var(--color-hairline)",
-              boxShadow: "0 1px 3px rgba(15, 23, 42, 0.04)",
+              boxShadow: "0 14px 32px -20px rgba(10, 108, 255, 0.16), 0 2px 6px -2px rgba(15, 23, 42, 0.06)",
               opacity: 0,
               animation: "fadeUp 500ms ease-out 300ms forwards",
             }

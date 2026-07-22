@@ -50,7 +50,7 @@ export function AdminActivityPreview({ events, statusLabels }: Props) {
   return (
     <section
       className="rounded-section bg-surface-card border border-hairline overflow-hidden"
-      style={{ boxShadow: "0 1px 3px rgba(15, 23, 42, 0.04)" }}
+      style={{ boxShadow: "0 14px 32px -20px rgba(10, 108, 255, 0.16), 0 2px 6px -2px rgba(15, 23, 42, 0.06)" }}
     >
       <header className="flex items-center justify-between px-5 py-4 border-b border-hairline">
         <div>

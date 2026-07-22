@@ -29,7 +29,7 @@ export function MyDayCard({ firstName, counts }: Props) {
       <Link
         href={"/tasks/agenda" as Route}
         className="group block rounded-section border border-hairline bg-surface-card px-6 py-4 transition-shadow hover:shadow-md"
-        style={{ boxShadow: "0 1px 3px rgba(15, 23, 42, 0.04)" }}
+        style={{ boxShadow: "0 14px 32px -20px rgba(10, 108, 255, 0.16), 0 2px 6px -2px rgba(15, 23, 42, 0.06)" }}
       >
         <div className="flex items-center justify-between gap-6 flex-wrap">
           <div className="flex items-center gap-6 flex-wrap">

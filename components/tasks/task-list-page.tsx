@@ -192,7 +192,7 @@ export function TaskListPage({
       {rows.length === 0 ? (
         <div
           className="bg-surface-card rounded-section border border-hairline p-10 text-center"
-          style={{ boxShadow: "0 1px 3px rgba(15, 23, 42, 0.04)" }}
+          style={{ boxShadow: "0 14px 32px -20px rgba(10, 108, 255, 0.16), 0 2px 6px -2px rgba(15, 23, 42, 0.06)" }}
         >
           <p
             className="font-bold"
@@ -250,7 +250,7 @@ function StatCard({
           : "1px solid var(--color-hairline)",
         boxShadow: active
           ? `0 0 0 3px color-mix(in srgb, var(--color-${spec.tone}) 16%, transparent)`
-          : "0 1px 3px rgba(15, 23, 42, 0.04)",
+          : "0 14px 32px -20px rgba(10, 108, 255, 0.16), 0 2px 6px -2px rgba(15, 23, 42, 0.06)",
         padding: "10px 14px 10px",
       }}
     >

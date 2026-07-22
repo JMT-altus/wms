@@ -308,7 +308,7 @@ function Column({
         border: `1px solid ${isOver ? "var(--color-blue)" : "rgba(52, 82, 201, 0.16)"}`,
         boxShadow: isOver
           ? "0 0 0 3px rgba(10, 108, 255, 0.14)"
-          : "0 14px 34px -22px rgba(10, 108, 255, 0.40), 0 1px 2px rgba(15, 23, 42, 0.04)",
+          : "0 14px 34px -22px rgba(10, 108, 255, 0.40), 0 12px 28px -18px rgba(10, 108, 255, 0.15), 0 1px 4px -1px rgba(15, 23, 42, 0.06)",
       }}
       onDragOver={
         droppable
