@@ -1006,6 +1006,9 @@ html[data-density="compact"] body {
   0%   { background-position: 0% 50%; }
   100% { background-position: 200% 50%; }
 }
+@keyframes headerTextShimmer {
+  to { background-position: 200% center; }
+}
 .brand-wordmark {
   background: linear-gradient(100deg, #7BB8FF 0%, #4C9AFF 22%, #38E5C6 44%, #4C9AFF 66%, #7BB8FF 88%, #38E5C6 100%);
   background-size: 220% auto;

@@ -68,12 +68,13 @@ export function BrandHero({ companyName = "JMT DRIVE SOLUTIONS" }: { companyName
               letterSpacing: "-0.02em",
               display: "inline-block",
               background:
-                "linear-gradient(100deg, #7BB8FF 0%, #4C9AFF 20%, #38E5C6 40%, #4C9AFF 60%, #7BB8FF 80%, #38E5C6 100%)",
-              backgroundSize: "220% auto",
+                "linear-gradient(95deg, #7BB8FF 0%, #4C9AFF 45%, #38E5C6 100%)",
+              backgroundSize: "200% auto",
               WebkitBackgroundClip: "text",
               backgroundClip: "text",
+              color: "transparent",
               WebkitTextFillColor: "transparent",
-              animation: "brandFlow 7s linear infinite",
+              animation: "headerTextShimmer 7s linear infinite",
             }}
             className="max-md:!text-[24px]"
           >
@@ -105,7 +106,7 @@ export function BrandHero({ companyName = "JMT DRIVE SOLUTIONS" }: { companyName
         </div>
 
         {/* RIGHT — powered by Altus Corp */}
-        <div className="absolute right-10 top-1/2 -translate-y-1/2 flex flex-col items-end gap-1 max-lg:hidden">
+        <div className="absolute right-10 top-1/2 -translate-y-1/2 flex flex-col items-center gap-1 max-lg:hidden">
           <span
             style={{
               fontFamily: "var(--font-mono-display), ui-monospace, monospace",
