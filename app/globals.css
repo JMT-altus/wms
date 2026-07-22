@@ -1013,6 +1013,27 @@ html[data-density="compact"] body {
   text-shadow: 0 1px 0 rgba(255, 255, 255, 0.6), 0 2px 6px rgba(15, 23, 42, 0.30);
 }
 
+/* Hub aurora — slow-drifting glow blobs behind the workspace launcher.
+   Animation lives in classes so reduced-motion can switch it off. */
+@keyframes hubFloat1 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50%      { transform: translate(46px, 34px) scale(1.09); }
+}
+@keyframes hubFloat2 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50%      { transform: translate(-40px, 26px) scale(1.06); }
+}
+@keyframes hubFloat3 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50%      { transform: translate(30px, -34px) scale(1.11); }
+}
+.hub-blob-1 { animation: hubFloat1 24s ease-in-out infinite; }
+.hub-blob-2 { animation: hubFloat2 28s ease-in-out infinite; }
+.hub-blob-3 { animation: hubFloat3 32s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .hub-blob-1, .hub-blob-2, .hub-blob-3 { animation: none; }
+}
+
 /* Animated brand wordmark — the "JMT DRIVE SOLUTIONS" gradient flows
    slowly left-to-right for a living, premium header. */
 @keyframes brandFlow {

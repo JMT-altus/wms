@@ -43,16 +43,15 @@ export default async function LoginPage({ searchParams }: PageProps) {
       {/* Brand pip, top-left — consistent with the dashboard header */}
       <div className="absolute left-0 right-0 top-0 z-10 flex items-center justify-between px-7 py-5 max-md:px-5">
         <div className="flex items-center gap-2.5">
-          <span
-            aria-hidden
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/altus-corp-logo-white.png"
+            alt="Altus Corp"
             style={{
-              display: "inline-block",
-              width: 0,
-              height: 0,
-              borderLeft: "6px solid transparent",
-              borderRight: "6px solid transparent",
-              borderBottom: "10px solid #0A6CFF",
-              filter: "drop-shadow(0 0 10px rgba(10, 108, 255, 0.7))",
+              height: 22,
+              width: "auto",
+              display: "block",
+              filter: "drop-shadow(0 0 10px rgba(10, 108, 255, 0.55))",
             }}
           />
           <span style={{ fontSize: 11, letterSpacing: "0.24em", color: "rgba(255,255,255,0.85)", fontFamily: "var(--font-mono-display)", fontWeight: 700 }}>
