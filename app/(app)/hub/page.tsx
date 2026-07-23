@@ -58,9 +58,25 @@ const STYLES: Record<ModuleId, Style> = {
   },
 };
 
+/** Time-of-day greeting + a warm line, computed in IST so it matches the team. */
+function greetingForHour(hour: number): { hello: string; line: string } {
+  if (hour >= 5 && hour < 12)
+    return { hello: "Good Morning", line: "A fresh start. Let's make today count." };
+  if (hour >= 12 && hour < 17)
+    return { hello: "Good Afternoon", line: "You're doing great. Keep the momentum going." };
+  if (hour >= 17 && hour < 21)
+    return { hello: "Good Evening", line: "Strong finish to the day. You've got this." };
+  return { hello: "Good Evening", line: "Wrapping up late? Thank you for your dedication." };
+}
+
 export default async function HubPage() {
   const me = await getCurrentEmployee();
   const firstName = me ? (me.name.split(" ")[0] ?? me.name) : "there";
+
+  const istHour = Number(
+    new Intl.DateTimeFormat("en-US", { hour: "numeric", hour12: false, timeZone: "Asia/Kolkata" }).format(new Date()),
+  );
+  const { hello, line } = greetingForHour(istHour);
 
   return (
     <div
@@ -145,11 +161,11 @@ export default async function HubPage() {
             className="mt-3"
             style={{ fontFamily: "var(--font-sans)", fontWeight: 900, fontSize: "clamp(38px, 5vw, 58px)", lineHeight: 1.03, letterSpacing: "-0.03em" }}
           >
-            <span className="text-ink-strong">Welcome back, </span>
+            <span className="text-ink-strong">{hello}, </span>
             <span className="brand-wordmark-deep">{firstName}</span>
           </h1>
           <p className="mt-4 font-medium text-ink-muted" style={{ fontSize: 17.5 }}>
-            Choose your workspace to get started
+            {line}
           </p>
         </div>
 
