@@ -124,6 +124,17 @@ export async function getRepCustomers(employeeId: string): Promise<RepCustomer[]
   return rows.map((r) => ({ id: r.id, name: r.name, deals: r.deals }));
 }
 
+/** Team-wide recent audit feed (admin command-center). */
+export async function getRecentActivity(limit = 15): Promise<{ actor: string | null; action: string; detail: Record<string, unknown>; at: Date }[]> {
+  const rows = await db
+    .select({ actor: employees.name, action: incentiveAudit.action, detail: incentiveAudit.detail, at: incentiveAudit.createdAt })
+    .from(incentiveAudit)
+    .leftJoin(employees, eq(incentiveAudit.actorId, employees.id))
+    .orderBy(desc(incentiveAudit.createdAt))
+    .limit(limit);
+  return rows.map((r) => ({ actor: r.actor, action: r.action, detail: (r.detail ?? {}) as Record<string, unknown>, at: r.at }));
+}
+
 export interface RepAuditRow { actor: string | null; action: string; entityType: string; detail: Record<string, unknown>; at: Date; }
 export async function getRepAudit(employeeId: string, limit = 20): Promise<RepAuditRow[]> {
   const rows = await db

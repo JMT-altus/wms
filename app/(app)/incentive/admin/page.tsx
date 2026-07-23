@@ -4,7 +4,8 @@ import { requireAdmin } from "@/lib/auth/current";
 import { formatInrPaise, formatInrCompactPaise } from "@/lib/format";
 import { getPendingSubmissions, getPeriodPayout, currentPeriodIST, periodLabel } from "@/lib/queries/incentives";
 import { getCollectionWatchtower, getDecayAlerts } from "@/lib/queries/incentive-risk";
-import { getLeaderboard, getAdminAnalytics, getPeriodLedgerByEmployee, type LeaderRow } from "@/lib/queries/incentive-admin";
+import { getLeaderboard, getAdminAnalytics, getPeriodLedgerByEmployee, getRecentActivity, type LeaderRow } from "@/lib/queries/incentive-admin";
+import { ActivityFeed } from "@/components/incentive/activity-feed";
 import { listEmployeeOptions } from "@/lib/queries/employees";
 import { VerificationQueue } from "@/components/incentive/verification-queue";
 import { RecomputeButton } from "@/components/incentive/recompute-button";
@@ -76,7 +77,7 @@ export default async function IncentiveAdminPage({ searchParams }: PageProps) {
 }
 
 async function PeriodTab({ period }: { period: string }) {
-  const [payout, ledgerByEmployee, leaders] = await Promise.all([getPeriodPayout(period), getPeriodLedgerByEmployee(period), getLeaderboard(period)]);
+  const [payout, ledgerByEmployee, leaders, activity] = await Promise.all([getPeriodPayout(period), getPeriodLedgerByEmployee(period), getLeaderboard(period), getRecentActivity(12)]);
   return (
     <>
       <div className="rounded-[18px] p-5 mb-6" style={{ background: "#fff", border: "1px solid rgba(15,23,42,0.08)" }}>
@@ -96,6 +97,9 @@ async function PeriodTab({ period }: { period: string }) {
       <h2 className="text-display-xs text-ink-strong mb-1">Leaderboard</h2>
       <p className="text-ink-muted text-[13px] mb-3">Ranked on qualifying activity — collections closed &amp; new customers won, not pay.</p>
       <Leaderboard leaders={leaders} />
+
+      <h2 className="text-display-xs text-ink-strong mb-3 mt-8">Live activity</h2>
+      <ActivityFeed rows={activity} />
     </>
   );
 }

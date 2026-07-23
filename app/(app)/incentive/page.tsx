@@ -7,6 +7,8 @@ import { CR } from "@/lib/incentives";
 import { PeriodPicker } from "@/components/incentive/period-picker";
 import { CategoryCards } from "@/components/incentive/category-cards";
 import { EmptyState, PageHead } from "@/components/incentive/empty-state";
+import { ActivityFeed } from "@/components/incentive/activity-feed";
+import { getRepAudit } from "@/lib/queries/incentive-admin";
 
 export const dynamic = "force-dynamic";
 
@@ -46,10 +48,11 @@ export default async function IncentiveOverviewPage({ searchParams }: PageProps)
   const sp = await searchParams;
   const period = typeof sp.period === "string" ? sp.period : currentPeriodIST();
 
-  const [summary, atRisk, monthlySales] = await Promise.all([
+  const [summary, atRisk, monthlySales, activity] = await Promise.all([
     getIncentiveSummary(me.id, period),
     getAtRiskInvoices(me.id),
     getMonthlySales(me.id, period),
+    getRepAudit(me.id, 8),
   ]);
   const chip = STATUS_CHIP[summary.status] ?? STATUS_CHIP.open!;
   const headroom = Math.max(0, summary.schemeCapPaise - summary.totalPaise);
@@ -127,6 +130,9 @@ export default async function IncentiveOverviewPage({ searchParams }: PageProps)
           ))}
         </div>
       )}
+
+      <h2 className="text-display-xs text-ink-strong mb-3 mt-8">Recent activity</h2>
+      <ActivityFeed rows={activity} />
     </main>
   );
 }
