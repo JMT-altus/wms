@@ -4,7 +4,7 @@ import * as XLSX from "xlsx";
 import { and, eq, sql } from "drizzle-orm";
 import { revalidatePath, updateTag } from "next/cache";
 import { db } from "@/lib/db";
-import { weeklyGoals, employees, incentiveRequests } from "@/db/schema";
+import { weeklyGoals, employees } from "@/db/schema";
 import { CACHE_TAGS } from "@/lib/cache-tags";
 import { requireUser, requireAdmin } from "@/lib/auth/current";
 import { rateLimitOrError } from "@/lib/rate-limit";
@@ -21,7 +21,6 @@ import {
   type CarryOverInput,
   DeleteWeeklyGoalSchema,
 } from "@/lib/validators/weekly-goal";
-import { ensureIncentiveColumns } from "@/lib/ensure-incentive-schema";
 
 type ActionOk<T> = T extends undefined ? { ok: true } : { ok: true } & T;
 type ActionResult<T = undefined> = ActionOk<T> | { ok: false; error: string };
@@ -473,47 +472,17 @@ export async function setWeeklyGoalIncentive(input: {
   const [goal] = await db.select().from(weeklyGoals).where(eq(weeklyGoals.id, input.id)).limit(1);
   if (!goal) return { ok: false, error: "Goal not found" };
 
+  // Weekly-goal incentive is now goal metadata only. The Sales-BH Incentive
+  // Tracker (lib/incentives/) computes payouts from commercial + activity data,
+  // not from weekly goals, so we no longer write to the incentive ledger here.
   try {
-    await ensureIncentiveColumns();
     await db.update(weeklyGoals)
       .set({ incentive: input.incentive, incentiveAmount: input.incentive ? amount : 0, updatedById: me.id, updatedAt: new Date() })
       .where(eq(weeklyGoals.id, input.id));
-
-    const [existing] = await db.select({ id: incentiveRequests.id, status: incentiveRequests.status })
-      .from(incentiveRequests)
-      .where(and(eq(incentiveRequests.source, "weekly_goal"), eq(incentiveRequests.sourceRef, input.id)))
-      .limit(1);
-
-    const label = `Weekly Goal — ${goal.client || goal.subject || goal.targetDone || "Priority"}`.slice(0, 200);
-
-    if (input.incentive && amount > 0) {
-      if (existing) {
-        // Refresh amount/label only if not yet decided/paid.
-        if (existing.status === "pending") {
-          await db.update(incentiveRequests)
-            .set({ amount, label, updatedAt: new Date() })
-            .where(eq(incentiveRequests.id, existing.id));
-        }
-      } else {
-        await db.insert(incentiveRequests).values({
-          employeeId: goal.employeeId,
-          type: "weekly_goal",
-          details: { week: goal.weekStart },
-          amount,
-          label,
-          source: "weekly_goal",
-          sourceRef: input.id,
-        } as typeof incentiveRequests.$inferInsert);
-      }
-    } else if (existing && existing.status === "pending") {
-      // Turned off / zeroed — drop the pending entry (keep decided ones).
-      await db.delete(incentiveRequests).where(eq(incentiveRequests.id, existing.id));
-    }
   } catch (err) {
     return { ok: false, error: `DB: ${err instanceof Error ? err.message : String(err)}` };
   }
 
   revalidateWeeklyGoals();
-  revalidatePath("/incentive");
   return { ok: true };
 }

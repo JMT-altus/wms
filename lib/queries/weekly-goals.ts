@@ -1,7 +1,7 @@
 import "server-only";
 import { and, asc, desc, eq, gte, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { employees, weeklyGoals, tasks, attendanceLogs, incentiveRequests } from "@/db/schema";
+import { employees, weeklyGoals, tasks, attendanceLogs, incentiveLedger } from "@/db/schema";
 import type { TaskPriority } from "@/db/enums";
 import {
   periodStart,
@@ -205,18 +205,17 @@ export async function globalRankings(
       .groupBy(attendanceLogs.employeeId),
     db
       .select({
-        employeeId: incentiveRequests.employeeId,
+        employeeId: incentiveLedger.employeeId,
         won: sql<number>`count(*)::int`,
       })
-      .from(incentiveRequests)
+      .from(incentiveLedger)
       .where(
         and(
-          eq(incentiveRequests.status, "approved"),
-          eq(incentiveRequests.archived, false),
-          sql`${incentiveRequests.createdAt} >= ${tsStart}`,
+          sql`${incentiveLedger.amountPaise} > 0`,
+          sql`${incentiveLedger.createdAt} >= ${tsStart}`,
         ),
       )
-      .groupBy(incentiveRequests.employeeId),
+      .groupBy(incentiveLedger.employeeId),
     db
       .select({ id: employees.id, name: employees.name })
       .from(employees)

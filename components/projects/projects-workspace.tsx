@@ -42,11 +42,6 @@ import {
   reorderProjectNodes,
 } from "@/app/(app)/projects/actions";
 import { fireToast } from "@/lib/toast";
-import {
-  saveProjectIncentives,
-  getProjectIncentives,
-  type ProjectIncentiveRow,
-} from "@/app/(app)/incentive/actions";
 import type { ProjectTreeNode } from "@/lib/queries/projects";
 import type { EmployeeOption } from "@/lib/queries/employees";
 
@@ -581,10 +576,6 @@ function ProjectDetail({ project }: { project: ProjectTreeNode }) {
             tone="red"
           />
         </div>
-
-        {/* Incentive — Manan 2026-06. Toggle + per-employee amounts that flow
-            into the Incentive ledger (source=project) for admin approval. */}
-        <ProjectIncentivePanel projectId={project.id} projectName={project.name} />
 
         {/* Section eyebrow */}
         <div
@@ -2246,107 +2237,3 @@ function EmptyState() {
   );
 }
 
-/* ───────────────────────────────────────── Project incentive panel ─ */
-
-/**
- * "Incentive?" toggle + a team list (employee + ₹ amount each) on a project.
- * Saving writes one ledger entry per person (source=project) into the
- * Incentive tab as pending; admins approve / override amounts there.
- */
-function ProjectIncentivePanel({ projectId, projectName }: { projectId: string; projectName: string }) {
-  const employees = useEmployees();
-  const [enabled, setEnabled] = React.useState(false);
-  const [rows, setRows] = React.useState<ProjectIncentiveRow[]>([]);
-  const [loaded, setLoaded] = React.useState(false);
-  const [pending, start] = React.useTransition();
-
-  React.useEffect(() => {
-    let alive = true;
-    getProjectIncentives(projectId)
-      .then((existing) => {
-        if (!alive) return;
-        if (existing.length > 0) { setEnabled(true); setRows(existing); }
-        setLoaded(true);
-      })
-      .catch(() => { if (alive) setLoaded(true); });
-    return () => { alive = false; };
-  }, [projectId]);
-
-  function addRow() {
-    setRows((r) => [...r, { employeeId: "", amount: 0 }]);
-  }
-  function update(i: number, patch: Partial<ProjectIncentiveRow>) {
-    setRows((r) => r.map((row, idx) => (idx === i ? { ...row, ...patch } : row)));
-  }
-  function remove(i: number) {
-    setRows((r) => r.filter((_, idx) => idx !== i));
-  }
-  function save() {
-    const clean = enabled ? rows.filter((r) => r.employeeId && r.amount > 0) : [];
-    start(async () => {
-      const res = await saveProjectIncentives({ projectId, projectName, rows: clean });
-      fireToast(res.ok
-        ? { message: "Project incentives saved to the Incentive tab." }
-        : { message: res.error });
-    });
-  }
-
-  if (!loaded) return null;
-
-  return (
-    <div className="mb-6 rounded-section border border-hairline bg-surface-card p-4">
-      <div className="flex items-center justify-between gap-3">
-        <span className="text-[11.5px] font-bold uppercase tracking-[0.16em] text-ink-subtle">Incentive</span>
-        <label className="inline-flex items-center gap-2 text-[13.5px] font-semibold text-ink-strong cursor-pointer">
-          <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
-          Incentive on this project?
-        </label>
-      </div>
-
-      {enabled && (
-        <div className="mt-3 space-y-2">
-          {rows.map((row, i) => (
-            <div key={i} className="flex items-center gap-2">
-              <select
-                value={row.employeeId}
-                onChange={(e) => update(i, { employeeId: e.target.value })}
-                className="flex-1 rounded-md border border-hairline bg-white px-2.5 py-1.5 text-[13.5px] outline-none focus:border-altus-red/50"
-              >
-                <option value="">Select team member…</option>
-                {employees.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
-              </select>
-              <div className="inline-flex items-center gap-1">
-                <span className="text-[13px] text-ink-muted">₹</span>
-                <input
-                  type="number" min={0} value={row.amount || ""}
-                  onChange={(e) => update(i, { amount: Number(e.target.value) || 0 })}
-                  placeholder="0"
-                  className="w-28 rounded-md border border-hairline bg-white px-2 py-1.5 text-[13.5px] text-right tabular-nums outline-none focus:border-altus-red/50"
-                />
-              </div>
-              <button type="button" onClick={() => remove(i)} aria-label="Remove"
-                className="rounded-md p-1.5 text-ink-muted hover:bg-red-50 hover:text-altus-red">
-                <X size={15} />
-              </button>
-            </div>
-          ))}
-          <button type="button" onClick={addRow}
-            className="inline-flex items-center gap-1.5 rounded-pill border border-hairline px-3 py-1.5 text-[13px] font-semibold text-ink-soft hover:border-altus-red transition-colors">
-            <Plus size={14} strokeWidth={2.4} /> Add team member
-          </button>
-        </div>
-      )}
-
-      <div className="mt-3 flex items-center justify-between gap-3">
-        <p className="text-[12px] text-ink-muted font-semibold">
-          Each person becomes a pending entry in the Incentive tab; admins approve & pay there.
-        </p>
-        <button type="button" onClick={save} disabled={pending}
-          className="rounded-pill px-4 py-2 text-[13px] font-bold text-white disabled:opacity-50"
-          style={{ background: "linear-gradient(135deg, #0A6CFF 0%, #0A6CFF 42%, #17B6A0 100%)" }}>
-          {pending ? "Saving…" : "Save incentives"}
-        </button>
-      </div>
-    </div>
-  );
-}

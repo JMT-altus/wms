@@ -61,6 +61,28 @@ export function formatInr(n: number): string {
   return inrFmt.format(n);
 }
 
+/** ₹ from integer **paise** (money is stored as paise in the incentive engine). */
+export function formatInrPaise(paise: number): string {
+  return inrFmt.format(Math.round(paise) / 100);
+}
+
+/**
+ * Compact ₹ for large sums — Indian crore/lakh grouping, e.g. "₹1.34 Cr",
+ * "₹2.50 L", "₹8,500". Takes **rupees**. Used in slab/sales contexts where a
+ * full grouped figure is too long.
+ */
+export function formatInrCompact(rupees: number): string {
+  const abs = Math.abs(rupees);
+  if (abs >= 1_00_00_000) return `₹${(rupees / 1_00_00_000).toFixed(2)} Cr`;
+  if (abs >= 1_00_000) return `₹${(rupees / 1_00_000).toFixed(2)} L`;
+  return formatInr(rupees);
+}
+
+/** Compact ₹ from integer **paise**. */
+export function formatInrCompactPaise(paise: number): string {
+  return formatInrCompact(Math.round(paise) / 100);
+}
+
 export function formatDelta(n: number): string {
   if (n > 0) return `↑ ${n}`;
   if (n < 0) return `↓ ${Math.abs(n)}`;

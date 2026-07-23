@@ -269,6 +269,43 @@ export const INCENTIVE_STATUS_LABELS: Record<IncentiveStatus, string> = {
   rejected: "Rejected",
 };
 
+// ── Incentive Tracker (Sales-BH rebuild) — new scheme enums ──────────────────
+// These power the rebuilt /incentive engine (docs/incentive-tracker/PLAN.md).
+// The four legacy INCENTIVE_TYPES above are removed in the Phase-0 teardown.
+
+/** Sales-order tag that routes a transaction to a rule (PDF §2.5). */
+export const ORDER_CATEGORY_CODES = ["A", "B", "C", "N", "I", "R", "V"] as const;
+export type OrderCategoryCode = (typeof ORDER_CATEGORY_CODES)[number];
+
+/** Rule line codes A.1…G.2. */
+export const INCENTIVE_LINE_CODES = [
+  "A.1", "A.2", "A.3", "B.1", "C.1", "D.1", "D.2", "E.1", "F.1", "F.2", "F.3", "G.1", "G.2",
+] as const;
+export type IncentiveLineCode = (typeof INCENTIVE_LINE_CODES)[number];
+
+export const INCENTIVE_CATEGORY_CODES = ["A", "B", "C", "D", "E", "F", "G"] as const;
+export type IncentiveCategoryCode = (typeof INCENTIVE_CATEGORY_CODES)[number];
+
+/** Append-only ledger entry types. */
+export const LEDGER_ENTRY_TYPES = [
+  "accrual", "decay", "clawback", "discretionary", "reversal", "adjustment",
+] as const;
+export type LedgerEntryType = (typeof LEDGER_ENTRY_TYPES)[number];
+
+/** Period lifecycle: open → computing → review → locked → paid. */
+export const INCENTIVE_PERIOD_STATUSES = ["open", "computing", "review", "locked", "paid"] as const;
+export type IncentivePeriodStatus = (typeof INCENTIVE_PERIOD_STATUSES)[number];
+
+export const TESTIMONIAL_KINDS = ["google_review", "email", "letterhead"] as const;
+export type TestimonialKind = (typeof TESTIMONIAL_KINDS)[number];
+
+/** Evidence-backed submission review state. */
+export const SUBMISSION_REVIEW_STATUSES = ["pending", "approved", "rejected"] as const;
+export type SubmissionReviewStatus = (typeof SUBMISSION_REVIEW_STATUSES)[number];
+
+export const MEETING_POTENTIAL_BANDS = ["low", "medium", "high"] as const;
+export type MeetingPotentialBand = (typeof MEETING_POTENTIAL_BANDS)[number];
+
 export const OUTSTANDING_STATUSES = [
   "open",
   "partial",

@@ -1,373 +1,143 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { and, eq } from "drizzle-orm";
-import { z } from "zod";
+import { eq, isNotNull } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { incentiveRequests, orgSettings } from "@/db/schema";
-import { INCENTIVE_TYPES } from "@/db/enums";
-import { requireAdmin, requireUser } from "@/lib/auth/current";
-import { rateLimitOrError } from "@/lib/rate-limit";
-import { validateIncentiveDetails } from "@/lib/incentive-fields";
-import { defaultIncentiveAmount, incentiveLabel } from "@/lib/incentive-amount";
-import { syncSheetIncentives, type SyncResult } from "@/lib/incentive-sheets";
-import { ensureIncentiveColumns } from "@/lib/ensure-incentive-schema";
+import { requireUser, requireAdmin } from "@/lib/auth/current";
+import { leadBatches, leadConversions, clientMeetings, testimonials, salesOrders } from "@/db/schema";
+import { currentPeriodIST } from "@/lib/queries/incentives";
+import { P } from "@/lib/incentives";
+import { computePeriodForEmployee } from "@/lib/incentives/load";
 
-type ActionResult<T = unknown> =
-  | ({ ok: true } & T)
-  | { ok: false; error: string };
+export type ActionResult = { ok: true } | { ok: false; error: string };
 
-const CreateSchema = z
-  .object({
-    type: z.enum(INCENTIVE_TYPES),
-    details: z.record(z.string(), z.string()),
-  })
-  .strict();
+const clampInt = (v: unknown, lo: number, hi: number) =>
+  Math.max(lo, Math.min(hi, Math.round(Number(v) || 0)));
 
-/** File a new incentive request (any signed-in employee, for themselves). */
-export async function createIncentiveRequest(input: {
-  type: (typeof INCENTIVE_TYPES)[number];
-  details: Record<string, string>;
-}): Promise<ActionResult<{ id: string }>> {
+// ── Employee submissions (enter pending review) ──────────────────────────────
+
+export async function submitLeadBatch(input: { leadCount: number; profiled: boolean }): Promise<ActionResult> {
   const me = await requireUser();
-  const limited = rateLimitOrError(me.id, "write");
-  if (limited) return limited;
-
-  const parsed = CreateSchema.safeParse(input);
-  if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
-  }
-
-  const validated = validateIncentiveDetails(parsed.data.type, parsed.data.details);
-  if (!validated.ok) return validated;
-
-  let inserted;
-  try {
-    await ensureIncentiveColumns();
-    [inserted] = await db
-      .insert(incentiveRequests)
-      .values({
-        employeeId: me.id,
-        type: parsed.data.type,
-        details: validated.details,
-        amount: defaultIncentiveAmount(parsed.data.type, validated.details),
-        label: incentiveLabel(parsed.data.type, validated.details),
-        source: "form",
-      })
-      .returning({ id: incentiveRequests.id });
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    return { ok: false, error: `DB: ${msg}` };
-  }
-  if (!inserted) return { ok: false, error: "DB: insert returned no row" };
-
+  const leadCount = clampInt(input.leadCount, 0, 100000);
+  if (leadCount < 1) return { ok: false, error: "Enter how many leads." };
+  await db.insert(leadBatches).values({
+    employeeId: me.id, periodMonth: currentPeriodIST(), leadCount, profiled: !!input.profiled,
+  });
   revalidatePath("/incentive");
-  return { ok: true, id: inserted.id };
+  return { ok: true };
 }
 
-const DecideSchema = z
-  .object({
-    id: z.string().uuid(),
-    verdict: z.enum(["approved", "rejected"]),
-    note: z.string().trim().max(1000).optional(),
-  })
-  .strict();
+export async function submitLeadConversion(input: { convertedCount: number }): Promise<ActionResult> {
+  const me = await requireUser();
+  const convertedCount = clampInt(input.convertedCount, 0, 100000);
+  if (convertedCount < 1) return { ok: false, error: "Enter how many enquiries." };
+  await db.insert(leadConversions).values({
+    employeeId: me.id, periodMonth: currentPeriodIST(), convertedCount,
+  });
+  revalidatePath("/incentive");
+  return { ok: true };
+}
 
-/** Admin verdict on a pending request. Re-deciding an already-decided
- *  request is allowed (corrections) — the latest verdict wins. */
-export async function decideIncentiveRequest(input: {
+export async function submitMeeting(input: {
+  potentialBand: "low" | "medium" | "high";
+  justification: string;
+}): Promise<ActionResult> {
+  const me = await requireUser();
+  const band = ["low", "medium", "high"].includes(input.potentialBand) ? input.potentialBand : "medium";
+  const justification = String(input.justification ?? "").slice(0, 500);
+  if (!justification.trim()) return { ok: false, error: "Add a short justification." };
+  await db.insert(clientMeetings).values({
+    employeeId: me.id, periodMonth: currentPeriodIST(), potentialBand: band, justification,
+  });
+  revalidatePath("/incentive");
+  return { ok: true };
+}
+
+export async function submitTestimonial(input: {
+  kind: "google_review" | "email" | "letterhead";
+  wordCount: number;
+  starRating?: number;
+  namesTeamMember: boolean;
+  evidenceUrl?: string;
+}): Promise<ActionResult> {
+  const me = await requireUser();
+  const kind = ["google_review", "email", "letterhead"].includes(input.kind) ? input.kind : "email";
+  const wordCount = clampInt(input.wordCount, 0, 100000);
+  const starRating = input.starRating != null ? clampInt(input.starRating, 1, 5) : null;
+  if (kind === "google_review" && starRating !== 5) return { ok: false, error: "Only 5★ reviews qualify." };
+  await db.insert(testimonials).values({
+    employeeId: me.id, periodMonth: currentPeriodIST(), kind, wordCount,
+    starRating, namesTeamMember: !!input.namesTeamMember, evidenceUrl: input.evidenceUrl?.slice(0, 500) ?? null,
+  });
+  revalidatePath("/incentive");
+  return { ok: true };
+}
+
+// ── Admin verification ───────────────────────────────────────────────────────
+
+type Queue = "lead_batch" | "lead_conversion" | "meeting" | "testimonial";
+
+export async function reviewSubmission(input: {
+  queue: Queue;
   id: string;
-  verdict: "approved" | "rejected";
+  decision: "approved" | "rejected";
+  awardedRupees?: number; // meetings only
+  namesTeamMember?: boolean; // testimonials only
   note?: string;
 }): Promise<ActionResult> {
   const me = await requireAdmin();
-  const limited = rateLimitOrError(me.id, "write");
-  if (limited) return limited;
+  if (!/^[0-9a-f-]{36}$/i.test(input.id)) return { ok: false, error: "Invalid id" };
+  const decision = input.decision === "approved" ? "approved" : "rejected";
+  const base = { reviewStatus: decision as "approved" | "rejected", reviewedById: me.id, reviewedAt: new Date(), note: input.note?.slice(0, 500) ?? null, updatedAt: new Date() };
 
-  const parsed = DecideSchema.safeParse(input);
-  if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
-  }
-
-  const existing = await db.query.incentiveRequests.findFirst({
-    where: eq(incentiveRequests.id, parsed.data.id),
-  });
-  if (!existing) return { ok: false, error: "Request not found" };
-
-  try {
-    await db
-      .update(incentiveRequests)
-      .set({
-        status: parsed.data.verdict,
-        decidedById: me.id,
-        decidedAt: new Date(),
-        decisionNote: parsed.data.note ? parsed.data.note : null,
-        updatedAt: new Date(),
-      })
-      .where(eq(incentiveRequests.id, parsed.data.id));
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    return { ok: false, error: `DB: ${msg}` };
-  }
-
-  revalidatePath("/incentive");
-  return { ok: true };
-}
-
-/* ================================================================== */
-/* Admin ledger actions — amount override, payment, manual conditions */
-/* ================================================================== */
-
-const AmountSchema = z.object({ id: z.string().uuid(), amount: z.coerce.number().int().min(0).max(10_000_000) }).strict();
-
-/** Admin overrides the ₹ amount of any incentive. */
-export async function setIncentiveAmount(input: { id: string; amount: number }): Promise<ActionResult> {
-  const me = await requireAdmin();
-  const limited = rateLimitOrError(me.id, "write");
-  if (limited) return limited;
-  const parsed = AmountSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid amount" };
-  try {
-    await db.update(incentiveRequests)
-      .set({ amount: parsed.data.amount, updatedAt: new Date() })
-      .where(eq(incentiveRequests.id, parsed.data.id));
-  } catch (err) {
-    return { ok: false, error: `DB: ${err instanceof Error ? err.message : String(err)}` };
+  switch (input.queue) {
+    case "lead_batch":
+      await db.update(leadBatches).set(base).where(eq(leadBatches.id, input.id));
+      break;
+    case "lead_conversion":
+      await db.update(leadConversions).set(base).where(eq(leadConversions.id, input.id));
+      break;
+    case "meeting": {
+      const awarded = P(clampInt(input.awardedRupees, 0, 1000));
+      await db.update(clientMeetings).set({ ...base, awardedPaise: awarded }).where(eq(clientMeetings.id, input.id));
+      break;
+    }
+    case "testimonial":
+      await db.update(testimonials).set({ ...base, namesTeamMember: !!input.namesTeamMember }).where(eq(testimonials.id, input.id));
+      break;
+    default:
+      return { ok: false, error: "Unknown queue" };
   }
   revalidatePath("/incentive");
-  revalidatePath("/incentive/dashboard");
+  revalidatePath("/incentive/admin");
   return { ok: true };
 }
-
-const PaymentSchema = z.object({
-  id: z.string().uuid(),
-  paid: z.boolean(),
-  paidAmt: z.coerce.number().int().min(0).max(10_000_000),
-  paidDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
-}).strict();
-
-/** Admin records a payout against an incentive. */
-export async function setIncentivePayment(input: {
-  id: string; paid: boolean; paidAmt: number; paidDate?: string | null;
-}): Promise<ActionResult> {
-  const me = await requireAdmin();
-  const limited = rateLimitOrError(me.id, "write");
-  if (limited) return limited;
-  const parsed = PaymentSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid payment" };
-  try {
-    await db.update(incentiveRequests)
-      .set({
-        paid: parsed.data.paid,
-        paidAmt: parsed.data.paidAmt,
-        paidDate: parsed.data.paidDate ? parsed.data.paidDate : null,
-        updatedAt: new Date(),
-      })
-      .where(eq(incentiveRequests.id, parsed.data.id));
-  } catch (err) {
-    return { ok: false, error: `DB: ${err instanceof Error ? err.message : String(err)}` };
-  }
-  revalidatePath("/incentive");
-  revalidatePath("/incentive/dashboard");
-  return { ok: true };
-}
-
-const ConditionsSchema = z.object({
-  id: z.string().uuid(),
-  conditions: z.record(z.string(), z.string()),
-}).strict();
-
-/** Admin sets the per-scheme manual condition columns. */
-export async function setIncentiveConditions(input: {
-  id: string; conditions: Record<string, string>;
-}): Promise<ActionResult> {
-  const me = await requireAdmin();
-  const parsed = ConditionsSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: "Invalid conditions" };
-  try {
-    await db.update(incentiveRequests)
-      .set({ conditions: parsed.data.conditions, updatedAt: new Date() })
-      .where(eq(incentiveRequests.id, parsed.data.id));
-  } catch (err) {
-    return { ok: false, error: `DB: ${err instanceof Error ? err.message : String(err)}` };
-  }
-  revalidatePath("/incentive");
-  return { ok: true };
-}
-
-/* ================================================================== */
-/* Project incentives — set per-employee amounts on a project, which   */
-/* flow into the same ledger (source='project') for admin approval.    */
-/* ================================================================== */
-
-export interface ProjectIncentiveRow { employeeId: string; amount: number }
-
-const ProjectIncentivesSchema = z.object({
-  projectId: z.string().uuid(),
-  projectName: z.string().trim().min(1).max(200),
-  rows: z.array(z.object({
-    employeeId: z.string().uuid(),
-    amount: z.coerce.number().int().min(0).max(10_000_000),
-  })).max(50),
-}).strict();
 
 /**
- * Replace the project's incentive entries with the given (employee, amount)
- * set. Existing project-source rows for this project are removed first so the
- * panel is the source of truth; new rows enter the ledger as pending.
+ * Recompute the ledger for a period across every employee with orders or
+ * approved activity in it. This is the "COMPUTE" step: run the pure engine and
+ * upsert accrual rows idempotently, so approvals and new sales become payable.
  */
-export async function saveProjectIncentives(input: {
-  projectId: string; projectName: string; rows: ProjectIncentiveRow[];
-}): Promise<ActionResult> {
-  const me = await requireUser();
-  const limited = rateLimitOrError(me.id, "write");
-  if (limited) return limited;
-  const parsed = ProjectIncentivesSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
+export async function recomputePeriod(input?: { period?: string }): Promise<{ ok: true; employees: number } | { ok: false; error: string }> {
+  await requireAdmin();
+  const period = input?.period ?? currentPeriodIST();
 
-  const clean = parsed.data.rows.filter((r) => r.amount > 0);
-  try {
-    await ensureIncentiveColumns();
-    await db.delete(incentiveRequests).where(
-      and(eq(incentiveRequests.source, "project"), eq(incentiveRequests.sourceRef, parsed.data.projectId)),
-    );
-    if (clean.length > 0) {
-      await db.insert(incentiveRequests).values(
-        clean.map((r) => ({
-          employeeId: r.employeeId,
-          type: "project" as const,
-          details: {},
-          amount: r.amount,
-          label: parsed.data.projectName,
-          source: "project",
-          sourceRef: parsed.data.projectId,
-        })),
-      );
-    }
-  } catch (err) {
-    return { ok: false, error: `DB: ${err instanceof Error ? err.message : String(err)}` };
-  }
+  const ids = new Set<string>();
+  const owners = await db.selectDistinct({ id: salesOrders.ownerId }).from(salesOrders).where(isNotNull(salesOrders.ownerId));
+  for (const o of owners) if (o.id) ids.add(o.id);
+
+  const [lb, lc, mt, ts] = await Promise.all([
+    db.selectDistinct({ id: leadBatches.employeeId }).from(leadBatches).where(eq(leadBatches.periodMonth, period)),
+    db.selectDistinct({ id: leadConversions.employeeId }).from(leadConversions).where(eq(leadConversions.periodMonth, period)),
+    db.selectDistinct({ id: clientMeetings.employeeId }).from(clientMeetings).where(eq(clientMeetings.periodMonth, period)),
+    db.selectDistinct({ id: testimonials.employeeId }).from(testimonials).where(eq(testimonials.periodMonth, period)),
+  ]);
+  for (const r of [...lb, ...lc, ...mt, ...ts]) ids.add(r.id);
+
+  const asOf = new Date();
+  for (const id of ids) await computePeriodForEmployee(id, period, asOf);
+
   revalidatePath("/incentive");
-  revalidatePath("/incentive/dashboard");
-  return { ok: true };
-}
-
-/** Load this project's current incentive (employee, amount) rows. */
-export async function getProjectIncentives(projectId: string): Promise<ProjectIncentiveRow[]> {
-  await requireUser();
-  if (!/^[0-9a-f-]{36}$/i.test(projectId)) return [];
-  const rows = await db
-    .select({ employeeId: incentiveRequests.employeeId, amount: incentiveRequests.amount })
-    .from(incentiveRequests)
-    .where(and(eq(incentiveRequests.source, "project"), eq(incentiveRequests.sourceRef, projectId)));
-  return rows;
-}
-
-/* ================================================================== */
-/* Archive / delete                                                    */
-/* ================================================================== */
-
-const ArchiveSchema = z.object({ id: z.string().uuid(), archived: z.boolean() }).strict();
-
-/** Admin archives (or restores) an incentive entry — moves it to/from the
- *  Archived view without deleting it. */
-export async function setIncentiveArchived(input: { id: string; archived: boolean }): Promise<ActionResult> {
-  const me = await requireAdmin();
-  const limited = rateLimitOrError(me.id, "write");
-  if (limited) return limited;
-  const parsed = ArchiveSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: "Invalid input" };
-  try {
-    await db.update(incentiveRequests)
-      .set({ archived: parsed.data.archived, updatedAt: new Date() })
-      .where(eq(incentiveRequests.id, parsed.data.id));
-  } catch (err) {
-    return { ok: false, error: `DB: ${err instanceof Error ? err.message : String(err)}` };
-  }
-  revalidatePath("/incentive");
-  revalidatePath("/incentive/dashboard");
-  return { ok: true };
-}
-
-/** Admin permanently deletes an incentive entry. */
-export async function deleteIncentiveEntry(input: { id: string }): Promise<ActionResult> {
-  const me = await requireAdmin();
-  const limited = rateLimitOrError(me.id, "write");
-  if (limited) return limited;
-  if (!z.string().uuid().safeParse(input.id).success) return { ok: false, error: "Invalid id" };
-  try {
-    await db.delete(incentiveRequests).where(eq(incentiveRequests.id, input.id));
-  } catch (err) {
-    return { ok: false, error: `DB: ${err instanceof Error ? err.message : String(err)}` };
-  }
-  revalidatePath("/incentive");
-  revalidatePath("/incentive/dashboard");
-  return { ok: true };
-}
-
-/** Admin reassigns the earning employee for a single incentive entry. */
-export async function setIncentiveEmployee(input: { id: string; employeeId: string }): Promise<ActionResult> {
-  const me = await requireAdmin();
-  const limited = rateLimitOrError(me.id, "write");
-  if (limited) return limited;
-  if (!z.string().uuid().safeParse(input.id).success) return { ok: false, error: "Invalid id" };
-  if (!z.string().uuid().safeParse(input.employeeId).success) return { ok: false, error: "Invalid employee" };
-  try {
-    await db.update(incentiveRequests)
-      .set({ employeeId: input.employeeId, updatedAt: new Date() })
-      .where(eq(incentiveRequests.id, input.id));
-  } catch (err) {
-    return { ok: false, error: `DB: ${err instanceof Error ? err.message : String(err)}` };
-  }
-  revalidatePath("/incentive");
-  revalidatePath("/incentive/dashboard");
-  return { ok: true };
-}
-
-/** Admin sets the permanent default earner for "PS Sold through Social Media". */
-export async function setIncentiveSocialEarner(input: { name: string }): Promise<ActionResult> {
-  const me = await requireAdmin();
-  const limited = rateLimitOrError(me.id, "write");
-  if (limited) return limited;
-  const name = String(input.name ?? "").trim().slice(0, 120);
-  if (!name) return { ok: false, error: "Pick an employee." };
-  try {
-    await db.update(orgSettings).set({ incentiveSocialEarner: name, updatedAt: new Date() }).where(eq(orgSettings.id, 1));
-  } catch (err) {
-    return { ok: false, error: `DB: ${err instanceof Error ? err.message : String(err)}` };
-  }
-  revalidatePath("/incentive");
-  return { ok: true };
-}
-
-/* ================================================================== */
-/* Sheet-sourced incentives — sync 10 Qualified Leads + 10 Referrals   */
-/* from the Apps Script endpoint and auto-create ledger entries.       */
-/* ================================================================== */
-
-/** Admin pulls the Qualified Leads / Participant Leads sheets and recomputes
- *  the milestone incentives into the ledger (idempotent). */
-export async function syncIncentivesFromSheets(): Promise<ActionResult<{ result: SyncResult }>> {
-  const me = await requireAdmin();
-  const limited = rateLimitOrError(me.id, "write");
-  if (limited) return limited;
-  // Default to the deployed Apps Script web app; an env var overrides it if set.
-  const DEFAULT_SHEETS_WEBAPP_URL =
-    "https://script.google.com/macros/s/AKfycbwIJZndFUBIZxoVN0xGa3vUV0M2f3f1bhTLdK5KoY7JrrwikXVqzOQVwCT3kfSNgKTi/exec";
-  const url = process.env.INCENTIVE_SHEETS_WEBAPP_URL || DEFAULT_SHEETS_WEBAPP_URL;
-  if (!url) return { ok: false, error: "Set INCENTIVE_SHEETS_WEBAPP_URL in your environment first." };
-  try {
-    await ensureIncentiveColumns(); // self-heals org_settings.incentive_social_earner too
-    let earner: string | undefined;
-    try {
-      const [cfg] = await db.select({ earner: orgSettings.incentiveSocialEarner }).from(orgSettings).where(eq(orgSettings.id, 1)).limit(1);
-      earner = cfg?.earner;
-    } catch { /* not migrated yet — fall back to the sheet's default */ }
-    const result = await syncSheetIncentives(url, earner);
-    revalidatePath("/incentive");
-    revalidatePath("/incentive/dashboard");
-    return { ok: true, result };
-  } catch (err) {
-    return { ok: false, error: `Sync failed: ${err instanceof Error ? err.message : String(err)}` };
-  }
+  revalidatePath("/incentive/admin");
+  return { ok: true, employees: ids.size };
 }

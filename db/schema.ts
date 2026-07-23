@@ -1787,3 +1787,322 @@ export type FormConfig = typeof formConfigs.$inferSelect;
 export type NewFormConfig = typeof formConfigs.$inferInsert;
 export type ProductOption = typeof productOptions.$inferSelect;
 export type NewProductOption = typeof productOptions.$inferInsert;
+
+// ════════════════════════════════════════════════════════════════════════════
+// INCENTIVE TRACKER (Sales-BH rebuild) — commercial spine, activity, rule spine
+// and append-only ledger. See docs/incentive-tracker/PLAN.md and lib/incentives/.
+// Money is integer **paise** (bigint) to match the pure rule engine exactly;
+// rates live in the rule_versions JSONB config. Authorization is app-layer
+// (this repo has no RLS), mirroring the existing modules.
+// ════════════════════════════════════════════════════════════════════════════
+
+/** Commercial spine — customers. */
+export const customers = pgTable(
+  "customers",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    name: text("name").notNull(),
+    code: text("code"),
+    acquisitionEmployeeId: uuid("acquisition_employee_id").references(() => employees.id, { onDelete: "set null" }),
+    firstTransactionAt: timestamp("first_transaction_at", { withTimezone: true }),
+    fyTurnoverPaise: bigint("fy_turnover_paise", { mode: "number" }).notNull().default(0),
+    isNewCustomer: boolean("is_new_customer").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("customers_code_idx").on(t.code),
+    index("customers_name_idx").on(t.name),
+  ],
+);
+
+/** Commercial spine — sales orders, tagged with a rule-routing category code. */
+export const salesOrders = pgTable(
+  "sales_orders",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    customerId: uuid("customer_id").references(() => customers.id, { onDelete: "cascade" }).notNull(),
+    ownerId: uuid("owner_id").references(() => employees.id, { onDelete: "set null" }),
+    orderValuePaise: bigint("order_value_paise", { mode: "number" }).notNull(),
+    categoryCode: text("category_code").$type<"A" | "B" | "C" | "N" | "I" | "R" | "V">().notNull(),
+    productRef: text("product_ref"),
+    brandRef: text("brand_ref"),
+    bookedAt: timestamp("booked_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("sales_orders_customer_idx").on(t.customerId),
+    index("sales_orders_owner_idx").on(t.ownerId),
+    index("sales_orders_booked_idx").on(t.bookedAt),
+  ],
+);
+
+/** Commercial spine — invoices (drive slab collection + decay). */
+export const invoices = pgTable(
+  "invoices",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orderId: uuid("order_id").references(() => salesOrders.id, { onDelete: "cascade" }).notNull(),
+    invoiceNo: text("invoice_no"),
+    invoiceValuePaise: bigint("invoice_value_paise", { mode: "number" }).notNull(),
+    invoiceDate: date("invoice_date").notNull(),
+    agreedTermsDays: integer("agreed_terms_days").notNull().default(0),
+    dueDate: date("due_date"),
+    isFirstInvoiceForCustomer: boolean("is_first_invoice_for_customer").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("invoices_order_idx").on(t.orderId),
+    index("invoices_date_idx").on(t.invoiceDate),
+  ],
+);
+
+/** Commercial spine — receipts (collection events). */
+export const receipts = pgTable(
+  "receipts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    invoiceId: uuid("invoice_id").references(() => invoices.id, { onDelete: "cascade" }).notNull(),
+    amountPaise: bigint("amount_paise", { mode: "number" }).notNull(),
+    receivedAt: date("received_at").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("receipts_invoice_idx").on(t.invoiceId)],
+);
+
+/** Activity spine — profiled lead batches (D.1). */
+export const leadBatches = pgTable(
+  "lead_batches",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    employeeId: uuid("employee_id").references(() => employees.id, { onDelete: "cascade" }).notNull(),
+    periodMonth: text("period_month").notNull(), // YYYY-MM
+    leadCount: integer("lead_count").notNull().default(0),
+    profiled: boolean("profiled").notNull().default(false),
+    evidenceUrl: text("evidence_url"),
+    reviewStatus: text("review_status").$type<"pending" | "approved" | "rejected">().notNull().default("pending"),
+    reviewedById: uuid("reviewed_by_id").references(() => employees.id, { onDelete: "set null" }),
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+    note: text("note"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("lead_batches_emp_period_idx").on(t.employeeId, t.periodMonth)],
+);
+
+/** Activity spine — lead→enquiry conversions (D.2). */
+export const leadConversions = pgTable(
+  "lead_conversions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    employeeId: uuid("employee_id").references(() => employees.id, { onDelete: "cascade" }).notNull(),
+    leadBatchId: uuid("lead_batch_id").references(() => leadBatches.id, { onDelete: "set null" }),
+    periodMonth: text("period_month").notNull(),
+    convertedCount: integer("converted_count").notNull().default(0),
+    reviewStatus: text("review_status").$type<"pending" | "approved" | "rejected">().notNull().default("pending"),
+    reviewedById: uuid("reviewed_by_id").references(() => employees.id, { onDelete: "set null" }),
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+    note: text("note"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("lead_conversions_emp_period_idx").on(t.employeeId, t.periodMonth)],
+);
+
+/** Activity spine — high-value client meetings (E.1, discretionary). */
+export const clientMeetings = pgTable(
+  "client_meetings",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    employeeId: uuid("employee_id").references(() => employees.id, { onDelete: "cascade" }).notNull(),
+    customerId: uuid("customer_id").references(() => customers.id, { onDelete: "set null" }),
+    periodMonth: text("period_month").notNull(),
+    potentialBand: text("potential_band").$type<"low" | "medium" | "high">(),
+    awardedPaise: bigint("awarded_paise", { mode: "number" }).notNull().default(0),
+    justification: text("justification"),
+    reviewStatus: text("review_status").$type<"pending" | "approved" | "rejected">().notNull().default("pending"),
+    reviewedById: uuid("reviewed_by_id").references(() => employees.id, { onDelete: "set null" }),
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+    note: text("note"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("client_meetings_emp_period_idx").on(t.employeeId, t.periodMonth)],
+);
+
+/** Activity spine — reviews / testimonials (F.1–F.4). */
+export const testimonials = pgTable(
+  "testimonials",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    employeeId: uuid("employee_id").references(() => employees.id, { onDelete: "cascade" }).notNull(),
+    customerId: uuid("customer_id").references(() => customers.id, { onDelete: "set null" }),
+    periodMonth: text("period_month").notNull(),
+    kind: text("kind").$type<"google_review" | "email" | "letterhead">().notNull(),
+    wordCount: integer("word_count").notNull().default(0),
+    starRating: integer("star_rating"),
+    namesTeamMember: boolean("names_team_member").notNull().default(false),
+    mentionedEmployeeIds: jsonb("mentioned_employee_ids").$type<string[]>().notNull().default([]),
+    evidenceUrl: text("evidence_url"),
+    reviewStatus: text("review_status").$type<"pending" | "approved" | "rejected">().notNull().default("pending"),
+    reviewedById: uuid("reviewed_by_id").references(() => employees.id, { onDelete: "set null" }),
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+    note: text("note"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("testimonials_emp_period_idx").on(t.employeeId, t.periodMonth)],
+);
+
+/** Rule spine — schemes. */
+export const incentiveSchemes = pgTable(
+  "incentive_schemes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    name: text("name").notNull(),
+    scopeRole: text("scope_role"),
+    effectiveFrom: date("effective_from"),
+    effectiveTo: date("effective_to"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+);
+
+/** Rule spine — immutable published rule versions (JSONB SchemeConfig snapshot). */
+export const ruleVersions = pgTable(
+  "rule_versions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    schemeId: uuid("scheme_id").references(() => incentiveSchemes.id, { onDelete: "cascade" }).notNull(),
+    version: integer("version").notNull(),
+    config: jsonb("config").notNull(),
+    effectiveFrom: date("effective_from"),
+    effectiveTo: date("effective_to"),
+    publishedById: uuid("published_by_id").references(() => employees.id, { onDelete: "set null" }),
+    publishedAt: timestamp("published_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("rule_versions_scheme_version_idx").on(t.schemeId, t.version)],
+);
+
+/** Rule spine — employee ↔ scheme assignments. */
+export const schemeAssignments = pgTable(
+  "scheme_assignments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    employeeId: uuid("employee_id").references(() => employees.id, { onDelete: "cascade" }).notNull(),
+    schemeId: uuid("scheme_id").references(() => incentiveSchemes.id, { onDelete: "cascade" }).notNull(),
+    effectiveFrom: date("effective_from"),
+    effectiveTo: date("effective_to"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("scheme_assignments_employee_idx").on(t.employeeId)],
+);
+
+/** Ledger spine — periods (open → computing → review → locked → paid). */
+export const incentivePeriods = pgTable(
+  "incentive_periods",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    month: text("month").notNull(), // YYYY-MM
+    status: text("status").$type<"open" | "computing" | "review" | "locked" | "paid">().notNull().default("open"),
+    lockedById: uuid("locked_by_id").references(() => employees.id, { onDelete: "set null" }),
+    lockedAt: timestamp("locked_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("incentive_periods_month_idx").on(t.month)],
+);
+
+/** Ledger spine — append-only entries. Balance = SUM(amount_paise). */
+export const incentiveLedger = pgTable(
+  "incentive_ledger",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    employeeId: uuid("employee_id").references(() => employees.id, { onDelete: "cascade" }).notNull(),
+    periodId: uuid("period_id").references(() => incentivePeriods.id, { onDelete: "cascade" }).notNull(),
+    ruleLineCode: text("rule_line_code").notNull(),
+    category: text("category").notNull(),
+    ruleVersionId: uuid("rule_version_id").references(() => ruleVersions.id, { onDelete: "set null" }),
+    entryType: text("entry_type")
+      .$type<"accrual" | "decay" | "clawback" | "discretionary" | "reversal" | "adjustment">()
+      .notNull(),
+    amountPaise: bigint("amount_paise", { mode: "number" }).notNull(),
+    sourceEventType: text("source_event_type"),
+    sourceEventId: text("source_event_id"),
+    sourceRef: text("source_ref"),
+    explanation: text("explanation"),
+    computedAt: timestamp("computed_at", { withTimezone: true }),
+    createdById: uuid("created_by_id").references(() => employees.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("incentive_ledger_emp_period_idx").on(t.employeeId, t.periodId),
+    index("incentive_ledger_period_idx").on(t.periodId),
+    uniqueIndex("incentive_ledger_idem_idx").on(t.periodId, t.employeeId, t.ruleLineCode, t.sourceRef, t.entryType),
+  ],
+);
+
+/** Ledger spine — payout runs (period → payroll handoff). */
+export const payoutRuns = pgTable(
+  "payout_runs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    periodId: uuid("period_id").references(() => incentivePeriods.id, { onDelete: "cascade" }).notNull(),
+    totalPaise: bigint("total_paise", { mode: "number" }).notNull().default(0),
+    exportRef: text("export_ref"),
+    pushedToPayrollAt: timestamp("pushed_to_payroll_at", { withTimezone: true }),
+    createdById: uuid("created_by_id").references(() => employees.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("payout_runs_period_idx").on(t.periodId)],
+);
+
+/** Ledger spine — disputes / queries against a ledger row. */
+export const incentiveDisputes = pgTable(
+  "incentive_disputes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ledgerId: uuid("ledger_id").references(() => incentiveLedger.id, { onDelete: "cascade" }).notNull(),
+    employeeId: uuid("employee_id").references(() => employees.id, { onDelete: "cascade" }).notNull(),
+    message: text("message").notNull(),
+    status: text("status").$type<"open" | "resolved">().notNull().default("open"),
+    resolution: text("resolution"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("incentive_disputes_ledger_idx").on(t.ledgerId)],
+);
+
+export type Customer = typeof customers.$inferSelect;
+export type NewCustomer = typeof customers.$inferInsert;
+export type SalesOrder = typeof salesOrders.$inferSelect;
+export type NewSalesOrder = typeof salesOrders.$inferInsert;
+export type Invoice = typeof invoices.$inferSelect;
+export type NewInvoice = typeof invoices.$inferInsert;
+export type Receipt = typeof receipts.$inferSelect;
+export type NewReceipt = typeof receipts.$inferInsert;
+export type LeadBatch = typeof leadBatches.$inferSelect;
+export type NewLeadBatch = typeof leadBatches.$inferInsert;
+export type LeadConversion = typeof leadConversions.$inferSelect;
+export type NewLeadConversion = typeof leadConversions.$inferInsert;
+export type ClientMeeting = typeof clientMeetings.$inferSelect;
+export type NewClientMeeting = typeof clientMeetings.$inferInsert;
+export type Testimonial = typeof testimonials.$inferSelect;
+export type NewTestimonial = typeof testimonials.$inferInsert;
+export type IncentiveScheme = typeof incentiveSchemes.$inferSelect;
+export type NewIncentiveScheme = typeof incentiveSchemes.$inferInsert;
+export type RuleVersion = typeof ruleVersions.$inferSelect;
+export type NewRuleVersion = typeof ruleVersions.$inferInsert;
+export type SchemeAssignment = typeof schemeAssignments.$inferSelect;
+export type NewSchemeAssignment = typeof schemeAssignments.$inferInsert;
+export type IncentivePeriod = typeof incentivePeriods.$inferSelect;
+export type NewIncentivePeriod = typeof incentivePeriods.$inferInsert;
+export type IncentiveLedgerRow = typeof incentiveLedger.$inferSelect;
+export type NewIncentiveLedgerRow = typeof incentiveLedger.$inferInsert;
+export type PayoutRun = typeof payoutRuns.$inferSelect;
+export type NewPayoutRun = typeof payoutRuns.$inferInsert;
+export type IncentiveDispute = typeof incentiveDisputes.$inferSelect;
+export type NewIncentiveDispute = typeof incentiveDisputes.$inferInsert;
