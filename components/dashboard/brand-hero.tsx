@@ -84,17 +84,45 @@ export function BrandHero({ companyName = "JMT DRIVE SOLUTIONS" }: { companyName
 
         {/* LEFT — JMT mark (no plate), with a soft glow so the teal reads on navy */}
         <div className="absolute left-10 top-1/2 -translate-y-1/2 max-lg:hidden">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src="/logo.png"
-            alt="JMT Drive Solutions"
-            style={{
-              height: 64,
-              width: "auto",
-              display: "block",
-              filter: "drop-shadow(0 0 16px rgba(120,220,255,0.35)) drop-shadow(0 2px 6px rgba(0,0,0,0.5))",
-            }}
-          />
+          <div className="relative inline-block" style={{ height: 66 }}>
+            {/* soft glow halo behind the mark */}
+            <span
+              aria-hidden
+              className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
+              style={{ width: 128, height: 128, background: "radial-gradient(circle, rgba(120,220,255,0.42), transparent 66%)", filter: "blur(6px)" }}
+            />
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/logo.png"
+              alt="JMT Drive Solutions"
+              style={{
+                position: "relative",
+                height: 66,
+                width: "auto",
+                display: "block",
+                filter:
+                  "drop-shadow(0 0 18px rgba(120,220,255,0.5)) drop-shadow(0 0 2px rgba(255,255,255,0.5)) drop-shadow(0 3px 8px rgba(0,0,0,0.55))",
+              }}
+            />
+            {/* glossy sheen — a light streak masked to the logo shape */}
+            <span
+              aria-hidden
+              className="logo-sheen pointer-events-none absolute inset-0"
+              style={{
+                WebkitMaskImage: "url(/logo.png)",
+                maskImage: "url(/logo.png)",
+                WebkitMaskSize: "contain",
+                maskSize: "contain",
+                WebkitMaskRepeat: "no-repeat",
+                maskRepeat: "no-repeat",
+                WebkitMaskPosition: "center",
+                maskPosition: "center",
+                background: "linear-gradient(115deg, transparent 42%, rgba(255,255,255,0.85) 50%, transparent 58%)",
+                backgroundSize: "250% 100%",
+                animation: "logoSheen 5s ease-in-out infinite",
+              }}
+            />
+          </div>
         </div>
 
         {/* RIGHT — powered by Altus Corp */}
@@ -110,12 +138,44 @@ export function BrandHero({ companyName = "JMT DRIVE SOLUTIONS" }: { companyName
           >
             POWERED BY
           </span>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src="/altus-corp-logo-white.png"
-            alt="Altus Corp"
-            style={{ height: 64, width: "auto", display: "block", filter: "drop-shadow(0 2px 6px rgba(0,0,0,0.4))" }}
-          />
+          <div className="relative inline-block" style={{ height: 64 }}>
+            {/* soft glow halo so the mark lifts off the navy */}
+            <span
+              aria-hidden
+              className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
+              style={{ width: 122, height: 122, background: "radial-gradient(circle, rgba(255,255,255,0.26), transparent 66%)", filter: "blur(6px)" }}
+            />
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/altus-corp-logo-white.png"
+              alt="Altus Corp"
+              style={{
+                position: "relative",
+                height: 64,
+                width: "auto",
+                display: "block",
+                filter: "drop-shadow(0 0 14px rgba(255,255,255,0.28)) drop-shadow(0 0 2px rgba(255,255,255,0.4)) drop-shadow(0 3px 8px rgba(0,0,0,0.5))",
+              }}
+            />
+            {/* glossy sheen masked to the logo shape */}
+            <span
+              aria-hidden
+              className="logo-sheen pointer-events-none absolute inset-0"
+              style={{
+                WebkitMaskImage: "url(/altus-corp-logo-white.png)",
+                maskImage: "url(/altus-corp-logo-white.png)",
+                WebkitMaskSize: "contain",
+                maskSize: "contain",
+                WebkitMaskRepeat: "no-repeat",
+                maskRepeat: "no-repeat",
+                WebkitMaskPosition: "center",
+                maskPosition: "center",
+                background: "linear-gradient(115deg, transparent 42%, rgba(255,255,255,0.8) 50%, transparent 58%)",
+                backgroundSize: "250% 100%",
+                animation: "logoSheen 5s ease-in-out infinite 1.2s",
+              }}
+            />
+          </div>
         </div>
       </div>
     </section>

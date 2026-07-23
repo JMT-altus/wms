@@ -159,7 +159,7 @@ export default async function HubPage() {
 
           <h1
             className="mt-4"
-            style={{ fontFamily: "var(--font-sans)", fontWeight: 900, fontSize: "clamp(38px, 4.6vw, 56px)", lineHeight: 1.0, letterSpacing: "-0.04em" }}
+            style={{ fontFamily: "var(--font-display), var(--font-sans), sans-serif", fontWeight: 800, fontSize: "clamp(38px, 4.6vw, 56px)", lineHeight: 1.0, letterSpacing: "-0.035em" }}
           >
             <span
               className="text-ink-strong"
@@ -242,7 +242,7 @@ export default async function HubPage() {
 
                 <h2
                   className="relative mt-4"
-                  style={{ fontFamily: "var(--font-sans)", fontWeight: 800, fontSize: 28, letterSpacing: "-0.02em", color: s.title, textShadow: "0 1px 0 rgba(255,255,255,0.6)" }}
+                  style={{ fontFamily: "var(--font-display), var(--font-sans), sans-serif", fontWeight: 800, fontSize: 28, letterSpacing: "-0.02em", color: s.title, textShadow: "0 1px 0 rgba(255,255,255,0.6)" }}
                 >
                   {m.label}
                 </h2>

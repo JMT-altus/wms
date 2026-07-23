@@ -49,7 +49,12 @@
   --color-nav-pill-bg-hover:  rgba(255, 255, 255, 0.10);
 
   /* fonts */
-  --font-serif: var(--font-roboto), system-ui, -apple-system, "Segoe UI", sans-serif;
+  /* The app's "heading voice" — every title routes its font through this var
+     (the text-display-* utilities, the `font-serif` class, and inline
+     `var(--font-serif)`). Pointing it at the Bricolage display font makes ALL
+     headings across every page match the "Outstanding Dashboard" title in one
+     place, regardless of tag (h1–h6 or div/span/p). */
+  --font-serif: var(--font-display), var(--font-roboto), system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-sans:  var(--font-roboto), system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono:  ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 
@@ -147,6 +152,29 @@ html[data-density="compact"] body {
     text-rendering: optimizeLegibility;
   }
 
+  /* ── System-wide heading system ─────────────────────────────────────────
+     Every heading, on every page, matches the "Outstanding Dashboard" title:
+     the Bricolage display font (via --font-serif), UPRIGHT and BOLD. The app's
+     old headings hard-code an assortment of fonts, weights, sizes and the
+     serif-italic slant via inline styles and utilities, so `!important` is
+     used to enforce one consistent look. Radix Dialog.Title renders as an
+     <h2>, so dialog titles are covered too. */
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-serif);
+    font-style: normal !important;
+    font-weight: 700 !important;
+    letter-spacing: -0.02em !important;
+  }
+  /* Page titles (h1) share ONE size + weight everywhere so a page title looks
+     identical from page to page (Welcome, Kanban, Outstanding Dashboard …).
+     The brand wordmarks are logo lockups, not page titles — exempt them. */
+  h1:not(.brand-wordmark):not(.brand-wordmark-deep) {
+    font-size: clamp(30px, 3.4vw, 46px) !important;
+    font-weight: 800 !important;
+    line-height: 1.04 !important;
+    letter-spacing: -0.03em !important;
+  }
+
   body {
     min-height: 100dvh;
     background:
@@ -189,7 +217,7 @@ html[data-density="compact"] body {
 /* Typography utilities. Sizes match the spec §Typography table. */
 @utility text-display-xl {
   font-family: var(--font-serif);
-  font-weight: 600;
+  font-weight: 800;
   font-size: clamp(40px, 9vw, 76px);
   line-height: 0.95;
   letter-spacing: -0.035em;
@@ -198,7 +226,7 @@ html[data-density="compact"] body {
 
 @utility text-display-lg {
   font-family: var(--font-serif);
-  font-weight: 400;
+  font-weight: 700;
   font-size: clamp(28px, 6vw, 40px);
   line-height: 1.1;
   letter-spacing: -0.015em;
@@ -206,7 +234,7 @@ html[data-density="compact"] body {
 
 @utility text-display-md {
   font-family: var(--font-serif);
-  font-weight: 600;
+  font-weight: 700;
   font-size: clamp(24px, 5.2vw, 32px);
   line-height: 1;
   letter-spacing: -0.025em;
@@ -215,7 +243,7 @@ html[data-density="compact"] body {
 
 @utility text-display-sm {
   font-family: var(--font-serif);
-  font-weight: 400;
+  font-weight: 700;
   font-size: clamp(25px, 5.4vw, 34px);
   line-height: 1.05;
   letter-spacing: -0.02em;
@@ -223,7 +251,7 @@ html[data-density="compact"] body {
 
 @utility text-display-xs {
   font-family: var(--font-serif);
-  font-weight: 600;
+  font-weight: 700;
   font-size: clamp(21px, 4.4vw, 26px);
   line-height: 1;
   letter-spacing: -0.02em;
@@ -1039,6 +1067,16 @@ html[data-density="compact"] body {
 @keyframes brandFlow {
   0%   { background-position: 0% 50%; }
   100% { background-position: 200% 50%; }
+}
+/* A light streak that sweeps across a logo (masked to its shape) for a
+   glossy "shine" pass on the header marks. */
+@keyframes logoSheen {
+  0%   { background-position: 180% 0; }
+  60%  { background-position: -80% 0; }
+  100% { background-position: -80% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .logo-sheen { animation: none !important; opacity: 0 !important; }
 }
 @keyframes headerTextShimmer {
   to { background-position: 200% center; }
