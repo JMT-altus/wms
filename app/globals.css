@@ -1056,6 +1056,31 @@ html[data-density="compact"] body {
   .brand-wordmark { animation: none; }
 }
 
+/* Deeper, glossier variant for the hub (light canvas) — richer navy→teal
+   stops for contrast, with a bright cyan band that sweeps across the letters
+   for a wet, shiny metallic sheen. */
+.brand-wordmark-deep {
+  background: linear-gradient(
+    100deg,
+    #0a6cff 0%,
+    #2e8bff 14%,
+    #7fe0ff 28%,
+    #1f9fe0 44%,
+    #12b6a0 62%,
+    #0e93a6 80%,
+    #0a6cff 100%
+  );
+  background-size: 220% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  animation: brandFlow 6s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .brand-wordmark-deep { animation: none; }
+}
+
 /* App wallpaper — a soft blue/teal gradient behind every (app) page so
    content cards read with depth instead of floating on flat white. The
    navy BrandHero sits on top; content below shows the wallpaper. */

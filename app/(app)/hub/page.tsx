@@ -97,9 +97,25 @@ export default async function HubPage() {
       <div className="relative z-10">
         {/* Top bar */}
         <header className="mx-auto max-w-[1440px] px-8 max-md:px-4 pt-7 flex items-center justify-between gap-4">
-          <Link href={"/hub" as Route} className="flex items-center gap-3 shrink-0" aria-label="JMT Drive Solutions">
+          <Link href={"/hub" as Route} className="flex items-center gap-3.5 shrink-0" aria-label="JMT Drive Solutions">
+            {/* No plate — the teal monogram sits directly on the light canvas,
+                lifted by layered drop-shadows so it reads clearly on white. */}
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/logo.png" alt="JMT Drive Solutions" className="h-14 w-auto" style={{ display: "block", filter: "drop-shadow(0 8px 20px rgba(10,108,255,0.22))" }} />
+            <img
+              src="/logo.png"
+              alt="JMT Drive Solutions"
+              className="h-14 w-auto shrink-0"
+              style={{
+                display: "block",
+                filter:
+                  "drop-shadow(0 6px 14px rgba(1,42,88,0.28)) drop-shadow(0 2px 4px rgba(15,23,42,0.18))",
+              }}
+            />
+            <div className="leading-tight max-sm:hidden">
+              <div className="brand-wordmark-deep" style={{ fontFamily: "var(--font-sans)", fontWeight: 900, fontSize: 22, letterSpacing: "-0.01em" }}>
+                JMT Drive Solutions
+              </div>
+            </div>
           </Link>
           <div className="flex items-center gap-4">
             <div className="text-right max-sm:hidden">
@@ -130,17 +146,7 @@ export default async function HubPage() {
             style={{ fontFamily: "var(--font-sans)", fontWeight: 900, fontSize: "clamp(38px, 5vw, 58px)", lineHeight: 1.03, letterSpacing: "-0.03em" }}
           >
             <span className="text-ink-strong">Welcome back, </span>
-            <span
-              style={{
-                background: "linear-gradient(100deg, #0A6CFF 0%, #4C9AFF 45%, #17B6A0 100%)",
-                WebkitBackgroundClip: "text",
-                backgroundClip: "text",
-                WebkitTextFillColor: "transparent",
-                color: "transparent",
-              }}
-            >
-              {firstName}
-            </span>
+            <span className="brand-wordmark-deep">{firstName}</span>
           </h1>
           <p className="mt-4 font-medium text-ink-muted" style={{ fontSize: 17.5 }}>
             Choose your workspace to get started
