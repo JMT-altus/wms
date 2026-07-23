@@ -168,12 +168,20 @@ export default async function HubPage() {
           </div>
           <h1
             className="mt-3"
-            style={{ fontFamily: "var(--font-sans)", fontWeight: 900, fontSize: "clamp(38px, 5vw, 58px)", lineHeight: 1.03, letterSpacing: "-0.03em" }}
+            style={{ fontFamily: "var(--font-sans)", fontWeight: 900, fontSize: "clamp(40px, 5.2vw, 62px)", lineHeight: 1.02, letterSpacing: "-0.035em" }}
           >
-            <span className="text-ink-strong">{hello}, </span>
+            <span
+              className="text-ink-strong"
+              style={{ textShadow: "0 1px 0 rgba(255,255,255,0.7), 0 6px 20px rgba(15,23,42,0.12)" }}
+            >
+              {hello},{" "}
+            </span>
             <span className="brand-wordmark-deep">{firstName}</span>
           </h1>
-          <p className="mt-4 font-medium text-ink-muted" style={{ fontSize: 17.5 }}>
+          <p
+            className="mt-4 mx-auto font-semibold"
+            style={{ fontSize: 18, lineHeight: 1.5, letterSpacing: "-0.005em", color: "#475569", maxWidth: 560, textShadow: "0 1px 0 rgba(255,255,255,0.6)" }}
+          >
             {line}
           </p>
         </div>
@@ -191,7 +199,7 @@ export default async function HubPage() {
                 style={{
                   background: s.bg,
                   border: "1px solid rgba(255,255,255,0.7)",
-                  boxShadow: `0 26px 60px -30px ${s.glow}, 0 2px 8px rgba(15,23,42,0.06), inset 0 1px 0 rgba(255,255,255,0.9)`,
+                  boxShadow: `0 30px 60px -28px ${s.glow}, 0 12px 26px -16px rgba(15,23,42,0.16), 0 2px 6px rgba(15,23,42,0.05), inset 0 1px 0 rgba(255,255,255,0.95)`,
                   minHeight: 232,
                 }}
               >
@@ -230,11 +238,11 @@ export default async function HubPage() {
 
                 <h2
                   className="relative mt-6"
-                  style={{ fontFamily: "var(--font-sans)", fontWeight: 800, fontSize: 29, letterSpacing: "-0.015em", color: s.title }}
+                  style={{ fontFamily: "var(--font-sans)", fontWeight: 800, fontSize: 30, letterSpacing: "-0.02em", color: s.title, textShadow: "0 1px 0 rgba(255,255,255,0.6)" }}
                 >
                   {m.label}
                 </h2>
-                <p className="relative mt-2 font-semibold" style={{ fontSize: 15, lineHeight: 1.45, color: s.ink, maxWidth: 260 }}>
+                <p className="relative mt-2 font-semibold" style={{ fontSize: 15, lineHeight: 1.5, letterSpacing: "-0.003em", color: s.ink, maxWidth: 260 }}>
                   {m.tagline}
                 </p>
 
