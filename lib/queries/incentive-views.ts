@@ -1,5 +1,5 @@
 import "server-only";
-import { and, eq, desc, sql } from "drizzle-orm";
+import { and, eq, gte, lt, desc, inArray, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
   salesOrders, invoices, receipts, customers,
@@ -45,7 +45,7 @@ export async function getMySales(employeeId: string, asOf: Date = new Date()): P
     .orderBy(desc(salesOrders.bookedAt));
 
   const invIds = rows.map((r) => r.invoiceId);
-  const recs = invIds.length ? await db.select().from(receipts).where(sql`${receipts.invoiceId} = any(${invIds})`) : [];
+  const recs = invIds.length ? await db.select().from(receipts).where(inArray(receipts.invoiceId, invIds)) : [];
   const paidBy = new Map<string, number>();
   const recsBy = new Map<string, ReceiptRow[]>();
   for (const r of recs) {
@@ -82,7 +82,7 @@ export async function getMonthlySales(employeeId: string, period: string): Promi
   const [row] = await db
     .select({ total: sql<number>`coalesce(sum(${salesOrders.orderValuePaise}), 0)::bigint` })
     .from(salesOrders)
-    .where(and(eq(salesOrders.ownerId, employeeId), sql`${salesOrders.bookedAt} >= ${start}`, sql`${salesOrders.bookedAt} < ${end}`));
+    .where(and(eq(salesOrders.ownerId, employeeId), gte(salesOrders.bookedAt, start), lt(salesOrders.bookedAt, end)));
   return Number(row?.total ?? 0);
 }
 
