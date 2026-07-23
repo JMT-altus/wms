@@ -4,10 +4,10 @@ import { revalidatePath } from "next/cache";
 import { eq, isNotNull } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { requireUser, requireAdmin } from "@/lib/auth/current";
-import { leadBatches, leadConversions, clientMeetings, testimonials, salesOrders, customers, invoices, receipts } from "@/db/schema";
-import { currentPeriodIST } from "@/lib/queries/incentives";
+import { leadBatches, leadConversions, clientMeetings, testimonials, salesOrders, customers, invoices, receipts, incentivePeriods, payoutRuns } from "@/db/schema";
+import { currentPeriodIST, getPeriodPayout } from "@/lib/queries/incentives";
 import { P } from "@/lib/incentives";
-import { computePeriodForEmployee } from "@/lib/incentives/load";
+import { computePeriodForEmployee, ensurePeriod } from "@/lib/incentives/load";
 
 type OrderCat = "A" | "B" | "C" | "N" | "I" | "R" | "V";
 const isDate = (s: unknown): s is string => typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s);
@@ -190,6 +190,29 @@ export async function reviewSubmission(input: {
       break;
     default:
       return { ok: false, error: "Unknown queue" };
+  }
+  revalidatePath("/incentive");
+  revalidatePath("/incentive/admin");
+  return { ok: true };
+}
+
+/** Period lifecycle: open → review → locked → paid. Admin-driven. */
+export async function setPeriodStatus(input: {
+  period?: string;
+  status: "open" | "review" | "locked" | "paid";
+}): Promise<ActionResult> {
+  const me = await requireAdmin();
+  const period = input.period ?? currentPeriodIST();
+  const status = (["open", "review", "locked", "paid"] as const).includes(input.status) ? input.status : "review";
+  const periodId = await ensurePeriod(period);
+
+  await db.update(incentivePeriods)
+    .set({ status, lockedById: status === "locked" || status === "paid" ? me.id : null, lockedAt: status === "locked" || status === "paid" ? new Date() : null, updatedAt: new Date() })
+    .where(eq(incentivePeriods.id, periodId));
+
+  if (status === "paid") {
+    const payout = await getPeriodPayout(period);
+    await db.insert(payoutRuns).values({ periodId, totalPaise: payout.grandTotalPaise, createdById: me.id, pushedToPayrollAt: new Date() });
   }
   revalidatePath("/incentive");
   revalidatePath("/incentive/admin");

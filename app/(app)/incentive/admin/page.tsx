@@ -1,12 +1,13 @@
 import { requireAdmin } from "@/lib/auth/current";
 import { SALES_BH_SCHEME } from "@/lib/incentives";
 import { formatInrPaise, formatInrCompactPaise } from "@/lib/format";
-import { getPendingSubmissions } from "@/lib/queries/incentives";
+import { getPendingSubmissions, getPeriodPayout, currentPeriodIST, periodLabel } from "@/lib/queries/incentives";
 import { getCollectionWatchtower } from "@/lib/queries/incentive-risk";
 import { listEmployeeOptions } from "@/lib/queries/employees";
 import { VerificationQueue } from "@/components/incentive/verification-queue";
 import { RecomputeButton } from "@/components/incentive/recompute-button";
 import { DataEntry } from "@/components/incentive/data-entry";
+import { PeriodControls } from "@/components/incentive/period-controls";
 
 export const dynamic = "force-dynamic";
 
@@ -18,10 +19,12 @@ const CATEGORY_LABELS: Record<string, string> = {
 export default async function IncentiveAdminPage() {
   await requireAdmin();
   const s = SALES_BH_SCHEME;
-  const [pending, watchtower, employees] = await Promise.all([
+  const period = currentPeriodIST();
+  const [pending, watchtower, employees, payout] = await Promise.all([
     getPendingSubmissions(),
     getCollectionWatchtower(),
     listEmployeeOptions(),
+    getPeriodPayout(period),
   ]);
 
   return (
@@ -32,6 +35,29 @@ export default async function IncentiveAdminPage() {
         </div>
         <h1 className="text-display-md text-ink-strong mt-2">Scheme &amp; Controls</h1>
         <p className="text-ink-muted mt-1 text-[15px]">The active Sales-BH scheme, plus the verification queue. Ingestion and period-close tools are next.</p>
+      </div>
+
+      {/* Period close + payout */}
+      <div className="rounded-[18px] p-5 mb-8" style={{ background: "#fff", border: "1px solid rgba(15,23,42,0.08)" }}>
+        <div className="flex items-center justify-between gap-3 flex-wrap mb-4">
+          <div>
+            <h2 className="text-display-xs text-ink-strong">Period · {periodLabel(period)}</h2>
+            <p className="text-ink-muted text-[13px] mt-0.5">
+              Payout total <b className="text-ink-strong">{formatInrPaise(payout.grandTotalPaise)}</b> across {payout.rows.length} employee{payout.rows.length === 1 ? "" : "s"}
+            </p>
+          </div>
+          <PeriodControls status={payout.status} />
+        </div>
+        {payout.rows.length > 0 && (
+          <div className="rounded-[14px] overflow-hidden" style={{ border: "1px solid rgba(15,23,42,0.07)" }}>
+            {payout.rows.map((r, i) => (
+              <div key={r.employeeId} className="flex items-center justify-between px-4 py-2.5" style={{ background: i % 2 ? "rgba(15,23,42,0.015)" : "#fff", borderTop: i ? "1px solid rgba(15,23,42,0.05)" : undefined }}>
+                <span className="text-[13.5px] font-semibold text-ink-strong">{r.employeeName}</span>
+                <span className="text-[14px] font-bold text-ink-strong" style={{ fontVariantNumeric: "tabular-nums" }}>{formatInrPaise(r.totalPaise)}</span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Verification queue */}

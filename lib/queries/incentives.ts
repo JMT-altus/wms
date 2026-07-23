@@ -1,5 +1,5 @@
 import "server-only";
-import { and, eq, desc } from "drizzle-orm";
+import { and, eq, desc, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { incentiveLedger, incentivePeriods, leadBatches, leadConversions, clientMeetings, testimonials, employees } from "@/db/schema";
 import { SALES_BH_SCHEME } from "@/lib/incentives";
@@ -54,6 +54,36 @@ export function periodLabel(period: string): string {
   const [y, m] = period.split("-").map(Number);
   const month = new Date(Date.UTC(y!, (m ?? 1) - 1, 1)).toLocaleString("en-US", { month: "short", timeZone: "UTC" });
   return `${month.toUpperCase()} ${y}`;
+}
+
+export interface PayoutRow { employeeId: string; employeeName: string; totalPaise: number; }
+export interface PeriodPayout { period: string; status: string; grandTotalPaise: number; rows: PayoutRow[]; }
+
+/** Per-employee payout totals for a period (for review / lock / payout). */
+export async function getPeriodPayout(period: string): Promise<PeriodPayout> {
+  const [prow] = await db.select({ status: incentivePeriods.status }).from(incentivePeriods).where(eq(incentivePeriods.month, period)).limit(1);
+  const rows = await db
+    .select({
+      employeeId: incentiveLedger.employeeId,
+      employeeName: employees.name,
+      totalPaise: sql<number>`sum(${incentiveLedger.amountPaise})::bigint`,
+    })
+    .from(incentiveLedger)
+    .innerJoin(incentivePeriods, eq(incentiveLedger.periodId, incentivePeriods.id))
+    .innerJoin(employees, eq(incentiveLedger.employeeId, employees.id))
+    .where(eq(incentivePeriods.month, period))
+    .groupBy(incentiveLedger.employeeId, employees.name);
+
+  const mapped = rows
+    .map((r) => ({ employeeId: r.employeeId, employeeName: r.employeeName, totalPaise: Number(r.totalPaise) }))
+    .filter((r) => r.totalPaise > 0)
+    .sort((a, b) => b.totalPaise - a.totalPaise);
+  return {
+    period,
+    status: prow?.status ?? "open",
+    grandTotalPaise: mapped.reduce((s, r) => s + r.totalPaise, 0),
+    rows: mapped,
+  };
 }
 
 export type PendingQueue = "lead_batch" | "lead_conversion" | "meeting" | "testimonial";
