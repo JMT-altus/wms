@@ -79,10 +79,14 @@ export async function submitTestimonial(input: {
 
 // ── Admin data ingestion (commercial spine) ─────────────────────────────────
 
-/** Record a sale: find-or-create customer, then order + invoice (+ optional receipt). */
+/**
+ * Record a sale: find-or-create customer, then order + invoice (+ optional
+ * receipt). A salesperson logs their own deal (owner forced to self); an admin
+ * may log on behalf of any employee via ownerEmployeeId.
+ */
 export async function recordSale(input: {
   customerName: string;
-  ownerEmployeeId: string;
+  ownerEmployeeId?: string;
   categoryCode: OrderCat;
   amountRupees: number;
   invoiceNo?: string;
@@ -92,10 +96,11 @@ export async function recordSale(input: {
   paidAmountRupees?: number;
   paidDate?: string;
 }): Promise<ActionResult> {
-  await requireAdmin();
+  const me = await requireUser();
+  const owner = me.isAdmin && input.ownerEmployeeId ? input.ownerEmployeeId : me.id;
   const name = String(input.customerName ?? "").trim().slice(0, 160);
   if (!name) return { ok: false, error: "Customer name is required." };
-  if (!/^[0-9a-f-]{36}$/i.test(input.ownerEmployeeId)) return { ok: false, error: "Pick a sales owner." };
+  if (!/^[0-9a-f-]{36}$/i.test(owner)) return { ok: false, error: "Pick a sales owner." };
   const cat: OrderCat = (["A", "B", "C", "N", "I", "R", "V"] as const).includes(input.categoryCode) ? input.categoryCode : "A";
   const amountPaise = P(clampInt(input.amountRupees, 0, 1_00_00_00_00));
   if (amountPaise <= 0) return { ok: false, error: "Enter the order amount." };
@@ -109,7 +114,7 @@ export async function recordSale(input: {
       .insert(customers)
       .values({
         name,
-        acquisitionEmployeeId: input.isNewCustomer ? input.ownerEmployeeId : null,
+        acquisitionEmployeeId: input.isNewCustomer ? owner : null,
         isNewCustomer: !!input.isNewCustomer,
         firstTransactionAt: new Date(input.invoiceDate),
       })
@@ -120,7 +125,7 @@ export async function recordSale(input: {
     .where(eq(customers.id, cust!.id));
 
   const [order] = await db.insert(salesOrders).values({
-    customerId: cust!.id, ownerId: input.ownerEmployeeId, orderValuePaise: amountPaise,
+    customerId: cust!.id, ownerId: owner, orderValuePaise: amountPaise,
     categoryCode: cat, bookedAt: new Date(input.invoiceDate),
   }).returning();
   const [inv] = await db.insert(invoices).values({

@@ -3,7 +3,7 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, ListTodo, CalendarDays, FolderKanban, SquareKanban, Target,
   CalendarCheck, CalendarRange, Award, IndianRupee, Receipt, CalendarOff,
-  Contact, Sparkles, GraduationCap, LayoutGrid,
+  Contact, Sparkles, GraduationCap, LayoutGrid, Users,
 } from "lucide-react";
 import type { Route } from "next";
 import { MainNavPill } from "./main-nav-pill";
@@ -18,7 +18,7 @@ interface Props {
 const ICONS: Record<string, typeof LayoutDashboard> = {
   LayoutDashboard, ListTodo, CalendarDays, FolderKanban, SquareKanban, Target,
   CalendarCheck, CalendarRange, Award, IndianRupee, Receipt, CalendarOff,
-  Contact, Sparkles, GraduationCap, LayoutGrid,
+  Contact, Sparkles, GraduationCap, LayoutGrid, Users,
 };
 
 export function MainNav({ activeTasks, isAdmin, variant }: Props) {
