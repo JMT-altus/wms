@@ -114,19 +114,28 @@ export default async function HubPage() {
         {/* Top bar */}
         <header className="mx-auto max-w-[1440px] px-8 max-md:px-4 pt-7 flex items-center justify-between gap-4">
           <Link href={"/hub" as Route} className="flex items-center gap-3.5 shrink-0" aria-label="JMT Drive Solutions">
-            {/* No plate — the teal monogram sits directly on the light canvas,
-                lifted by layered drop-shadows so it reads clearly on white. */}
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="/logo.png"
-              alt="JMT Drive Solutions"
-              className="h-14 w-auto shrink-0"
+            {/* App-icon tile — your gear monogram reversed to white inside the
+                brand blue→teal gradient. Thin light lines read crisply on the
+                saturated tile (light mark on dark surface), which suits the
+                low-res mark far better than sitting it on a light canvas. */}
+            <span
+              className="grid place-items-center shrink-0 rounded-[16px]"
               style={{
-                display: "block",
-                filter:
-                  "drop-shadow(0 6px 14px rgba(1,42,88,0.28)) drop-shadow(0 2px 4px rgba(15,23,42,0.18))",
+                width: 52,
+                height: 52,
+                background: "linear-gradient(135deg, #0a6cff 0%, #1f9fe0 50%, #12b6a0 100%)",
+                boxShadow:
+                  "0 10px 22px -10px rgba(10,108,255,0.5), 0 1px 2px rgba(15,23,42,0.12), inset 0 1px 0 rgba(255,255,255,0.35)",
               }}
-            />
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/logo.png"
+                alt="JMT Drive Solutions"
+                className="h-8 w-auto"
+                style={{ display: "block", filter: "brightness(0) invert(1) drop-shadow(0 1px 2px rgba(1,42,88,0.4))" }}
+              />
+            </span>
             <div className="leading-tight max-sm:hidden">
               <div className="brand-wordmark-deep" style={{ fontFamily: "var(--font-sans)", fontWeight: 900, fontSize: 22, letterSpacing: "-0.01em" }}>
                 JMT Drive Solutions
