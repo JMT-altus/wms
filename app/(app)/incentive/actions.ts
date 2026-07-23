@@ -4,10 +4,14 @@ import { revalidatePath } from "next/cache";
 import { eq, isNotNull } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { requireUser, requireAdmin } from "@/lib/auth/current";
-import { leadBatches, leadConversions, clientMeetings, testimonials, salesOrders } from "@/db/schema";
+import { leadBatches, leadConversions, clientMeetings, testimonials, salesOrders, customers, invoices, receipts } from "@/db/schema";
 import { currentPeriodIST } from "@/lib/queries/incentives";
 import { P } from "@/lib/incentives";
 import { computePeriodForEmployee } from "@/lib/incentives/load";
+
+type OrderCat = "A" | "B" | "C" | "N" | "I" | "R" | "V";
+const isDate = (s: unknown): s is string => typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s);
+const addDays = (isoDate: string, days: number) => new Date(new Date(isoDate).getTime() + days * 86_400_000).toISOString().slice(0, 10);
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -70,6 +74,85 @@ export async function submitTestimonial(input: {
     starRating, namesTeamMember: !!input.namesTeamMember, evidenceUrl: input.evidenceUrl?.slice(0, 500) ?? null,
   });
   revalidatePath("/incentive");
+  return { ok: true };
+}
+
+// ── Admin data ingestion (commercial spine) ─────────────────────────────────
+
+/** Record a sale: find-or-create customer, then order + invoice (+ optional receipt). */
+export async function recordSale(input: {
+  customerName: string;
+  ownerEmployeeId: string;
+  categoryCode: OrderCat;
+  amountRupees: number;
+  invoiceNo?: string;
+  invoiceDate: string;
+  termsDays: number;
+  isNewCustomer?: boolean;
+  paidAmountRupees?: number;
+  paidDate?: string;
+}): Promise<ActionResult> {
+  await requireAdmin();
+  const name = String(input.customerName ?? "").trim().slice(0, 160);
+  if (!name) return { ok: false, error: "Customer name is required." };
+  if (!/^[0-9a-f-]{36}$/i.test(input.ownerEmployeeId)) return { ok: false, error: "Pick a sales owner." };
+  const cat: OrderCat = (["A", "B", "C", "N", "I", "R", "V"] as const).includes(input.categoryCode) ? input.categoryCode : "A";
+  const amountPaise = P(clampInt(input.amountRupees, 0, 1_00_00_00_00));
+  if (amountPaise <= 0) return { ok: false, error: "Enter the order amount." };
+  if (!isDate(input.invoiceDate)) return { ok: false, error: "Invoice date must be YYYY-MM-DD." };
+  const termsDays = clampInt(input.termsDays, 0, 365);
+  const dueDate = addDays(input.invoiceDate, termsDays);
+
+  let [cust] = await db.select().from(customers).where(eq(customers.name, name)).limit(1);
+  if (!cust) {
+    [cust] = await db
+      .insert(customers)
+      .values({
+        name,
+        acquisitionEmployeeId: input.isNewCustomer ? input.ownerEmployeeId : null,
+        isNewCustomer: !!input.isNewCustomer,
+        firstTransactionAt: new Date(input.invoiceDate),
+      })
+      .returning();
+  }
+  await db.update(customers)
+    .set({ fyTurnoverPaise: (cust!.fyTurnoverPaise ?? 0) + amountPaise, updatedAt: new Date() })
+    .where(eq(customers.id, cust!.id));
+
+  const [order] = await db.insert(salesOrders).values({
+    customerId: cust!.id, ownerId: input.ownerEmployeeId, orderValuePaise: amountPaise,
+    categoryCode: cat, bookedAt: new Date(input.invoiceDate),
+  }).returning();
+  const [inv] = await db.insert(invoices).values({
+    orderId: order!.id, invoiceNo: input.invoiceNo?.slice(0, 60) || null,
+    invoiceValuePaise: amountPaise, invoiceDate: input.invoiceDate, agreedTermsDays: termsDays, dueDate,
+  }).returning();
+
+  const paid = P(clampInt(input.paidAmountRupees ?? 0, 0, 1_00_00_00_00));
+  if (paid > 0) {
+    await db.insert(receipts).values({
+      invoiceId: inv!.id, amountPaise: paid, receivedAt: isDate(input.paidDate) ? input.paidDate : input.invoiceDate,
+    });
+  }
+  revalidatePath("/incentive");
+  revalidatePath("/incentive/admin");
+  return { ok: true };
+}
+
+/** Record a collection against an existing invoice (by its number). */
+export async function recordReceipt(input: { invoiceNo: string; amountRupees: number; receivedAt: string }): Promise<ActionResult> {
+  await requireAdmin();
+  const invNo = String(input.invoiceNo ?? "").trim();
+  if (!invNo) return { ok: false, error: "Invoice number is required." };
+  const [inv] = await db.select().from(invoices).where(eq(invoices.invoiceNo, invNo)).limit(1);
+  if (!inv) return { ok: false, error: "No invoice found with that number." };
+  const amt = P(clampInt(input.amountRupees, 0, 1_00_00_00_00));
+  if (amt <= 0) return { ok: false, error: "Enter the amount received." };
+  await db.insert(receipts).values({
+    invoiceId: inv.id, amountPaise: amt, receivedAt: isDate(input.receivedAt) ? input.receivedAt : new Date().toISOString().slice(0, 10),
+  });
+  revalidatePath("/incentive");
+  revalidatePath("/incentive/admin");
   return { ok: true };
 }
 

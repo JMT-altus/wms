@@ -1,7 +1,7 @@
 import "server-only";
-import { and, eq, inArray } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { salesOrders, invoices, receipts } from "@/db/schema";
+import { salesOrders, invoices, receipts, customers, employees } from "@/db/schema";
 import { SALES_BH_SCHEME } from "@/lib/incentives";
 import type { DecayStep } from "@/lib/incentives";
 
@@ -94,4 +94,74 @@ export async function getAtRiskInvoices(employeeId: string, asOf: Date = new Dat
   // Most urgent first: soonest next-step, then most past terms.
   out.sort((a, b) => (a.daysToNextStep ?? 9999) - (b.daysToNextStep ?? 9999) || b.daysPastTerms - a.daysPastTerms);
   return out.slice(0, 12);
+}
+
+export interface WatchtowerRow {
+  invoiceNo: string | null;
+  customer: string;
+  owner: string;
+  outstandingPaise: number;
+  daysPastTerms: number;
+  multiplier: number;
+  bucket: "0-45" | "46-75" | "76-100" | "100+";
+}
+export interface Watchtower {
+  rows: WatchtowerRow[];
+  buckets: { key: string; label: string; count: number; outstandingPaise: number }[];
+}
+
+function bucketFor(days: number): WatchtowerRow["bucket"] {
+  if (days <= 45) return "0-45";
+  if (days <= 75) return "46-75";
+  if (days <= 100) return "76-100";
+  return "100+";
+}
+
+/** All outstanding invoices across the team, aged by days past terms. */
+export async function getCollectionWatchtower(asOf: Date = new Date()): Promise<Watchtower> {
+  const rows = await db
+    .select({
+      invoiceId: invoices.id,
+      invoiceNo: invoices.invoiceNo,
+      invoiceValuePaise: invoices.invoiceValuePaise,
+      invoiceDate: invoices.invoiceDate,
+      agreedTermsDays: invoices.agreedTermsDays,
+      dueDate: invoices.dueDate,
+      customer: customers.name,
+      owner: employees.name,
+    })
+    .from(invoices)
+    .innerJoin(salesOrders, eq(invoices.orderId, salesOrders.id))
+    .innerJoin(customers, eq(salesOrders.customerId, customers.id))
+    .leftJoin(employees, eq(salesOrders.ownerId, employees.id));
+
+  const invIds = rows.map((r) => r.invoiceId);
+  const recs = invIds.length ? await db.select().from(receipts).where(inArray(receipts.invoiceId, invIds)) : [];
+  const paidByInv = new Map<string, number>();
+  for (const r of recs) paidByInv.set(r.invoiceId, (paidByInv.get(r.invoiceId) ?? 0) + r.amountPaise);
+
+  const bucketAgg = new Map<string, { count: number; outstandingPaise: number }>();
+  const out: WatchtowerRow[] = [];
+  for (const r of rows) {
+    const outstanding = r.invoiceValuePaise - (paidByInv.get(r.invoiceId) ?? 0);
+    if (outstanding <= 0) continue;
+    const due = r.dueDate ? new Date(r.dueDate) : new Date(new Date(r.invoiceDate).getTime() + r.agreedTermsDays * DAY);
+    const daysPastTerms = Math.max(0, dayDiff(asOf, due));
+    const bucket = bucketFor(daysPastTerms);
+    const { currentMultiplier } = riskInfo(daysPastTerms, SALES_BH_SCHEME.decaySteps);
+    out.push({
+      invoiceNo: r.invoiceNo, customer: r.customer, owner: r.owner ?? "—",
+      outstandingPaise: outstanding, daysPastTerms, multiplier: currentMultiplier, bucket,
+    });
+    const agg = bucketAgg.get(bucket) ?? { count: 0, outstandingPaise: 0 };
+    agg.count += 1; agg.outstandingPaise += outstanding;
+    bucketAgg.set(bucket, agg);
+  }
+  out.sort((a, b) => b.daysPastTerms - a.daysPastTerms);
+
+  const LABELS: Record<string, string> = { "0-45": "On track (0–45d)", "46-75": "Halved (46–75d)", "76-100": "Quartered (76–100d)", "100+": "Voided (100d+)" };
+  const buckets = ["0-45", "46-75", "76-100", "100+"].map((key) => ({
+    key, label: LABELS[key]!, count: bucketAgg.get(key)?.count ?? 0, outstandingPaise: bucketAgg.get(key)?.outstandingPaise ?? 0,
+  }));
+  return { rows: out.slice(0, 50), buckets };
 }

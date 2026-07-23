@@ -1,9 +1,12 @@
 import { requireAdmin } from "@/lib/auth/current";
 import { SALES_BH_SCHEME } from "@/lib/incentives";
-import { formatInrPaise } from "@/lib/format";
+import { formatInrPaise, formatInrCompactPaise } from "@/lib/format";
 import { getPendingSubmissions } from "@/lib/queries/incentives";
+import { getCollectionWatchtower } from "@/lib/queries/incentive-risk";
+import { listEmployeeOptions } from "@/lib/queries/employees";
 import { VerificationQueue } from "@/components/incentive/verification-queue";
 import { RecomputeButton } from "@/components/incentive/recompute-button";
+import { DataEntry } from "@/components/incentive/data-entry";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +18,11 @@ const CATEGORY_LABELS: Record<string, string> = {
 export default async function IncentiveAdminPage() {
   await requireAdmin();
   const s = SALES_BH_SCHEME;
-  const pending = await getPendingSubmissions();
+  const [pending, watchtower, employees] = await Promise.all([
+    getPendingSubmissions(),
+    getCollectionWatchtower(),
+    listEmployeeOptions(),
+  ]);
 
   return (
     <main className="mx-auto max-w-[1280px] px-10 max-md:px-4 pt-8 pb-16">
@@ -42,6 +49,39 @@ export default async function IncentiveAdminPage() {
       <div className="mb-8">
         <RecomputeButton />
       </div>
+
+      {/* Data ingestion */}
+      <h2 className="text-display-xs text-ink-strong mb-3">Record sales &amp; collections</h2>
+      <div className="mb-8">
+        <DataEntry employees={employees} />
+      </div>
+
+      {/* Collection watchtower */}
+      <h2 className="text-display-xs text-ink-strong mb-3">Collection watchtower</h2>
+      <div className="grid grid-cols-4 max-md:grid-cols-2 gap-3 mb-4">
+        {watchtower.buckets.map((b) => (
+          <div key={b.key} className="rounded-[16px] p-4" style={{ background: "#fff", border: "1px solid rgba(15,23,42,0.08)" }}>
+            <div className="text-[11.5px] font-bold uppercase tracking-[0.1em] text-ink-subtle">{b.label}</div>
+            <div className="mt-1.5 font-bold text-ink-strong text-[19px]" style={{ fontVariantNumeric: "tabular-nums" }}>{formatInrCompactPaise(b.outstandingPaise)}</div>
+            <div className="text-ink-subtle text-[12px]">{b.count} invoice{b.count === 1 ? "" : "s"}</div>
+          </div>
+        ))}
+      </div>
+      {watchtower.rows.length > 0 && (
+        <div className="rounded-[18px] overflow-hidden mb-8" style={{ border: "1px solid rgba(15,23,42,0.08)" }}>
+          {watchtower.rows.map((r, i) => (
+            <div key={i} className="flex items-center gap-4 px-5 py-3 max-md:flex-wrap" style={{ background: i % 2 ? "rgba(15,23,42,0.015)" : "#fff", borderTop: i ? "1px solid rgba(15,23,42,0.05)" : undefined }}>
+              <div className="flex-1 min-w-0">
+                <span className="font-bold text-ink-strong text-[13.5px]">{r.customer}</span>
+                {r.invoiceNo && <span className="text-ink-subtle text-[12.5px] font-semibold"> · {r.invoiceNo}</span>}
+                <span className="text-ink-subtle text-[12.5px]"> · {r.owner}</span>
+              </div>
+              <span className="shrink-0 text-[12.5px] font-semibold text-ink-muted">{r.daysPastTerms}d past · ×{r.multiplier.toFixed(2)}</span>
+              <span className="shrink-0 font-bold text-ink-strong text-[14px]" style={{ fontVariantNumeric: "tabular-nums" }}>{formatInrPaise(r.outstandingPaise)}</span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Active category caps */}
       <h2 className="text-display-xs text-ink-strong mb-3">Category ceilings</h2>
