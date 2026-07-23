@@ -4,19 +4,36 @@
 // ledger idempotently. Uses Date here (script/server side) — only the pure
 // engine forbids Date.
 
-import { and, eq, gte, lt, inArray } from "drizzle-orm";
+import { and, eq, gte, lt, inArray, desc } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
   salesOrders, invoices, receipts, customers,
   leadBatches, leadConversions, clientMeetings, testimonials,
-  incentivePeriods, incentiveLedger,
+  incentivePeriods, incentiveLedger, ruleVersions,
 } from "@/db/schema";
 import { evaluate } from "./engine";
 import { SALES_BH_SCHEME } from "./config";
 import type {
-  CrossSellInvoice, EvaluationInput, EvaluationResult, NewCustomerCohort,
+  CrossSellInvoice, DecayStep, EvaluationInput, EvaluationResult, NewCustomerCohort,
   SchemeConfig, TestimonialKind,
 } from "./types";
+
+/**
+ * The scheme config that drives computation — the latest published rule_version
+ * if the admin has edited the scheme, else the built-in Sales-BH default. JSON
+ * cannot hold Infinity, so the open-ended decay step round-trips as null and is
+ * restored here.
+ */
+export async function getActiveSchemeConfig(): Promise<SchemeConfig> {
+  const [rv] = await db.select({ config: ruleVersions.config }).from(ruleVersions).orderBy(desc(ruleVersions.createdAt)).limit(1);
+  if (!rv?.config) return SALES_BH_SCHEME;
+  const cfg = rv.config as Partial<SchemeConfig>;
+  const steps = (cfg.decaySteps ?? SALES_BH_SCHEME.decaySteps).map((s): DecayStep => ({
+    maxDaysPastTerms: s.maxDaysPastTerms == null ? Infinity : s.maxDaysPastTerms,
+    multiplier: s.multiplier,
+  }));
+  return { ...SALES_BH_SCHEME, ...cfg, decaySteps: steps };
+}
 
 const DAY = 86_400_000;
 const dayDiff = (later: Date, earlier: Date) => Math.floor((later.getTime() - earlier.getTime()) / DAY);
@@ -67,6 +84,7 @@ export async function buildEvaluationInput(
   employeeId: string,
   period: string,
   asOf: Date,
+  scheme: SchemeConfig = SALES_BH_SCHEME,
 ): Promise<EvaluationInput> {
   const { start, end } = monthBounds(period);
 
@@ -101,7 +119,7 @@ export async function buildEvaluationInput(
     const { decayMultiplier } = await import("./collection");
     const totalVal = invs.reduce((s, i) => s + i.invoiceValuePaise, 0) || 1;
     slabDecay =
-      invs.reduce((s, i) => s + i.invoiceValuePaise * decayMultiplier(decayFor(i), SALES_BH_SCHEME.decaySteps), 0) /
+      invs.reduce((s, i) => s + i.invoiceValuePaise * decayMultiplier(decayFor(i), scheme.decaySteps), 0) /
       totalVal;
   }
 
@@ -120,7 +138,7 @@ export async function buildEvaluationInput(
 
   // C · new-customer cohorts — customers acquired by this employee whose 3rd
   // acquisition-type transaction completes in this month.
-  const newCustomerCohorts = await buildNewCustomerCohorts(employeeId, start, end, asOf);
+  const newCustomerCohorts = await buildNewCustomerCohorts(employeeId, start, end, asOf, scheme);
 
   // Activity spine — approved submissions in the period.
   const [batches, convs, meets, tests] = await Promise.all([
@@ -148,7 +166,7 @@ export async function buildEvaluationInput(
 }
 
 async function buildNewCustomerCohorts(
-  employeeId: string, start: Date, end: Date, asOf: Date,
+  employeeId: string, start: Date, end: Date, asOf: Date, scheme: SchemeConfig,
 ): Promise<NewCustomerCohort[]> {
   const acq = await db.select().from(customers).where(eq(customers.acquisitionEmployeeId, employeeId));
   const cohorts: NewCustomerCohort[] = [];
@@ -158,8 +176,8 @@ async function buildNewCustomerCohorts(
     )
       .filter((o) => ["C", "N", "I", "R"].includes(o.categoryCode))
       .sort((a, b) => a.bookedAt.getTime() - b.bookedAt.getTime());
-    if (custOrders.length < SALES_BH_SCHEME.newCustomer.requiredTxns) continue;
-    const first3 = custOrders.slice(0, SALES_BH_SCHEME.newCustomer.requiredTxns);
+    if (custOrders.length < scheme.newCustomer.requiredTxns) continue;
+    const first3 = custOrders.slice(0, scheme.newCustomer.requiredTxns);
     const thirdBooked = first3[first3.length - 1]!.bookedAt;
     if (thirdBooked < start || thirdBooked >= end) continue; // credit only in the completing month
 
@@ -212,8 +230,9 @@ export async function ensurePeriod(period: string): Promise<string> {
 export async function computePeriodForEmployee(
   employeeId: string, period: string, asOf: Date = new Date(),
 ): Promise<EvaluationResult> {
-  const input = await buildEvaluationInput(employeeId, period, asOf);
-  const result = evaluate(input, SALES_BH_SCHEME as SchemeConfig);
+  const scheme = await getActiveSchemeConfig();
+  const input = await buildEvaluationInput(employeeId, period, asOf, scheme);
+  const result = evaluate(input, scheme);
   const periodId = await ensurePeriod(period);
 
   // Recompute is wholesale for accruals: clear this employee-period's accrual

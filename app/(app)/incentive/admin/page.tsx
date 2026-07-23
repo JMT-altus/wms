@@ -1,7 +1,6 @@
 import Link from "next/link";
 import type { Route } from "next";
 import { requireAdmin } from "@/lib/auth/current";
-import { SALES_BH_SCHEME } from "@/lib/incentives";
 import { formatInrPaise, formatInrCompactPaise } from "@/lib/format";
 import { getPendingSubmissions, getPeriodPayout, currentPeriodIST, periodLabel } from "@/lib/queries/incentives";
 import { getCollectionWatchtower } from "@/lib/queries/incentive-risk";
@@ -14,6 +13,8 @@ import { PeriodControls } from "@/components/incentive/period-controls";
 import { PayoutTable } from "@/components/incentive/payout-table";
 import { AdminAnalyticsView } from "@/components/incentive/admin-analytics";
 import { PeriodPicker } from "@/components/incentive/period-picker";
+import { SchemeEditor } from "@/components/incentive/scheme-editor";
+import { getActiveSchemeConfig } from "@/lib/incentives/load";
 
 export const dynamic = "force-dynamic";
 
@@ -184,19 +185,19 @@ async function InsightsTab({ period }: { period: string }) {
   );
 }
 
-function SchemeTab() {
-  const s = SALES_BH_SCHEME;
+async function SchemeTab() {
+  const s = await getActiveSchemeConfig();
+  const r = (v: number) => Math.round(v / 100);
+  const initial = {
+    caps: { A: r(s.categoryCaps.A), B: r(s.categoryCaps.B), C: r(s.categoryCaps.C), D: r(s.categoryCaps.D), E: r(s.categoryCaps.E), F: r(s.categoryCaps.F) },
+    schemeCap: r(s.schemeMonthlyCapPaise),
+    rates: { a1: +(s.slabBands[0]!.rate * 100).toFixed(2), a2: +(s.slabBands[1]!.rate * 100).toFixed(2), a3: +(s.slabBands[2]!.rate * 100).toFixed(2) },
+  };
   return (
     <>
-      <h2 className="text-display-xs text-ink-strong mb-3">Category ceilings</h2>
-      <div className="grid grid-cols-3 max-md:grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
-        {(["A", "B", "C", "D", "E", "F"] as const).map((code) => (
-          <div key={code} className="rounded-[18px] p-5" style={{ background: "#fff", border: "1px solid rgba(15,23,42,0.08)" }}>
-            <div className="text-[13px] font-bold text-ink-strong"><span className="text-ink-subtle mr-1.5">{code}</span>{CATEGORY_LABELS[code]}</div>
-            <div className="mt-2 font-bold text-ink-strong text-[22px]" style={{ fontVariantNumeric: "tabular-nums" }}>{formatInrPaise(s.categoryCaps[code])}</div>
-          </div>
-        ))}
-      </div>
+      <h2 className="text-display-xs text-ink-strong mb-1">Edit scheme</h2>
+      <p className="text-ink-muted text-[13px] mb-4">Publishing mints a new immutable version. Recompute a month to apply it; locked periods keep their old version.</p>
+      <div className="mb-8"><SchemeEditor initial={initial} /></div>
       <h2 className="text-display-xs text-ink-strong mb-3">Rules</h2>
       <div className="rounded-[18px] p-6 text-[14px] leading-[1.7] text-ink-muted" style={{ background: "#fff", border: "1px solid rgba(15,23,42,0.08)" }}>
         <p><b className="text-ink-strong">A · Sales slabs</b> — marginal from ₹1 Cr: 0.10% / 0.15% / 0.20% per ₹20 L band, cap {formatInrPaise(s.categoryCaps.A)}.</p>

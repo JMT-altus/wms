@@ -1,12 +1,12 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { eq, isNotNull } from "drizzle-orm";
+import { eq, isNotNull, desc } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { requireUser, requireAdmin } from "@/lib/auth/current";
-import { leadBatches, leadConversions, clientMeetings, testimonials, salesOrders, customers, invoices, receipts, incentivePeriods, payoutRuns } from "@/db/schema";
+import { leadBatches, leadConversions, clientMeetings, testimonials, salesOrders, customers, invoices, receipts, incentivePeriods, payoutRuns, incentiveSchemes, ruleVersions } from "@/db/schema";
 import { currentPeriodIST, getPeriodPayout } from "@/lib/queries/incentives";
-import { P } from "@/lib/incentives";
+import { P, CR, SALES_BH_SCHEME } from "@/lib/incentives";
 import { computePeriodForEmployee, ensurePeriod } from "@/lib/incentives/load";
 
 type OrderCat = "A" | "B" | "C" | "N" | "I" | "R" | "V";
@@ -262,6 +262,41 @@ export async function reviewSubmission(input: {
       return { ok: false, error: "Unknown queue" };
   }
   if (affected) await computePeriodForEmployee(affected.employeeId, affected.periodMonth, new Date());
+  revalidateIncentive();
+  return { ok: true };
+}
+
+/**
+ * Publish an edited scheme as a new immutable rule_version. Future recomputes
+ * pick it up (getActiveSchemeConfig reads the latest). Values are in rupees /
+ * percent at the edge; stored as paise / fractions.
+ */
+export async function publishScheme(input: {
+  categoryCaps: { A: number; B: number; C: number; D: number; E: number; F: number };
+  schemeMonthlyCap: number;
+  slabRates: { a1: number; a2: number; a3: number }; // percent, e.g. 0.10
+}): Promise<ActionResult> {
+  const me = await requireAdmin();
+  const caps = input.categoryCaps;
+  const config = {
+    ...SALES_BH_SCHEME,
+    slabBands: [
+      { fromPaise: CR(1.0), toPaise: CR(1.2), rate: Math.max(0, input.slabRates.a1) / 100 },
+      { fromPaise: CR(1.2), toPaise: CR(1.4), rate: Math.max(0, input.slabRates.a2) / 100 },
+      { fromPaise: CR(1.4), toPaise: CR(1.6), rate: Math.max(0, input.slabRates.a3) / 100 },
+    ],
+    categoryCaps: {
+      A: P(clampInt(caps.A, 0, 1_00_00_000)), B: P(clampInt(caps.B, 0, 1_00_00_000)),
+      C: P(clampInt(caps.C, 0, 1_00_00_000)), D: P(clampInt(caps.D, 0, 1_00_00_000)),
+      E: P(clampInt(caps.E, 0, 1_00_00_000)), F: P(clampInt(caps.F, 0, 1_00_00_000)), G: 0,
+    },
+    schemeMonthlyCapPaise: P(clampInt(input.schemeMonthlyCap, 0, 10_00_00_000)),
+  };
+
+  let [scheme] = await db.select().from(incentiveSchemes).limit(1);
+  if (!scheme) [scheme] = await db.insert(incentiveSchemes).values({ name: "Sales BH", scopeRole: "sales_bh" }).returning();
+  const [last] = await db.select({ v: ruleVersions.version }).from(ruleVersions).where(eq(ruleVersions.schemeId, scheme!.id)).orderBy(desc(ruleVersions.version)).limit(1);
+  await db.insert(ruleVersions).values({ schemeId: scheme!.id, version: (last?.v ?? 0) + 1, config, publishedById: me.id, publishedAt: new Date() });
   revalidateIncentive();
   return { ok: true };
 }
