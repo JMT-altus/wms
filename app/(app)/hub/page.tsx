@@ -112,36 +112,7 @@ export default async function HubPage() {
 
       <div className="relative z-10 flex min-h-[100svh] flex-col">
         {/* Top bar */}
-        <header className="mx-auto w-full max-w-[1440px] px-8 max-md:px-4 pt-5 flex items-center justify-between gap-4">
-          <Link href={"/hub" as Route} className="flex items-center gap-3.5 shrink-0" aria-label="JMT Drive Solutions">
-            {/* App-icon tile — your gear monogram reversed to white inside the
-                brand blue→teal gradient. Thin light lines read crisply on the
-                saturated tile (light mark on dark surface), which suits the
-                low-res mark far better than sitting it on a light canvas. */}
-            <span
-              className="grid place-items-center shrink-0 rounded-[16px]"
-              style={{
-                width: 52,
-                height: 52,
-                background: "linear-gradient(135deg, #0a6cff 0%, #1f9fe0 50%, #12b6a0 100%)",
-                boxShadow:
-                  "0 16px 30px -10px rgba(10,108,255,0.55), 0 6px 12px -6px rgba(15,23,42,0.25), 0 1px 2px rgba(15,23,42,0.12), inset 0 2px 0 rgba(255,255,255,0.45), inset 0 -6px 14px -6px rgba(6,20,44,0.35)",
-              }}
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src="/logo.png"
-                alt="JMT Drive Solutions"
-                className="h-8 w-auto"
-                style={{ display: "block", filter: "brightness(0) invert(1) drop-shadow(0 1px 2px rgba(1,42,88,0.4))" }}
-              />
-            </span>
-            <div className="leading-tight max-sm:hidden">
-              <div className="brand-wordmark-deep" style={{ fontFamily: "var(--font-sans)", fontWeight: 900, fontSize: 22, letterSpacing: "-0.01em" }}>
-                JMT Drive Solutions
-              </div>
-            </div>
-          </Link>
+        <header className="mx-auto w-full max-w-[1440px] px-8 max-md:px-4 pt-5 flex items-center justify-end gap-4">
           <div className="flex items-center gap-4">
             <div className="text-right max-sm:hidden">
               <div className="text-[15px] text-ink-muted">
@@ -220,7 +191,7 @@ export default async function HubPage() {
         </div>
 
         {/* Module tiles */}
-        <div className="mx-auto w-full max-w-[1440px] px-8 max-md:px-4 pb-6 grid gap-6 max-md:gap-5 grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 lg:flex-1 lg:content-center">
+        <div className="mx-auto w-full max-w-[1440px] px-8 max-md:px-4 pb-2 grid gap-6 max-md:gap-5 grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 lg:flex-1 lg:content-center">
           {MODULES.map((m) => {
             const s = STYLES[m.id];
             const Icon = s.Icon;
@@ -298,6 +269,30 @@ export default async function HubPage() {
             );
           })}
         </div>
+
+        {/* Subtle platform credit — the tasteful home for a "powered by" line. */}
+        <footer className="shrink-0 pb-6 pt-2 max-md:pb-5">
+          <div className="flex items-center justify-center gap-2.5 opacity-80">
+            <span
+              style={{
+                fontFamily: "var(--font-mono-display), ui-monospace, monospace",
+                fontSize: 10.5,
+                fontWeight: 700,
+                letterSpacing: "0.22em",
+                color: "rgba(15,23,42,0.42)",
+              }}
+            >
+              POWERED BY
+            </span>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/altus-corp-logo.png"
+              alt="Altus Corp"
+              className="w-auto"
+              style={{ height: 26, display: "block", filter: "drop-shadow(0 2px 5px rgba(15,23,42,0.15))" }}
+            />
+          </div>
+        </footer>
       </div>
     </div>
   );

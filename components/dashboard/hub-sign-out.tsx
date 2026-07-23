@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
-import { LogOut } from "lucide-react";
+import { LogOut, Loader2 } from "lucide-react";
 import { signOut } from "firebase/auth";
 import { getFirebaseAuth } from "@/lib/firebase/client";
 
@@ -33,10 +33,14 @@ export function HubSignOut() {
       type="button"
       onClick={handleSignOut}
       disabled={busy}
-      className="inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-white text-[14.5px] font-semibold transition-opacity disabled:opacity-60"
-      style={{ background: "linear-gradient(135deg, #0A6CFF 0%, #0A6CFF 42%, #17B6A0 100%)", boxShadow: "0 8px 20px -8px rgba(10,108,255,0.55)" }}
+      className="group inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-white text-[14.5px] font-semibold transition-[transform,filter,box-shadow] duration-300 ease-out hover:-translate-y-0.5 hover:brightness-[1.06] active:translate-y-0 active:brightness-95 disabled:opacity-70 disabled:hover:translate-y-0 disabled:hover:brightness-100 shadow-[0_8px_20px_-8px_rgba(10,108,255,0.55),inset_0_1px_0_rgba(255,255,255,0.32)] hover:shadow-[0_14px_30px_-8px_rgba(10,108,255,0.72),inset_0_1px_0_rgba(255,255,255,0.4)]"
+      style={{ background: "linear-gradient(135deg, #0A6CFF 0%, #0A6CFF 42%, #17B6A0 100%)" }}
     >
-      <LogOut size={16} strokeWidth={2.4} />
+      {busy ? (
+        <Loader2 size={16} strokeWidth={2.4} className="animate-spin" />
+      ) : (
+        <LogOut size={16} strokeWidth={2.4} className="transition-transform duration-300 group-hover:translate-x-0.5" />
+      )}
       {busy ? "Signing out…" : "Sign out"}
     </button>
   );
