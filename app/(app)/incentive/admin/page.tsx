@@ -13,8 +13,17 @@ import { DataEntry } from "@/components/incentive/data-entry";
 import { PeriodControls } from "@/components/incentive/period-controls";
 import { PayoutTable } from "@/components/incentive/payout-table";
 import { AdminAnalyticsView } from "@/components/incentive/admin-analytics";
+import { PeriodPicker } from "@/components/incentive/period-picker";
 
 export const dynamic = "force-dynamic";
+
+function recentPeriods(count = 6): { value: string; label: string }[] {
+  const [y, m] = currentPeriodIST().split("-").map(Number);
+  return Array.from({ length: count }, (_, i) => {
+    const p = new Date(Date.UTC(y!, m! - 1 - i, 1)).toISOString().slice(0, 7);
+    return { value: p, label: periodLabel(p) };
+  });
+}
 
 type Tab = "period" | "verify" | "data" | "collections" | "insights" | "scheme";
 const TABS: { id: Tab; label: string }[] = [
@@ -34,13 +43,16 @@ export default async function IncentiveAdminPage({ searchParams }: PageProps) {
   await requireAdmin();
   const sp = await searchParams;
   const tab = (typeof sp.tab === "string" && TABS.some((t) => t.id === sp.tab) ? sp.tab : "period") as Tab;
-  const period = currentPeriodIST();
+  const period = typeof sp.period === "string" ? sp.period : currentPeriodIST();
 
   return (
     <main className="mx-auto max-w-[1280px] px-10 max-md:px-4 pt-8 pb-16">
-      <div className="mb-5">
-        <div style={{ fontFamily: "var(--font-mono-display), ui-monospace, monospace", fontSize: 12, fontWeight: 800, letterSpacing: "0.24em", color: "#0A6CFF" }}>INCENTIVE TRACKER · ADMIN · {periodLabel(period)}</div>
-        <h1 className="text-display-md text-ink-strong mt-2">Control Room</h1>
+      <div className="flex items-end justify-between gap-4 flex-wrap mb-5">
+        <div>
+          <div style={{ fontFamily: "var(--font-mono-display), ui-monospace, monospace", fontSize: 12, fontWeight: 800, letterSpacing: "0.24em", color: "#0A6CFF" }}>INCENTIVE TRACKER · ADMIN · {periodLabel(period)}</div>
+          <h1 className="text-display-md text-ink-strong mt-2">Control Room</h1>
+        </div>
+        <PeriodPicker current={period} options={recentPeriods()} />
       </div>
 
       <div className="flex items-center gap-1 border-b mb-6 overflow-x-auto" style={{ borderColor: "rgba(15,23,42,0.1)" }}>

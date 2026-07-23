@@ -26,7 +26,11 @@ export function SalesTable({ sales }: { sales: SaleRow[] }) {
   const [editing, setEditing] = useState(false);
   const [pending, start] = useTransition();
   const [msg, setMsg] = useState<string | null>(null);
-  const filtered = sales.filter((s) => (filter === "all" ? true : filter === "collected" ? s.status === "collected" : s.status !== "collected"));
+  const [query, setQuery] = useState("");
+  const q = query.trim().toLowerCase();
+  const filtered = sales
+    .filter((s) => (filter === "all" ? true : filter === "collected" ? s.status === "collected" : s.status !== "collected"))
+    .filter((s) => (q === "" ? true : s.customer.toLowerCase().includes(q) || (s.invoiceNo ?? "").toLowerCase().includes(q) || s.category.toLowerCase() === q));
 
   function refresh() { router.refresh(); }
   function close() { setOpen(null); setEditing(false); setMsg(null); }
@@ -34,10 +38,13 @@ export function SalesTable({ sales }: { sales: SaleRow[] }) {
   return (
     <>
       <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
-        <div className="inline-flex rounded-xl p-1" style={{ background: "rgba(15,23,42,0.05)" }}>
-          {FILTERS.map((f) => (
-            <button key={f.id} type="button" onClick={() => setFilter(f.id)} className="px-3.5 py-1.5 rounded-lg text-[13px] font-bold transition-colors" style={filter === f.id ? { background: "#fff", color: "#0a47b3", boxShadow: "0 1px 3px rgba(15,23,42,0.12)" } : { color: "#64748b" }}>{f.label}</button>
-          ))}
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <div className="inline-flex rounded-xl p-1" style={{ background: "rgba(15,23,42,0.05)" }}>
+            {FILTERS.map((f) => (
+              <button key={f.id} type="button" onClick={() => setFilter(f.id)} className="px-3.5 py-1.5 rounded-lg text-[13px] font-bold transition-colors" style={filter === f.id ? { background: "#fff", color: "#0a47b3", boxShadow: "0 1px 3px rgba(15,23,42,0.12)" } : { color: "#64748b" }}>{f.label}</button>
+            ))}
+          </div>
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search customer, invoice, category…" className="rounded-xl px-3.5 py-2 text-[13.5px]" style={{ background: "#fff", border: "1px solid rgba(15,23,42,0.14)", minWidth: 220 }} />
         </div>
         <span className="text-ink-subtle text-[12.5px] font-semibold">{filtered.length} of {sales.length}</span>
       </div>

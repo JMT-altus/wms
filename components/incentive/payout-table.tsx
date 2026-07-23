@@ -8,14 +8,20 @@ import type { EmpLedgerLine } from "@/lib/queries/incentive-admin";
 
 export function PayoutTable({ rows, ledgerByEmployee }: { rows: PayoutRow[]; ledgerByEmployee: Record<string, EmpLedgerLine[]> }) {
   const [open, setOpen] = useState<PayoutRow | null>(null);
+  const [query, setQuery] = useState("");
   const lines = open ? ledgerByEmployee[open.employeeId] ?? [] : [];
+  const q = query.trim().toLowerCase();
+  const shown = q === "" ? rows : rows.filter((r) => r.employeeName.toLowerCase().includes(q));
 
-  if (rows.length === 0) return <p className="text-ink-muted text-[13.5px]">No payouts computed yet. Record sales / approve submissions, then Recompute.</p>;
+  if (rows.length === 0) return <p className="text-ink-muted text-[13.5px]">No payouts computed yet. Record sales / approve submissions — the ledger updates automatically.</p>;
 
   return (
     <>
+      {rows.length > 6 && (
+        <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search employee…" className="rounded-xl px-3.5 py-2 text-[13.5px] mb-3" style={{ background: "#fff", border: "1px solid rgba(15,23,42,0.14)", minWidth: 220 }} />
+      )}
       <div className="rounded-[14px] overflow-hidden" style={{ border: "1px solid rgba(15,23,42,0.07)" }}>
-        {rows.map((r, i) => (
+        {shown.map((r, i) => (
           <button
             key={r.employeeId}
             type="button"
