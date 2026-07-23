@@ -216,6 +216,13 @@ export async function computePeriodForEmployee(
   const result = evaluate(input, SALES_BH_SCHEME as SchemeConfig);
   const periodId = await ensurePeriod(period);
 
+  // Recompute is wholesale for accruals: clear this employee-period's accrual
+  // rows first so sources that no longer exist (deleted invoices/submissions)
+  // don't linger and double-count. Reversals/adjustments are preserved.
+  await db
+    .delete(incentiveLedger)
+    .where(and(eq(incentiveLedger.employeeId, employeeId), eq(incentiveLedger.periodId, periodId), eq(incentiveLedger.entryType, "accrual")));
+
   for (const line of result.lines) {
     await db
       .insert(incentiveLedger)

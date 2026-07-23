@@ -6,7 +6,7 @@
 //
 //   pnpm tsx --env-file=.env.local scripts/seed-incentives.ts
 
-import { eq, like, inArray } from "drizzle-orm";
+import { and, eq, like, inArray } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
   employees, customers, salesOrders, invoices, receipts,
@@ -40,11 +40,23 @@ async function wipe() {
 }
 
 async function main() {
-  const [emp] = await db.select().from(employees).limit(1);
+  // Target the signed-in admin by default so the demo month shows on their
+  // "My Incentives". Override with SEED_EMPLOYEE_EMAIL=someone@x.com.
+  const targetEmail = process.env.SEED_EMPLOYEE_EMAIL;
+  let emp = targetEmail
+    ? (await db.select().from(employees).where(eq(employees.email, targetEmail)).limit(1))[0]
+    : undefined;
+  emp ??= (await db.select().from(employees).where(eq(employees.isAdmin, true)).limit(1))[0];
+  emp ??= (await db.select().from(employees).limit(1))[0];
   if (!emp) throw new Error("No employees — run the main seed first.");
   console.log(`Seeding incentive demo for ${emp.name} (${emp.id}), period ${PERIOD}\n`);
 
   await wipe();
+  // Clear this employee's prior submissions for the period so re-runs stay clean.
+  await db.delete(leadBatches).where(and(eq(leadBatches.employeeId, emp.id), eq(leadBatches.periodMonth, PERIOD)));
+  await db.delete(leadConversions).where(and(eq(leadConversions.employeeId, emp.id), eq(leadConversions.periodMonth, PERIOD)));
+  await db.delete(clientMeetings).where(and(eq(clientMeetings.employeeId, emp.id), eq(clientMeetings.periodMonth, PERIOD)));
+  await db.delete(testimonials).where(and(eq(testimonials.employeeId, emp.id), eq(testimonials.periodMonth, PERIOD)));
 
   // Scheme + published rule version (snapshot of the config the engine used).
   const [scheme] = await db.insert(incentiveSchemes).values({
@@ -99,6 +111,21 @@ async function main() {
       isFirstInvoiceForCustomer: i === 0,
     }).returning();
     await db.insert(receipts).values({ invoiceId: inv!.id, amountPaise: t.val, receivedAt: d(t.paidOn) });
+  }
+
+  // ── Outstanding overdue invoices — exercise the at-risk decay panel ──
+  const odCust = (await db.insert(customers).values({ name: "SEED Overdue Co", code: "SEED-OD", isNewCustomer: false }).returning())[0]!;
+  const overdue = [
+    { inv: "2026-06-10", val: L(5), no: "SEED-OD-1" }, // due 06-10 → ~43d past → HALVES IN a few days
+    { inv: "2026-05-20", val: L(3), no: "SEED-OD-2" }, // due 05-20 → ~64d past → already ×0.50
+  ];
+  for (const od of overdue) {
+    const [o] = await db.insert(salesOrders).values({
+      customerId: odCust.id, ownerId: emp.id, orderValuePaise: od.val, categoryCode: "A", bookedAt: new Date(od.inv),
+    }).returning();
+    await db.insert(invoices).values({
+      orderId: o!.id, invoiceNo: od.no, invoiceValuePaise: od.val, invoiceDate: d(od.inv), agreedTermsDays: 0, dueDate: d(od.inv),
+    }); // no receipt → outstanding
   }
 
   // ── D/E/F · activity submissions (approved) ──
