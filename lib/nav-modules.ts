@@ -40,7 +40,7 @@ export const MODULES: ModuleDef[] = [
   {
     id: "wms",
     label: "WMS",
-    tagline: "The work dashboard — tasks, goals & the daily loop.",
+    tagline: "The work dashboard for tasks, goals & the daily loop.",
     icon: "LayoutGrid",
     landing: "/",
     routes: ["/tasks", "/projects", "/weekly-goals", "/inbox", "/archived", "/search", "/documents", "/forms"],

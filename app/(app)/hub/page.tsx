@@ -80,7 +80,7 @@ export default async function HubPage() {
 
   return (
     <div
-      className="relative min-h-screen overflow-hidden"
+      className="relative min-h-[100svh] overflow-hidden"
       style={{ background: "linear-gradient(168deg, #e8f0ff 0%, #f2f7ff 44%, #ebf8f4 100%)" }}
     >
       {/* ── Aurora backdrop — slow-drifting colour glows + a dot mesh, so the
@@ -110,9 +110,9 @@ export default async function HubPage() {
         />
       </div>
 
-      <div className="relative z-10">
+      <div className="relative z-10 flex min-h-[100svh] flex-col">
         {/* Top bar */}
-        <header className="mx-auto max-w-[1440px] px-8 max-md:px-4 pt-7 flex items-center justify-between gap-4">
+        <header className="mx-auto w-full max-w-[1440px] px-8 max-md:px-4 pt-5 flex items-center justify-between gap-4">
           <Link href={"/hub" as Route} className="flex items-center gap-3.5 shrink-0" aria-label="JMT Drive Solutions">
             {/* App-icon tile — your gear monogram reversed to white inside the
                 brand blue→teal gradient. Thin light lines read crisply on the
@@ -125,7 +125,7 @@ export default async function HubPage() {
                 height: 52,
                 background: "linear-gradient(135deg, #0a6cff 0%, #1f9fe0 50%, #12b6a0 100%)",
                 boxShadow:
-                  "0 10px 22px -10px rgba(10,108,255,0.5), 0 1px 2px rgba(15,23,42,0.12), inset 0 1px 0 rgba(255,255,255,0.35)",
+                  "0 16px 30px -10px rgba(10,108,255,0.55), 0 6px 12px -6px rgba(15,23,42,0.25), 0 1px 2px rgba(15,23,42,0.12), inset 0 2px 0 rgba(255,255,255,0.45), inset 0 -6px 14px -6px rgba(6,20,44,0.35)",
               }}
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -154,40 +154,73 @@ export default async function HubPage() {
         </header>
 
         {/* Hero greeting */}
-        <div className="mx-auto max-w-[1440px] px-8 max-md:px-4 text-center mt-6 mb-8 max-md:mt-5 max-md:mb-6">
-          <div
-            style={{
-              fontFamily: "var(--font-mono-display), ui-monospace, monospace",
-              fontSize: 13,
-              fontWeight: 800,
-              letterSpacing: "0.26em",
-              color: "#0A6CFF",
-            }}
-          >
-            JMT DRIVE SOLUTIONS · WORKSPACES
+        <div className="mx-auto w-full max-w-[1440px] px-8 max-md:px-4 text-center mt-5 mb-5 max-md:mt-5 max-md:mb-6">
+          {/* Eyebrow — glassy pill with a glowing brand dot */}
+          <div className="flex justify-center">
+            <div
+              className="inline-flex items-center gap-2.5 rounded-full px-4 py-1.5"
+              style={{
+                background: "rgba(255,255,255,0.55)",
+                border: "1px solid rgba(10,108,255,0.16)",
+                boxShadow:
+                  "0 10px 24px -12px rgba(10,108,255,0.4), 0 1px 2px rgba(15,23,42,0.05), inset 0 1px 0 rgba(255,255,255,0.9)",
+                backdropFilter: "blur(8px)",
+                WebkitBackdropFilter: "blur(8px)",
+              }}
+            >
+              <span
+                className="inline-block size-1.5 rounded-full"
+                style={{ background: "linear-gradient(135deg, #0a6cff, #12b6a0)", boxShadow: "0 0 8px rgba(10,108,255,0.7)" }}
+              />
+              <span
+                style={{
+                  fontFamily: "var(--font-mono-display), ui-monospace, monospace",
+                  fontSize: 11.5,
+                  fontWeight: 800,
+                  letterSpacing: "0.24em",
+                  color: "#0A6CFF",
+                }}
+              >
+                JMT DRIVE SOLUTIONS · WORKSPACES
+              </span>
+            </div>
           </div>
+
           <h1
-            className="mt-3"
-            style={{ fontFamily: "var(--font-sans)", fontWeight: 900, fontSize: "clamp(40px, 5.2vw, 62px)", lineHeight: 1.02, letterSpacing: "-0.035em" }}
+            className="mt-4"
+            style={{ fontFamily: "var(--font-sans)", fontWeight: 900, fontSize: "clamp(38px, 4.6vw, 56px)", lineHeight: 1.0, letterSpacing: "-0.04em" }}
           >
             <span
               className="text-ink-strong"
-              style={{ textShadow: "0 1px 0 rgba(255,255,255,0.7), 0 6px 20px rgba(15,23,42,0.12)" }}
+              style={{ textShadow: "0 1px 0 rgba(255,255,255,0.7), 0 8px 26px rgba(15,23,42,0.14)" }}
             >
               {hello},{" "}
             </span>
             <span className="brand-wordmark-deep">{firstName}</span>
           </h1>
+
+          {/* Elegant gradient divider */}
+          <div
+            aria-hidden
+            className="mx-auto mt-4 rounded-full"
+            style={{
+              width: 72,
+              height: 4,
+              background: "linear-gradient(90deg, #0a6cff, #1f9fe0, #12b6a0)",
+              boxShadow: "0 6px 16px -4px rgba(10,108,255,0.5)",
+            }}
+          />
+
           <p
             className="mt-4 mx-auto font-semibold"
-            style={{ fontSize: 18, lineHeight: 1.5, letterSpacing: "-0.005em", color: "#475569", maxWidth: 560, textShadow: "0 1px 0 rgba(255,255,255,0.6)" }}
+            style={{ fontSize: 17, lineHeight: 1.5, letterSpacing: "-0.005em", color: "#475569", maxWidth: 560, textShadow: "0 1px 0 rgba(255,255,255,0.6)" }}
           >
             {line}
           </p>
         </div>
 
         {/* Module tiles */}
-        <div className="mx-auto max-w-[1440px] px-8 max-md:px-4 pb-10 grid gap-6 grid-cols-1 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="mx-auto w-full max-w-[1440px] px-8 max-md:px-4 pb-6 grid gap-6 max-md:gap-5 grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 lg:flex-1 lg:content-center">
           {MODULES.map((m) => {
             const s = STYLES[m.id];
             const Icon = s.Icon;
@@ -195,12 +228,12 @@ export default async function HubPage() {
               <Link
                 key={m.id}
                 href={m.landing as Route}
-                className="group relative flex flex-col overflow-hidden rounded-[24px] p-7 transition-transform duration-300 ease-out hover:-translate-y-1.5"
+                className="group relative flex flex-col overflow-hidden rounded-[24px] p-6 transition-transform duration-300 ease-out hover:-translate-y-2"
                 style={{
                   background: s.bg,
                   border: "1px solid rgba(255,255,255,0.7)",
-                  boxShadow: `0 30px 60px -28px ${s.glow}, 0 12px 26px -16px rgba(15,23,42,0.16), 0 2px 6px rgba(15,23,42,0.05), inset 0 1px 0 rgba(255,255,255,0.95)`,
-                  minHeight: 232,
+                  boxShadow: `0 40px 70px -26px ${s.glow}, 0 22px 40px -22px rgba(15,23,42,0.22), 0 8px 16px -10px rgba(15,23,42,0.14), 0 1px 2px rgba(15,23,42,0.06), inset 0 2px 0 rgba(255,255,255,0.95), inset 0 -10px 24px -12px rgba(15,23,42,0.10)`,
+                  minHeight: 178,
                 }}
               >
                 {/* glass sheen across the top */}
@@ -230,15 +263,15 @@ export default async function HubPage() {
                     backdropFilter: "blur(6px)",
                     WebkitBackdropFilter: "blur(6px)",
                     border: "1px solid rgba(255,255,255,0.9)",
-                    boxShadow: `0 8px 18px -8px ${s.glow}`,
+                    boxShadow: `0 14px 26px -10px ${s.glow}, 0 6px 12px -6px rgba(15,23,42,0.18), inset 0 1px 0 rgba(255,255,255,1), inset 0 -3px 8px -3px rgba(15,23,42,0.08)`,
                   }}
                 >
                   <Icon size={27} strokeWidth={2.2} style={{ color: s.ink }} />
                 </span>
 
                 <h2
-                  className="relative mt-6"
-                  style={{ fontFamily: "var(--font-sans)", fontWeight: 800, fontSize: 30, letterSpacing: "-0.02em", color: s.title, textShadow: "0 1px 0 rgba(255,255,255,0.6)" }}
+                  className="relative mt-4"
+                  style={{ fontFamily: "var(--font-sans)", fontWeight: 800, fontSize: 28, letterSpacing: "-0.02em", color: s.title, textShadow: "0 1px 0 rgba(255,255,255,0.6)" }}
                 >
                   {m.label}
                 </h2>
@@ -246,14 +279,14 @@ export default async function HubPage() {
                   {m.tagline}
                 </p>
 
-                <div className="relative mt-auto pt-7">
+                <div className="relative mt-auto pt-4">
                   <span
-                    className="inline-flex items-center gap-2 rounded-xl px-5 py-3 text-white transition-[filter,box-shadow] duration-300 group-hover:brightness-105"
+                    className="inline-flex items-center gap-2 rounded-xl px-5 py-3 text-white transition-[filter,box-shadow,transform] duration-300 group-hover:brightness-105 group-hover:-translate-y-0.5"
                     style={{
                       background: s.btn,
                       fontSize: 14.5,
                       fontWeight: 700,
-                      boxShadow: `0 12px 26px -10px ${s.glow}, inset 0 1px 0 rgba(255,255,255,0.28)`,
+                      boxShadow: `0 3px 0 rgba(6,20,44,0.28), 0 14px 24px -8px ${s.glow}, 0 6px 12px -6px rgba(15,23,42,0.28), inset 0 1px 0 rgba(255,255,255,0.4), inset 0 -2px 6px -2px rgba(6,20,44,0.3)`,
                       lineHeight: 1,
                     }}
                   >
