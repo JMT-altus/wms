@@ -1,7 +1,7 @@
 import "server-only";
-import { and, eq, gte, lt, sql, desc, inArray } from "drizzle-orm";
+import { and, eq, gte, lt, sql, desc, inArray, or } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { salesOrders, invoices, receipts, customers, employees, incentiveLedger, incentivePeriods } from "@/db/schema";
+import { salesOrders, invoices, receipts, customers, employees, incentiveLedger, incentivePeriods, incentiveAudit } from "@/db/schema";
 
 function monthBounds(period: string) {
   const [y, m] = period.split("-").map(Number);
@@ -109,6 +109,31 @@ export async function getAdminAnalytics(period: string): Promise<AdminAnalytics>
     totalCollectedPaise,
     costPct: totalCollectedPaise > 0 ? (totalIncentivePaise / totalCollectedPaise) * 100 : 0,
   };
+}
+
+// ── Rep profile ──────────────────────────────────────────────────────────────
+export interface RepCustomer { id: string; name: string; deals: number; }
+export async function getRepCustomers(employeeId: string): Promise<RepCustomer[]> {
+  const rows = await db
+    .select({ id: customers.id, name: customers.name, deals: sql<number>`count(${salesOrders.id})::int` })
+    .from(customers)
+    .leftJoin(salesOrders, eq(salesOrders.customerId, customers.id))
+    .where(eq(customers.acquisitionEmployeeId, employeeId))
+    .groupBy(customers.id, customers.name)
+    .orderBy(desc(sql`count(${salesOrders.id})`));
+  return rows.map((r) => ({ id: r.id, name: r.name, deals: r.deals }));
+}
+
+export interface RepAuditRow { actor: string | null; action: string; entityType: string; detail: Record<string, unknown>; at: Date; }
+export async function getRepAudit(employeeId: string, limit = 20): Promise<RepAuditRow[]> {
+  const rows = await db
+    .select({ actor: employees.name, action: incentiveAudit.action, entityType: incentiveAudit.entityType, detail: incentiveAudit.detail, at: incentiveAudit.createdAt })
+    .from(incentiveAudit)
+    .leftJoin(employees, eq(incentiveAudit.actorId, employees.id))
+    .where(or(eq(incentiveAudit.employeeId, employeeId), eq(incentiveAudit.actorId, employeeId)))
+    .orderBy(desc(incentiveAudit.createdAt))
+    .limit(limit);
+  return rows.map((r) => ({ actor: r.actor, action: r.action, entityType: r.entityType, detail: (r.detail ?? {}) as Record<string, unknown>, at: r.at }));
 }
 
 // ── Per-employee ledger lines for the admin drill-down drawer ────────────────

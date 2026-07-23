@@ -111,7 +111,7 @@ function Leaderboard({ leaders }: { leaders: LeaderRow[] }) {
       {leaders.map((l, i) => (
         <div key={l.employeeId} className="grid grid-cols-[auto_1fr_auto_auto_auto] max-md:grid-cols-2 gap-y-1 items-center px-5 py-3" style={{ background: i % 2 ? "rgba(15,23,42,0.015)" : "#fff", borderTop: i ? "1px solid rgba(15,23,42,0.06)" : undefined }}>
           <span className="text-[15px]" style={{ width: 30 }}>{medal[i] ?? <span className="text-ink-subtle text-[13px] font-bold">{i + 1}</span>}</span>
-          <span className="font-bold text-ink-strong text-[13.5px]">{l.name}</span>
+          <Link href={`/incentive/admin/rep/${l.employeeId}` as Route} className="font-bold text-ink-strong text-[13.5px] hover:underline">{l.name}</Link>
           <span className="text-right pr-6 font-bold text-ink-strong text-[13.5px]" style={{ fontVariantNumeric: "tabular-nums" }}>{formatInrCompactPaise(l.collectedPaise)}</span>
           <span className="text-right pr-6 text-[13.5px] font-semibold text-ink-muted">{l.newCustomers}</span>
           <span className="text-right text-[13.5px] font-bold" style={{ color: "#0a47b3", fontVariantNumeric: "tabular-nums" }}>{formatInrPaise(l.incentivePaise)}</span>

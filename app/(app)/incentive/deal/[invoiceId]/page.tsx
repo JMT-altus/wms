@@ -43,6 +43,10 @@ export default async function DealPage({ params }: { params: Promise<{ invoiceId
         right={<span className="inline-flex items-center rounded-full px-3.5 py-1.5" style={{ background: st.bg, color: st.fg, fontSize: 11.5, fontWeight: 800, letterSpacing: "0.14em" }}>{st.label}{deal.daysPastTerms > 0 ? ` · ${deal.daysPastTerms}D` : ""}</span>}
       />
 
+      {deal.customerId && (
+        <p className="-mt-2 mb-5 text-[13px]"><Link href={`/incentive/customer/${deal.customerId}` as Route} className="font-semibold text-[#0a47b3]">View {deal.customer}&apos;s full history →</Link></p>
+      )}
+
       {/* Stats */}
       <div className="grid grid-cols-4 max-md:grid-cols-2 gap-3 mb-6">
         <Stat label="Invoice value" value={formatInrPaise(deal.valuePaise)} />

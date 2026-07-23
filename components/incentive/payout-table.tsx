@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
+import type { Route } from "next";
 import { DetailDrawer } from "./detail-drawer";
 import { formatInrPaise } from "@/lib/format";
 import type { PayoutRow } from "@/lib/queries/incentives";
@@ -44,6 +46,7 @@ export function PayoutTable({ rows, ledgerByEmployee }: { rows: PayoutRow[]; led
             <div className="rounded-[16px] p-5 mb-5" style={{ background: "linear-gradient(135deg,#f4f8ff,#ffffff)", border: "1px solid rgba(15,23,42,0.07)" }}>
               <div className="text-ink-subtle text-[11.5px] font-bold uppercase tracking-[0.14em]">Total payable</div>
               <div className="mt-1 font-bold text-ink-strong" style={{ fontFamily: "var(--font-display), sans-serif", fontSize: 34, letterSpacing: "-0.02em", fontVariantNumeric: "tabular-nums" }}>{formatInrPaise(open.totalPaise)}</div>
+              <Link href={`/incentive/admin/rep/${open.employeeId}` as Route} className="inline-block mt-2 text-[13px] font-semibold text-[#0a47b3]">View full profile →</Link>
             </div>
             {lines.length === 0 ? (
               <p className="text-ink-muted text-[14px]">No ledger lines.</p>
