@@ -13,6 +13,12 @@ type OrderCat = "A" | "B" | "C" | "N" | "I" | "R" | "V";
 const isDate = (s: unknown): s is string => typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s);
 const addDays = (isoDate: string, days: number) => new Date(new Date(isoDate).getTime() + days * 86_400_000).toISOString().slice(0, 10);
 
+function revalidateIncentive() {
+  for (const p of ["/incentive", "/incentive/sales", "/incentive/activity", "/incentive/history", "/incentive/admin"]) {
+    revalidatePath(p);
+  }
+}
+
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
 const clampInt = (v: unknown, lo: number, hi: number) =>
@@ -27,7 +33,7 @@ export async function submitLeadBatch(input: { leadCount: number; profiled: bool
   await db.insert(leadBatches).values({
     employeeId: me.id, periodMonth: currentPeriodIST(), leadCount, profiled: !!input.profiled,
   });
-  revalidatePath("/incentive");
+  revalidateIncentive();
   return { ok: true };
 }
 
@@ -38,7 +44,7 @@ export async function submitLeadConversion(input: { convertedCount: number }): P
   await db.insert(leadConversions).values({
     employeeId: me.id, periodMonth: currentPeriodIST(), convertedCount,
   });
-  revalidatePath("/incentive");
+  revalidateIncentive();
   return { ok: true };
 }
 
@@ -53,7 +59,7 @@ export async function submitMeeting(input: {
   await db.insert(clientMeetings).values({
     employeeId: me.id, periodMonth: currentPeriodIST(), potentialBand: band, justification,
   });
-  revalidatePath("/incentive");
+  revalidateIncentive();
   return { ok: true };
 }
 
@@ -73,7 +79,7 @@ export async function submitTestimonial(input: {
     employeeId: me.id, periodMonth: currentPeriodIST(), kind, wordCount,
     starRating, namesTeamMember: !!input.namesTeamMember, evidenceUrl: input.evidenceUrl?.slice(0, 500) ?? null,
   });
-  revalidatePath("/incentive");
+  revalidateIncentive();
   return { ok: true };
 }
 
@@ -139,25 +145,79 @@ export async function recordSale(input: {
       invoiceId: inv!.id, amountPaise: paid, receivedAt: isDate(input.paidDate) ? input.paidDate : input.invoiceDate,
     });
   }
-  revalidatePath("/incentive");
-  revalidatePath("/incentive/admin");
+  await computePeriodForEmployee(owner, input.invoiceDate.slice(0, 7), new Date());
+  revalidateIncentive();
   return { ok: true };
 }
 
-/** Record a collection against an existing invoice (by its number). */
-export async function recordReceipt(input: { invoiceNo: string; amountRupees: number; receivedAt: string }): Promise<ActionResult> {
-  await requireAdmin();
-  const invNo = String(input.invoiceNo ?? "").trim();
-  if (!invNo) return { ok: false, error: "Invoice number is required." };
-  const [inv] = await db.select().from(invoices).where(eq(invoices.invoiceNo, invNo)).limit(1);
-  if (!inv) return { ok: false, error: "No invoice found with that number." };
+/**
+ * Record a collection against an invoice (by id or number). A rep may record
+ * on their own invoice; an admin on any. Auto-recomputes the owner's period.
+ */
+export async function recordReceipt(input: { invoiceId?: string; invoiceNo?: string; amountRupees: number; receivedAt: string }): Promise<ActionResult> {
+  const me = await requireUser();
+  let inv;
+  if (input.invoiceId && /^[0-9a-f-]{36}$/i.test(input.invoiceId)) {
+    [inv] = await db.select().from(invoices).where(eq(invoices.id, input.invoiceId)).limit(1);
+  } else {
+    const invNo = String(input.invoiceNo ?? "").trim();
+    if (!invNo) return { ok: false, error: "Invoice id or number is required." };
+    [inv] = await db.select().from(invoices).where(eq(invoices.invoiceNo, invNo)).limit(1);
+  }
+  if (!inv) return { ok: false, error: "No invoice found." };
+  const [ord] = await db.select({ ownerId: salesOrders.ownerId, bookedAt: salesOrders.bookedAt }).from(salesOrders).where(eq(salesOrders.id, inv.orderId)).limit(1);
+  if (!me.isAdmin && ord?.ownerId !== me.id) return { ok: false, error: "That invoice isn't yours." };
   const amt = P(clampInt(input.amountRupees, 0, 1_00_00_00_00));
   if (amt <= 0) return { ok: false, error: "Enter the amount received." };
   await db.insert(receipts).values({
     invoiceId: inv.id, amountPaise: amt, receivedAt: isDate(input.receivedAt) ? input.receivedAt : new Date().toISOString().slice(0, 10),
   });
-  revalidatePath("/incentive");
-  revalidatePath("/incentive/admin");
+  if (ord?.ownerId) await computePeriodForEmployee(ord.ownerId, ord.bookedAt.toISOString().slice(0, 7), new Date());
+  revalidateIncentive();
+  return { ok: true };
+}
+
+/** Edit a logged sale (rep: own; admin: any). Recomputes the owner's period. */
+export async function editSale(input: {
+  invoiceId: string; customerName?: string; categoryCode?: OrderCat; amountRupees?: number; invoiceDate?: string; termsDays?: number;
+}): Promise<ActionResult> {
+  const me = await requireUser();
+  if (!/^[0-9a-f-]{36}$/i.test(input.invoiceId)) return { ok: false, error: "Invalid id" };
+  const [inv] = await db.select().from(invoices).where(eq(invoices.id, input.invoiceId)).limit(1);
+  if (!inv) return { ok: false, error: "Sale not found." };
+  const [ord] = await db.select().from(salesOrders).where(eq(salesOrders.id, inv.orderId)).limit(1);
+  if (!ord) return { ok: false, error: "Order not found." };
+  if (!me.isAdmin && ord.ownerId !== me.id) return { ok: false, error: "That sale isn't yours." };
+
+  const amountPaise = input.amountRupees != null ? P(clampInt(input.amountRupees, 0, 1_00_00_00_00)) : ord.orderValuePaise;
+  const cat = input.categoryCode && (["A", "B", "C", "N", "I", "R", "V"] as const).includes(input.categoryCode) ? input.categoryCode : ord.categoryCode;
+  const invoiceDate = isDate(input.invoiceDate) ? input.invoiceDate : inv.invoiceDate;
+  const terms = input.termsDays != null ? clampInt(input.termsDays, 0, 365) : inv.agreedTermsDays;
+  const dueDate = addDays(invoiceDate, terms);
+
+  await db.update(salesOrders).set({ orderValuePaise: amountPaise, categoryCode: cat, bookedAt: new Date(invoiceDate), updatedAt: new Date() }).where(eq(salesOrders.id, ord.id));
+  await db.update(invoices).set({ invoiceValuePaise: amountPaise, invoiceDate, agreedTermsDays: terms, dueDate, updatedAt: new Date() }).where(eq(invoices.id, inv.id));
+  if (input.customerName?.trim() && ord.customerId) {
+    await db.update(customers).set({ name: input.customerName.trim().slice(0, 160), updatedAt: new Date() }).where(eq(customers.id, ord.customerId));
+  }
+  if (ord.ownerId) await computePeriodForEmployee(ord.ownerId, invoiceDate.slice(0, 7), new Date());
+  revalidateIncentive();
+  return { ok: true };
+}
+
+/** Delete a logged sale (rep: own; admin: any). Removes order + invoices + receipts. */
+export async function deleteSale(input: { invoiceId: string }): Promise<ActionResult> {
+  const me = await requireUser();
+  if (!/^[0-9a-f-]{36}$/i.test(input.invoiceId)) return { ok: false, error: "Invalid id" };
+  const [inv] = await db.select().from(invoices).where(eq(invoices.id, input.invoiceId)).limit(1);
+  if (!inv) return { ok: false, error: "Sale not found." };
+  const [ord] = await db.select().from(salesOrders).where(eq(salesOrders.id, inv.orderId)).limit(1);
+  if (!ord) return { ok: false, error: "Order not found." };
+  if (!me.isAdmin && ord.ownerId !== me.id) return { ok: false, error: "That sale isn't yours." };
+  const period = inv.invoiceDate.slice(0, 7);
+  await db.delete(salesOrders).where(eq(salesOrders.id, ord.id)); // cascades invoices + receipts
+  if (ord.ownerId) await computePeriodForEmployee(ord.ownerId, period, new Date());
+  revalidateIncentive();
   return { ok: true };
 }
 
@@ -178,26 +238,31 @@ export async function reviewSubmission(input: {
   const decision = input.decision === "approved" ? "approved" : "rejected";
   const base = { reviewStatus: decision as "approved" | "rejected", reviewedById: me.id, reviewedAt: new Date(), note: input.note?.slice(0, 500) ?? null, updatedAt: new Date() };
 
+  let affected: { employeeId: string; periodMonth: string } | undefined;
   switch (input.queue) {
     case "lead_batch":
       await db.update(leadBatches).set(base).where(eq(leadBatches.id, input.id));
+      [affected] = await db.select({ employeeId: leadBatches.employeeId, periodMonth: leadBatches.periodMonth }).from(leadBatches).where(eq(leadBatches.id, input.id)).limit(1);
       break;
     case "lead_conversion":
       await db.update(leadConversions).set(base).where(eq(leadConversions.id, input.id));
+      [affected] = await db.select({ employeeId: leadConversions.employeeId, periodMonth: leadConversions.periodMonth }).from(leadConversions).where(eq(leadConversions.id, input.id)).limit(1);
       break;
     case "meeting": {
       const awarded = P(clampInt(input.awardedRupees, 0, 1000));
       await db.update(clientMeetings).set({ ...base, awardedPaise: awarded }).where(eq(clientMeetings.id, input.id));
+      [affected] = await db.select({ employeeId: clientMeetings.employeeId, periodMonth: clientMeetings.periodMonth }).from(clientMeetings).where(eq(clientMeetings.id, input.id)).limit(1);
       break;
     }
     case "testimonial":
       await db.update(testimonials).set({ ...base, namesTeamMember: !!input.namesTeamMember }).where(eq(testimonials.id, input.id));
+      [affected] = await db.select({ employeeId: testimonials.employeeId, periodMonth: testimonials.periodMonth }).from(testimonials).where(eq(testimonials.id, input.id)).limit(1);
       break;
     default:
       return { ok: false, error: "Unknown queue" };
   }
-  revalidatePath("/incentive");
-  revalidatePath("/incentive/admin");
+  if (affected) await computePeriodForEmployee(affected.employeeId, affected.periodMonth, new Date());
+  revalidateIncentive();
   return { ok: true };
 }
 
@@ -219,8 +284,7 @@ export async function setPeriodStatus(input: {
     const payout = await getPeriodPayout(period);
     await db.insert(payoutRuns).values({ periodId, totalPaise: payout.grandTotalPaise, createdById: me.id, pushedToPayrollAt: new Date() });
   }
-  revalidatePath("/incentive");
-  revalidatePath("/incentive/admin");
+  revalidateIncentive();
   return { ok: true };
 }
 
@@ -248,7 +312,6 @@ export async function recomputePeriod(input?: { period?: string }): Promise<{ ok
   const asOf = new Date();
   for (const id of ids) await computePeriodForEmployee(id, period, asOf);
 
-  revalidatePath("/incentive");
-  revalidatePath("/incentive/admin");
+  revalidateIncentive();
   return { ok: true, employees: ids.size };
 }
