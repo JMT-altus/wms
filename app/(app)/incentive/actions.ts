@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { eq, isNotNull, desc } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { requireUser, requireAdmin } from "@/lib/auth/current";
-import { leadBatches, leadConversions, clientMeetings, testimonials, salesOrders, customers, invoices, receipts, incentivePeriods, payoutRuns, incentiveSchemes, ruleVersions } from "@/db/schema";
+import { leadBatches, leadConversions, clientMeetings, testimonials, salesOrders, customers, invoices, receipts, incentivePeriods, payoutRuns, incentiveSchemes, ruleVersions, incentiveAudit } from "@/db/schema";
 import { currentPeriodIST, getPeriodPayout } from "@/lib/queries/incentives";
 import { P, CR, SALES_BH_SCHEME } from "@/lib/incentives";
 import { computePeriodForEmployee, ensurePeriod } from "@/lib/incentives/load";
@@ -17,6 +17,13 @@ function revalidateIncentive() {
   for (const p of ["/incentive", "/incentive/sales", "/incentive/activity", "/incentive/history", "/incentive/admin"]) {
     revalidatePath(p);
   }
+}
+
+/** Append one audit event (who did what, to which entity, for whom). */
+async function audit(actorId: string, action: string, entityType: string, entityId: string | null, employeeId: string | null, detail: Record<string, unknown> = {}) {
+  try {
+    await db.insert(incentiveAudit).values({ actorId, action, entityType, entityId, employeeId, detail });
+  } catch { /* audit is best-effort; never block the primary action */ }
 }
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
@@ -145,6 +152,7 @@ export async function recordSale(input: {
       invoiceId: inv!.id, amountPaise: paid, receivedAt: isDate(input.paidDate) ? input.paidDate : input.invoiceDate,
     });
   }
+  await audit(me.id, "logged_sale", "invoice", inv!.id, owner, { customer: name, amountPaise, category: cat });
   await computePeriodForEmployee(owner, input.invoiceDate.slice(0, 7), new Date());
   revalidateIncentive();
   return { ok: true };
@@ -169,9 +177,9 @@ export async function recordReceipt(input: { invoiceId?: string; invoiceNo?: str
   if (!me.isAdmin && ord?.ownerId !== me.id) return { ok: false, error: "That invoice isn't yours." };
   const amt = P(clampInt(input.amountRupees, 0, 1_00_00_00_00));
   if (amt <= 0) return { ok: false, error: "Enter the amount received." };
-  await db.insert(receipts).values({
-    invoiceId: inv.id, amountPaise: amt, receivedAt: isDate(input.receivedAt) ? input.receivedAt : new Date().toISOString().slice(0, 10),
-  });
+  const receivedAt = isDate(input.receivedAt) ? input.receivedAt : new Date().toISOString().slice(0, 10);
+  await db.insert(receipts).values({ invoiceId: inv.id, amountPaise: amt, receivedAt });
+  await audit(me.id, "recorded_payment", "invoice", inv.id, ord?.ownerId ?? null, { amountPaise: amt, receivedAt });
   if (ord?.ownerId) await computePeriodForEmployee(ord.ownerId, ord.bookedAt.toISOString().slice(0, 7), new Date());
   revalidateIncentive();
   return { ok: true };
@@ -200,6 +208,7 @@ export async function editSale(input: {
   if (input.customerName?.trim() && ord.customerId) {
     await db.update(customers).set({ name: input.customerName.trim().slice(0, 160), updatedAt: new Date() }).where(eq(customers.id, ord.customerId));
   }
+  await audit(me.id, "edited_sale", "invoice", inv.id, ord.ownerId, { amountPaise, category: cat, invoiceDate });
   if (ord.ownerId) await computePeriodForEmployee(ord.ownerId, invoiceDate.slice(0, 7), new Date());
   revalidateIncentive();
   return { ok: true };
@@ -216,6 +225,7 @@ export async function deleteSale(input: { invoiceId: string }): Promise<ActionRe
   if (!me.isAdmin && ord.ownerId !== me.id) return { ok: false, error: "That sale isn't yours." };
   const period = inv.invoiceDate.slice(0, 7);
   await db.delete(salesOrders).where(eq(salesOrders.id, ord.id)); // cascades invoices + receipts
+  await audit(me.id, "deleted_sale", "invoice", input.invoiceId, ord.ownerId, { invoiceNo: inv.invoiceNo });
   if (ord.ownerId) await computePeriodForEmployee(ord.ownerId, period, new Date());
   revalidateIncentive();
   return { ok: true };
@@ -261,7 +271,10 @@ export async function reviewSubmission(input: {
     default:
       return { ok: false, error: "Unknown queue" };
   }
-  if (affected) await computePeriodForEmployee(affected.employeeId, affected.periodMonth, new Date());
+  if (affected) {
+    await audit(me.id, decision === "approved" ? "approved" : "rejected", "submission", input.id, affected.employeeId, { queue: input.queue });
+    await computePeriodForEmployee(affected.employeeId, affected.periodMonth, new Date());
+  }
   revalidateIncentive();
   return { ok: true };
 }

@@ -2106,3 +2106,25 @@ export type PayoutRun = typeof payoutRuns.$inferSelect;
 export type NewPayoutRun = typeof payoutRuns.$inferInsert;
 export type IncentiveDispute = typeof incentiveDisputes.$inferSelect;
 export type NewIncentiveDispute = typeof incentiveDisputes.$inferInsert;
+
+/** Append-only audit of every incentive action (who did what, when). */
+export const incentiveAudit = pgTable(
+  "incentive_audit",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    actorId: uuid("actor_id").references(() => employees.id, { onDelete: "set null" }),
+    action: text("action").notNull(),        // logged_sale · edited_sale · deleted_sale · recorded_payment · approved · rejected · locked · paid · published_scheme · recomputed
+    entityType: text("entity_type").notNull(), // invoice · order · receipt · submission · period · scheme
+    entityId: text("entity_id"),
+    employeeId: uuid("employee_id").references(() => employees.id, { onDelete: "set null" }), // affected/owning employee
+    detail: jsonb("detail").$type<Record<string, unknown>>().notNull().default({}),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("incentive_audit_entity_idx").on(t.entityType, t.entityId),
+    index("incentive_audit_employee_idx").on(t.employeeId, t.createdAt),
+  ],
+);
+
+export type IncentiveAudit = typeof incentiveAudit.$inferSelect;
+export type NewIncentiveAudit = typeof incentiveAudit.$inferInsert;

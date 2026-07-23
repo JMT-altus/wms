@@ -24,10 +24,10 @@ async function clean() {
   const cs = await db.select({ id: customers.id }).from(customers).where(like(customers.code, "QA-%"));
   const ids = cs.map((c) => c.id);
   if (ids.length) await db.delete(customers).where(inArray(customers.id, ids)); // cascades orders → invoices → receipts
-  for (const t of [leadBatches, leadConversions, clientMeetings, testimonials]) {
-    // @ts-expect-error uniform shape
-    await db.delete(t).where(and(eq(t.employeeId, EMP), eq(t.periodMonth, PERIOD)));
-  }
+  await db.delete(leadBatches).where(and(eq(leadBatches.employeeId, EMP), eq(leadBatches.periodMonth, PERIOD)));
+  await db.delete(leadConversions).where(and(eq(leadConversions.employeeId, EMP), eq(leadConversions.periodMonth, PERIOD)));
+  await db.delete(clientMeetings).where(and(eq(clientMeetings.employeeId, EMP), eq(clientMeetings.periodMonth, PERIOD)));
+  await db.delete(testimonials).where(and(eq(testimonials.employeeId, EMP), eq(testimonials.periodMonth, PERIOD)));
 }
 
 interface SaleOpts { code: string; cat: "A" | "B" | "C" | "N" | "I" | "R" | "V"; valuePaise: number; invDate: string; terms: number; paidPaise?: number; paidDate?: string; newCust?: boolean; firstTxnAt?: string; turnoverPaise?: number; }
@@ -51,7 +51,7 @@ async function check(name: string, setup: () => Promise<void>, expect: Partial<R
 }
 
 async function main() {
-  [EMP] = (await db.select({ id: employees.id }).from(employees).limit(1)).map((e) => e.id);
+  EMP = (await db.select({ id: employees.id }).from(employees).limit(1))[0]?.id ?? "";
   if (!EMP) throw new Error("No employees.");
   console.log(`\nVerifying Sales-BH scheme through the live pipeline (period ${PERIOD})\n`);
 
@@ -105,7 +105,7 @@ async function main() {
   await check("two ₹1,000 meetings → ₹1,000 (cap)", async () => { await db.insert(clientMeetings).values([{ employeeId: EMP, periodMonth: PERIOD, awardedPaise: P(1000), reviewStatus: "approved" }, { employeeId: EMP, periodMonth: PERIOD, awardedPaise: P(1000), reviewStatus: "approved" }]); }, { E: P(1000) });
 
   console.log("\nF · Reviews (Google ₹100 5★≥50w · email ₹100 · letterhead ₹150 · F.4 doubles, cap ₹750)");
-  const t = (o: Partial<typeof testimonials.$inferInsert>) => db.insert(testimonials).values({ employeeId: EMP, periodMonth: PERIOD, kind: "google_review", wordCount: 60, starRating: 5, namesTeamMember: false, reviewStatus: "approved", evidenceUrl: "x", ...o });
+  const t = async (o: Partial<typeof testimonials.$inferInsert>) => { await db.insert(testimonials).values({ employeeId: EMP, periodMonth: PERIOD, kind: "google_review", wordCount: 60, starRating: 5, namesTeamMember: false, reviewStatus: "approved", evidenceUrl: "x", ...o }); };
   await check("Google 5★ 60w screenshot → ₹100", () => t({}), { F: P(100) });
   await check("Google 4★ → ₹0", () => t({ starRating: 4 }), { F: 0 });
   await check("Google 40 words → ₹0", () => t({ wordCount: 40 }), { F: 0 });
