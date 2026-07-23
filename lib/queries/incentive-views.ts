@@ -13,6 +13,7 @@ const DAY = 86_400_000;
 const dayDiff = (a: Date, b: Date) => Math.floor((a.getTime() - b.getTime()) / DAY);
 
 // ── My Sales (tracking table) ────────────────────────────────────────────────
+export interface ReceiptRow { amountPaise: number; receivedAt: string }
 export interface SaleRow {
   invoiceId: string;
   bookedAt: string;
@@ -23,8 +24,11 @@ export interface SaleRow {
   collectedPaise: number;
   outstandingPaise: number;
   daysPastTerms: number;
+  termsDays: number;
+  dueDate: string;
   multiplier: number;
   status: "collected" | "partial" | "overdue" | "due";
+  receipts: ReceiptRow[];
 }
 
 export async function getMySales(employeeId: string, asOf: Date = new Date()): Promise<SaleRow[]> {
@@ -43,7 +47,13 @@ export async function getMySales(employeeId: string, asOf: Date = new Date()): P
   const invIds = rows.map((r) => r.invoiceId);
   const recs = invIds.length ? await db.select().from(receipts).where(sql`${receipts.invoiceId} = any(${invIds})`) : [];
   const paidBy = new Map<string, number>();
-  for (const r of recs) paidBy.set(r.invoiceId, (paidBy.get(r.invoiceId) ?? 0) + r.amountPaise);
+  const recsBy = new Map<string, ReceiptRow[]>();
+  for (const r of recs) {
+    paidBy.set(r.invoiceId, (paidBy.get(r.invoiceId) ?? 0) + r.amountPaise);
+    const arr = recsBy.get(r.invoiceId) ?? [];
+    arr.push({ amountPaise: r.amountPaise, receivedAt: String(r.receivedAt) });
+    recsBy.set(r.invoiceId, arr);
+  }
 
   return rows.map((r) => {
     const collected = paidBy.get(r.invoiceId) ?? 0;
@@ -56,9 +66,24 @@ export async function getMySales(employeeId: string, asOf: Date = new Date()): P
     return {
       invoiceId: r.invoiceId, bookedAt: String(r.invoiceDate), category: r.category, customer: r.customer,
       invoiceNo: r.invoiceNo, valuePaise: r.valuePaise, collectedPaise: collected,
-      outstandingPaise: Math.max(0, outstanding), daysPastTerms, multiplier, status,
+      outstandingPaise: Math.max(0, outstanding), daysPastTerms, termsDays: r.terms,
+      dueDate: r.dueDate ? String(r.dueDate) : due.toISOString().slice(0, 10),
+      multiplier, status,
+      receipts: (recsBy.get(r.invoiceId) ?? []).sort((a, b) => a.receivedAt.localeCompare(b.receivedAt)),
     };
   });
+}
+
+/** Total booked sales (paise) for an employee in a period — for the Go-Get nudge. */
+export async function getMonthlySales(employeeId: string, period: string): Promise<number> {
+  const [y, m] = period.split("-").map(Number);
+  const start = new Date(Date.UTC(y!, m! - 1, 1));
+  const end = new Date(Date.UTC(y!, m!, 1));
+  const [row] = await db
+    .select({ total: sql<number>`coalesce(sum(${salesOrders.orderValuePaise}), 0)::bigint` })
+    .from(salesOrders)
+    .where(and(eq(salesOrders.ownerId, employeeId), sql`${salesOrders.bookedAt} >= ${start}`, sql`${salesOrders.bookedAt} < ${end}`));
+  return Number(row?.total ?? 0);
 }
 
 // ── My Activity (submissions with status) ────────────────────────────────────

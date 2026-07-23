@@ -1070,6 +1070,14 @@ html[data-density="compact"] body {
 }
 /* A light streak that sweeps across a logo (masked to its shape) for a
    glossy "shine" pass on the header marks. */
+@keyframes drawerIn {
+  from { transform: translateX(100%); }
+  to   { transform: translateX(0); }
+}
+@keyframes drawerFade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
 @keyframes logoSheen {
   0%   { background-position: 180% 0; }
   60%  { background-position: -80% 0; }
