@@ -96,6 +96,53 @@ export async function getAtRiskInvoices(employeeId: string, asOf: Date = new Dat
   return out.slice(0, 12);
 }
 
+export interface DecayAlert {
+  employeeId: string;
+  employeeName: string;
+  invoices: { customer: string; invoiceNo: string | null; daysToNextStep: number; nextMultiplier: number; atRiskPaise: number }[];
+}
+
+/**
+ * Invoices whose incentive crosses a worse decay step within `withinDays`,
+ * grouped by owner — the T-7 / T-2 nudge list (data layer for notifications).
+ */
+export async function getDecayAlerts(withinDays = 7, asOf: Date = new Date()): Promise<DecayAlert[]> {
+  const rows = await db
+    .select({
+      invoiceNo: invoices.invoiceNo, invoiceValuePaise: invoices.invoiceValuePaise,
+      invoiceDate: invoices.invoiceDate, agreedTermsDays: invoices.agreedTermsDays, dueDate: invoices.dueDate,
+      category: salesOrders.categoryCode, ownerId: salesOrders.ownerId,
+      customer: customers.name, owner: employees.name, invoiceId: invoices.id,
+    })
+    .from(invoices)
+    .innerJoin(salesOrders, eq(invoices.orderId, salesOrders.id))
+    .innerJoin(customers, eq(salesOrders.customerId, customers.id))
+    .innerJoin(employees, eq(salesOrders.ownerId, employees.id));
+
+  const invIds = rows.map((r) => r.invoiceId);
+  const recs = invIds.length ? await db.select().from(receipts).where(inArray(receipts.invoiceId, invIds)) : [];
+  const paidByInv = new Map<string, number>();
+  for (const r of recs) paidByInv.set(r.invoiceId, (paidByInv.get(r.invoiceId) ?? 0) + r.amountPaise);
+
+  const byOwner = new Map<string, DecayAlert>();
+  for (const r of rows) {
+    if (!r.ownerId) continue;
+    const outstanding = r.invoiceValuePaise - (paidByInv.get(r.invoiceId) ?? 0);
+    if (outstanding <= 0) continue;
+    const due = r.dueDate ? new Date(r.dueDate) : new Date(new Date(r.invoiceDate).getTime() + r.agreedTermsDays * DAY);
+    const daysPastTerms = Math.max(0, dayDiff(asOf, due));
+    const info = riskInfo(daysPastTerms, SALES_BH_SCHEME.decaySteps);
+    if (info.daysToNextStep == null || info.daysToNextStep > withinDays || info.nextMultiplier == null) continue;
+    const incentive = invoiceIncentivePaise(r.category, r.invoiceValuePaise);
+    const atRisk = Math.round(incentive * (info.currentMultiplier - info.nextMultiplier));
+    const alert = byOwner.get(r.ownerId) ?? { employeeId: r.ownerId, employeeName: r.owner, invoices: [] };
+    alert.invoices.push({ customer: r.customer, invoiceNo: r.invoiceNo, daysToNextStep: info.daysToNextStep, nextMultiplier: info.nextMultiplier, atRiskPaise: atRisk });
+    byOwner.set(r.ownerId, alert);
+  }
+  for (const a of byOwner.values()) a.invoices.sort((x, y) => x.daysToNextStep - y.daysToNextStep);
+  return [...byOwner.values()];
+}
+
 export interface WatchtowerRow {
   invoiceNo: string | null;
   customer: string;

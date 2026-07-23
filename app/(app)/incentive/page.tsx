@@ -62,7 +62,12 @@ export default async function IncentiveOverviewPage({ searchParams }: PageProps)
         eyebrow={`MY INCENTIVES · ${periodLabel(period)}`}
         title={`Hi, ${me.name.split(" ")[0] ?? me.name}`}
         sub="What you've earned this month, and what to chase next."
-        right={<PeriodPicker current={period} options={recentPeriods()} />}
+        right={
+          <div className="flex items-center gap-2">
+            <a href={`/incentive/statement?period=${period}`} className="rounded-xl px-4 py-2 text-[13px] font-bold" style={{ background: "rgba(15,23,42,0.05)", color: "#334155" }}>Statement CSV</a>
+            <PeriodPicker current={period} options={recentPeriods()} />
+          </div>
+        }
       />
 
       <section className="relative overflow-hidden rounded-[24px] p-8 max-md:p-6 mb-6" style={{ background: "radial-gradient(90% 140% at 12% 0%, rgba(10,108,255,0.10), transparent 60%),linear-gradient(135deg, #ffffff 0%, #f4f8ff 100%)", border: "1px solid rgba(15,23,42,0.07)", boxShadow: "0 30px 60px -30px rgba(10,108,255,0.3), 0 2px 8px rgba(15,23,42,0.05), inset 0 1px 0 rgba(255,255,255,0.9)" }}>

@@ -3,7 +3,7 @@ import type { Route } from "next";
 import { requireAdmin } from "@/lib/auth/current";
 import { formatInrPaise, formatInrCompactPaise } from "@/lib/format";
 import { getPendingSubmissions, getPeriodPayout, currentPeriodIST, periodLabel } from "@/lib/queries/incentives";
-import { getCollectionWatchtower } from "@/lib/queries/incentive-risk";
+import { getCollectionWatchtower, getDecayAlerts } from "@/lib/queries/incentive-risk";
 import { getLeaderboard, getAdminAnalytics, getPeriodLedgerByEmployee, type LeaderRow } from "@/lib/queries/incentive-admin";
 import { listEmployeeOptions } from "@/lib/queries/employees";
 import { VerificationQueue } from "@/components/incentive/verification-queue";
@@ -85,7 +85,10 @@ async function PeriodTab({ period }: { period: string }) {
             <h2 className="text-display-xs text-ink-strong">Payout · {periodLabel(period)}</h2>
             <p className="text-ink-muted text-[13px] mt-0.5">Total <b className="text-ink-strong">{formatInrPaise(payout.grandTotalPaise)}</b> · {payout.rows.length} employee{payout.rows.length === 1 ? "" : "s"} · tap a row to drill in</p>
           </div>
-          <PeriodControls status={payout.status} />
+          <div className="flex items-center gap-2 flex-wrap">
+            <a href={`/incentive/admin/export?period=${period}`} className="rounded-xl px-4 py-2 text-[13px] font-bold" style={{ background: "rgba(15,23,42,0.05)", color: "#334155" }}>Export CSV</a>
+            <PeriodControls status={payout.status} />
+          </div>
         </div>
         <PayoutTable rows={payout.rows} ledgerByEmployee={ledgerByEmployee} />
       </div>
@@ -143,9 +146,34 @@ async function DataTab() {
 }
 
 async function CollectionsTab() {
-  const watchtower = await getCollectionWatchtower();
+  const [watchtower, alerts] = await Promise.all([getCollectionWatchtower(), getDecayAlerts(7)]);
   return (
     <>
+      {alerts.length > 0 && (
+        <div className="mb-8">
+          <div className="flex items-center gap-2 mb-3">
+            <h2 className="text-display-xs text-ink-strong">Nudge list</h2>
+            <span className="text-[11px] font-extrabold tracking-[0.12em] rounded-full px-2 py-0.5" style={{ background: "rgba(239,68,68,0.12)", color: "#b91c1c" }}>DECAY WITHIN 7 DAYS</span>
+          </div>
+          <div className="grid gap-3">
+            {alerts.map((a) => (
+              <div key={a.employeeId} className="rounded-[16px] p-4" style={{ background: "#fff", border: "1px solid rgba(239,68,68,0.18)" }}>
+                <div className="font-bold text-ink-strong text-[14px] mb-2">{a.employeeName}</div>
+                <div className="grid gap-1.5">
+                  {a.invoices.map((inv, i) => (
+                    <div key={i} className="flex items-center gap-3 text-[13px]">
+                      <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10.5px] font-extrabold tracking-[0.08em]" style={{ background: inv.daysToNextStep <= 2 ? "rgba(239,68,68,0.14)" : "rgba(245,158,11,0.16)", color: inv.daysToNextStep <= 2 ? "#b91c1c" : "#b45309" }}>{inv.nextMultiplier === 0 ? "VOIDS" : "HALVES"} IN {inv.daysToNextStep}D</span>
+                      <span className="text-ink-strong font-semibold flex-1">{inv.customer}{inv.invoiceNo ? ` · ${inv.invoiceNo}` : ""}</span>
+                      {inv.atRiskPaise > 0 && <span className="text-ink-muted font-bold">≈{formatInrPaise(inv.atRiskPaise)} at risk</span>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <h2 className="text-display-xs text-ink-strong mb-3">Collection watchtower</h2>
       <div className="grid grid-cols-4 max-md:grid-cols-2 gap-3 mb-4">
         {watchtower.buckets.map((b) => (
