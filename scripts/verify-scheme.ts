@@ -87,7 +87,7 @@ async function main() {
   };
   await check("3 txns · ₹10 L · paid → ₹5,000 (1% capped)", () => cohort({ turnover: L(10), txns: 3, paid: true, total: L(10) }), { C: P(5000) });
   await check("3 txns · ₹3 L · paid → ₹3,000 (1%)", () => cohort({ turnover: L(3), txns: 3, paid: true, total: L(3) }), { C: P(3000) });
-  await check("turnover ₹2.4 L → ₹0 (ineligible)", () => cohort({ turnover: L(2.4), txns: 3, paid: true, total: L(3) }), { C: 0 });
+  await check("turnover ₹2.4 L → ₹0 (ineligible)", () => cohort({ turnover: L(2.4), txns: 3, paid: true, total: L(2.4) }), { C: 0 });
   await check("only 2 txns → ₹0 (ineligible)", () => cohort({ turnover: L(10), txns: 2, paid: true, total: L(10) }), { C: 0 });
   await check("not fully paid → ₹0 (ineligible)", () => cohort({ turnover: L(10), txns: 3, paid: false, total: L(10) }), { C: 0 });
 

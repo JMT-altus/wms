@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { eq, isNotNull, desc } from "drizzle-orm";
+import { eq, isNotNull, desc, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { requireUser, requireAdmin } from "@/lib/auth/current";
 import { leadBatches, leadConversions, clientMeetings, testimonials, salesOrders, customers, invoices, receipts, incentivePeriods, payoutRuns, incentiveSchemes, ruleVersions, incentiveAudit } from "@/db/schema";
@@ -127,7 +127,9 @@ export async function recordSale(input: {
   const termsDays = clampInt(input.termsDays, 0, 365);
   const dueDate = addDays(input.invoiceDate, termsDays);
 
-  let [cust] = await db.select().from(customers).where(eq(customers.name, name)).limit(1);
+  // Case-insensitive match so "Acme"/"acme" don't fragment into duplicate
+  // customer records (which would break C's per-customer eligibility + history).
+  let [cust] = await db.select().from(customers).where(sql`lower(${customers.name}) = ${name.toLowerCase()}`).limit(1);
   if (!cust) {
     [cust] = await db
       .insert(customers)

@@ -46,10 +46,13 @@ export async function getCustomerDetail(customerId: string): Promise<CustomerDet
   }
 
   const asOf = new Date();
-  let lifetime = 0, collected = 0, outstandingTotal = 0, ownerId: string | null = cust.ownerId;
+  const fyYear = asOf.getUTCMonth() >= 3 ? asOf.getUTCFullYear() : asOf.getUTCFullYear() - 1;
+  const fyStart = new Date(Date.UTC(fyYear, 3, 1));
+  let lifetime = 0, collected = 0, outstandingTotal = 0, fyTurnover = 0, ownerId: string | null = cust.ownerId;
   const lateDays: number[] = [];
   const deals: CustomerDeal[] = rows.map((r) => {
     lifetime += r.valuePaise;
+    if (r.bookedAt >= fyStart) fyTurnover += r.valuePaise;
     const paid = paidBy.get(r.invoiceId) ?? 0;
     collected += paid;
     const outstanding = r.valuePaise - paid;
@@ -76,7 +79,7 @@ export async function getCustomerDetail(customerId: string): Promise<CustomerDet
 
   return {
     customerId, name: cust.name, code: cust.code, ownerId: cust.ownerId, owner: cust.owner,
-    isNewCustomer: cust.isNew, firstTransactionAt: cust.firstTx ? String(cust.firstTx).slice(0, 10) : null, fyTurnoverPaise: cust.fy,
+    isNewCustomer: cust.isNew, firstTransactionAt: cust.firstTx ? String(cust.firstTx).slice(0, 10) : null, fyTurnoverPaise: fyTurnover,
     lifetimePaise: lifetime, dealCount: rows.length, collectedPaise: collected, outstandingPaise: outstandingTotal,
     avgDaysLate: lateDays.length ? Math.round(lateDays.reduce((s, d) => s + d, 0) / lateDays.length) : null,
     incentiveGeneratedPaise, deals,

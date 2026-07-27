@@ -190,10 +190,15 @@ async function buildNewCustomerCohorts(
 ): Promise<NewCustomerCohort[]> {
   const acq = await db.select().from(customers).where(eq(customers.acquisitionEmployeeId, employeeId));
   const cohorts: NewCustomerCohort[] = [];
+  // Current FY (Apr–Mar) start for the period being computed.
+  const fyYear = start.getUTCMonth() >= 3 ? start.getUTCFullYear() : start.getUTCFullYear() - 1;
+  const fyStart = new Date(Date.UTC(fyYear, 3, 1));
   for (const cust of acq) {
-    const custOrders = (
-      await db.select().from(salesOrders).where(eq(salesOrders.customerId, cust.id))
-    )
+    const allOrders = await db.select().from(salesOrders).where(eq(salesOrders.customerId, cust.id));
+    // Turnover is DERIVED from actual orders in the FY, not a cached counter that
+    // could drift when a deal is edited or deleted.
+    const fyTurnoverPaise = allOrders.filter((o) => o.bookedAt >= fyStart).reduce((s, o) => s + o.orderValuePaise, 0);
+    const custOrders = allOrders
       .filter((o) => ["C", "N", "I", "R"].includes(o.categoryCode))
       .sort((a, b) => a.bookedAt.getTime() - b.bookedAt.getTime());
     if (custOrders.length < scheme.newCustomer.requiredTxns) continue;
@@ -226,7 +231,7 @@ async function buildNewCustomerCohorts(
       id: cust.id,
       customer: cust.name,
       first3TotalPaise: first3.reduce((s, o) => s + o.orderValuePaise, 0),
-      fyTurnoverPaise: cust.fyTurnoverPaise,
+      fyTurnoverPaise,
       transactionsDone: custOrders.length,
       fullyPaid,
       daysPastTerms,
