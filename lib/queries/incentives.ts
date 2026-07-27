@@ -1,8 +1,23 @@
 import "server-only";
 import { and, eq, desc, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { incentiveLedger, incentivePeriods, leadBatches, leadConversions, clientMeetings, testimonials, employees } from "@/db/schema";
+import { incentiveLedger, incentivePeriods, leadBatches, leadConversions, clientMeetings, testimonials, employees, salesOrders, customers, invoices } from "@/db/schema";
 import { SALES_BH_SCHEME } from "@/lib/incentives";
+
+export interface PendingSale { orderId: string; invoiceId: string | null; customer: string; owner: string; category: string; valuePaise: number; bookedAt: string; }
+
+/** Rep-logged sales awaiting admin confirmation before they count. */
+export async function getPendingSales(): Promise<PendingSale[]> {
+  const rows = await db
+    .select({ orderId: salesOrders.id, invoiceId: invoices.id, customer: customers.name, owner: employees.name, category: salesOrders.categoryCode, valuePaise: salesOrders.orderValuePaise, bookedAt: salesOrders.bookedAt })
+    .from(salesOrders)
+    .innerJoin(customers, eq(salesOrders.customerId, customers.id))
+    .leftJoin(employees, eq(salesOrders.ownerId, employees.id))
+    .leftJoin(invoices, eq(invoices.orderId, salesOrders.id))
+    .where(eq(salesOrders.confirmed, false))
+    .orderBy(desc(salesOrders.bookedAt));
+  return rows.map((r) => ({ orderId: r.orderId, invoiceId: r.invoiceId, customer: r.customer, owner: r.owner ?? "—", category: r.category, valuePaise: r.valuePaise, bookedAt: String(r.bookedAt).slice(0, 10) }));
+}
 
 export interface IncentiveLine {
   lineCode: string;

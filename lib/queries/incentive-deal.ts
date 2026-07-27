@@ -27,6 +27,7 @@ export interface DealDetail {
   daysPastTerms: number;
   multiplier: number;
   status: "collected" | "partial" | "overdue" | "due";
+  confirmed: boolean;
   receipts: { amountPaise: number; receivedAt: string }[];
   drivesLines: { lineCode: string; category: string; amountPaise: number; explanation: string | null }[];
   drivesPaise: number;
@@ -38,7 +39,7 @@ export async function getDealDetail(invoiceId: string): Promise<DealDetail | nul
     .select({
       invoiceNo: invoices.invoiceNo, valuePaise: invoices.invoiceValuePaise, invoiceDate: invoices.invoiceDate,
       terms: invoices.agreedTermsDays, dueDate: invoices.dueDate,
-      category: salesOrders.categoryCode, ownerId: salesOrders.ownerId, bookedAt: salesOrders.bookedAt,
+      category: salesOrders.categoryCode, ownerId: salesOrders.ownerId, bookedAt: salesOrders.bookedAt, confirmed: salesOrders.confirmed,
       customerId: customers.id, customer: customers.name, owner: employees.name,
     })
     .from(invoices)
@@ -89,7 +90,7 @@ export async function getDealDetail(invoiceId: string): Promise<DealDetail | nul
     invoiceId, invoiceNo: row.invoiceNo, category: row.category, customerId: row.customerId, customer: row.customer,
     ownerId: row.ownerId, owner: row.owner ?? "—", bookedAt: String(row.bookedAt).slice(0, 10), invoiceDate: String(row.invoiceDate),
     dueDate: row.dueDate ? String(row.dueDate) : due.toISOString().slice(0, 10), termsDays: row.terms, period,
-    valuePaise: row.valuePaise, collectedPaise: collected, outstandingPaise: Math.max(0, outstanding), daysPastTerms, multiplier, status,
+    valuePaise: row.valuePaise, collectedPaise: collected, outstandingPaise: Math.max(0, outstanding), daysPastTerms, multiplier, status, confirmed: row.confirmed,
     receipts: recs, drivesLines, drivesPaise,
     audit: auditRows.map((a) => ({ actor: a.actor, action: a.action, detail: (a.detail ?? {}) as Record<string, unknown>, at: a.at })),
   };

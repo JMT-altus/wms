@@ -108,11 +108,13 @@ export async function buildEvaluationInput(
 ): Promise<EvaluationInput> {
   const { start, end } = monthBounds(period);
 
-  // Orders owned by the employee, booked in the month.
+  // Orders owned by the employee, booked in the month. Only CONFIRMED orders
+  // count toward incentive — rep-logged sales are provisional until an admin
+  // confirms them.
   const orders = await db
     .select()
     .from(salesOrders)
-    .where(and(eq(salesOrders.ownerId, employeeId), gte(salesOrders.bookedAt, start), lt(salesOrders.bookedAt, end)));
+    .where(and(eq(salesOrders.ownerId, employeeId), gte(salesOrders.bookedAt, start), lt(salesOrders.bookedAt, end), eq(salesOrders.confirmed, true)));
 
   const orderIds = orders.map((o) => o.id);
   const invs = orderIds.length
@@ -194,7 +196,7 @@ async function buildNewCustomerCohorts(
   const fyYear = start.getUTCMonth() >= 3 ? start.getUTCFullYear() : start.getUTCFullYear() - 1;
   const fyStart = new Date(Date.UTC(fyYear, 3, 1));
   for (const cust of acq) {
-    const allOrders = await db.select().from(salesOrders).where(eq(salesOrders.customerId, cust.id));
+    const allOrders = await db.select().from(salesOrders).where(and(eq(salesOrders.customerId, cust.id), eq(salesOrders.confirmed, true)));
     // Turnover is DERIVED from actual orders in the FY, not a cached counter that
     // could drift when a deal is edited or deleted.
     const fyTurnoverPaise = allOrders.filter((o) => o.bookedAt >= fyStart).reduce((s, o) => s + o.orderValuePaise, 0);

@@ -1828,6 +1828,9 @@ export const salesOrders = pgTable(
     productRef: text("product_ref"),
     brandRef: text("brand_ref"),
     bookedAt: timestamp("booked_at", { withTimezone: true }).notNull(),
+    confirmed: boolean("confirmed").notNull().default(true),
+    confirmedById: uuid("confirmed_by_id").references(() => employees.id, { onDelete: "set null" }),
+    confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -1835,6 +1838,7 @@ export const salesOrders = pgTable(
     index("sales_orders_customer_idx").on(t.customerId),
     index("sales_orders_owner_idx").on(t.ownerId),
     index("sales_orders_booked_idx").on(t.bookedAt),
+    index("sales_orders_confirmed_idx").on(t.confirmed),
   ],
 );
 

@@ -47,6 +47,12 @@ export default async function DealPage({ params }: { params: Promise<{ invoiceId
         <p className="-mt-2 mb-5 text-[13px]"><Link href={`/incentive/customer/${deal.customerId}` as Route} className="font-semibold text-[#0a47b3]">View {deal.customer}&apos;s full history →</Link></p>
       )}
 
+      {!deal.confirmed && (
+        <div className="rounded-[14px] px-4 py-3 mb-5 text-[13.5px] font-semibold" style={{ background: "rgba(245,158,11,0.1)", color: "#b45309", border: "1px solid rgba(245,158,11,0.25)" }}>
+          Awaiting admin confirmation — this deal doesn&apos;t count toward incentive until it&apos;s confirmed.
+        </div>
+      )}
+
       {/* Stats */}
       <div className="grid grid-cols-4 max-md:grid-cols-2 gap-3 mb-6">
         <Stat label="Invoice value" value={formatInrPaise(deal.valuePaise)} />

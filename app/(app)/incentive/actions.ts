@@ -148,6 +148,7 @@ export async function recordSale(input: {
   const [order] = await db.insert(salesOrders).values({
     customerId: cust!.id, ownerId: owner, orderValuePaise: amountPaise,
     categoryCode: cat, bookedAt: new Date(input.invoiceDate),
+    confirmed: me.isAdmin, confirmedById: me.isAdmin ? me.id : null, confirmedAt: me.isAdmin ? new Date() : null,
   }).returning();
   const [inv] = await db.insert(invoices).values({
     orderId: order!.id, invoiceNo: input.invoiceNo?.slice(0, 60) || null,
@@ -237,6 +238,19 @@ export async function deleteSale(input: { invoiceId: string }): Promise<ActionRe
   await db.delete(salesOrders).where(eq(salesOrders.id, ord.id)); // cascades invoices + receipts
   await audit(me.id, "deleted_sale", "invoice", input.invoiceId, ord.ownerId, { invoiceNo: inv.invoiceNo });
   if (ord.ownerId) await computePeriodForEmployee(ord.ownerId, period, new Date());
+  revalidateIncentive();
+  return { ok: true };
+}
+
+/** Admin confirms a rep-logged sale so it counts toward incentive. */
+export async function confirmSale(input: { orderId: string }): Promise<ActionResult> {
+  const me = await requireAdmin();
+  if (!/^[0-9a-f-]{36}$/i.test(input.orderId)) return { ok: false, error: "Invalid id" };
+  const [ord] = await db.select().from(salesOrders).where(eq(salesOrders.id, input.orderId)).limit(1);
+  if (!ord) return { ok: false, error: "Sale not found." };
+  await db.update(salesOrders).set({ confirmed: true, confirmedById: me.id, confirmedAt: new Date(), updatedAt: new Date() }).where(eq(salesOrders.id, ord.id));
+  await audit(me.id, "confirmed_sale", "order", ord.id, ord.ownerId, { amountPaise: ord.orderValuePaise, category: ord.categoryCode });
+  if (ord.ownerId) await computePeriodForEmployee(ord.ownerId, ord.bookedAt.toISOString().slice(0, 7), new Date());
   revalidateIncentive();
   return { ok: true };
 }

@@ -49,6 +49,7 @@ export function SalesTable({ sales }: { sales: SaleRow[] }) {
                 <span className="font-bold text-ink-strong text-[13.5px] group-hover:underline">{s.customer}</span>
                 {s.invoiceNo && <span className="text-ink-subtle text-[12.5px] font-semibold"> · {s.invoiceNo}</span>}
                 <span className="text-ink-subtle text-[12px]"> · {s.bookedAt}</span>
+                {!s.confirmed && <span className="ml-2 inline-flex items-center rounded-full px-2 py-0.5 text-[9.5px] font-extrabold tracking-[0.08em]" style={{ background: "rgba(245,158,11,0.16)", color: "#b45309" }}>PENDING</span>}
               </div>
               <span className="text-right pr-6 font-bold text-ink-strong text-[13.5px]" style={{ fontVariantNumeric: "tabular-nums" }}>{formatInrCompactPaise(s.valuePaise)}</span>
               <span className="text-right pr-6"><span className="inline-flex items-center rounded-full px-2.5 py-1 text-[10.5px] font-extrabold" style={{ background: st.bg, color: st.fg }}>{st.label}</span></span>

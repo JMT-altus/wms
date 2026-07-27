@@ -28,6 +28,7 @@ export interface SaleRow {
   dueDate: string;
   multiplier: number;
   status: "collected" | "partial" | "overdue" | "due";
+  confirmed: boolean;
   receipts: ReceiptRow[];
 }
 
@@ -36,7 +37,7 @@ export async function getMySales(employeeId: string, asOf: Date = new Date()): P
     .select({
       invoiceId: invoices.id, invoiceNo: invoices.invoiceNo, valuePaise: invoices.invoiceValuePaise,
       invoiceDate: invoices.invoiceDate, terms: invoices.agreedTermsDays, dueDate: invoices.dueDate,
-      bookedAt: salesOrders.bookedAt, category: salesOrders.categoryCode, customer: customers.name,
+      bookedAt: salesOrders.bookedAt, category: salesOrders.categoryCode, customer: customers.name, confirmed: salesOrders.confirmed,
     })
     .from(invoices)
     .innerJoin(salesOrders, eq(invoices.orderId, salesOrders.id))
@@ -68,7 +69,7 @@ export async function getMySales(employeeId: string, asOf: Date = new Date()): P
       invoiceNo: r.invoiceNo, valuePaise: r.valuePaise, collectedPaise: collected,
       outstandingPaise: Math.max(0, outstanding), daysPastTerms, termsDays: r.terms,
       dueDate: r.dueDate ? String(r.dueDate) : due.toISOString().slice(0, 10),
-      multiplier, status,
+      multiplier, status, confirmed: r.confirmed,
       receipts: (recsBy.get(r.invoiceId) ?? []).sort((a, b) => a.receivedAt.localeCompare(b.receivedAt)),
     };
   });

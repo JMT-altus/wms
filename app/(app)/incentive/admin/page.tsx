@@ -2,7 +2,8 @@ import Link from "next/link";
 import type { Route } from "next";
 import { requireAdmin } from "@/lib/auth/current";
 import { formatInrPaise, formatInrCompactPaise } from "@/lib/format";
-import { getPendingSubmissions, getPeriodPayout, currentPeriodIST, periodLabel } from "@/lib/queries/incentives";
+import { getPendingSubmissions, getPeriodPayout, getPendingSales, currentPeriodIST, periodLabel } from "@/lib/queries/incentives";
+import { SalesConfirmQueue } from "@/components/incentive/sales-confirm";
 import { getCollectionWatchtower, getDecayAlerts } from "@/lib/queries/incentive-risk";
 import { getLeaderboard, getAdminAnalytics, getPeriodLedgerByEmployee, getRecentActivity, type LeaderRow } from "@/lib/queries/incentive-admin";
 import { ActivityFeed } from "@/components/incentive/activity-feed";
@@ -126,11 +127,18 @@ function Leaderboard({ leaders }: { leaders: LeaderRow[] }) {
 }
 
 async function VerifyTab() {
-  const pending = await getPendingSubmissions();
+  const [pending, pendingSales] = await Promise.all([getPendingSubmissions(), getPendingSales()]);
   return (
     <>
       <div className="flex items-center gap-2 mb-3">
-        <h2 className="text-display-xs text-ink-strong">Verification queue</h2>
+        <h2 className="text-display-xs text-ink-strong">Sales awaiting confirmation</h2>
+        {pendingSales.length > 0 && <span className="text-[11px] font-extrabold tracking-[0.12em] rounded-full px-2 py-0.5" style={{ background: "rgba(245,158,11,0.16)", color: "#b45309" }}>{pendingSales.length}</span>}
+      </div>
+      <p className="text-ink-muted text-[13px] mb-3">Rep-logged deals count toward incentive only once you confirm them.</p>
+      <div className="mb-8"><SalesConfirmQueue sales={pendingSales} /></div>
+
+      <div className="flex items-center gap-2 mb-3">
+        <h2 className="text-display-xs text-ink-strong">Activity queue</h2>
         {pending.length > 0 && <span className="text-[11px] font-extrabold tracking-[0.12em] rounded-full px-2 py-0.5" style={{ background: "rgba(245,158,11,0.16)", color: "#b45309" }}>{pending.length} PENDING</span>}
       </div>
       <div className="mb-4"><VerificationQueue items={pending} /></div>
