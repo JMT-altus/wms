@@ -4,7 +4,7 @@
 // ledger idempotently. Uses Date here (script/server side) — only the pure
 // engine forbids Date.
 
-import { and, eq, gte, lt, inArray, desc } from "drizzle-orm";
+import { and, eq, gte, lt, inArray, desc, isNotNull } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
   salesOrders, invoices, receipts, customers,
@@ -24,15 +24,35 @@ import type {
  * cannot hold Infinity, so the open-ended decay step round-trips as null and is
  * restored here.
  */
-export async function getActiveSchemeConfig(): Promise<SchemeConfig> {
-  const [rv] = await db.select({ config: ruleVersions.config }).from(ruleVersions).orderBy(desc(ruleVersions.createdAt)).limit(1);
-  if (!rv?.config) return SALES_BH_SCHEME;
-  const cfg = rv.config as Partial<SchemeConfig>;
+function parseConfig(raw: unknown): SchemeConfig {
+  const cfg = (raw ?? {}) as Partial<SchemeConfig>;
   const steps = (cfg.decaySteps ?? SALES_BH_SCHEME.decaySteps).map((s): DecayStep => ({
     maxDaysPastTerms: s.maxDaysPastTerms == null ? Infinity : s.maxDaysPastTerms,
     multiplier: s.multiplier,
   }));
   return { ...SALES_BH_SCHEME, ...cfg, decaySteps: steps };
+}
+
+/** The latest published config — for the admin editor's current values. */
+export async function getActiveSchemeConfig(): Promise<SchemeConfig> {
+  const [rv] = await db.select({ config: ruleVersions.config }).from(ruleVersions).orderBy(desc(ruleVersions.createdAt)).limit(1);
+  return rv?.config ? parseConfig(rv.config) : SALES_BH_SCHEME;
+}
+
+/**
+ * The config EFFECTIVE for a given period — the newest version whose
+ * effective_from is on/before the period start (versions with no effective_from
+ * are treated as always-effective). This pins each month to the scheme that was
+ * live then, so publishing a change never retroactively restates an old month.
+ */
+export async function getSchemeConfigForPeriod(period: string): Promise<SchemeConfig> {
+  const periodStart = `${period}-01`;
+  const versions = await db
+    .select({ config: ruleVersions.config, effectiveFrom: ruleVersions.effectiveFrom, createdAt: ruleVersions.createdAt })
+    .from(ruleVersions);
+  const applicable = versions.filter((v) => !v.effectiveFrom || String(v.effectiveFrom) <= periodStart);
+  applicable.sort((a, b) => String(b.effectiveFrom ?? "").localeCompare(String(a.effectiveFrom ?? "")) || b.createdAt.getTime() - a.createdAt.getTime());
+  return applicable[0]?.config ? parseConfig(applicable[0]!.config) : SALES_BH_SCHEME;
 }
 
 const DAY = 86_400_000;
@@ -230,10 +250,16 @@ export async function ensurePeriod(period: string): Promise<string> {
 export async function computePeriodForEmployee(
   employeeId: string, period: string, asOf: Date = new Date(),
 ): Promise<EvaluationResult> {
-  const scheme = await getActiveSchemeConfig();
+  const scheme = await getSchemeConfigForPeriod(period);
   const input = await buildEvaluationInput(employeeId, period, asOf, scheme);
   const result = evaluate(input, scheme);
   const periodId = await ensurePeriod(period);
+
+  // A locked/paid period is finalized — never rewrite its ledger. Late edits or
+  // collections against it are recorded in the source data but the payout that
+  // was locked stays exactly as it was paid.
+  const [prow] = await db.select({ status: incentivePeriods.status }).from(incentivePeriods).where(eq(incentivePeriods.id, periodId)).limit(1);
+  if (prow?.status === "locked" || prow?.status === "paid") return result;
 
   // Recompute is wholesale for accruals: clear this employee-period's accrual
   // rows first so sources that no longer exist (deleted invoices/submissions)
@@ -269,4 +295,27 @@ export async function computePeriodForEmployee(
       });
   }
   return result;
+}
+
+/**
+ * Recompute a period for every employee with orders or activity in it. Called
+ * by the daily cron so collection-decay (which advances with the calendar)
+ * stays accurate without anyone touching the app. Locked/paid periods are
+ * skipped by computePeriodForEmployee, so this never disturbs a finalized month.
+ */
+export async function recomputeOpenPeriod(period: string): Promise<{ employees: number }> {
+  const ids = new Set<string>();
+  const owners = await db.selectDistinct({ id: salesOrders.ownerId }).from(salesOrders).where(isNotNull(salesOrders.ownerId));
+  for (const o of owners) if (o.id) ids.add(o.id);
+  const [lb, lc, mt, ts] = await Promise.all([
+    db.selectDistinct({ id: leadBatches.employeeId }).from(leadBatches).where(eq(leadBatches.periodMonth, period)),
+    db.selectDistinct({ id: leadConversions.employeeId }).from(leadConversions).where(eq(leadConversions.periodMonth, period)),
+    db.selectDistinct({ id: clientMeetings.employeeId }).from(clientMeetings).where(eq(clientMeetings.periodMonth, period)),
+    db.selectDistinct({ id: testimonials.employeeId }).from(testimonials).where(eq(testimonials.periodMonth, period)),
+  ]);
+  for (const r of [...lb, ...lc, ...mt, ...ts]) ids.add(r.id);
+
+  const asOf = new Date();
+  for (const id of ids) await computePeriodForEmployee(id, period, asOf);
+  return { employees: ids.size };
 }

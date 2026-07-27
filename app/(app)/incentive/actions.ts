@@ -19,6 +19,12 @@ function revalidateIncentive() {
   }
 }
 
+/** A locked/paid period is finalized — edits and deletions are rejected. */
+async function isPeriodClosed(period: string): Promise<boolean> {
+  const [p] = await db.select({ status: incentivePeriods.status }).from(incentivePeriods).where(eq(incentivePeriods.month, period)).limit(1);
+  return p?.status === "locked" || p?.status === "paid";
+}
+
 /** Append one audit event (who did what, to which entity, for whom). */
 async function audit(actorId: string, action: string, entityType: string, entityId: string | null, employeeId: string | null, detail: Record<string, unknown> = {}) {
   try {
@@ -196,6 +202,7 @@ export async function editSale(input: {
   const [ord] = await db.select().from(salesOrders).where(eq(salesOrders.id, inv.orderId)).limit(1);
   if (!ord) return { ok: false, error: "Order not found." };
   if (!me.isAdmin && ord.ownerId !== me.id) return { ok: false, error: "That sale isn't yours." };
+  if (await isPeriodClosed(inv.invoiceDate.slice(0, 7))) return { ok: false, error: "That month is locked. Ask an admin to reopen it before editing." };
 
   const amountPaise = input.amountRupees != null ? P(clampInt(input.amountRupees, 0, 1_00_00_00_00)) : ord.orderValuePaise;
   const cat = input.categoryCode && (["A", "B", "C", "N", "I", "R", "V"] as const).includes(input.categoryCode) ? input.categoryCode : ord.categoryCode;
@@ -224,6 +231,7 @@ export async function deleteSale(input: { invoiceId: string }): Promise<ActionRe
   if (!ord) return { ok: false, error: "Order not found." };
   if (!me.isAdmin && ord.ownerId !== me.id) return { ok: false, error: "That sale isn't yours." };
   const period = inv.invoiceDate.slice(0, 7);
+  if (await isPeriodClosed(period)) return { ok: false, error: "That month is locked. Ask an admin to reopen it before deleting." };
   await db.delete(salesOrders).where(eq(salesOrders.id, ord.id)); // cascades invoices + receipts
   await audit(me.id, "deleted_sale", "invoice", input.invoiceId, ord.ownerId, { invoiceNo: inv.invoiceNo });
   if (ord.ownerId) await computePeriodForEmployee(ord.ownerId, period, new Date());
@@ -309,7 +317,8 @@ export async function publishScheme(input: {
   let [scheme] = await db.select().from(incentiveSchemes).limit(1);
   if (!scheme) [scheme] = await db.insert(incentiveSchemes).values({ name: "Sales BH", scopeRole: "sales_bh" }).returning();
   const [last] = await db.select({ v: ruleVersions.version }).from(ruleVersions).where(eq(ruleVersions.schemeId, scheme!.id)).orderBy(desc(ruleVersions.version)).limit(1);
-  await db.insert(ruleVersions).values({ schemeId: scheme!.id, version: (last?.v ?? 0) + 1, config, publishedById: me.id, publishedAt: new Date() });
+  await db.insert(ruleVersions).values({ schemeId: scheme!.id, version: (last?.v ?? 0) + 1, config, effectiveFrom: `${currentPeriodIST()}-01`, publishedById: me.id, publishedAt: new Date() });
+  await audit(me.id, "published_scheme", "scheme", scheme!.id, null, { version: (last?.v ?? 0) + 1, effectiveFrom: `${currentPeriodIST()}-01` });
   revalidateIncentive();
   return { ok: true };
 }
