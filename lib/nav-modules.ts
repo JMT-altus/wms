@@ -49,7 +49,7 @@ export const MODULES: ModuleDef[] = [
       { href: "/", label: "Dashboard", icon: "LayoutDashboard" },
       { href: "/tasks/agenda", label: "My Day", icon: "CalendarDays" },
       { href: "/tasks", label: "Tasks", icon: "ListTodo", taskCount: true, notMatch: ["/tasks/agenda", "/tasks/kanban"] },
-      { href: "/tasks/kanban", label: "Kanban", icon: "SquareKanban", adminOnly: true },
+      { href: "/tasks/kanban", label: "Kanban", icon: "SquareKanban" },
       { href: "/projects", label: "Projects", icon: "FolderKanban" },
       { href: "/weekly-goals", label: "Weekly Goals", icon: "Target" },
     ],

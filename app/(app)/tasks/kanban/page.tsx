@@ -16,7 +16,6 @@ import {
 import { TASK_STATUSES, isDeprecatedStatus } from "@/db/enums";
 import type { TaskStatus, StatusColorToken } from "@/db/enums";
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import type { Route } from "next";
 
 export const dynamic = "force-dynamic";
@@ -27,12 +26,13 @@ interface PageProps {
 
 export default async function KanbanPage({ searchParams }: PageProps) {
   const me = await requireUser();
-  // Kanban is an admin-only board — doers work from the list / My Day. A doer
-  // who lands here by typing the URL is sent to their task list.
-  if (!me.isAdmin) redirect("/tasks" as Route);
 
   const sp = await searchParams;
-  const filters = parseTaskFilters(sp, /*archived*/ false, {});
+  // Non-admins default to "assigned to me" when no explicit ?emp= is set —
+  // same scoping as the Tasks list, so a doer lands on their own board.
+  const filters = parseTaskFilters(sp, /*archived*/ false, {
+    defaultDoerId: me.isAdmin ? undefined : me.id,
+  });
 
   const [tasks, statusDisplay, employees, org, subjects, clients] = await Promise.all([
     listBoardTasks(filters),
