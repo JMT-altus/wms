@@ -75,6 +75,9 @@ interface Props {
   /** Admin-overridable status color tokens. Used by the interactive status
    *  picker so the dropdown swatches match the rest of the UI. */
   statusTones?: Record<TaskStatus, StatusColorToken>;
+  /** Active statuses in the admin's display order — drives the picker options
+   *  (hidden statuses are excluded, and reordering is reflected here). */
+  pickerOrder?: TaskStatus[];
 }
 
 /** Status → tone mapping shared by the pill + meta UI. */
@@ -222,6 +225,7 @@ export function TaskDetailView({
   me,
   statusLabels,
   statusTones,
+  pickerOrder,
 }: Props) {
   const [editing, setEditing] = useState(false);
   const [approveOpen, setApproveOpen] = useState(false);
@@ -500,6 +504,7 @@ export function TaskDetailView({
                 tones={statusTones}
                 canChange={canCommentOnTask /* same gate: any task participant or admin */}
                 isAdmin={me?.isAdmin ?? false}
+                order={pickerOrder}
               />
               {/* Meta rows directly under the status — keeps the screenshot's
                   "status header + meta block" pairing in one card. */}
@@ -605,6 +610,7 @@ function InteractiveStatusPill({
   tones,
   canChange,
   isAdmin,
+  order,
 }: {
   taskId: string;
   status: TaskStatus;
@@ -613,6 +619,7 @@ function InteractiveStatusPill({
   tones?: Record<TaskStatus, StatusColorToken>;
   canChange: boolean;
   isAdmin: boolean;
+  order?: TaskStatus[];
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -631,9 +638,12 @@ function InteractiveStatusPill({
   }, [open]);
 
   const t = STATUS_TONE[shown];
-  const options: readonly TaskStatus[] = isAdmin
-    ? ADMIN_TASK_STATUSES
-    : USER_TASK_STATUSES;
+  // `order` = the admin's active statuses in display order. Admin picks from
+  // all of them; a non-admin keeps their curated lifecycle subset (intersected
+  // with what's active). The task's own status is always kept even if hidden.
+  const base: TaskStatus[] = order && order.length ? [...order] : [...(isAdmin ? ADMIN_TASK_STATUSES : USER_TASK_STATUSES)];
+  const scoped = isAdmin ? base : base.filter((s) => (USER_TASK_STATUSES as readonly string[]).includes(s));
+  const options: readonly TaskStatus[] = scoped.includes(shown) ? scoped : [shown, ...scoped];
 
   function pick(next: TaskStatus) {
     setOpen(false);

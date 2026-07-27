@@ -1,6 +1,6 @@
 import { requireAdmin } from "@/lib/auth/current";
 import { getOrgSettings } from "@/lib/queries/org-settings";
-import { getStatusDisplayMap } from "@/lib/queries/status-display";
+import { getStatusList } from "@/lib/queries/status-display";
 import { getIntegrationHealth } from "@/lib/queries/integration-health";
 import { listRecentDispatchFailures, getDispatchLogTotals } from "@/lib/queries/dispatch-log";
 import { listRecurringTemplates } from "@/lib/queries/recurring-templates";
@@ -17,7 +17,7 @@ export default async function SettingsPage() {
   await requireAdmin();
   const [
     settings,
-    statusDisplay,
+    statusList,
     integrations,
     matrix,
     dispatchFailures,
@@ -25,7 +25,7 @@ export default async function SettingsPage() {
     recurringTemplates,
   ] = await Promise.all([
     getOrgSettings(),
-    getStatusDisplayMap(),
+    getStatusList(),
     getIntegrationHealth(),
     getNotificationMatrix(),
     listRecentDispatchFailures({ limit: 50 }),
@@ -60,7 +60,7 @@ export default async function SettingsPage() {
 
       <SettingsTabs
         general={<SettingsTabGeneral current={settings} />}
-        statuses={<SettingsTabStatuses display={statusDisplay} />}
+        statuses={<SettingsTabStatuses statuses={statusList} />}
         integrations={
           <SettingsTabIntegrations
             rows={integrations}

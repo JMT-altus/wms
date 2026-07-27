@@ -166,6 +166,50 @@ export async function updateStatusSettingAction(
   return { ok: true };
 }
 
+const SetStatusActiveSchema = z.object({ status: z.enum(TASK_STATUSES), active: z.boolean() });
+
+/** Hide/show a status. Hidden statuses drop from the pickers but existing
+ *  tasks keep their value (enum values are never dropped). */
+export async function setStatusActiveAction(input: z.infer<typeof SetStatusActiveSchema>): Promise<ActionResult> {
+  const me = await requireAdmin();
+  const parsed = SetStatusActiveSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
+  const { status, active } = parsed.data;
+  try {
+    await db.update(statusSettings).set({ active, updatedAt: new Date(), updatedById: me.id }).where(eq(statusSettings.status, status));
+  } catch (err) {
+    return { ok: false, error: `DB: ${err instanceof Error ? err.message : String(err)}` };
+  }
+  try {
+    await db.insert(settingsEvents).values({ scope: "status_settings", targetId: status, actorId: me.id, eventType: "updated", fromValue: null, toValue: { active } });
+  } catch (err) { console.error("[setStatusActiveAction] audit write failed", err); }
+  revalidatePath("/admin/settings");
+  revalidatePath("/");
+  updateTag(CACHE_TAGS.statusSettings);
+  return { ok: true };
+}
+
+const ReorderStatusSchema = z.object({ order: z.array(z.enum(TASK_STATUSES)).min(1) });
+
+/** Persist a new display order for the statuses (index → display_order). */
+export async function reorderStatusesAction(input: z.infer<typeof ReorderStatusSchema>): Promise<ActionResult> {
+  const me = await requireAdmin();
+  const parsed = ReorderStatusSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
+  try {
+    let i = 0;
+    for (const status of parsed.data.order) {
+      await db.update(statusSettings).set({ displayOrder: i++, updatedAt: new Date(), updatedById: me.id }).where(eq(statusSettings.status, status));
+    }
+  } catch (err) {
+    return { ok: false, error: `DB: ${err instanceof Error ? err.message : String(err)}` };
+  }
+  revalidatePath("/admin/settings");
+  revalidatePath("/");
+  updateTag(CACHE_TAGS.statusSettings);
+  return { ok: true };
+}
+
 /**
  * sir's changes #8 — persist the kanban column order (admin-only). Accepts the
  * full ordered list of column ids; unknown/deprecated ids are rejected so a

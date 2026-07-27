@@ -506,6 +506,7 @@ export const statusSettings = pgTable("status_settings", {
   label: text("label").notNull(),
   colorToken: text("color_token").notNull(),
   displayOrder: integer("display_order").notNull(),
+  active: boolean("active").notNull().default(true),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

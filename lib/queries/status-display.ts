@@ -4,6 +4,7 @@ import { unstable_cache } from "next/cache";
 import { db } from "@/lib/db";
 import { statusSettings } from "@/db/schema";
 import { CACHE_TAGS } from "@/lib/cache-tags";
+import type { TaskStatus } from "@/db/enums";
 import {
   mergeStatusDisplay,
   type StatusDisplay,
@@ -34,3 +35,32 @@ const fetchStatusDisplayMap = unstable_cache(
 );
 
 export const getStatusDisplayMap = cache(fetchStatusDisplayMap);
+
+export interface StatusMeta {
+  status: TaskStatus;
+  label: string;
+  colorToken: string;
+  active: boolean;
+  displayOrder: number;
+}
+
+// Ordered list of statuses with hide/show + order — for the admin manager and
+// for pickers to know which statuses are selectable and in what order.
+const fetchStatusList = unstable_cache(
+  async (): Promise<StatusMeta[]> => {
+    return db
+      .select({
+        status: statusSettings.status,
+        label: statusSettings.label,
+        colorToken: statusSettings.colorToken,
+        active: statusSettings.active,
+        displayOrder: statusSettings.displayOrder,
+      })
+      .from(statusSettings)
+      .orderBy(statusSettings.displayOrder);
+  },
+  ["status-list"],
+  { tags: [CACHE_TAGS.statusSettings], revalidate: 3600 },
+);
+
+export const getStatusList = cache(fetchStatusList);

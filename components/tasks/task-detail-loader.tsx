@@ -7,7 +7,7 @@ import { listEmployees } from "@/lib/queries/employees";
 import { listActiveClientNames } from "@/lib/queries/clients";
 import { listActiveSubjectNames } from "@/lib/queries/subjects";
 import { listProjectNodeOptions } from "@/lib/queries/projects";
-import { getStatusDisplayMap } from "@/lib/queries/status-display";
+import { getStatusDisplayMap, getStatusList } from "@/lib/queries/status-display";
 import type { TaskStatus, StatusColorToken } from "@/db/enums";
 import {
   canEditTaskFields,
@@ -41,14 +41,18 @@ export async function TaskDetailLoader({ taskId, me }: Props) {
   const task = await getTaskById(taskId);
   if (!task) notFound();
 
-  const [events, all, statusDisplay, clients, subjects, projectNodes] = await Promise.all([
+  const [events, all, statusDisplay, statusList, clients, subjects, projectNodes] = await Promise.all([
     listTaskEvents(taskId),
     listEmployees(),
     getStatusDisplayMap(),
+    getStatusList(),
     listActiveClientNames(),
     listActiveSubjectNames(),
     listProjectNodeOptions(),
   ]);
+  // Active statuses in the admin's display order — drives the picker's options
+  // (hidden ones drop out, reordering reflects here too).
+  const pickerOrder = statusList.filter((s) => s.active).map((s) => s.status);
   const employeeOptions = all.map((e) => ({ id: e.id, name: e.name }));
   const statusLabels = Object.fromEntries(
     Object.entries(statusDisplay).map(([k, v]) => [k, v.label]),
@@ -91,6 +95,7 @@ export async function TaskDetailLoader({ taskId, me }: Props) {
       me={me}
       statusLabels={statusLabels}
       statusTones={statusTones}
+      pickerOrder={pickerOrder}
     />
   );
 }
