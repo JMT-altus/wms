@@ -40,6 +40,10 @@
   --color-slate:   #64748b;  --color-slate-deep:  #334155;  --color-slate-bg:  #f1f5f9;
   --color-brown:   #92724e;  --color-brown-deep:  #6b4a2b;  --color-brown-bg:  #f6f1ea;
   --color-stone:   #9ca3af;  --color-stone-deep:  #6b7280;  --color-stone-bg:  #f9fafb;
+  --color-cyan:      #06b6d4;  --color-cyan-deep:      #0e7490;  --color-cyan-bg:      #ecfeff;
+  --color-tangerine: #ea580c;  --color-tangerine-deep: #9a3412;  --color-tangerine-bg: #fff7ed;
+  --color-crimson:   #b91c1c;  --color-crimson-deep:   #7f1d1d;  --color-crimson-bg:   #fef2f2;
+  --color-pink:      #ec4899;  --color-pink-deep:      #be185d;  --color-pink-bg:      #fdf2f8;
   /* attendance Phase B tones: teal=comp-off, indigo=holiday */
   --color-teal:    #14b8a6;  --color-teal-deep:   #0f766e;  --color-teal-bg:   #f0fdfa;
   --color-indigo:  #6366f1;  --color-indigo-deep: #4338ca;  --color-indigo-bg: #eef2ff;
@@ -100,6 +104,10 @@
   --color-slate:   #64748b;  --color-slate-deep:  #334155;  --color-slate-bg:  #f1f5f9;
   --color-brown:   #92724e;  --color-brown-deep:  #6b4a2b;  --color-brown-bg:  #f6f1ea;
   --color-stone:   #9ca3af;  --color-stone-deep:  #6b7280;  --color-stone-bg:  #f9fafb;
+  --color-cyan:      #06b6d4;  --color-cyan-deep:      #0e7490;  --color-cyan-bg:      #ecfeff;
+  --color-tangerine: #ea580c;  --color-tangerine-deep: #9a3412;  --color-tangerine-bg: #fff7ed;
+  --color-crimson:   #b91c1c;  --color-crimson-deep:   #7f1d1d;  --color-crimson-bg:   #fef2f2;
+  --color-pink:      #ec4899;  --color-pink-deep:      #be185d;  --color-pink-bg:      #fdf2f8;
   --color-teal:    #14b8a6;  --color-teal-deep:   #0f766e;  --color-teal-bg:   #f0fdfa;
   --color-indigo:  #6366f1;  --color-indigo-deep: #4338ca;  --color-indigo-bg: #eef2ff;
 }

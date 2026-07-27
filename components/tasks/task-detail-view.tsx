@@ -80,6 +80,14 @@ interface Props {
   pickerOrder?: TaskStatus[];
 }
 
+/** Palette token → "r, g, b" for arbitrary status colours set by the admin. */
+const TOKEN_RGB: Record<string, string> = {
+  amber: "245, 158, 11", blue: "59, 130, 246", cyan: "6, 182, 212", slate: "100, 116, 139",
+  orange: "249, 115, 22", yellow: "234, 179, 8", tangerine: "234, 88, 12", crimson: "185, 28, 28",
+  red: "239, 68, 68", pink: "236, 72, 153", green: "34, 197, 94", purple: "168, 85, 247",
+  rose: "244, 63, 94", stone: "156, 163, 175", brown: "146, 114, 78", ink: "15, 23, 42",
+};
+
 /** Status → tone mapping shared by the pill + meta UI. */
 const STATUS_TONE: Record<
   TaskStatus,
@@ -637,7 +645,17 @@ function InteractiveStatusPill({
     return () => document.removeEventListener("mousedown", onDown);
   }, [open]);
 
-  const t = STATUS_TONE[shown];
+  // Resolve the pill tone from the admin's DB colour (token or custom hex),
+  // falling back to the built-in tone. Keeps label + "live" shimmer from the
+  // built-in, but colour follows what the admin set.
+  const _base = STATUS_TONE[shown];
+  const _dbTone = tones?.[shown];
+  const _hex = _dbTone && /^#([0-9a-f]{6})$/i.test(_dbTone) ? _dbTone : null;
+  const t = _hex
+    ? (() => { const r = parseInt(_hex.slice(1, 3), 16), g = parseInt(_hex.slice(3, 5), 16), b = parseInt(_hex.slice(5, 7), 16); const rgb = `${r}, ${g}, ${b}`; return { label: _base.label, live: _base.live, rgb, bg: `rgba(${rgb}, 0.12)`, ink: _hex }; })()
+    : _dbTone && TOKEN_RGB[_dbTone]
+      ? { label: _base.label, live: _base.live, rgb: TOKEN_RGB[_dbTone]!, bg: `var(--color-${_dbTone}-bg)`, ink: `var(--color-${_dbTone}-deep)` }
+      : _base;
   // `order` = the admin's active statuses in display order. Admin picks from
   // all of them; a non-admin keeps their curated lifecycle subset (intersected
   // with what's active). The task's own status is always kept even if hidden.
@@ -778,7 +796,7 @@ function InteractiveStatusPill({
                   aria-hidden
                   className="inline-block size-2.5 rounded-full shrink-0"
                   style={{
-                    background: `var(--color-${tone})`,
+                    background: tone.startsWith("#") ? tone : `var(--color-${tone})`,
                     boxShadow: "inset 0 0 0 1px rgba(15, 23, 42, 0.18)",
                   }}
                 />

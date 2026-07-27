@@ -117,20 +117,23 @@ export const STATUS_LABELS_FALLBACK: Record<TaskStatus, string> = {
 // Initiated=yellow, Need Info/Need Help=red, Follow Up 1/2/3=orange,
 // Done=green, Not Approved=light red (rose), Approved=purple,
 // Cancelled=dark grey (slate), Transferred=brown.
+// Every status a DISTINCT tone (no repeats). The four Follow-Ups escalate
+// orange → crimson; Need Help (red) and Need Info (pink) are separated; On Hold
+// (slate) and Cancelled (stone) are two different greys.
 export const STATUS_TONES_FALLBACK: Record<TaskStatus, StatusColorToken> = {
-  dont_know:    "amber",
+  dont_know:    "amber",     // Not Seen
   not_started:  "blue",
-  initiated:    "yellow",
-  follow_up:    "orange",            // legacy follow-up → orange family
+  initiated:    "cyan",
+  follow_up:    "orange",
   need_help:    "red",
   on_hold:      "slate",
-  need_info:    "red",
-  follow_up_1:  "orange",
-  follow_up_2:  "orange",
-  follow_up_3:  "orange",
+  need_info:    "pink",
+  follow_up_1:  "yellow",
+  follow_up_2:  "tangerine",
+  follow_up_3:  "crimson",
   done:         "green",
   approved:     "purple",
   not_approved: "rose",
-  cancelled:    "slate",
+  cancelled:    "stone",
   transferred:  "brown",
 };

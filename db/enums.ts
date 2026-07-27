@@ -336,7 +336,11 @@ export const STATUS_COLOR_TOKENS = [
   "orange",
   "slate",
   "brown",
-  "stone",  // light grey (Dont Know)
+  "stone",  // light grey
+  "cyan",
+  "tangerine",
+  "crimson",
+  "pink",
 ] as const;
 export type StatusColorToken = (typeof STATUS_COLOR_TOKENS)[number];
 

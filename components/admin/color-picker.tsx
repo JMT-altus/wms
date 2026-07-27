@@ -17,6 +17,10 @@ const TOKEN_BG: Record<StatusColorToken, string> = {
   slate:  "#64748b",
   brown:  "#92724e",
   stone:  "#9ca3af",
+  cyan:      "#06b6d4",
+  tangerine: "#ea580c",
+  crimson:   "#b91c1c",
+  pink:      "#ec4899",
 };
 
 function isPresetToken(v: string): v is StatusColorToken {
@@ -63,6 +67,26 @@ export function ColorPicker({ value, onChange }: Props) {
           collisionPadding={12}
           className="z-[100] w-64 rounded-xl border border-[rgba(15,23,42,0.10)] bg-white p-3 shadow-lg max-h-[var(--radix-popover-content-available-height)] overflow-y-auto"
         >
+          {/* Full spectrum — the OS colour wheel / picker for any colour. */}
+          <label className="block text-[10px] uppercase tracking-[0.18em] text-ink-subtle font-bold mb-1.5">
+            Spectrum
+          </label>
+          <div className="relative rounded-lg overflow-hidden border border-[rgba(15,23,42,0.12)]" style={{ height: 40, background: "linear-gradient(90deg,#ef4444,#f59e0b,#eab308,#22c55e,#06b6d4,#3b82f6,#8b5cf6,#ec4899,#ef4444)" }}>
+            <input
+              type="color"
+              aria-label="Pick any colour"
+              value={colorToCss(value)}
+              onChange={(e) => onChange(e.target.value)}
+              className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+            />
+            <span className="pointer-events-none absolute inset-0 grid place-items-center text-[11px] font-bold text-white" style={{ textShadow: "0 1px 3px rgba(0,0,0,0.5)" }}>
+              Click to open colour wheel
+            </span>
+          </div>
+
+          <label className="mt-3 block text-[10px] uppercase tracking-[0.18em] text-ink-subtle font-bold mb-1.5">
+            Presets
+          </label>
           <div className="grid grid-cols-6 gap-2">
             {STATUS_COLOR_TOKENS.map((t) => (
               <button
