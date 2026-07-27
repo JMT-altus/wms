@@ -83,10 +83,10 @@ const STATUS_TONE: Record<
   { label: string; rgb: string; ink: string; bg: string; live: boolean }
 > = {
   dont_know: {
-    label: "Not Read",
-    rgb: "156, 163, 175",
-    ink: "var(--color-stone-deep)",
-    bg: "var(--color-stone-bg)",
+    label: "Not Seen",
+    rgb: "245, 158, 11",
+    ink: "var(--color-amber-deep)",
+    bg: "var(--color-amber-bg)",
     live: false,
   },
   not_started: {

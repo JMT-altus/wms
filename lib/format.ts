@@ -96,7 +96,7 @@ import type { TaskStatus, StatusColorToken } from "@/db/enums";
 // instead so admin renames flow through. These exist for purely-client surfaces
 // and as a safety net if a DB read fails.
 export const STATUS_LABELS_FALLBACK: Record<TaskStatus, string> = {
-  dont_know:    "Not Read",
+  dont_know:    "Not Seen",
   not_started:  "Not Started",
   initiated:    "Initiated",
   follow_up:    "Follow Up",         // legacy — kept for already-imported rows
@@ -118,7 +118,7 @@ export const STATUS_LABELS_FALLBACK: Record<TaskStatus, string> = {
 // Done=green, Not Approved=light red (rose), Approved=purple,
 // Cancelled=dark grey (slate), Transferred=brown.
 export const STATUS_TONES_FALLBACK: Record<TaskStatus, StatusColorToken> = {
-  dont_know:    "stone",
+  dont_know:    "amber",
   not_started:  "blue",
   initiated:    "yellow",
   follow_up:    "orange",            // legacy follow-up → orange family

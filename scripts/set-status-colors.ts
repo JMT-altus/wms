@@ -8,7 +8,7 @@ import type { TaskStatus } from "@/db/enums";
 const COMMIT = process.argv.includes("--commit");
 
 const COLORS: Record<TaskStatus, string> = {
-  dont_know:    "stone",   // light grey
+  dont_know:    "amber",   // "Not Seen" (grey now means On Hold)
   not_started:  "blue",    // light blue
   initiated:    "yellow",
   follow_up:    "orange",

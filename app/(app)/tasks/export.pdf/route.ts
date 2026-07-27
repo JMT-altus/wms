@@ -80,7 +80,7 @@ const COLORS = {
 // Kept in sync with components/ui status-tone styling so the PDF reads as
 // part of the same product, not a separate export tool.
 const STATUS_PILL: Record<TaskStatus, { bg: string; fg: string; label: string }> = {
-  dont_know:    { bg: "#F1F5F9", fg: "#475569", label: "Unassessed" },
+  dont_know:    { bg: "#fffbeb", fg: "#b45309", label: "Not Seen" },
   not_started:  { bg: "#F1F5F9", fg: "#475569", label: "Not Started" },
   initiated:    { bg: "#DBEAFE", fg: "#1D4ED8", label: "Initiated" },
   follow_up:    { bg: "#FEF3C7", fg: "#92400E", label: "Follow-up" },

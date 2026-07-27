@@ -5,7 +5,7 @@
 // enum so 240 imported tasks keep rendering; new code should write the new
 // statuses + approval_status independently.
 export const TASK_STATUSES = [
-  "dont_know",      // Manan 2026-05 — "I haven't assessed this yet" (light grey)
+  "dont_know",      // "Not Seen" — not yet looked at (amber; grey now = On Hold)
   "not_started",
   "initiated",
   "follow_up",

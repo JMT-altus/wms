@@ -107,7 +107,7 @@ export function ReassignDialog({
                 Reassign task
               </Dialog.Title>
               <Dialog.Description className="text-[15px] text-ink-subtle mt-1.5" style={{ lineHeight: 1.5 }}>
-                Pick the new doer. You can optionally reset the status to "Not Read".
+                Pick the new doer. You can optionally reset the status to "Not Seen".
               </Dialog.Description>
             </div>
             <Dialog.Close asChild>
@@ -144,7 +144,7 @@ export function ReassignDialog({
                 onChange={(e) => setResetStatus(e.target.checked)}
                 className="h-4 w-4"
               />
-              Reset status to "Not Read"
+              Reset status to "Not Seen"
             </label>
 
             {error && (
