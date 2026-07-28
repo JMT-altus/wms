@@ -3,10 +3,15 @@ import { DashboardFooter } from "@/components/layout/footer";
 import { FilterBar } from "@/components/layout/filter-bar";
 import { TaskListPage } from "@/components/tasks/task-list-page";
 import { listEmployeeOptions } from "@/lib/queries/employees";
-import { listTasks, listDistinctSubjects } from "@/lib/queries/tasks";
+import { listTasks, listDistinctSubjects, countUnassignedTasks, getTaskById } from "@/lib/queries/tasks";
 import { listActiveClientNames } from "@/lib/queries/clients";
 import { parseTaskFilters } from "@/lib/task-filters";
 import { requireUser } from "@/lib/auth/current";
+import { canQuickDump } from "@/lib/auth/quick-dump";
+import { CompleteTaskModal } from "@/components/tasks/complete-task-modal";
+import Link from "next/link";
+import type { Route } from "next";
+import { Inbox, ArrowLeft } from "lucide-react";
 import { getStatusDisplayMap } from "@/lib/queries/status-display";
 import { TASK_STATUSES, isDeprecatedStatus } from "@/db/enums";
 import type { TaskStatus, StatusColorToken } from "@/db/enums";
@@ -25,13 +30,21 @@ export default async function TasksPage({ searchParams }: PageProps) {
     defaultDoerId: me.isAdmin ? undefined : me.id,
   });
 
-  const [allEmployees, rows, subjects, clients, statusDisplay] = await Promise.all([
+  const [allEmployees, rows, subjects, clients, statusDisplay, unassignedCount] = await Promise.all([
     listEmployeeOptions(),
     listTasks(filters),
     listDistinctSubjects(),
     listActiveClientNames(),
     getStatusDisplayMap(),
+    // The pool is admins-only to triage; skip the count for everyone else.
+    me.isAdmin ? countUnassignedTasks() : Promise.resolve(0),
   ]);
+  const inPool = filters.assigneeMode === "unassigned";
+
+  // "Complete task" overlay — opened by clicking an unassigned task (?complete=<id>).
+  const completeId = typeof sp.complete === "string" ? sp.complete : undefined;
+  const canComplete = me.isAdmin || canQuickDump(me.email);
+  const completeTask = completeId && canComplete ? await getTaskById(completeId) : null;
 
   const statusLabels = Object.fromEntries(
     Object.entries(statusDisplay).map(([k, v]) => [k, v.label]),
@@ -86,6 +99,46 @@ export default async function TasksPage({ searchParams }: PageProps) {
           client: filters.clients,
         }}
       />
+      {/* Unassigned pool — entry pill (normal view) or a "you're in the pool"
+          banner with a way back. Admins only. */}
+      {me.isAdmin && (inPool || unassignedCount > 0) && (
+        <div className="w-full px-6 max-md:px-4 pt-4">
+          {inPool ? (
+            <div
+              className="flex items-center justify-between gap-3 flex-wrap rounded-chip px-4 py-2.5"
+              style={{
+                background: "color-mix(in srgb, var(--color-amber) 12%, transparent)",
+                border: "1px solid color-mix(in srgb, var(--color-amber) 34%, transparent)",
+              }}
+            >
+              <span className="inline-flex items-center gap-2 text-[14.5px] font-bold" style={{ color: "var(--color-amber-deep)" }}>
+                <Inbox size={16} strokeWidth={2.4} />
+                Unassigned pool — {unassignedCount} {unassignedCount === 1 ? "task" : "tasks"}. Set a doer to assign.
+              </span>
+              <Link
+                href={"/tasks" as Route}
+                className="inline-flex items-center gap-1.5 text-[14px] font-semibold text-ink-soft hover:text-ink-strong"
+              >
+                <ArrowLeft size={15} strokeWidth={2.4} />
+                Back to all tasks
+              </Link>
+            </div>
+          ) : (
+            <Link
+              href={"/tasks?emp=unassigned" as Route}
+              className="inline-flex items-center gap-2 rounded-pill px-3.5 py-2 text-[14px] font-bold transition-transform hover:-translate-y-0.5"
+              style={{
+                color: "var(--color-amber-deep)",
+                background: "color-mix(in srgb, var(--color-amber) 14%, transparent)",
+                border: "1px solid color-mix(in srgb, var(--color-amber) 34%, transparent)",
+              }}
+            >
+              <Inbox size={15} strokeWidth={2.4} />
+              Unassigned · {unassignedCount}
+            </Link>
+          )}
+        </div>
+      )}
       <TaskListPage
         title="Tasks"
         rows={rows}
@@ -98,6 +151,24 @@ export default async function TasksPage({ searchParams }: PageProps) {
         clients={clients}
       />
       <DashboardFooter />
+      {completeTask && (
+        <CompleteTaskModal
+          taskId={completeTask.id}
+          employees={allEmployees}
+          clients={clients}
+          subjects={subjects}
+          defaults={{
+            taskTitle: completeTask.title, // the quick-dump text, editable
+            title: completeTask.client ?? undefined, // Client Name (blank for pool tasks)
+            initiatorId: completeTask.initiatorId,
+            doerId: completeTask.doerId ?? undefined,
+            priority: completeTask.priority,
+            subject: completeTask.subject ?? undefined,
+            description: completeTask.description ?? undefined,
+            dueAt: completeTask.dueAt ? completeTask.dueAt.toISOString().slice(0, 10) : undefined,
+          }}
+        />
+      )}
     </>
   );
 }

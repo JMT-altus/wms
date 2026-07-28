@@ -7,6 +7,8 @@ import { listActiveSubjectNames } from "@/lib/queries/subjects";
 import { listProjectNodeOptions } from "@/lib/queries/projects";
 import { getTaskById } from "@/lib/queries/tasks";
 import { requireUser } from "@/lib/auth/current";
+import { canQuickDump } from "@/lib/auth/quick-dump";
+import { QuickDumpDialog } from "@/components/tasks/quick-dump-dialog";
 import type { TaskPriority } from "@/db/enums";
 
 export const dynamic = "force-dynamic";
@@ -57,12 +59,16 @@ export default async function NewTaskPage({ searchParams }: PageProps) {
     <>
       <DashboardHeader generatedAt={new Date()} />
       <main className="mx-auto max-w-[720px] px-12 max-md:px-4 pt-8 pb-16">
-        <header className="mb-6">
-          <h1 className="text-display-lg text-ink-strong">New Task</h1>
-          <p className="text-body-lg text-ink-subtle mt-1">
-            Create a task and assign it to a doer. The initiator approves it
-            once it's done.
-          </p>
+        <header className="mb-6 flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <h1 className="text-display-lg text-ink-strong">New Task</h1>
+            <p className="text-body-lg text-ink-subtle mt-1">
+              Create a task and assign it to a doer. The initiator approves it
+              once it's done.
+            </p>
+          </div>
+          {/* Quick Dump — allowlisted users capture unassigned tasks fast. */}
+          {canQuickDump(me.email) && <QuickDumpDialog />}
         </header>
         <div
           className="bg-surface-card rounded-section border border-hairline p-6"

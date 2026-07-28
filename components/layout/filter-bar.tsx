@@ -34,7 +34,7 @@ import { StatusFilter } from "./filters/status-filter";
 import { SubjectFilter } from "./filters/subject-filter";
 import { ClientFilter } from "./filters/client-filter";
 
-type AssigneeMode = "default" | "all" | "specific";
+type AssigneeMode = "default" | "all" | "specific" | "unassigned";
 
 interface Props {
   employees: { value: string; label: string }[];

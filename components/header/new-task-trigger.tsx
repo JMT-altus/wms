@@ -3,6 +3,7 @@ import { listActiveClientNames } from "@/lib/queries/clients";
 import { listActiveSubjectNames } from "@/lib/queries/subjects";
 import { listProjectNodeOptions } from "@/lib/queries/projects";
 import { getCurrentEmployee } from "@/lib/auth/current";
+import { canQuickDump } from "@/lib/auth/quick-dump";
 import { NewTaskDialog } from "@/components/tasks/new-task-dialog";
 
 export async function NewTaskTrigger() {
@@ -23,6 +24,7 @@ export async function NewTaskTrigger() {
       projectNodes={projectNodes}
       defaultInitiatorId={me.id}
       isAdmin={me.isAdmin}
+      canQuickDump={canQuickDump(me.email)}
     />
   );
 }

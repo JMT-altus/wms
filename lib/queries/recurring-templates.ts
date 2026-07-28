@@ -97,7 +97,7 @@ export async function listRecurringTemplates(): Promise<RecurringTemplateRow[]> 
       title: t.title,
       subject: t.subject,
       rule: t.rule ?? "",
-      doerName: nameById.get(t.doerId) ?? null,
+      doerName: t.doerId ? nameById.get(t.doerId) ?? null : null,
       initiatorName: nameById.get(t.initiatorId) ?? null,
       status: t.status,
       dueAt: t.dueAt,

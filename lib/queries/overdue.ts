@@ -65,6 +65,7 @@ export async function listOverdueByEmployee(
 
   const map = new Map<string, OverdueTask[]>();
   for (const r of rows) {
+    if (r.doerId == null) continue; // unassigned pool tasks have no doer to chase
     const daysOverdue = Math.max(
       0,
       Math.floor((now.getTime() - r.dueAt.getTime()) / MS_PER_DAY),

@@ -2,7 +2,7 @@
 import * as React from "react";
 import Link from "next/link";
 import type { Route } from "next";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import {
   flexRender,
   getCoreRowModel,
@@ -1134,9 +1134,19 @@ function taskCellLabel(row: TaskListRow): string {
 }
 
 function TaskTitleCell({ row }: { row: TaskListRow }) {
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  // Unassigned pool tasks open the "Complete task" panel (a `?complete=<id>`
+  // overlay on the current page); assigned tasks open their detail page.
+  let href = `/tasks/${row.id}`;
+  if (row.doerId == null) {
+    const sp = new URLSearchParams(searchParams.toString());
+    sp.set("complete", row.id);
+    href = `${pathname}?${sp.toString()}`;
+  }
   const link = (
     <Link
-      href={`/tasks/${row.id}` as Route}
+      href={href as Route}
       className="task-title-link text-body text-ink-strong underline-offset-2 transition-colors"
       style={{ fontWeight: 700 }}
     >

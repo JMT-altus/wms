@@ -17,6 +17,7 @@ import {
   User,
   Check,
   GripVertical,
+  Inbox,
 } from "lucide-react";
 import {
   DndContext,
@@ -121,6 +122,9 @@ export function KanbanBoard({ tasks, labels, tones, isAdmin, columnOrder }: Prop
   // unchanged). Optimistic drag still mutates `items`.
   const filtered = items;
   const activeCount = items.filter((t) => !t.archived).length;
+  // Ownerless quick-dumped tasks live in their own pinned column (admins only),
+  // never in a status lane. Employees' boards are self-scoped so never see them.
+  const unassignedTasks = filtered.filter((t) => !t.archived && t.doerId == null);
 
   async function persistOrder(next: ColId[]) {
     const prev = columns;
@@ -261,12 +265,17 @@ export function KanbanBoard({ tasks, labels, tones, isAdmin, columnOrder }: Prop
             className="kanban-scroll flex items-stretch gap-4 overflow-x-auto overflow-y-auto pb-3 max-sm:snap-x max-sm:snap-mandatory"
             style={{ maxHeight: "calc(100dvh - 290px)", minHeight: 460 }}
           >
+            {/* Unassigned pool — pinned first, admins only, not reorderable and
+                not a drop target (you assign by opening the card). */}
+            {isAdmin && (
+              <UnassignedColumn tasks={unassignedTasks} labels={labels} tones={tones} />
+            )}
             <SortableContext items={columns} strategy={horizontalListSortingStrategy}>
               {columns.map((col) => {
                 const { isArchive, accent, accentDeep, accentBgLight } = accentFor(col, tones);
                 const colTasks = isArchive
                   ? filtered.filter((t) => t.archived)
-                  : filtered.filter((t) => !t.archived && t.status === col);
+                  : filtered.filter((t) => !t.archived && t.status === col && t.doerId != null);
                 const limit = visibleByCol[col] ?? COL_STEP;
                 const shownTasks = colTasks.slice(0, limit);
                 const hiddenCount = colTasks.length - shownTasks.length;
@@ -441,29 +450,112 @@ function KanbanColumn({
   );
 }
 
+// ── Unassigned pool column (static, admin-only) ─────────────────────────────
+function UnassignedColumn({
+  tasks,
+  labels,
+  tones,
+}: {
+  tasks: BoardTask[];
+  labels: Record<TaskStatus, string>;
+  tones: Record<TaskStatus, StatusColorToken>;
+}) {
+  const accent = "var(--color-amber)";
+  const accentDeep = "var(--color-amber-deep)";
+  return (
+    <div
+      className="flex-shrink-0 w-[320px] max-sm:w-[85vw] max-sm:snap-center rounded-section p-3.5"
+      style={{
+        background: `linear-gradient(180deg, color-mix(in srgb, ${accent} 12%, #ffffff) 0%, #ffffff 30%)`,
+        border: `1px solid color-mix(in srgb, ${accent} 40%, var(--color-hairline))`,
+        boxShadow: `0 20px 44px -26px color-mix(in srgb, ${accent} 60%, transparent), 0 2px 6px rgba(15,23,42,0.05)`,
+      }}
+    >
+      <div
+        className="sticky top-0 z-20 flex items-center justify-between -mx-3.5 -mt-3.5 mb-3 px-3.5 pt-3.5 pb-2.5"
+        style={{
+          background: `linear-gradient(180deg, color-mix(in srgb, ${accent} 18%, #ffffff), color-mix(in srgb, ${accent} 7%, #ffffff))`,
+          backdropFilter: "blur(10px)",
+          WebkitBackdropFilter: "blur(10px)",
+          borderTopLeftRadius: 16,
+          borderTopRightRadius: 16,
+          borderBottom: `2px solid color-mix(in srgb, ${accent} 45%, transparent)`,
+        }}
+      >
+        <span
+          className="inline-flex items-center gap-2 text-[15.5px] font-bold min-w-0"
+          style={{ color: accentDeep }}
+        >
+          <Inbox size={17} strokeWidth={2.4} style={{ color: accent }} />
+          Unassigned
+        </span>
+        <span className="text-[14px] font-bold tabular-nums text-ink-subtle">{tasks.length}</span>
+      </div>
+
+      <div className="flex flex-col gap-2 min-h-[40px]">
+        {tasks.length === 0 ? (
+          <p className="px-2 py-6 text-center text-[13.5px] text-ink-subtle">
+            No unassigned tasks. Quick-dumped tasks land here.
+          </p>
+        ) : (
+          <>
+            <p className="px-1 pb-1 text-[12.5px] text-ink-subtle">
+              Open a card to assign it to someone.
+            </p>
+            {tasks.map((t) => (
+              <KanbanCard key={t.id} t={t} labels={labels} tones={tones} saving={false} draggable={false} openComplete />
+            ))}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Card (draggable) ─────────────────────────────────────────────────────────
 function KanbanCard({
   t,
   labels,
   tones,
   saving,
+  draggable = true,
+  openComplete = false,
 }: {
   t: BoardTask;
   labels: Record<TaskStatus, string>;
   tones: Record<TaskStatus, StatusColorToken>;
   saving: boolean;
+  /** Ownerless pool cards aren't draggable (there's no status lane to move an
+   *  unassigned task to) — they only open the task so you can assign it. */
+  draggable?: boolean;
+  /** Pool cards open the "Complete task" panel instead of the detail page. */
+  openComplete?: boolean;
 }) {
+  const router = useRouter();
+  const target = openComplete ? `/tasks/kanban?complete=${t.id}` : `/tasks/${t.id}`;
   const { setNodeRef, attributes, listeners, isDragging } = useDraggable({
     id: t.id,
     data: { type: "card" },
   });
+  // Distinguish a click (open the task) from a drag (move it). dnd-kit's 6px
+  // activation means a real click barely moves; compare pointer down→up.
+  const downAt = React.useRef<{ x: number; y: number } | null>(null);
+  const dragProps = draggable ? { ...attributes, ...listeners } : {};
 
   return (
     <div
-      ref={setNodeRef}
-      {...attributes}
-      {...listeners}
-      className="cursor-grab active:cursor-grabbing"
+      ref={draggable ? setNodeRef : undefined}
+      {...dragProps}
+      onPointerDownCapture={(e) => {
+        downAt.current = { x: e.clientX, y: e.clientY };
+      }}
+      onClick={(e) => {
+        const s = downAt.current;
+        if (s && Math.hypot(e.clientX - s.x, e.clientY - s.y) < 6) {
+          router.push(target as Route);
+        }
+      }}
+      className="cursor-pointer"
       style={{ opacity: isDragging ? 0.4 : 1 }}
     >
       <Tooltip.Root delayDuration={220}>
@@ -471,7 +563,7 @@ function KanbanCard({
           <div className="group rounded-chip bg-gradient-to-b from-white to-[#f5f8ff] border border-hairline p-3.5 shadow-[0_4px_14px_-10px_rgba(10,108,255,0.35)] transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5 hover:border-altus-red/40">
             <div className="flex items-start justify-between gap-2">
               <Link
-                href={`/tasks/${t.id}/focus` as Route}
+                href={target as Route}
                 draggable={false}
                 onClick={(e) => e.stopPropagation()}
                 className="text-[15.5px] font-semibold text-ink-strong leading-snug hover:underline"

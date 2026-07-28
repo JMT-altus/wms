@@ -464,7 +464,7 @@ export interface TaskRecipientShape {
   id: string;
   createdById: string | null;
   initiatorId: string;
-  doerId: string;
+  doerId: string | null; // null = unassigned pool task (no doer to notify)
 }
 
 export interface NotifyManyOpts {

@@ -170,8 +170,9 @@ export interface TaskListFilters {
    *                default-to-me scope). `doerIds` will be `[defaultDoerId]`.
    *  - "all":      either `emp` was absent for an admin, or `emp=all` was
    *                explicitly set. `doerIds` is `[]`.
-   *  - "specific": `emp=<one-or-more-ids>` was explicitly set. */
-  assigneeMode: "default" | "all" | "specific";
+   *  - "specific": `emp=<one-or-more-ids>` was explicitly set.
+   *  - "unassigned": `emp=unassigned` — the pool lens (tasks with no doer). */
+  assigneeMode: "default" | "all" | "specific" | "unassigned";
 }
 
 export interface TaskListRow {
@@ -186,7 +187,8 @@ export interface TaskListRow {
   description: string | null;
   status: TaskStatus;
   priority: EisenhowerPriority;
-  doerId: string;
+  /** Null = unassigned (a quick-dumped pool task awaiting assignment). */
+  doerId: string | null;
   doerName: string | null;
   doerDept: string | null;
   initiatorId: string;

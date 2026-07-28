@@ -32,6 +32,7 @@ export function computeEmployeeStatusTable(
 
   for (const t of tasks) {
     const id = view === "doer" ? t.doerId : t.initiatorId;
+    if (!id) continue; // unassigned pool task in doer view — no doer to bucket
     const emp = employeeById.get(id);
     if (!emp) continue;
 

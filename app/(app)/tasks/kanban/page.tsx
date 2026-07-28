@@ -2,13 +2,15 @@ import { DashboardHeader } from "@/components/layout/header";
 import { DashboardFooter } from "@/components/layout/footer";
 import { FilterBar } from "@/components/layout/filter-bar";
 import { KanbanBoard } from "@/components/tasks/kanban-board";
-import { listBoardTasks, listDistinctSubjects } from "@/lib/queries/tasks";
+import { listBoardTasks, listDistinctSubjects, getTaskById } from "@/lib/queries/tasks";
 import { listEmployeeOptions } from "@/lib/queries/employees";
 import { listActiveClientNames } from "@/lib/queries/clients";
 import { getStatusDisplayMap } from "@/lib/queries/status-display";
 import { getOrgSettings } from "@/lib/queries/org-settings";
 import { parseTaskFilters } from "@/lib/task-filters";
 import { requireUser } from "@/lib/auth/current";
+import { canQuickDump } from "@/lib/auth/quick-dump";
+import { CompleteTaskModal } from "@/components/tasks/complete-task-modal";
 import {
   resolveAdminColumnOrder,
   USER_COLUMN_ORDER,
@@ -53,6 +55,11 @@ export default async function KanbanPage({ searchParams }: PageProps) {
   const columnOrder = me.isAdmin
     ? resolveAdminColumnOrder(org.boardColumnOrder)
     : USER_COLUMN_ORDER;
+
+  // "Complete task" overlay — opened by clicking an unassigned pool card.
+  const completeId = typeof sp.complete === "string" ? sp.complete : undefined;
+  const canComplete = me.isAdmin || canQuickDump(me.email);
+  const completeTask = completeId && canComplete ? await getTaskById(completeId) : null;
 
   const employeeOptions = employees.map((e) => ({ value: e.id, label: e.name }));
   const statusOptions = TASK_STATUSES.filter((s) => !isDeprecatedStatus(s)).map((s) => ({
@@ -129,6 +136,24 @@ export default async function KanbanPage({ searchParams }: PageProps) {
         </section>
       </main>
       <DashboardFooter />
+      {completeTask && (
+        <CompleteTaskModal
+          taskId={completeTask.id}
+          employees={employees}
+          clients={clients}
+          subjects={subjects}
+          defaults={{
+            taskTitle: completeTask.title, // the quick-dump text, editable
+            title: completeTask.client ?? undefined, // Client Name (blank for pool tasks)
+            initiatorId: completeTask.initiatorId,
+            doerId: completeTask.doerId ?? undefined,
+            priority: completeTask.priority,
+            subject: completeTask.subject ?? undefined,
+            description: completeTask.description ?? undefined,
+            dueAt: completeTask.dueAt ? completeTask.dueAt.toISOString().slice(0, 10) : undefined,
+          }}
+        />
+      )}
     </>
   );
 }

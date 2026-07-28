@@ -1,4 +1,4 @@
-import { and, eq, gte, inArray, lt, or, asc, desc, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, isNull, isNotNull, lt, or, asc, desc, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { unstable_cache } from "next/cache";
 import { db, employees, tasks } from "@/lib/db";
@@ -33,6 +33,15 @@ export async function listTasks(filters: TaskListFilters): Promise<TaskListRow[]
     conditions.push(lt(tasks.createdAt, new Date(filters.endDate.getTime() + MS_PER_DAY)));
   const statusCond = statusFilterCondition(filters.statuses);
   if (statusCond)                    conditions.push(statusCond);
+  // Pool lens vs normal views: `emp=unassigned` shows ONLY ownerless tasks;
+  // every other lens HIDES them so the pool never clutters a person's list
+  // or the team view. Assigned tasks always have a doer, so IS NOT NULL is a
+  // no-op for them.
+  if (filters.assigneeMode === "unassigned") {
+    conditions.push(isNull(tasks.doerId));
+  } else {
+    conditions.push(isNotNull(tasks.doerId));
+  }
   if (filters.doerIds.length > 0)    conditions.push(inArray(tasks.doerId, filters.doerIds));
   if (filters.initiatorIds.length > 0)
     conditions.push(inArray(tasks.initiatorId, filters.initiatorIds));
@@ -269,6 +278,16 @@ export async function listTasksPage(
   return { rows, nextCursor };
 }
 
+/** How many unassigned (ownerless, non-archived) tasks are in the pool.
+ *  Drives the "Unassigned · N" count on the Tasks list + Kanban. */
+export async function countUnassignedTasks(): Promise<number> {
+  const [row] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(tasks)
+    .where(and(isNull(tasks.doerId), eq(tasks.archived, false)));
+  return row?.n ?? 0;
+}
+
 /** Minimal card shape for the status Kanban board. */
 export interface BoardTask {
   id: string;
@@ -279,7 +298,8 @@ export interface BoardTask {
   description: string | null;
   status: (typeof TASK_STATUSES)[number];
   priority: (typeof TASK_PRIORITIES)[number];
-  doerId: string;
+  /** Null = unassigned (a quick-dumped pool task awaiting assignment). */
+  doerId: string | null;
   doerName: string | null;
   archived: boolean;
   dueAt: Date;
@@ -421,6 +441,15 @@ export async function listTasksForExport(
     conditions.push(lt(tasks.createdAt, new Date(filters.endDate.getTime() + MS_PER_DAY)));
   const statusCond = statusFilterCondition(filters.statuses);
   if (statusCond)                    conditions.push(statusCond);
+  // Pool lens vs normal views: `emp=unassigned` shows ONLY ownerless tasks;
+  // every other lens HIDES them so the pool never clutters a person's list
+  // or the team view. Assigned tasks always have a doer, so IS NOT NULL is a
+  // no-op for them.
+  if (filters.assigneeMode === "unassigned") {
+    conditions.push(isNull(tasks.doerId));
+  } else {
+    conditions.push(isNotNull(tasks.doerId));
+  }
   if (filters.doerIds.length > 0)    conditions.push(inArray(tasks.doerId, filters.doerIds));
   if (filters.initiatorIds.length > 0)
     conditions.push(inArray(tasks.initiatorId, filters.initiatorIds));

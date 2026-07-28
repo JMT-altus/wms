@@ -521,9 +521,9 @@ export const tasks = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     title: text("title").notNull(),
     description: text("description"),
-    doerId: uuid("doer_id")
-      .notNull()
-      .references(() => employees.id, { onDelete: "restrict" }),
+    // Nullable since migration 0075 — NULL = an unassigned task in the pool
+    // (quick-dumped by Mihir Veera / Altus Corp, assigned to a doer later).
+    doerId: uuid("doer_id").references(() => employees.id, { onDelete: "restrict" }),
     initiatorId: uuid("initiator_id")
       .notNull()
       .references(() => employees.id, { onDelete: "restrict" }),

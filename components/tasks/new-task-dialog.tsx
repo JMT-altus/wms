@@ -5,9 +5,10 @@ import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import * as Dialog from "@radix-ui/react-dialog";
 import * as Tooltip from "@radix-ui/react-tooltip";
-import { Plus, X, Upload } from "lucide-react";
+import { Plus, X, Upload, Zap } from "lucide-react";
 import { NewTaskForm } from "./new-task-form";
 import { TaskImport } from "./task-import";
+import { QuickDumpDialog } from "./quick-dump-dialog";
 
 interface Props {
   employees: { id: string; name: string }[];
@@ -21,14 +22,17 @@ interface Props {
   defaultInitiatorId?: string;
   /** Admins get the "Import" shortcut in the dialog header. */
   isAdmin?: boolean;
+  /** Allowlisted users (Mihir Veera / Altus Corp) get the "Quick Dump" shortcut. */
+  canQuickDump?: boolean;
 }
 
 const HINT_STORAGE_KEY = "vp_seen_new_task_hint";
 
-export function NewTaskDialog({ employees, clients, subjects, projectNodes, defaultInitiatorId, isAdmin }: Props) {
+export function NewTaskDialog({ employees, clients, subjects, projectNodes, defaultInitiatorId, isAdmin, canQuickDump }: Props) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [quickOpen, setQuickOpen] = useState(false);
   const [showHint, setShowHint] = useState(false);
 
   // Open the Import popup instead of navigating to a page (the page round-trip
@@ -37,6 +41,12 @@ export function NewTaskDialog({ employees, clients, subjects, projectNodes, defa
   function goImport() {
     setOpen(false);
     setImportOpen(true);
+  }
+
+  // Quick Dump — same pattern: close New Task, open the rapid-capture dialog.
+  function goQuickDump() {
+    setOpen(false);
+    setQuickOpen(true);
   }
 
   // First-time hint: surface if the user has never seen it before.
@@ -301,8 +311,23 @@ export function NewTaskDialog({ employees, clients, subjects, projectNodes, defa
             >
               Capture work, attach context, assign owners — all in one go.
             </Dialog.Description>
-            {/* Top-right actions — Import shortcut (admin) + Close. */}
+            {/* Top-right actions — Quick Dump (allowlist) + Import (admin) + Close. */}
             <div className="absolute top-6 right-6 flex items-center gap-2.5">
+              {canQuickDump && (
+                <button
+                  type="button"
+                  onClick={goQuickDump}
+                  title="Dump tasks fast, unassigned — assign them later"
+                  className="inline-flex items-center gap-2 rounded-full px-4 h-12 text-[14px] font-bold text-white transition-transform hover:-translate-y-0.5 max-md:px-3"
+                  style={{
+                    background: "linear-gradient(135deg, var(--color-amber), var(--color-tangerine))",
+                    boxShadow: "0 6px 16px -4px color-mix(in srgb, var(--color-amber) 55%, transparent)",
+                  }}
+                >
+                  <Zap size={17} strokeWidth={2.6} />
+                  <span className="max-md:hidden">Quick Dump</span>
+                </button>
+              )}
               {isAdmin && (
                 <button
                   type="button"
@@ -358,6 +383,11 @@ export function NewTaskDialog({ employees, clients, subjects, projectNodes, defa
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
+
+    {/* Quick Dump popup (allowlist) — controlled; opened from the header shortcut. */}
+    {canQuickDump && (
+      <QuickDumpDialog open={quickOpen} onOpenChange={setQuickOpen} renderTrigger={false} />
+    )}
 
     {/* Import popup (admin) — opens in place instead of navigating to a page. */}
     {isAdmin && (

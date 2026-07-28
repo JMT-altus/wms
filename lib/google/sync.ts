@@ -43,6 +43,12 @@ export async function reconcileTaskEvent(taskId: string): Promise<void> {
       if (oldTok) await deleteEvent(oldTok, eventId).catch(() => {});
     }
 
+    // Unassigned pool task — nothing to sync; drop any stale calendar pointer.
+    if (t.doerId == null) {
+      if (eventId) await clearPointers(taskId);
+      return;
+    }
+
     const tok = await doerToken(t.doerId);
     if (!tok) {
       // Current doer isn't connected. Drop any stale pointer from the old doer.

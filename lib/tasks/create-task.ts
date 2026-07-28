@@ -135,3 +135,94 @@ export async function createTasksCore(
 
   return { ok: true, id: createdIds[0]!, ids: createdIds };
 }
+
+/** How far out a quick-dumped task's placeholder due date is set (7 days).
+ *  It's ownerless for now — the real due is set when Mihir assigns it. */
+const QUICK_DUMP_DUE_MS = 7 * 24 * 60 * 60 * 1000;
+/** Safety cap so one paste can't spawn a runaway batch. */
+const QUICK_DUMP_MAX = 200;
+
+/**
+ * Create one or more UNASSIGNED tasks (no doer) from bare titles — the
+ * "quick dump" pool. Mihir Veera / Altus Corp capture tasks here fast and
+ * assign a doer later. Auth (allowlist) + rate-limit live in the caller.
+ * Mirrors createTasksCore's short-id retry + created-event, minus the doer,
+ * notifications and calendar sync (an ownerless task has none of those).
+ */
+export async function createUnassignedTasks(
+  actor: { id: string; name: string },
+  titles: string[],
+): Promise<{ ok: true; ids: string[] } | { ok: false; error: string }> {
+  const clean = titles
+    .map((t) => t.trim())
+    .filter((t) => t.length > 0)
+    .slice(0, QUICK_DUMP_MAX);
+  if (clean.length === 0) return { ok: false, error: "Nothing to add." };
+
+  const dueAt = new Date(Date.now() + QUICK_DUMP_DUE_MS);
+  const ids: string[] = [];
+
+  for (const raw of clean) {
+    const title = raw.slice(0, 500);
+    const taskId = crypto.randomUUID();
+    let attempt = 0;
+    let row: { id: string } | undefined;
+    while (attempt < 23) {
+      const shortId =
+        attempt === 0 ? deriveShortId(taskId) : nextShortIdCandidate(taskId, attempt);
+      if (!shortId) return { ok: false, error: "Could not derive short_id (uuid exhausted)" };
+      try {
+        [row] = await db
+          .insert(tasks)
+          .values({
+            id: taskId,
+            // The dump text is the task's TITLE (shown in the list's Task column
+            // via title fallback, and editable later in the Complete panel).
+            // Client + description are left blank; filled in on completion.
+            title,
+            client: null,
+            doerId: null, // unassigned — the pool
+            initiatorId: actor.id,
+            createdById: actor.id,
+            priority: "not_imp_not_urgent",
+            dueAt,
+            status: "dont_know",
+            shortId,
+          })
+          .returning({ id: tasks.id });
+        break;
+      } catch (err: unknown) {
+        const e = err as { code?: string; constraint?: string; message?: string };
+        if (e?.code === "23505" && e?.constraint === "tasks_short_id_uidx") {
+          attempt++;
+          continue;
+        }
+        return { ok: false, error: `DB: ${e?.message ?? String(err)}` };
+      }
+    }
+    if (!row) {
+      return {
+        ok: false,
+        error:
+          attempt >= 23
+            ? "Could not allocate unique short_id after 23 attempts"
+            : "Insert returned no row",
+      };
+    }
+
+    try {
+      await db.insert(taskEvents).values({
+        taskId: row.id,
+        actorId: actor.id,
+        eventType: "created",
+        toValue: { title, doerId: null, unassigned: true },
+      });
+    } catch (err) {
+      console.warn("[quickDump] created-event insert failed (non-fatal):", (err as Error)?.message ?? err);
+    }
+
+    ids.push(row.id);
+  }
+
+  return { ok: true, ids };
+}

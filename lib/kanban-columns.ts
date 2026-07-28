@@ -2,6 +2,9 @@ import { USER_TASK_STATUSES, type TaskStatus } from "@/db/enums";
 
 // Sentinel id for the synthetic "Archived" column (not a real TaskStatus).
 export const ARCHIVE_COL = "__archived__" as const;
+// Sentinel for the synthetic "Unassigned" pool column — ownerless tasks Mihir
+// Veera / Altus Corp quick-dumped, pinned first on the admin board.
+export const UNASSIGNED_COL = "__unassigned__" as const;
 export type ColId = TaskStatus | typeof ARCHIVE_COL;
 
 // Default admin board order (sir's changes #7): the working lane, then the

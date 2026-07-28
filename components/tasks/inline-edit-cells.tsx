@@ -60,7 +60,7 @@ export function InlineDoerCell({
   editable,
 }: {
   taskId: string;
-  doerId: string;
+  doerId: string | null;
   doerName: string | null;
   employees: { id: string; name: string }[];
   editable: boolean;
@@ -80,7 +80,17 @@ export function InlineDoerCell({
       </span>
     </span>
   ) : (
-    <span className="text-ink-subtle">—</span>
+    <span
+      className="inline-flex items-center rounded-pill px-2 py-0.5 font-bold"
+      style={{
+        fontSize: 12.5,
+        color: "var(--color-amber-deep)",
+        background: "color-mix(in srgb, var(--color-amber) 16%, transparent)",
+        border: "1px solid color-mix(in srgb, var(--color-amber) 34%, transparent)",
+      }}
+    >
+      Unassigned
+    </span>
   );
 
   if (!editable) return display;

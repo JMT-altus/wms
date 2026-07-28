@@ -59,7 +59,8 @@ import {
   taskLabel,
 } from "@/lib/tasks/set-status";
 import { addTaskComment } from "@/lib/tasks/add-comment";
-import { createTasksCore } from "@/lib/tasks/create-task";
+import { createTasksCore, createUnassignedTasks } from "@/lib/tasks/create-task";
+import { canQuickDump } from "@/lib/auth/quick-dump";
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -753,6 +754,124 @@ export async function createTask(input: CreateTaskInput): Promise<
 }
 
 /**
+ * Quick Dump — create a batch of UNASSIGNED tasks from bare titles. Gated to
+ * the allowlist (Mihir Veera / Altus Corp); the pool is theirs to triage.
+ * They assign a doer later from the Tasks list (inline doer cell) or the
+ * Kanban's Unassigned column.
+ */
+export async function quickDumpTasks(
+  titles: string[],
+): Promise<{ ok: true; count: number } | { ok: false; error: string }> {
+  const me = await requireUser();
+  if (!canQuickDump(me.email)) {
+    return { ok: false, error: "You don't have access to Quick Dump." };
+  }
+  const limited = rateLimitOrError(me.id, "write");
+  if (limited) return limited;
+  if (!Array.isArray(titles)) return { ok: false, error: "Invalid input." };
+
+  const result = await createUnassignedTasks({ id: me.id, name: me.name }, titles);
+  if (!result.ok) return result;
+
+  revalidateTaskRoutes();
+  return { ok: true, count: result.ids.length };
+}
+
+/** Fields for completing a pool task (filling in the details Mihir skipped at
+ *  quick-dump time, and optionally assigning a doer). */
+export interface CompletePooledInput {
+  title: string; // the task title (editable — seeded from the quick-dump text)
+  client: string | null; // the client name (separate from the title)
+  subject: string | null;
+  description: string | null;
+  priority: string;
+  dueAt: string | null; // ISO; null keeps the existing due date
+  doerId: string | null; // null keeps it unassigned
+}
+
+/**
+ * Complete a pool task — the "New Task-like panel" that opens when you click an
+ * unassigned task. Fills in client/subject/description/priority/due and,
+ * optionally, assigns a doer (first assignment out of the pool). Gated to
+ * admins + the quick-dump allowlist.
+ */
+export async function completePooledTask(
+  taskId: string,
+  input: CompletePooledInput,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!isUuid(taskId)) return { ok: false, error: "Invalid task id." };
+  const me = await requireUser();
+  if (!me.isAdmin && !canQuickDump(me.email)) {
+    return { ok: false, error: "You don't have access to complete pool tasks." };
+  }
+  const limited = rateLimitOrError(me.id, "write");
+  if (limited) return limited;
+
+  const title = (input.title ?? "").trim();
+  if (!title) return { ok: false, error: "Title is required." };
+  const client = input.client?.trim() || null;
+  if (!(TASK_PRIORITIES as readonly string[]).includes(input.priority)) {
+    return { ok: false, error: "Invalid priority." };
+  }
+  const doerId = input.doerId ?? null;
+  if (doerId !== null && !isUuid(doerId)) return { ok: false, error: "Invalid doer." };
+  let dueAt: Date | null = null;
+  if (input.dueAt) {
+    const d = new Date(input.dueAt);
+    if (Number.isNaN(d.getTime())) return { ok: false, error: "Invalid due date." };
+    dueAt = d;
+  }
+  const subject = input.subject?.trim() || null;
+  const description = input.description?.trim() || null;
+
+  const current = await db.query.tasks.findFirst({ where: eq(tasks.id, taskId) });
+  if (!current) return { ok: false, error: "Task not found." };
+
+  const now = new Date();
+  try {
+    await db
+      .update(tasks)
+      .set({
+        title,
+        client, // the client name, entered separately from the title
+        subject,
+        description,
+        priority: input.priority as (typeof TASK_PRIORITIES)[number],
+        ...(dueAt ? { dueAt } : {}),
+        doerId,
+        updatedAt: now,
+      })
+      .where(eq(tasks.id, taskId));
+    await db.insert(taskEvents).values({
+      taskId,
+      actorId: me.id,
+      eventType: "field_updated",
+      fromValue: { doerId: current.doerId, title: current.title },
+      toValue: { doerId, title },
+    });
+  } catch (err) {
+    return { ok: false, error: `Could not save: ${(err as Error).message}` };
+  }
+
+  // Notify the newly-assigned doer — first assignment out of the pool.
+  if (doerId && doerId !== me.id && doerId !== current.doerId) {
+    const label = taskLabel({ subject, title });
+    afterResponse(() =>
+      notify({
+        userId: doerId,
+        kind: "task_assigned",
+        title: `${me.name} assigned you '${label}'`,
+        taskId,
+        actorId: me.id,
+      }),
+    );
+  }
+  afterResponse(() => reconcileTaskEvent(taskId));
+  revalidateTaskRoutes();
+  return { ok: true };
+}
+
+/**
  * Appends a new client to the shared roster, used by the "+ Add new
  * client…" affordance on the task forms. Any authenticated user may add
  * one (see migration 0022 RLS). Case-insensitive dedupe: if the name
@@ -1011,9 +1130,13 @@ export async function approveTask(
     where: eq(tasks.id, taskId),
   });
   if (!current) return { ok: false, error: "not-found" };
+  if (current.doerId == null) {
+    return { ok: false, error: "invalid", message: "This task isn't assigned to anyone yet." };
+  }
+  const currentDoerId = current.doerId;
 
   const doerRow = await db.query.employees.findFirst({
-    where: eq(employees.id, current.doerId),
+    where: eq(employees.id, currentDoerId),
     columns: { managerId: true },
   });
   const isDoersManager = !!doerRow?.managerId && doerRow.managerId === me.id;
@@ -1066,10 +1189,10 @@ export async function approveTask(
   // decline → "declined" kind so the recipient's UI can colour each
   // distinctly and the email subject can differ.  Body is the note.
   const label = taskLabel({ subject: current.subject, title: current.title });
-  if (current.doerId !== me.id) {
+  if (currentDoerId !== me.id) {
     if (parsed.decision === "approved") {
       await notify({
-        userId: current.doerId,
+        userId: currentDoerId,
         kind: "approved",
         title: `${me.name} approved '${label}'`,
         body: parsed.note?.trim() || null,
@@ -1078,7 +1201,7 @@ export async function approveTask(
       });
     } else {
       await notify({
-        userId: current.doerId,
+        userId: currentDoerId,
         kind: "declined",
         title: `${me.name} declined '${label}'`,
         body: parsed.note?.trim() || null,
@@ -1210,7 +1333,7 @@ export async function reassignTask(
       actorId: me.id,
     });
   }
-  if (current.doerId !== me.id && current.doerId !== parsed.newDoerId) {
+  if (current.doerId && current.doerId !== me.id && current.doerId !== parsed.newDoerId) {
     await notify({
       userId: current.doerId,
       kind: "reassigned",

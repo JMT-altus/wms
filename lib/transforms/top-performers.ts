@@ -25,6 +25,7 @@ export function computeTopPerformers(
 
   for (const t of tasks) {
     if (!COMPLETED_STATUSES.has(t.status)) continue;
+    if (t.doerId == null) continue; // unassigned pool tasks aren't anyone's completion
     counts.set(t.doerId, (counts.get(t.doerId) ?? 0) + 1);
 
     const referenceDate = t.completedAt ?? t.createdAt;

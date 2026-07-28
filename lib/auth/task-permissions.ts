@@ -15,7 +15,9 @@ export type TaskPermissionInput = {
   task: {
     createdById: string | null;
     initiatorId: string;
-    doerId: string;
+    // Null = unassigned pool task. The `=== employee.id` checks below simply
+    // never match for an ownerless task, which is the correct behaviour.
+    doerId: string | null;
     status: TaskStatus;
   };
 };

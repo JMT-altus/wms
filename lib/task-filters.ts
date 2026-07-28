@@ -31,6 +31,8 @@ function todayUtcMidnight(): Date {
 /** Sentinel value for ?emp=all — meaning "explicitly show all assignees,
  *  do not apply the default-to-me behavior for non-admins". */
 const EMP_ALL = "all";
+/** Sentinel for ?emp=unassigned — the pool lens (tasks with no doer). */
+const EMP_UNASSIGNED = "unassigned";
 
 export interface ParseTaskFiltersOptions {
   /** If set AND the `emp` URL param is absent, default `doerIds` to `[defaultDoerId]`.
@@ -74,7 +76,7 @@ export function parseTaskFilters(
   const empRaw = get("emp");
   const empPresent = empRaw !== undefined;
   let doerIds: string[];
-  let assigneeMode: "default" | "all" | "specific";
+  let assigneeMode: "default" | "all" | "specific" | "unassigned";
   if (!empPresent) {
     if (opts.defaultDoerId) {
       doerIds = [opts.defaultDoerId];
@@ -83,6 +85,11 @@ export function parseTaskFilters(
       doerIds = [];
       assigneeMode = "all";
     }
+  } else if (empRaw === EMP_UNASSIGNED) {
+    // The pool lens: tasks with no doer. `doerIds` stays empty; the query
+    // switches to an IS NULL match on assigneeMode.
+    doerIds = [];
+    assigneeMode = "unassigned";
   } else if (empRaw === EMP_ALL || empRaw === "") {
     doerIds = [];
     assigneeMode = "all";
@@ -115,7 +122,9 @@ export function taskFiltersToSearchString(f: TaskListFilters): string {
   // Round-trip the assignee selector. "default" intentionally omits the param
   // so re-parsing (without a defaultDoerId) resolves to "all"; the page-level
   // defaulting handles the non-admin scoping at the call site.
-  if (f.assigneeMode === "all") {
+  if (f.assigneeMode === "unassigned") {
+    sp.set("emp", EMP_UNASSIGNED);
+  } else if (f.assigneeMode === "all") {
     sp.set("emp", EMP_ALL);
   } else if (f.assigneeMode === "specific" && f.doerIds.length > 0) {
     sp.set("emp", f.doerIds.join(","));

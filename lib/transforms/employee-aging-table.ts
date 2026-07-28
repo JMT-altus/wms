@@ -28,6 +28,7 @@ export function computeEmployeeAgingTable(
 
   for (const t of tasks) {
     if (!PENDING.has(t.status)) continue;
+    if (t.doerId == null) continue; // unassigned pool tasks have no doer to age
     const emp = employeeById.get(t.doerId);
     if (!emp) continue;
 

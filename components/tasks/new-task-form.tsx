@@ -13,13 +13,14 @@ import {
   type TaskPriority,
   type TaskRecurrence,
 } from "@/db/enums";
-import { createTask } from "@/app/(app)/tasks/actions";
+import { createTask, completePooledTask } from "@/app/(app)/tasks/actions";
 import { EmployeeAvatar } from "@/components/ui/employee-avatar";
 import { ScheduleSection, type ScheduleValue } from "./schedule-section";
 import { ClientSelect } from "./client-select";
 import { SubjectSelect } from "./subject-select";
 import { Select } from "@/components/ui/select";
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
+import { DictateButton } from "@/components/ui/dictate-button";
 
 type EmployeeOption = { id: string; name: string };
 
@@ -33,17 +34,26 @@ interface Props {
   projectNodes?: { id: string; label: string }[];
   /** Called after a successful create. Default: navigate to /tasks/[id]. */
   onSuccess?: (taskId: string) => void;
-  /** Optional defaults for the form (used by the canonical route + the
-   *  Duplicate action, which prefills from an existing task). */
+  /** When set, the form runs in "complete a pool task" mode: it UPDATES this
+   *  task (fills in details + optionally assigns) instead of creating a new one. */
+  completeTaskId?: string;
+  /** Called after a successful complete (instead of onSuccess). */
+  onCompleted?: () => void;
+  /** Optional defaults for the form (used by the canonical route, the
+   *  Duplicate action, and pool-task completion — all prefill from a task). */
   defaults?: {
     doerId?: string;
     initiatorId?: string;
     priority?: TaskPriority;
     title?: string;
+    /** Editable task title (complete mode) — seeded from the quick-dump text. */
+    taskTitle?: string;
     subject?: string;
     description?: string;
     notes?: string;
     projectNodeId?: string;
+    /** Prefill the Due Date (YYYY-MM-DD). Defaults to tomorrow when absent. */
+    dueAt?: string;
   };
 }
 
@@ -55,16 +65,34 @@ const MEDIA_SLOT_COUNT = 4;
 // into the payload at submit — same shape createTask has always received.
 const NewTaskSchema = z.object({
   title: z.string().trim().min(1, "Client name is required"),
+  taskTitle: z.string(), // used only in complete mode; ignored on create
   initiatorId: z.string().min(1, "Initiator is required"),
   doerIds: z.array(z.string()).min(1, "Pick at least one Doer"),
   priority: z.enum(TASK_PRIORITIES),
   dueAt: z.string().min(1, "Due date is required"),
   subject: z.string().trim().min(1, "Subject is required"),
-  description: z.string().trim().min(1, "Task Description is required"),
+  description: z.string().trim(), // optional — a task can be created without a description
   notes: z.string(),
   projectNodeId: z.string(),
 });
 type NewTaskFormValues = z.infer<typeof NewTaskSchema>;
+
+// "Complete a pool task" mode — same shape, relaxed rules: only the Title
+// (seeded from the quick-dump text) is required; Client, Doer, Subject, Due and
+// Description can be filled in now or later. Same output type as
+// NewTaskFormValues so the resolver swaps cleanly.
+const CompleteTaskSchema = z.object({
+  title: z.string().trim(), // Client Name — optional in complete mode
+  taskTitle: z.string().trim().min(1, "Title is required"),
+  initiatorId: z.string(),
+  doerIds: z.array(z.string()),
+  priority: z.enum(TASK_PRIORITIES),
+  dueAt: z.string(),
+  subject: z.string().trim(),
+  description: z.string().trim(),
+  notes: z.string(),
+  projectNodeId: z.string(),
+});
 
 // Media slots are UI-only for now — files live in component state and
 // aren't uploaded anywhere. The Links section is wired: URLs get
@@ -75,9 +103,10 @@ interface PreviewFile {
   url: string;
 }
 
-export function NewTaskForm({ employees, clients, subjects, projectNodes = [], onSuccess, defaults }: Props) {
+export function NewTaskForm({ employees, clients, subjects, projectNodes = [], onSuccess, completeTaskId, onCompleted, defaults }: Props) {
   const router = useRouter();
   const [pending, startTransition] = React.useTransition();
+  const isComplete = Boolean(completeTaskId);
 
   // Default due: 1 day after the entry date.
   const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000)
@@ -89,15 +118,18 @@ export function NewTaskForm({ employees, clients, subjects, projectNodes = [], o
     control,
     handleSubmit,
     watch,
+    setValue,
+    getValues,
     formState: { errors },
   } = useForm<NewTaskFormValues>({
-    resolver: zodResolver(NewTaskSchema),
+    resolver: zodResolver(isComplete ? CompleteTaskSchema : NewTaskSchema),
     defaultValues: {
       title: defaults?.title ?? "",
+      taskTitle: defaults?.taskTitle ?? "",
       initiatorId: defaults?.initiatorId ?? "",
       doerIds: defaults?.doerId ? [defaults.doerId] : [],
       priority: defaults?.priority ?? DEFAULT_PRIORITY,
-      dueAt: tomorrow,
+      dueAt: defaults?.dueAt ?? tomorrow,
       subject: defaults?.subject ?? "",
       description: defaults?.description ?? "",
       notes: defaults?.notes ?? "",
@@ -123,6 +155,11 @@ export function NewTaskForm({ employees, clients, subjects, projectNodes = [], o
 
   const doerCount = watch("doerIds").length;
   const tagsCount = tags.length;
+
+  // Live dictation read/write helpers for a text field.
+  const fieldGetter = (name: "description" | "notes") => () => getValues(name) ?? "";
+  const fieldSetter = (name: "description" | "notes") => (v: string) =>
+    setValue(name, v, { shouldDirty: true });
 
   // Release object-URLs the moment the dialog tears down so we don't
   // leak blobs into the document for the rest of the session.
@@ -173,7 +210,33 @@ export function NewTaskForm({ employees, clients, subjects, projectNodes = [], o
     setError(null);
     // The <input type="date"> gives YYYY-MM-DD; convert to ISO at noon UTC
     // so timezone wrap-arounds don't push the due into the wrong day.
-    const dueIso = new Date(`${values.dueAt}T12:00:00.000Z`).toISOString();
+    const dueIso = values.dueAt
+      ? new Date(`${values.dueAt}T12:00:00.000Z`).toISOString()
+      : null;
+
+    // "Complete a pool task" mode — UPDATE the existing task instead of
+    // creating one, then hand control back to the caller (closes the panel).
+    if (completeTaskId) {
+      startTransition(async () => {
+        const res = await completePooledTask(completeTaskId, {
+          title: values.taskTitle, // the editable task title
+          client: values.title || null, // Client Name (separate picker)
+          subject: values.subject || null,
+          description: values.description || null,
+          priority: values.priority,
+          dueAt: dueIso,
+          doerId: values.doerIds[0] ?? null,
+        });
+        if (!res.ok) {
+          setError(res.error);
+          return;
+        }
+        if (onCompleted) onCompleted();
+        else router.push(`/tasks/${completeTaskId}` as Route);
+        router.refresh();
+      });
+      return;
+    }
 
     // Stamp link URLs onto the notes payload — they survive into the task
     // record so the team can click through later. Media files are UI-only.
@@ -194,7 +257,8 @@ export function NewTaskForm({ employees, clients, subjects, projectNodes = [], o
         doerIds: values.doerIds,       // multi-doer fanout — N tasks if N doers
         initiatorId: values.initiatorId,
         priority: values.priority,
-        dueAt: dueIso,
+        // Create mode always has a due (schema-required); fall back defensively.
+        dueAt: dueIso ?? new Date(`${tomorrow}T12:00:00.000Z`).toISOString(),
         description: values.description || null,
         subject: values.subject || null,
         notes: composedNotes,
@@ -251,22 +315,53 @@ export function NewTaskForm({ employees, clients, subjects, projectNodes = [], o
       className="flex flex-col gap-6"
       noValidate
     >
-      {/* Client Name — full width hero field (was: Title) */}
-      <Field id="nt-title" label="Client Name" required>
-        <Controller
-          control={control}
-          name="title"
-          render={({ field }) => (
-            <ClientSelect
-              id="nt-title"
-              value={field.value}
-              onChange={field.onChange}
-              clients={clients}
-              className="nt-input"
-            />
-          )}
-        />
-      </Field>
+      {/* Title — editable task title (complete mode only), seeded from the
+          quick-dump text. Separate from the Client Name below. */}
+      {isComplete && (
+        <Field id="nt-tasktitle" label="Title" required>
+          <input
+            id="nt-tasktitle"
+            className="nt-input"
+            placeholder="What's the task?"
+            {...register("taskTitle")}
+          />
+        </Field>
+      )}
+
+      {/* Client Name + Subject — one line, above the people/dates. */}
+      <div className="grid grid-cols-2 gap-4 max-md:grid-cols-1 max-md:gap-3">
+        <Field id="nt-title" label="Client Name" required={!isComplete}>
+          <Controller
+            control={control}
+            name="title"
+            render={({ field }) => (
+              <ClientSelect
+                id="nt-title"
+                value={field.value}
+                onChange={field.onChange}
+                clients={clients}
+                className="nt-input"
+              />
+            )}
+          />
+        </Field>
+        <Field id="nt-subject" label="Subject" required={!isComplete}>
+          <Controller
+            control={control}
+            name="subject"
+            render={({ field }) => (
+              <SubjectSelect
+                id="nt-subject"
+                value={field.value}
+                onChange={field.onChange}
+                subjects={subjects}
+                className="nt-input"
+                placeholder="Select a subject…"
+              />
+            )}
+          />
+        </Field>
+      </div>
 
       {/* Metadata — two balanced rows (Initiator · Doer / Priority · Due
           Date). The old 4-across row squeezed each field to ~170px: the
@@ -274,7 +369,7 @@ export function NewTaskForm({ employees, clients, subjects, projectNodes = [], o
           clipped its own value. Two columns give every field real room;
           1-col under md. */}
       <div className="grid grid-cols-2 gap-4 max-md:grid-cols-1 max-md:gap-3">
-        <Field id="nt-initiator" label="Initiator" required>
+        <Field id="nt-initiator" label="Initiator" required={!isComplete}>
           <Controller
             control={control}
             name="initiatorId"
@@ -294,7 +389,7 @@ export function NewTaskForm({ employees, clients, subjects, projectNodes = [], o
         <Field
           id="nt-doer"
           label={`Doer${doerCount > 1 ? ` · ${doerCount} selected` : ""}`}
-          required
+          required={!isComplete}
         >
           <Controller
             control={control}
@@ -328,50 +423,42 @@ export function NewTaskForm({ employees, clients, subjects, projectNodes = [], o
             )}
           />
         </Field>
-        <Field id="nt-due" label="Due Date" required>
+        <Field id="nt-due" label="Due Date" required={!isComplete}>
           <input id="nt-due" type="date" className="nt-input" {...register("dueAt")} />
         </Field>
       </div>
 
-      {/* Subject · Task Description · Initiator Notes — each full-width
-          single column, stacked top-to-bottom per spec. */}
-      <Field id="nt-subject" label="Subject" required>
-        <Controller
-          control={control}
-          name="subject"
-          render={({ field }) => (
-            <SubjectSelect
-              id="nt-subject"
-              value={field.value}
-              onChange={field.onChange}
-              subjects={subjects}
-              className="nt-input"
-              placeholder="Select a subject…"
-            />
-          )}
-        />
-      </Field>
-
-      <Field id="nt-desc" label="Task Description" required>
-        <textarea
-          id="nt-desc"
-          rows={4}
-          className="nt-input resize-y"
-          style={{ fontWeight: 400 }}
-          placeholder="What needs to happen, in detail…"
-          {...register("description")}
-        />
+      {/* Task Description · Initiator Notes — full-width, stacked. */}
+      <Field id="nt-desc" label="Task Description">
+        <div className="relative">
+          <textarea
+            id="nt-desc"
+            rows={4}
+            className="nt-input resize-y"
+            style={{ fontWeight: 400, paddingRight: 52 }}
+            placeholder="What needs to happen, in detail… (optional — or tap the mic and speak)"
+            {...register("description")}
+          />
+          <div className="absolute top-2.5 right-2.5">
+            <DictateButton getValue={fieldGetter("description")} setValue={fieldSetter("description")} title="Dictate description" />
+          </div>
+        </div>
       </Field>
 
       <Field id="nt-notes" label="Initiator Notes">
-        <textarea
-          id="nt-notes"
-          rows={3}
-          className="nt-input resize-y"
-          style={{ fontWeight: 400 }}
-          placeholder="Notes only the team sees…"
-          {...register("notes")}
-        />
+        <div className="relative">
+          <textarea
+            id="nt-notes"
+            rows={3}
+            className="nt-input resize-y"
+            style={{ fontWeight: 400, paddingRight: 52 }}
+            placeholder="Notes only the team sees… (or tap the mic and speak)"
+            {...register("notes")}
+          />
+          <div className="absolute top-2.5 right-2.5">
+            <DictateButton getValue={fieldGetter("notes")} setValue={fieldSetter("notes")} title="Dictate notes" />
+          </div>
+        </div>
       </Field>
 
       {/* Tags — free-form chips. Type a tag, hit Enter or comma to commit.
@@ -465,7 +552,13 @@ export function NewTaskForm({ employees, clients, subjects, projectNodes = [], o
               "0 6px 16px rgba(10, 108, 255, 0.34)";
           }}
         >
-          {pending ? "Creating…" : "Create Task"}
+          {pending
+            ? isComplete
+              ? "Saving…"
+              : "Creating…"
+            : isComplete
+              ? "Save details"
+              : "Create Task"}
         </button>
       </div>
     </form>

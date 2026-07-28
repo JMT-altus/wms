@@ -256,6 +256,7 @@ async function loadDashboardDataUncached(
   const byCell: AgingHeatmapData["byCell"] = {};
   for (const t of periodTasks) {
     if (!PENDING_AGES.has(t.status)) continue;
+    if (t.doerId == null) continue; // unassigned pool task — not on the aging heatmap
     const ageDays = Math.floor((now.getTime() - t.createdAt.getTime()) / MS_PER_DAY);
     const bucket = AGE_BUCKETS.find((b) => ageDays >= b.min && ageDays <= b.max);
     if (!bucket) continue;

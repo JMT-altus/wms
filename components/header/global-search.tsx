@@ -12,6 +12,7 @@ import {
 import {
   Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
 } from "@/components/ui/command";
+import { DictateButton } from "@/components/ui/dictate-button";
 import { globalSearchAction } from "@/app/(app)/search/actions";
 import type { GlobalSearchResult } from "@/lib/queries/global-search";
 import { STATUS_LABELS_FALLBACK } from "@/lib/format";
@@ -105,6 +106,7 @@ export function GlobalSearch() {
                 className="h-14 !border-b-0 !px-0 text-[16px]"
               />
               {isFetching && <Loader2 size={16} className="shrink-0 animate-spin text-ink-subtle" />}
+              <DictateButton getValue={() => query} setValue={setQuery} title="Dictate search" />
             </div>
             <CommandList className="max-h-[60vh] overflow-y-auto border-t border-hairline p-2">
               {q.length < 2 ? (
