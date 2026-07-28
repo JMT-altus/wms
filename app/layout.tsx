@@ -55,6 +55,11 @@ export const viewport: Viewport = {
   maximumScale: 5,
 };
 
+// Run server functions in Mumbai (bom1) — co-located with the Supabase DB
+// (aws-1-ap-south-1). Keeps every query on a ~5–20ms hop instead of a
+// ~250ms trans-continental round-trip from the US default (iad1).
+export const preferredRegion = "bom1";
+
 export default async function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
