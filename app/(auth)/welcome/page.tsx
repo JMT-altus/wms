@@ -12,9 +12,11 @@ interface PageProps {
  */
 function sanitizeNext(v: string | string[] | undefined): string {
   const raw = Array.isArray(v) ? v[0] : v;
-  if (!raw) return "/";
-  if (!raw.startsWith("/")) return "/";
-  if (raw.startsWith("//")) return "/";
+  // Default landing is the Hub; a bare "/" (app root) routes there too.
+  if (!raw) return "/hub";
+  if (!raw.startsWith("/")) return "/hub";
+  if (raw.startsWith("//")) return "/hub";
+  if (raw === "/") return "/hub";
   return raw;
 }
 

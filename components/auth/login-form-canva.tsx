@@ -61,7 +61,10 @@ async function exchangeIdTokenForSession(idToken: string): Promise<void> {
 export function LoginFormCanva() {
   const router = useRouter();
   const params = useSearchParams();
-  const requestedNext = params.get("next") || "/hub";
+  // Land on the Hub after login. A bare "/" (the app root) or no `next` both
+  // route to /hub; a specific deep link (e.g. /tasks/123) still returns there.
+  const rawNext = params.get("next");
+  const requestedNext = !rawNext || rawNext === "/" ? "/hub" : rawNext;
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
