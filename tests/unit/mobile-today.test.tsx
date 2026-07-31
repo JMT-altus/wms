@@ -45,6 +45,7 @@ describe("MobileToday", () => {
         doneToday={2}
         statusLabels={statusLabels}
         statusTones={statusTones}
+        canPunch
       />,
     );
 
@@ -69,9 +70,24 @@ describe("MobileToday", () => {
         doneToday={0}
         statusLabels={statusLabels}
         statusTones={statusTones}
+        canPunch
       />,
     );
     expect(getByText(/all clear for today/i)).toBeTruthy();
     expect(getByText(/0 due today/)).toBeTruthy();
+  });
+
+  it("hides the attendance CTA when the Employees module is blocked", () => {
+    const { queryByRole } = render(
+      <MobileToday
+        firstName="Hetesh"
+        tasks={[]}
+        doneToday={0}
+        statusLabels={statusLabels}
+        statusTones={statusTones}
+        canPunch={false}
+      />,
+    );
+    expect(queryByRole("link", { name: /Mark attendance/i })).toBeNull();
   });
 });

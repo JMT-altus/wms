@@ -1,6 +1,7 @@
 import PDFDocument from "pdfkit";
 import { format } from "date-fns";
 import { requireAdmin } from "@/lib/auth/current";
+import { canAccessModule } from "@/lib/auth/module-access";
 import { localDateString } from "@/lib/format";
 import {
   getMonthDashboard,
@@ -40,6 +41,10 @@ export async function GET(request: Request): Promise<Response> {
   try {
     me = await requireAdmin();
   } catch {
+    return new Response("Forbidden", { status: 403 });
+  }
+  // Route handlers skip layouts, so the module guard has to run here too.
+  if (!(await canAccessModule("employees"))) {
     return new Response("Forbidden", { status: 403 });
   }
 

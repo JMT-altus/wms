@@ -1,5 +1,6 @@
 import * as XLSX from "xlsx";
 import { requireUser } from "@/lib/auth/current";
+import { canAccessModule } from "@/lib/auth/module-access";
 import { listRunsForMonth } from "@/lib/queries/salary";
 
 /**
@@ -42,6 +43,10 @@ export async function GET(request: Request): Promise<Response> {
     return new Response("Forbidden", { status: 403 });
   }
   if (!me.isAdmin) return new Response("Forbidden", { status: 403 });
+  // Route handlers skip layouts, so the module guard has to run here too.
+  if (!(await canAccessModule("employees"))) {
+    return new Response("Forbidden", { status: 403 });
+  }
 
   const url = new URL(request.url);
   const raw = url.searchParams.get("month");

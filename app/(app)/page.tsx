@@ -16,6 +16,7 @@ import { getStatusDisplayMap } from "@/lib/queries/status-display";
 import { getMyDayCounts, getMyTodayTasks } from "@/lib/queries/my-day";
 import { MobileToday } from "@/components/dashboard/mobile-today";
 import { getCurrentEmployee } from "@/lib/auth/current";
+import { canAccessModule } from "@/lib/auth/module-access";
 import { parseFilters } from "@/lib/filters";
 import type { TaskStatus, StatusColorToken } from "@/db/enums";
 
@@ -124,6 +125,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
                   doneToday={myDay?.doneToday ?? 0}
                   statusLabels={statusLabels}
                   statusTones={statusTones}
+                  canPunch={await canAccessModule("employees")}
                 />
               </div>
             )}

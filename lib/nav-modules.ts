@@ -101,6 +101,30 @@ export const MODULES: ModuleDef[] = [
   },
 ];
 
+export const MODULE_IDS: ModuleId[] = MODULES.map((m) => m.id);
+
+/**
+ * Like `moduleForPath` but honest about misses: returns null for routes that
+ * belong to no module (/hub, /profile, /admin/*) instead of silently falling
+ * back to WMS.  The access guard uses this — a fallback would mean denying WMS
+ * also denied the hub itself, which redirects to the hub, which loops.
+ */
+export function moduleIdForPath(pathname: string): ModuleId | null {
+  if (pathname === "/") return "wms";
+  let best: ModuleId | null = null;
+  let bestLen = 0;
+  for (const m of MODULES) {
+    for (const r of [m.landing, ...m.routes]) {
+      if (r === "/") continue;
+      if ((pathname === r || pathname.startsWith(r + "/")) && r.length > bestLen) {
+        best = m.id;
+        bestLen = r.length;
+      }
+    }
+  }
+  return best;
+}
+
 /** Resolve which module a pathname belongs to (defaults to WMS). */
 export function moduleForPath(pathname: string): ModuleDef {
   // Longest matching route prefix wins so /attendance/dashboard maps to

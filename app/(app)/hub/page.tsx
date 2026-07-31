@@ -1,7 +1,8 @@
 import Link from "next/link";
 import type { Route } from "next";
-import { LayoutGrid, Users, TrendingUp, GraduationCap, ArrowRight } from "lucide-react";
+import { LayoutGrid, Users, TrendingUp, GraduationCap, ArrowRight, Lock } from "lucide-react";
 import { getCurrentEmployee } from "@/lib/auth/current";
+import { getMyModuleAccess } from "@/lib/auth/module-access";
 import { GlobalSearch } from "@/components/header/global-search";
 import { HubSignOut } from "@/components/dashboard/hub-sign-out";
 import { MODULES, type ModuleId } from "@/lib/nav-modules";
@@ -69,9 +70,25 @@ function greetingForHour(hour: number): { hello: string; line: string } {
   return { hello: "Good Evening", line: "Wrapping up late? Thank you for your dedication." };
 }
 
-export default async function HubPage() {
-  const me = await getCurrentEmployee();
+export default async function HubPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ denied?: string }>;
+}) {
+  const [me, access, params] = await Promise.all([
+    getCurrentEmployee(),
+    getMyModuleAccess(),
+    searchParams,
+  ]);
   const firstName = me ? (me.name.split(" ")[0] ?? me.name) : "there";
+
+  // Only the modules this person is allowed into get a tile. The guard in
+  // app/(app)/layout.tsx enforces the same list on direct URL hits and sends
+  // them back here with ?denied=<module>.
+  const visibleModules = MODULES.filter((m) => access[m.id]?.allowed);
+  const deniedModule = params.denied
+    ? MODULES.find((m) => m.id === params.denied)
+    : undefined;
 
   const istHour = Number(
     new Intl.DateTimeFormat("en-US", { hour: "numeric", hour12: false, timeZone: "Asia/Kolkata" }).format(new Date()),
@@ -190,9 +207,52 @@ export default async function HubPage() {
           </p>
         </div>
 
-        {/* Module tiles */}
-        <div className="mx-auto w-full max-w-[1440px] px-8 max-md:px-4 pb-2 grid gap-6 max-md:gap-5 grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 lg:flex-1 lg:content-center">
-          {MODULES.map((m) => {
+        {/* Access notice — set when the layout guard bounced a direct URL hit. */}
+        {deniedModule && (
+          <div className="mx-auto w-full max-w-[1440px] px-8 max-md:px-4 mb-5">
+            <div
+              className="mx-auto flex items-center gap-3 rounded-2xl px-5 py-3.5"
+              style={{
+                maxWidth: 620,
+                background: "rgba(255,255,255,0.72)",
+                border: "1px solid rgba(220,38,38,0.22)",
+                boxShadow: "0 14px 30px -18px rgba(220,38,38,0.45), inset 0 1px 0 rgba(255,255,255,0.9)",
+                backdropFilter: "blur(8px)",
+                WebkitBackdropFilter: "blur(8px)",
+              }}
+            >
+              <Lock size={18} strokeWidth={2.4} style={{ color: "#b91c1c", flexShrink: 0 }} />
+              <p className="text-[14.5px] font-semibold" style={{ color: "#7f1d1d", lineHeight: 1.45 }}>
+                You don&rsquo;t have access to <strong>{deniedModule.label}</strong>. Ask an
+                admin to enable it for you.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Module tiles — only the ones this person may open. */}
+        <div
+          className={`mx-auto w-full px-8 max-md:px-4 pb-2 grid gap-6 max-md:gap-5 grid-cols-1 lg:flex-1 lg:content-center ${
+            visibleModules.length >= 4
+              ? "sm:grid-cols-2 xl:grid-cols-4"
+              : visibleModules.length === 3
+                ? "sm:grid-cols-2 xl:grid-cols-3"
+                : visibleModules.length === 2
+                  ? "sm:grid-cols-2"
+                  : ""
+          }`}
+          style={{
+            maxWidth:
+              visibleModules.length >= 4
+                ? 1440
+                : visibleModules.length === 3
+                  ? 1140
+                  : visibleModules.length === 2
+                    ? 800
+                    : 420,
+          }}
+        >
+          {visibleModules.map((m) => {
             const s = STYLES[m.id];
             const Icon = s.Icon;
             return (
@@ -269,6 +329,34 @@ export default async function HubPage() {
             );
           })}
         </div>
+
+        {visibleModules.length === 0 && (
+          <div className="mx-auto w-full max-w-[1440px] px-8 max-md:px-4 lg:flex-1 lg:flex lg:items-center lg:justify-center">
+            <div
+              className="mx-auto rounded-[24px] px-8 py-12 text-center"
+              style={{
+                maxWidth: 520,
+                background: "rgba(255,255,255,0.7)",
+                border: "1px solid rgba(255,255,255,0.8)",
+                boxShadow: "0 30px 60px -30px rgba(15,23,42,0.28), inset 0 1px 0 rgba(255,255,255,0.95)",
+                backdropFilter: "blur(8px)",
+                WebkitBackdropFilter: "blur(8px)",
+              }}
+            >
+              <Lock size={30} strokeWidth={2.2} style={{ color: "#64748b" }} className="mx-auto" />
+              <p
+                className="mt-4 text-ink-strong"
+                style={{ fontFamily: "var(--font-serif)", fontStyle: "italic", fontSize: 24, letterSpacing: "-0.015em" }}
+              >
+                No workspaces yet
+              </p>
+              <p className="mt-2 text-[14.5px] text-ink-subtle" style={{ lineHeight: 1.55 }}>
+                Your account doesn&rsquo;t have access to any module right now. An admin can
+                grant it from the Access page.
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Subtle platform credit — the tasteful home for a "powered by" line. */}
         <footer className="shrink-0 pb-6 pt-2 max-md:pb-5">

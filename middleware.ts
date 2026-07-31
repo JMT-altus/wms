@@ -74,6 +74,10 @@ export function middleware(request: NextRequest) {
     // than instantly. Signing-key rotation is still picked up live.
     checkRevoked: false,
     handleValidToken: async (_tokens, headers) => {
+      // Layouts can't see the pathname, and the module-access guard needs it
+      // to know which module the request belongs to. Set (not append) so a
+      // spoofed inbound x-pathname can never widen someone's access.
+      headers.set("x-pathname", request.nextUrl.pathname);
       return NextResponse.next({ request: { headers } });
     },
     handleInvalidToken: async () => {

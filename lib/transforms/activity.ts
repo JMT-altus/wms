@@ -195,6 +195,7 @@ export function settingsEventCopy(row: ActivityRow): string {
   if (scope === "department" && evt === "created") return "created a department";
   if (scope === "department" && evt === "updated") return "updated a department";
   if (scope === "department" && evt === "deleted") return "deleted a department";
+  if (scope === "module_access" && evt === "updated") return "changed module access";
 
   // Fallback: humanise both fields so admin can still parse it.
   const niceScope = scope.replace(/_/g, " ");

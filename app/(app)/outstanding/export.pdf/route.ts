@@ -1,6 +1,7 @@
 import PDFDocument from "pdfkit";
 import { format } from "date-fns";
 import { requireUser } from "@/lib/auth/current";
+import { canAccessModule } from "@/lib/auth/module-access";
 import { parseOutstandingFilters } from "@/lib/outstanding/filters";
 import { loadOutstandingDashboard } from "@/lib/queries/outstanding";
 import { todayISO, rollingHorizon } from "@/lib/outstanding/horizon";
@@ -30,6 +31,10 @@ export async function GET(request: Request): Promise<Response> {
   try {
     me = await requireUser();
   } catch {
+    return new Response("Forbidden", { status: 403 });
+  }
+  // Route handlers skip layouts, so the module guard has to run here too.
+  if (!(await canAccessModule("sales"))) {
     return new Response("Forbidden", { status: 403 });
   }
 

@@ -1,4 +1,5 @@
 import { requireUser } from "@/lib/auth/current";
+import { canAccessModule } from "@/lib/auth/module-access";
 import { getIncentiveSummary, currentPeriodIST } from "@/lib/queries/incentives";
 
 const cell = (v: string | number) => {
@@ -9,6 +10,10 @@ const cell = (v: string | number) => {
 /** The signed-in rep's own incentive statement for a period, as CSV. */
 export async function GET(req: Request) {
   const me = await requireUser();
+  // Route handlers skip layouts, so the module guard has to run here too.
+  if (!(await canAccessModule("sales"))) {
+    return new Response("Forbidden", { status: 403 });
+  }
   const period = new URL(req.url).searchParams.get("period") ?? currentPeriodIST();
   const summary = await getIncentiveSummary(me.id, period);
 

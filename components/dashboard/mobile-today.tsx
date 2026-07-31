@@ -30,12 +30,15 @@ export function MobileToday({
   doneToday,
   statusLabels,
   statusTones,
+  canPunch,
 }: {
   firstName: string;
   tasks: MyTodayTask[];
   doneToday: number;
   statusLabels: Record<TaskStatus, string>;
   statusTones: Record<TaskStatus, StatusColorToken>;
+  /** Attendance lives in the Employees module — hide the CTA if it's blocked. */
+  canPunch: boolean;
 }) {
   const now = new Date();
   const hourIst = Number(
@@ -92,15 +95,19 @@ export function MobileToday({
 
       {/* Primary action — Attendance is the reason most people open the app on
           their phone, so it sits right under the greeting, always reachable
-          without scrolling past the task backlog. */}
-      <Link
-        href={"/attendance" as Route}
-        className="mt-5 inline-flex h-[52px] w-full items-center justify-center gap-2 rounded-pill bg-gradient-to-br from-[#0A6CFF] via-[#0A6CFF] to-[#17B6A0] font-semibold text-white transition-all hover:brightness-105"
-        style={{ fontSize: 16 }}
-      >
-        <Fingerprint size={19} strokeWidth={2.2} aria-hidden />
-        Mark attendance
-      </Link>
+          without scrolling past the task backlog.  Hidden for anyone whose
+          access to the Employees module is switched off, so the CTA never
+          leads to a bounce back to the hub. */}
+      {canPunch && (
+        <Link
+          href={"/attendance" as Route}
+          className="mt-5 inline-flex h-[52px] w-full items-center justify-center gap-2 rounded-pill bg-gradient-to-br from-[#0A6CFF] via-[#0A6CFF] to-[#17B6A0] font-semibold text-white transition-all hover:brightness-105"
+          style={{ fontSize: 16 }}
+        >
+          <Fingerprint size={19} strokeWidth={2.2} aria-hidden />
+          Mark attendance
+        </Link>
+      )}
 
       {tasks.length === 0 ? (
         <div

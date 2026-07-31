@@ -945,6 +945,37 @@ export const employeeEvents = pgTable(
   ],
 );
 
+/**
+ * 0076 — per-module access control.  One row = one explicit grant of a hub
+ * module (lib/nav-modules.ts `ModuleId`) to a subject.  Absence of a row means
+ * "inherit from the next-broadest level"; see lib/access/modules.ts for the
+ * resolution order.  `subjectId` is a department id or an employee id
+ * depending on `subjectType`, and NULL for the org-wide `everyone` rows —
+ * which is why there's no FK here and why the uniques are partial indexes.
+ */
+export const moduleAccessGrants = pgTable(
+  "module_access_grants",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    moduleId: text("module_id").notNull(),
+    subjectType: text("subject_type")
+      .notNull()
+      .$type<"everyone" | "department" | "employee">(),
+    subjectId: uuid("subject_id"),
+    allowed: boolean("allowed").notNull(),
+    updatedBy: uuid("updated_by").references(() => employees.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [index("module_access_grants_subject_idx").on(t.subjectType, t.subjectId)],
+);
+
 export const settingsEvents = pgTable(
   "settings_events",
   {
@@ -1218,6 +1249,8 @@ export type EmployeeEvent = typeof employeeEvents.$inferSelect;
 export type NewEmployeeEvent = typeof employeeEvents.$inferInsert;
 export type SettingsEvent = typeof settingsEvents.$inferSelect;
 export type NewSettingsEvent = typeof settingsEvents.$inferInsert;
+export type ModuleAccessGrant = typeof moduleAccessGrants.$inferSelect;
+export type NewModuleAccessGrant = typeof moduleAccessGrants.$inferInsert;
 export type AuthSession = typeof authSessions.$inferSelect;
 export type NewAuthSession = typeof authSessions.$inferInsert;
 export type AuditDataExport = typeof auditDataExports.$inferSelect;
