@@ -246,8 +246,11 @@ export function AdminSidebar({ adminName, adminEmail, avatarUrl }: Props) {
           className="px-3 pb-6 pt-3 shrink-0"
           style={{ borderTop: "1px solid rgba(255, 255, 255, 0.10)" }}
         >
+          {/* Lands on the hub, not the WMS dashboard — the hub is the app's
+              real entry point, and a module the admin can't open shouldn't be
+              where "back" drops them. */}
           <Link
-            href={"/" as Route}
+            href={"/hub" as Route}
             className="group flex items-center gap-2.5 px-3.5 py-2.5 rounded-lg text-[14px] text-white/75 hover:text-white hover:bg-white/[0.06] transition-colors"
           >
             <ArrowLeft

@@ -53,12 +53,28 @@ describe("parseTaskFilters", () => {
 
   it("ignores invalid values silently", () => {
     const f = parseTaskFilters(
-      { status: "made_up,need_help", prio: "fake_quad", dept: "Bogus" },
+      { status: "made_up,need_help", prio: "fake_quad" },
       false,
     );
     expect(f.statuses).toEqual(["need_help"]);
     expect(f.priorities).toEqual([]);
-    expect(f.departments).toEqual([]);
+  });
+
+  it("passes department names through without a whitelist", () => {
+    // Departments are admin-managed rows, so any name is valid here — the
+    // query layer resolves it against the `departments` table. Whitelisting
+    // against the legacy DEPARTMENTS const silently dropped every department
+    // added through /admin/departments.
+    const f = parseTaskFilters({ dept: "Godown,Purchase,Support" }, false);
+    expect(f.departments).toEqual(["Godown", "Purchase", "Support"]);
+  });
+
+  it("trims and drops blank or oversized department names", () => {
+    const f = parseTaskFilters(
+      { dept: `  Sales  ,,${"x".repeat(81)},MD` },
+      false,
+    );
+    expect(f.departments).toEqual(["Sales", "MD"]);
   });
 
   it("round-trips through toSearchString", () => {

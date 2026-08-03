@@ -1,4 +1,4 @@
-import type { TaskStatus, AgeBucketId, Department } from "@/db/enums";
+import type { TaskStatus, AgeBucketId } from "@/db/enums";
 
 export type ViewMode = "doer" | "initiator";
 
@@ -13,7 +13,8 @@ export interface DashboardFilters {
   endDate: Date | null;
   employeeIds: string[];
   view: ViewMode;
-  departments: Department[];
+  /** Department NAMES, as managed in /admin/departments — not a fixed union. */
+  departments: string[];
   priorities: EisenhowerPriority[];
   subjects: string[];
 }
@@ -159,7 +160,8 @@ export interface TaskListFilters {
   statuses: TaskStatus[];
   doerIds: string[];
   initiatorIds: string[];
-  departments: Department[];
+  /** Department NAMES, as managed in /admin/departments — not a fixed union. */
+  departments: string[];
   priorities: EisenhowerPriority[];
   subjects: string[];
   clients: string[];

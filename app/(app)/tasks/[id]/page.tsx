@@ -4,7 +4,7 @@ import { DashboardFooter } from "@/components/layout/footer";
 import { TaskDetailLoader } from "@/components/tasks/task-detail-loader";
 import { TaskDetailSkeleton } from "@/components/tasks/task-detail-skeleton";
 import { requireUser } from "@/lib/auth/current";
-import { markTaskRead } from "@/app/(app)/tasks/read-actions";
+import { markTaskRead, markTaskSeenByDoer } from "@/app/(app)/tasks/read-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -32,6 +32,12 @@ export default async function TaskDetailPage({ params }: PageProps) {
   // Read-receipt: mark this task read on first open by anyone. Fire-and-forget;
   // markTaskRead is best-effort and the NULL guard makes repeat opens a no-op.
   void markTaskRead(id);
+
+  // "Not Seen" → "Not Started" when the doer opens their own task. Awaited, not
+  // fire-and-forget, so the detail below streams the NEW status — otherwise the
+  // page would still say "Not Seen" until the next refresh. One indexed UPDATE
+  // that matches nothing on repeat opens.
+  await markTaskSeenByDoer(id);
 
   return (
     <>

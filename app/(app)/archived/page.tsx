@@ -4,6 +4,7 @@ import { FilterBar } from "@/components/layout/filter-bar";
 import { TaskListPage } from "@/components/tasks/task-list-page";
 import { listEmployees } from "@/lib/queries/employees";
 import { listTasks, listDistinctSubjects } from "@/lib/queries/tasks";
+import { listActiveDepartmentNames } from "@/lib/queries/departments";
 import { parseTaskFilters } from "@/lib/task-filters";
 import { requireUser } from "@/lib/auth/current";
 import { getStatusDisplayMap } from "@/lib/queries/status-display";
@@ -28,10 +29,11 @@ export default async function ArchivedPage({ searchParams }: PageProps) {
     defaultDoerId: me.isAdmin ? undefined : me.id,
   });
 
-  const [allEmployees, rows, subjects, statusDisplay] = await Promise.all([
+  const [allEmployees, rows, subjects, departments, statusDisplay] = await Promise.all([
     listEmployees(),
     listTasks(filters),
     listDistinctSubjects(),
+    listActiveDepartmentNames(),
     getStatusDisplayMap(),
   ]);
 
@@ -56,6 +58,7 @@ export default async function ArchivedPage({ searchParams }: PageProps) {
       <FilterBar
         employees={employeeOptions}
         subjects={subjects}
+        departments={departments}
         me={{ id: me.id, isAdmin: me.isAdmin }}
         assigneeMode={filters.assigneeMode}
         initial={{

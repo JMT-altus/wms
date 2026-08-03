@@ -1,11 +1,6 @@
 import { z } from "zod";
 import type { DashboardFilters, ViewMode } from "@/lib/types";
-import {
-  DEPARTMENTS,
-  TASK_PRIORITIES,
-  type Department,
-  type TaskPriority,
-} from "@/db/enums";
+import { TASK_PRIORITIES, type TaskPriority } from "@/db/enums";
 
 const isoDate = z
   .string()
@@ -22,8 +17,21 @@ const filtersSchema = z.object({
   subj: z.string().optional(),
 });
 
-const DEPT_SET = new Set<Department>(DEPARTMENTS);
 const PRIO_SET = new Set<TaskPriority>(TASK_PRIORITIES);
+
+/**
+ * Departments are admin-managed rows now (/admin/departments), not a fixed
+ * union, so there's no list to validate against here — a whitelist would
+ * silently drop every department added after the code was written.  Names are
+ * only ever used to look up employee ids via a parameterised `in` clause, so
+ * we just trim and bound them.
+ */
+const MAX_DEPT_NAME = 80;
+function cleanDepartments(values: string[]): string[] {
+  return values
+    .map((d) => d.trim())
+    .filter((d) => d.length > 0 && d.length <= MAX_DEPT_NAME);
+}
 
 export function parseFilters(
   searchParams: Record<string, string | string[] | undefined>,
@@ -51,9 +59,7 @@ export function parseFilters(
   if (!parsed.success) return empty;
 
   const split = (v?: string) => (v ? v.split(",").filter(Boolean) : []);
-  const departments = split(parsed.data.dept).filter((d): d is Department =>
-    DEPT_SET.has(d as Department),
-  );
+  const departments = cleanDepartments(split(parsed.data.dept));
   const priorities = split(parsed.data.prio).filter(
     (p): p is TaskPriority => PRIO_SET.has(p as TaskPriority),
   );

@@ -105,6 +105,20 @@ export async function employeeIdsInDepartments(
 }
 
 /**
+ * Active department NAMES, ordered like the admin list.  Feeds the Department
+ * filter chip on the dashboard and every task view, so the options always
+ * match exactly what's in /admin/departments.
+ */
+export async function listActiveDepartmentNames(): Promise<string[]> {
+  const rows = await db
+    .select({ name: departments.name })
+    .from(departments)
+    .where(eq(departments.isActive, true))
+    .orderBy(asc(departments.sortOrder), asc(departments.name));
+  return rows.map((r) => r.name);
+}
+
+/**
  * Just active departments, used by employee pickers (invite + edit).
  */
 export async function listActiveDepartments(): Promise<Department[]> {

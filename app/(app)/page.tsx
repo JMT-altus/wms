@@ -11,6 +11,7 @@ import { MyDayCard } from "@/components/dashboard/my-day-card";
 import { DashboardLoadError } from "@/components/dashboard/dashboard-load-error";
 import { listEmployees } from "@/lib/queries/employees";
 import { listDistinctSubjects } from "@/lib/queries/tasks";
+import { listActiveDepartmentNames } from "@/lib/queries/departments";
 import { loadDashboardData } from "@/lib/queries/dashboard";
 import { getStatusDisplayMap } from "@/lib/queries/status-display";
 import { getMyDayCounts, getMyTodayTasks } from "@/lib/queries/my-day";
@@ -47,8 +48,9 @@ export default async function DashboardPage({ searchParams }: PageProps) {
   let myDay: Awaited<ReturnType<typeof getMyDayCounts>> | null;
   let todayTasks: Awaited<ReturnType<typeof getMyTodayTasks>> | null;
   let subjects: string[];
+  let departments: string[];
   try {
-    [allEmployees, data, statusDisplay, myDay, todayTasks, subjects] = await Promise.all([
+    [allEmployees, data, statusDisplay, myDay, todayTasks, subjects, departments] = await Promise.all([
       listEmployees(),
       loadDashboardData(filters),
       getStatusDisplayMap(),
@@ -59,6 +61,8 @@ export default async function DashboardPage({ searchParams }: PageProps) {
       // Auxiliary (only powers the Subject filter chip) — must NEVER take down
       // the whole dashboard, so it degrades to an empty list on failure.
       listDistinctSubjects().catch(() => [] as string[]),
+      // Ditto for the Department chip — auxiliary, never fatal.
+      listActiveDepartmentNames().catch(() => [] as string[]),
     ]);
   } catch (err) {
     console.error("[dashboard] data load failed:", err);
@@ -97,21 +101,24 @@ export default async function DashboardPage({ searchParams }: PageProps) {
   return (
     <>
       <DashboardHeader generatedAt={data.generatedAt} />
-      <div className={mobileToday ? "max-md:hidden" : undefined}>
-        <FilterBar
-          employees={employeeOptions}
-          subjects={subjects}
-          initial={{
-            start: isoDay(filters.startDate ?? new Date()),
-            end:   isoDay(filters.endDate   ?? new Date()),
-            emp:   filters.employeeIds,
-            view:  filters.view,
-            dept:  filters.departments,
-            prio:  filters.priorities,
-            subj:  filters.subjects,
-          }}
-        />
-      </div>
+      {/* No wrapper <div> here — the bar is `position: sticky`, and a wrapper
+          sized to it leaves it nowhere to travel, so it scrolls straight away.
+          The responsive hide rides on the bar's own root via `className`. */}
+      <FilterBar
+        className={mobileToday ? "max-md:hidden" : undefined}
+        employees={employeeOptions}
+        subjects={subjects}
+        departments={departments}
+        initial={{
+          start: isoDay(filters.startDate ?? new Date()),
+          end:   isoDay(filters.endDate   ?? new Date()),
+          emp:   filters.employeeIds,
+          view:  filters.view,
+          dept:  filters.departments,
+          prio:  filters.priorities,
+          subj:  filters.subjects,
+        }}
+      />
       <main>
         {isEmpty ? (
           <WelcomeHero />

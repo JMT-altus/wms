@@ -5,6 +5,7 @@ import { TaskListPage } from "@/components/tasks/task-list-page";
 import { listEmployeeOptions } from "@/lib/queries/employees";
 import { listTasks, listDistinctSubjects, countUnassignedTasks, getTaskById } from "@/lib/queries/tasks";
 import { listActiveClientNames } from "@/lib/queries/clients";
+import { listActiveDepartmentNames } from "@/lib/queries/departments";
 import { parseTaskFilters } from "@/lib/task-filters";
 import { requireUser } from "@/lib/auth/current";
 import { canQuickDump } from "@/lib/auth/quick-dump";
@@ -30,11 +31,12 @@ export default async function TasksPage({ searchParams }: PageProps) {
     defaultDoerId: me.isAdmin ? undefined : me.id,
   });
 
-  const [allEmployees, rows, subjects, clients, statusDisplay, unassignedCount] = await Promise.all([
+  const [allEmployees, rows, subjects, clients, departments, statusDisplay, unassignedCount] = await Promise.all([
     listEmployeeOptions(),
     listTasks(filters),
     listDistinctSubjects(),
     listActiveClientNames(),
+    listActiveDepartmentNames(),
     getStatusDisplayMap(),
     // The pool is admins-only to triage; skip the count for everyone else.
     me.isAdmin ? countUnassignedTasks() : Promise.resolve(0),
@@ -82,6 +84,7 @@ export default async function TasksPage({ searchParams }: PageProps) {
       <FilterBar
         employees={employeeOptions}
         subjects={subjects}
+        departments={departments}
         statusOptions={statusOptions}
         clients={clients}
         me={{ id: me.id, isAdmin: me.isAdmin }}

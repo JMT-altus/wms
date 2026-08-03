@@ -208,8 +208,9 @@ export function AdminMobileBar({ adminName, adminEmail }: Props) {
                   </div>
                 </div>
               </div>
+              {/* Hub, not the WMS dashboard — see admin-sidebar.tsx. */}
               <Link
-                href={"/" as Route}
+                href={"/hub" as Route}
                 className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-white/80 hover:bg-white/10 transition-colors"
               >
                 <ArrowLeft size={16} strokeWidth={2.2} />

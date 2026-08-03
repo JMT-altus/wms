@@ -171,6 +171,15 @@ export const PRIORITY_LABELS: Record<TaskPriority, string> = {
   not_imp_not_urgent: "Normal",
 };
 
+/**
+ * LEGACY seed list — NOT the source of truth for departments.
+ *
+ * Departments live in the `departments` table and are managed at
+ * /admin/departments; read them with `listActiveDepartmentNames()`.  This array
+ * survives only so `scripts/sync-departments.ts` can seed a fresh DB.  Do not
+ * use it to build pickers or to validate filter input: anything added through
+ * the admin UI is absent here, and filtering against it silently drops it.
+ */
 export const DEPARTMENTS = [
   "Founder Office",
   "Handholding",

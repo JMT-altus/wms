@@ -4,6 +4,7 @@ import { getStatusDisplayMap } from "@/lib/queries/status-display";
 import { requireUser } from "@/lib/auth/current";
 import { type TaskStatus, type StatusColorToken } from "@/db/enums";
 import { FocusWorkspace } from "@/components/tasks/focus-workspace";
+import { markTaskSeenByDoer } from "@/app/(app)/tasks/read-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +21,10 @@ interface PageProps {
 export default async function TaskFocusPage({ params }: PageProps) {
   const { id } = await params;
   const me = await requireUser();
+  // Same "Not Seen" → "Not Started" auto-advance as the detail page — opening
+  // a task in focus mode counts just as much as opening it normally. Runs
+  // BEFORE the read so the workspace renders the new status.
+  await markTaskSeenByDoer(id);
   const task = await getTaskById(id);
   if (!task) notFound();
 

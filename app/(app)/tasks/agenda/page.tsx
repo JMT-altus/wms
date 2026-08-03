@@ -6,6 +6,7 @@ import type { AgendaTask } from "@/components/tasks/agenda-board";
 import { listEmployeeOptions } from "@/lib/queries/employees";
 import { listTasks, listDistinctSubjects } from "@/lib/queries/tasks";
 import { listActiveClientNames } from "@/lib/queries/clients";
+import { listActiveDepartmentNames } from "@/lib/queries/departments";
 import { parseTaskFilters } from "@/lib/task-filters";
 import { isDoneLate } from "@/lib/task-late";
 import { requireUser } from "@/lib/auth/current";
@@ -33,11 +34,12 @@ export default async function AgendaPage({ searchParams }: PageProps) {
   // FilterBar as the Tasks tab can widen/redirect it from there.
   const filters = parseTaskFilters(sp, /*archived*/ false, { defaultDoerId: me.id });
 
-  const [allEmployees, rows, subjects, clients, statusDisplay] = await Promise.all([
+  const [allEmployees, rows, subjects, clients, departments, statusDisplay] = await Promise.all([
     listEmployeeOptions(),
     listTasks(filters),
     listDistinctSubjects(),
     listActiveClientNames(),
+    listActiveDepartmentNames(),
     getStatusDisplayMap(),
   ]);
 
@@ -86,6 +88,7 @@ export default async function AgendaPage({ searchParams }: PageProps) {
       <FilterBar
         employees={employeeOptions}
         subjects={subjects}
+        departments={departments}
         statusOptions={statusOptions}
         clients={clients}
         me={{ id: me.id, isAdmin: me.isAdmin }}

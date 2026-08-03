@@ -50,6 +50,9 @@ interface Props {
     client?: string[];
   };
   subjects?: string[]; // pool of distinct task subjects for autocomplete
+  /** Active department names from /admin/departments. When empty, the
+   *  Department chip is hidden — there's nothing to pick. */
+  departments?: string[];
   /** Status options (value + admin-overridable label). When provided, the
    *  Status filter chip is shown. Omitted on views without status filtering. */
   statusOptions?: { value: string; label: string }[];
@@ -61,6 +64,12 @@ interface Props {
   /** How the assignee filter was resolved on the server. Controls the initial
    *  state of the scope chip. */
   assigneeMode?: AssigneeMode;
+  /** Extra classes for the sticky root. Callers that need to hide the bar
+   *  responsively MUST pass them here rather than wrapping this component in a
+   *  <div> — `position: sticky` can only travel inside its parent's box, and a
+   *  wrapper sized to the bar itself leaves it nowhere to go, silently killing
+   *  the stick. */
+  className?: string;
 }
 
 const ONE_DAY = 24 * 60 * 60 * 1000;
@@ -69,10 +78,12 @@ export function FilterBar({
   employees,
   initial,
   subjects,
+  departments,
   statusOptions,
   clients,
   me,
   assigneeMode: initialAssigneeMode = "all",
+  className,
 }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -209,7 +220,7 @@ export function FilterBar({
     <div
       // Tight against the bottom of the sticky light header (96px desktop,
       // 72px mobile). No gap → no clipped content peeking through.
-      className="sticky top-[96px] max-md:top-[72px] z-40 border-b border-hairline"
+      className={`sticky top-[96px] max-md:top-[72px] z-40 border-b border-hairline${className ? ` ${className}` : ""}`}
       style={{
         backgroundColor: "rgba(250, 251, 252, 0.82)",
         backdropFilter: "blur(20px) saturate(150%)",
@@ -349,7 +360,9 @@ export function FilterBar({
               onChange={setClient}
             />
           )}
-          <DepartmentFilter selected={dept} onChange={setDept} />
+          {departments && departments.length > 0 && (
+            <DepartmentFilter options={departments} selected={dept} onChange={setDept} />
+          )}
           <PriorityFilter selected={prio} onChange={setPrio} />
           {statusOptions && statusOptions.length > 0 && (
             <StatusFilter options={statusOptions} selected={status} onChange={setStatus} />

@@ -5,6 +5,7 @@ import { KanbanBoard } from "@/components/tasks/kanban-board";
 import { listBoardTasks, listDistinctSubjects, getTaskById } from "@/lib/queries/tasks";
 import { listEmployeeOptions } from "@/lib/queries/employees";
 import { listActiveClientNames } from "@/lib/queries/clients";
+import { listActiveDepartmentNames } from "@/lib/queries/departments";
 import { getStatusDisplayMap } from "@/lib/queries/status-display";
 import { getOrgSettings } from "@/lib/queries/org-settings";
 import { parseTaskFilters } from "@/lib/task-filters";
@@ -36,13 +37,14 @@ export default async function KanbanPage({ searchParams }: PageProps) {
     defaultDoerId: me.isAdmin ? undefined : me.id,
   });
 
-  const [tasks, statusDisplay, employees, org, subjects, clients] = await Promise.all([
+  const [tasks, statusDisplay, employees, org, subjects, clients, departments] = await Promise.all([
     listBoardTasks(filters),
     getStatusDisplayMap(),
     listEmployeeOptions(),
     getOrgSettings(),
     listDistinctSubjects(),
     listActiveClientNames(),
+    listActiveDepartmentNames(),
   ]);
   const labels = Object.fromEntries(
     Object.entries(statusDisplay).map(([k, v]) => [k, v.label]),
@@ -75,6 +77,7 @@ export default async function KanbanPage({ searchParams }: PageProps) {
       <FilterBar
         employees={employeeOptions}
         subjects={subjects}
+        departments={departments}
         statusOptions={statusOptions}
         clients={clients}
         me={{ id: me.id, isAdmin: me.isAdmin }}
