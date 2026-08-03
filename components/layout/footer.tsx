@@ -30,7 +30,7 @@ export function DashboardFooter() {
           className="text-center flex-1"
           style={{ fontSize: 13.5, color: "rgba(255, 255, 255, 0.55)" }}
         >
-          © JMT Drive Solutions 2025–2035 · All rights reserved
+          © Altus Corp 2025–2035 · All rights reserved
         </p>
 
         {/* RIGHT — powered by Altus Corp */}

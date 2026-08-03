@@ -360,11 +360,11 @@ export default async function HubPage({
 
         {/* Subtle platform credit — the tasteful home for a "powered by" line. */}
         <footer className="shrink-0 pb-6 pt-2 max-md:pb-5">
-          <div className="flex items-center justify-center gap-2.5 opacity-80">
+          <div className="flex items-center justify-center gap-3.5 opacity-80">
             <span
               style={{
                 fontFamily: "var(--font-mono-display), ui-monospace, monospace",
-                fontSize: 10.5,
+                fontSize: 12,
                 fontWeight: 700,
                 letterSpacing: "0.22em",
                 color: "rgba(15,23,42,0.42)",
@@ -377,7 +377,7 @@ export default async function HubPage({
               src="/altus-corp-logo.png"
               alt="Altus Corp"
               className="w-auto"
-              style={{ height: 26, display: "block", filter: "drop-shadow(0 2px 5px rgba(15,23,42,0.15))" }}
+              style={{ height: 44, display: "block", filter: "drop-shadow(0 3px 7px rgba(15,23,42,0.16))" }}
             />
           </div>
         </footer>
