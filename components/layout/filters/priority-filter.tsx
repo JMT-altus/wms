@@ -24,6 +24,7 @@ export function PriorityFilter({
         onChange={onChange}
         placeholder="All Priorities"
         className="min-w-[6.5rem] !text-[14px]"
+        openOnHover
       />
     </div>
   );

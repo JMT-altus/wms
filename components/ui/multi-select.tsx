@@ -15,6 +15,7 @@ import {
 } from "./command";
 import { cn } from "@/lib/utils";
 import { focusNextFrom } from "@/lib/focus-next";
+import { useHoverOpen } from "@/lib/use-hover-open";
 
 interface MultiSelectProps {
   options: { value: string; label: string }[];
@@ -22,6 +23,9 @@ interface MultiSelectProps {
   onChange: (selected: string[]) => void;
   placeholder?: string;
   className?: string;
+  /** Open on mouse hover, close shortly after the pointer leaves both the chip
+   *  and the menu. Opt-in — see useHoverOpen for why it isn't the default. */
+  openOnHover?: boolean;
 }
 
 export function MultiSelect({
@@ -30,10 +34,46 @@ export function MultiSelect({
   onChange,
   placeholder = "All Employees",
   className,
+  openOnHover = false,
 }: MultiSelectProps) {
-  const [open, setOpen] = React.useState(false);
   const triggerRef = React.useRef<HTMLButtonElement>(null);
+  const {
+    open,
+    setOpen,
+    setAnchor,
+    setContent,
+    enter: hoverEnter,
+    leave: hoverLeave,
+    hoverProps,
+    contentDismissProps,
+  } = useHoverOpen(openOnHover);
   const labelMap = new Map(options.map((o) => [o.value, o.label]));
+
+  // The affordance the user aims at is the whole `.filter-chip` — leading icon,
+  // label, chevron — but this component only owns the button inside it. Bind
+  // the hover listeners to that chip so approaching from the icon side counts;
+  // fall back to the button where there's no chip. pointerenter/leave fire once
+  // for the element and all its descendants, so the chip alone is enough.
+  React.useEffect(() => {
+    if (!openOnHover) return;
+    const btn = triggerRef.current;
+    if (!btn) return;
+    const host = btn.closest<HTMLElement>(".filter-chip") ?? btn;
+    setAnchor(host);
+    const onEnter = (e: PointerEvent) => {
+      if (e.pointerType === "mouse") hoverEnter();
+    };
+    const onLeave = (e: PointerEvent) => {
+      if (e.pointerType === "mouse") hoverLeave();
+    };
+    host.addEventListener("pointerenter", onEnter);
+    host.addEventListener("pointerleave", onLeave);
+    return () => {
+      host.removeEventListener("pointerenter", onEnter);
+      host.removeEventListener("pointerleave", onLeave);
+      setAnchor(null);
+    };
+  }, [openOnHover, hoverEnter, hoverLeave, setAnchor]);
 
   // Tab commits the highlighted option and advances to the next field, instead
   // of just dismissing the menu (cmdk only commits on Enter / click).
@@ -98,7 +138,12 @@ export function MultiSelect({
           <ChevronDown size={14} className="text-ink-subtle" />
         </button>
       </PopoverTrigger>
-      <PopoverContent className="w-72 p-0">
+      <PopoverContent
+        ref={setContent}
+        className="w-72 p-0"
+        {...hoverProps}
+        {...contentDismissProps}
+      >
         <Command onKeyDown={onCommandKeyDown}>
           <CommandInput placeholder="Search…" />
           <CommandList className="max-h-64 overflow-auto">

@@ -27,6 +27,7 @@ export function DepartmentFilter({
         onChange={onChange}
         placeholder="All Departments"
         className="min-w-[6.5rem] !text-[14px]"
+        openOnHover
       />
     </div>
   );

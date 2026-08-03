@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { motion } from "motion/react";
 import { MultiSelect } from "@/components/ui/multi-select";
+import { useHoverOpen } from "@/lib/use-hover-open";
 import { DepartmentFilter } from "./filters/department-filter";
 import { PriorityFilter } from "./filters/priority-filter";
 import { StatusFilter } from "./filters/status-filter";
@@ -111,6 +112,17 @@ export function FilterBar({
   const [client, setClient] = React.useState<string[]>(initial.client ?? []);
   const [sheetOpen, setSheetOpen] = React.useState(false);
   const pathname = usePathname();
+
+  // The date range is a bare Popover rather than a MultiSelect, so it wires up
+  // hover-to-open itself. Same behaviour as the other chips.
+  const {
+    open: dateOpen,
+    setOpen: setDateOpen,
+    setAnchor: setDateAnchor,
+    setContent: setDateContent,
+    hoverProps: dateHoverProps,
+    contentDismissProps: dateDismissProps,
+  } = useHoverOpen(true);
 
   const range: DateRange | undefined = React.useMemo(() => {
     try {
@@ -271,9 +283,16 @@ export function FilterBar({
           <div className="flex-1 min-w-0 overflow-x-auto nav-scroll max-sm:flex-none max-sm:overflow-visible">
             <div className="flex items-center gap-2 w-max max-sm:w-full max-sm:flex-col max-sm:items-stretch max-sm:gap-3">
           {/* Date range */}
-          <Popover.Root>
+          <Popover.Root open={dateOpen} onOpenChange={setDateOpen}>
             <Popover.Trigger asChild>
-              <button type="button" className="filter-chip max-sm:w-full max-sm:justify-between">
+              {/* Here the chip IS the trigger, so it doubles as the hover
+                  anchor. Radix's asChild composes this ref with its own. */}
+              <button
+                ref={setDateAnchor}
+                type="button"
+                className="filter-chip max-sm:w-full max-sm:justify-between"
+                {...dateHoverProps}
+              >
                 <Calendar size={16} className="text-ink-subtle" strokeWidth={2} />
                 <span className="text-[14px] font-medium text-ink-strong tabular-nums">
                   {formattedRange}
@@ -282,11 +301,14 @@ export function FilterBar({
             </Popover.Trigger>
             <Popover.Portal>
               <Popover.Content
+                ref={setDateContent}
                 align="start"
                 sideOffset={10}
                 collisionPadding={12}
                 className="z-[100] bg-surface-card border border-hairline-strong rounded-chip p-3 max-h-[var(--radix-popover-content-available-height)] overflow-y-auto"
                 style={{ boxShadow: "0 16px 40px rgba(15, 23, 42, 0.14)" }}
+                {...dateHoverProps}
+                {...dateDismissProps}
               >
                 <DayPicker
                   mode="range"
@@ -350,6 +372,7 @@ export function FilterBar({
                   : "All Employees"
               }
               className="min-w-[6.5rem] !text-[14px]"
+              openOnHover
             />
           </div>
 

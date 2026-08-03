@@ -23,6 +23,7 @@ export function StatusFilter({
         onChange={onChange}
         placeholder="All Status"
         className="min-w-[6.5rem] !text-[14px]"
+        openOnHover
       />
     </div>
   );
