@@ -7,10 +7,16 @@ import { db } from "@/lib/db";
 import {
   projectNodes,
   projectMembers,
+  projectAudience,
   employees,
   type Employee,
   type ProjectNode,
 } from "@/db/schema";
+import { isSuperAdmin } from "@/lib/auth/super-admin";
+import {
+  SetVisibilitySchema,
+  type SetVisibilityInput,
+} from "@/lib/validators/task";
 import { requireUser } from "@/lib/auth/current";
 import { rateLimitOrError } from "@/lib/rate-limit";
 import { CACHE_TAGS } from "@/lib/cache-tags";
@@ -114,6 +120,69 @@ export async function createProjectNode(
   if (!inserted) return { ok: false, error: "Insert returned no row" };
   revalidateProjectSurfaces();
   return { ok: true, id: inserted.id };
+}
+
+/**
+ * Change who can see a project. ROOTS ONLY — visibility is inherited by the
+ * whole subtree, so setting it on a milestone would be a lie (its parent
+ * decides). Restricted to the owner, the creator and super-admins.
+ */
+export async function setProjectVisibility(
+  id: string,
+  input: SetVisibilityInput,
+): Promise<Result> {
+  const me = await requireUser();
+  const limited = rateLimitOrError(me.id, "write");
+  if (limited) return limited;
+
+  const parsed = SetVisibilitySchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
+  }
+
+  const node = await db.query.projectNodes.findFirst({
+    where: eq(projectNodes.id, id),
+  });
+  if (!node) return { ok: false, error: "Project not found." };
+  if (node.parentId) {
+    return {
+      ok: false,
+      error: "Visibility is set on the project itself and applies to everything under it.",
+    };
+  }
+  if (
+    node.ownerId !== me.id &&
+    node.createdById !== me.id &&
+    !isSuperAdmin(me.email)
+  ) {
+    return { ok: false, error: "Only the project owner can change who sees it." };
+  }
+
+  try {
+    await db.transaction(async (tx) => {
+      await tx
+        .update(projectNodes)
+        .set({ visibility: parsed.data.visibility, updatedAt: new Date() })
+        .where(eq(projectNodes.id, id));
+      // Replaced wholesale, not diffed — a partial update is how stale grants
+      // survive a narrowing edit.
+      await tx.delete(projectAudience).where(eq(projectAudience.projectNodeId, id));
+      if (parsed.data.visibility === "restricted" && parsed.data.audience.length > 0) {
+        await tx.insert(projectAudience).values(
+          parsed.data.audience.map((a) => ({
+            projectNodeId: id,
+            kind: a.kind,
+            refId: a.kind === "management" ? null : a.refId,
+          })),
+        );
+      }
+    });
+  } catch (err) {
+    return { ok: false, error: `DB: ${err instanceof Error ? err.message : String(err)}` };
+  }
+
+  revalidateProjectSurfaces();
+  return { ok: true };
 }
 
 export async function renameProjectNode(

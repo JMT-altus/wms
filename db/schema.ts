@@ -25,6 +25,7 @@ import {
   TASK_PRIORITIES,
   APPROVAL_STATUSES,
 } from "./enums";
+import type { AudienceKind, Visibility } from "./enums";
 import type { FormFieldDef } from "@/lib/forms/field-types";
 
 export const taskStatusEnum = pgEnum("task_status", TASK_STATUSES);
@@ -40,6 +41,13 @@ export const designations = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     name: text("name").notNull().unique(),
     isActive: boolean("is_active").notNull().default(true),
+    /**
+     * 0077 — marks this designation as management for the "visible to managers"
+     * audience. An explicit flag, NOT a name match: names are free text an
+     * admin can rename from /admin/designations, and keying visibility off the
+     * string would silently change who can see things on a rename.
+     */
+    isManagement: boolean("is_management").notNull().default(false),
     sortOrder: integer("sort_order").notNull().default(100),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -443,6 +451,16 @@ export const projectNodes = pgTable(
     createdById: uuid("created_by_id").references(() => employees.id, {
       onDelete: "set null",
     }),
+    /**
+     * 0077 — set on the ROOT project and inherited by every descendant.
+     * Per-node visibility would allow a public milestone under a private
+     * project and force every read to walk ancestors; reads resolve a node's
+     * effective visibility from its root instead.
+     */
+    visibility: text("visibility")
+      .$type<Visibility>()
+      .notNull()
+      .default("internal"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -450,6 +468,39 @@ export const projectNodes = pgTable(
     index("project_nodes_parent_idx").on(t.parentId),
     index("project_nodes_kind_idx").on(t.kind, t.isArchived),
   ],
+);
+
+/**
+ * 0077 — who a `restricted` task is opened up to, beyond the people on it.
+ * `refId` is a department id or an employee id depending on `kind`, and NULL
+ * for `management` (which means "anyone holding a designation flagged
+ * is_management"). No FK, since the target table varies by kind.
+ */
+export const taskAudience = pgTable(
+  "task_audience",
+  {
+    taskId: uuid("task_id")
+      .notNull()
+      .references(() => tasks.id, { onDelete: "cascade" }),
+    kind: text("kind").$type<AudienceKind>().notNull(),
+    refId: uuid("ref_id"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("task_audience_lookup_idx").on(t.kind, t.refId)],
+);
+
+/** Same, for project roots. */
+export const projectAudience = pgTable(
+  "project_audience",
+  {
+    projectNodeId: uuid("project_node_id")
+      .notNull()
+      .references(() => projectNodes.id, { onDelete: "cascade" }),
+    kind: text("kind").$type<AudienceKind>().notNull(),
+    refId: uuid("ref_id"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("project_audience_lookup_idx").on(t.kind, t.refId)],
 );
 
 /**
@@ -550,6 +601,16 @@ export const tasks = pgTable(
     googleEventId: text("google_event_id"),
     googleSyncedDoerId: uuid("google_synced_doer_id"),
     archived: boolean("archived").notNull().default(false),
+    /**
+     * 0077 — row-level visibility. 'internal' (the default, and what every
+     * pre-existing row migrated to) means everyone, i.e. the behaviour before
+     * this column existed. See lib/access/visibility.ts for the rules and
+     * lib/auth/task-visibility.ts for the SQL predicate every read applies.
+     */
+    visibility: text("visibility")
+      .$type<Visibility>()
+      .notNull()
+      .default("internal"),
     // M2.1 additions — provenance + approval (approved_* used in M2.2) + optimistic lock
     createdById: uuid("created_by_id").references(() => employees.id, {
       onDelete: "restrict",
@@ -1251,6 +1312,10 @@ export type SettingsEvent = typeof settingsEvents.$inferSelect;
 export type NewSettingsEvent = typeof settingsEvents.$inferInsert;
 export type ModuleAccessGrant = typeof moduleAccessGrants.$inferSelect;
 export type NewModuleAccessGrant = typeof moduleAccessGrants.$inferInsert;
+export type TaskAudience = typeof taskAudience.$inferSelect;
+export type NewTaskAudience = typeof taskAudience.$inferInsert;
+export type ProjectAudience = typeof projectAudience.$inferSelect;
+export type NewProjectAudience = typeof projectAudience.$inferInsert;
 export type AuthSession = typeof authSessions.$inferSelect;
 export type NewAuthSession = typeof authSessions.$inferInsert;
 export type AuditDataExport = typeof auditDataExports.$inferSelect;

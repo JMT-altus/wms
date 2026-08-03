@@ -3,9 +3,42 @@ import {
   TASK_PRIORITIES,
   APPROVAL_STATUSES,
   TASK_RECURRENCES,
+  AUDIENCE_KINDS,
+  VISIBILITIES,
 } from "@/db/enums";
 
 const uuid = z.string().guid("Must be a UUID");
+
+/**
+ * One audience entry on a `restricted` row. `management` carries no id (it
+ * means "anyone with a designation flagged is_management"); the other two must.
+ */
+export const AudienceEntrySchema = z
+  .object({
+    kind: z.enum(AUDIENCE_KINDS),
+    refId: uuid.nullable().optional().default(null),
+  })
+  .refine(
+    (v) => (v.kind === "management" ? v.refId === null : v.refId !== null),
+    "Pick a department or a person for this audience entry",
+  );
+
+/** Reused by task create, task edit and the project write path. */
+export const VisibilityFields = {
+  visibility: z.enum(VISIBILITIES).optional().default("internal"),
+  audience: z.array(AudienceEntrySchema).max(100).optional().default([]),
+};
+
+export const SetVisibilitySchema = z
+  .object({
+    visibility: z.enum(VISIBILITIES),
+    audience: z.array(AudienceEntrySchema).max(100).optional().default([]),
+  })
+  .refine(
+    (v) => v.visibility !== "restricted" || v.audience.length > 0,
+    "Pick at least one department, manager group or person to share with",
+  );
+export type SetVisibilityInput = z.input<typeof SetVisibilitySchema>;
 const isoDateToDate = z
   .string()
   .datetime({ message: "Must be an ISO-8601 timestamp" })
@@ -45,10 +78,15 @@ export const CreateTaskSchema = z
     recurrence: z.enum(TASK_RECURRENCES).nullable().optional().default(null),
     recurrenceRule: z.string().trim().max(200).nullable().optional().default(null),
     projectNodeId: z.string().uuid().nullable().optional().default(null),
+    ...VisibilityFields,
   })
   .refine(
     (v) => Boolean(v.doerId) !== Boolean(v.doerIds && v.doerIds.length > 0),
     "Provide exactly one of doerId or doerIds",
+  )
+  .refine(
+    (v) => v.visibility !== "restricted" || v.audience.length > 0,
+    "Pick at least one department, manager group or person to share with",
   )
   .refine(
     (v) =>

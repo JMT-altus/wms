@@ -11,6 +11,7 @@ import {
   TASK_PRIORITIES,
   type TaskStatus,
   type TaskPriority,
+  type Visibility,
 } from "@/db/enums";
 import {
   CreateTaskSchema,
@@ -28,8 +29,11 @@ import {
   type SetApprovalStatusInput,
   SetRevisedTargetDateSchema,
   type SetRevisedTargetDateInput,
+  SetVisibilitySchema,
+  type SetVisibilityInput,
 } from "@/lib/validators/task";
-import { taskEvents, clients, subjects, employees } from "@/db/schema";
+import { taskEvents, taskAudience, clients, subjects, employees } from "@/db/schema";
+import { isSuperAdmin } from "@/lib/auth/super-admin";
 import { CreateClientSchema } from "@/lib/validators/client";
 import { CreateSubjectSchema } from "@/lib/validators/subject";
 import { requireUser } from "@/lib/auth/current";
@@ -737,6 +741,87 @@ export async function bulkDelete(taskIds: string[]): Promise<BulkResult> {
   return { ok: true, updated: doomed.length, skipped: ids.length - doomed.length };
 }
 
+/**
+ * Change who can see an existing task.
+ *
+ * Restricted to people who are ON the task (or a super-admin): visibility is
+ * not an ordinary editable field, because widening it is a disclosure and
+ * narrowing it can hide a task from the person doing the work.
+ */
+export async function setTaskVisibility(
+  taskId: string,
+  input: SetVisibilityInput,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!isUuid(taskId)) return { ok: false, error: "Invalid task id." };
+  const me = await requireUser();
+  const limited = rateLimitOrError(me.id, "write");
+  if (limited) return limited;
+
+  const parsed = SetVisibilitySchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
+  }
+
+  const current = await db.query.tasks.findFirst({
+    where: eq(tasks.id, taskId),
+    columns: {
+      id: true,
+      visibility: true,
+      doerId: true,
+      initiatorId: true,
+      createdById: true,
+    },
+  });
+  if (!current) return { ok: false, error: "Task not found." };
+
+  const onTheTask =
+    current.doerId === me.id ||
+    current.initiatorId === me.id ||
+    current.createdById === me.id;
+  if (!onTheTask && !isSuperAdmin(me.email)) {
+    return { ok: false, error: "Only someone on this task can change who sees it." };
+  }
+
+  try {
+    await db.transaction(async (tx) => {
+      await tx
+        .update(tasks)
+        .set({ visibility: parsed.data.visibility, updatedAt: new Date() })
+        .where(eq(tasks.id, taskId));
+      // Rewrite the audience wholesale rather than diffing — the list is tiny
+      // and a partial update is how stale grants survive a narrowing edit.
+      await tx.delete(taskAudience).where(eq(taskAudience.taskId, taskId));
+      if (parsed.data.visibility === "restricted" && parsed.data.audience.length > 0) {
+        await tx.insert(taskAudience).values(
+          parsed.data.audience.map((a) => ({
+            taskId,
+            kind: a.kind,
+            refId: a.kind === "management" ? null : a.refId,
+          })),
+        );
+      }
+    });
+  } catch (err) {
+    return { ok: false, error: `Could not save: ${(err as Error).message}` };
+  }
+
+  try {
+    await db.insert(taskEvents).values({
+      taskId,
+      actorId: me.id,
+      eventType: "visibility_changed",
+      fromValue: { visibility: current.visibility },
+      toValue: { visibility: parsed.data.visibility, audience: parsed.data.audience },
+    });
+  } catch (err) {
+    console.error("[setTaskVisibility] audit write failed", err);
+  }
+
+  revalidateTaskRoutes();
+  revalidatePath(`/tasks/${taskId}`);
+  return { ok: true };
+}
+
 export async function createTask(input: CreateTaskInput): Promise<
   | { ok: true; id: string; ids: string[] }
   | { ok: false; error: string }
@@ -761,6 +846,7 @@ export async function createTask(input: CreateTaskInput): Promise<
  */
 export async function quickDumpTasks(
   titles: string[],
+  visibility: Visibility = "internal",
 ): Promise<{ ok: true; count: number } | { ok: false; error: string }> {
   const me = await requireUser();
   if (!canQuickDump(me.email)) {
@@ -769,8 +855,17 @@ export async function quickDumpTasks(
   const limited = rateLimitOrError(me.id, "write");
   if (limited) return limited;
   if (!Array.isArray(titles)) return { ok: false, error: "Invalid input." };
+  // 'restricted' needs an audience, which quick dump has no UI for — it's a
+  // capture box, not a sharing dialog. Personal or Everyone only.
+  if (visibility !== "private" && visibility !== "internal") {
+    return { ok: false, error: "Quick Dump supports Personal or Everyone only." };
+  }
 
-  const result = await createUnassignedTasks({ id: me.id, name: me.name }, titles);
+  const result = await createUnassignedTasks(
+    { id: me.id, name: me.name },
+    titles,
+    visibility,
+  );
   if (!result.ok) return result;
 
   revalidateTaskRoutes();

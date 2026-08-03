@@ -18,6 +18,8 @@ interface Props {
   subjects: string[];
   /** Project tree nodes for the optional Project link. */
   projectNodes?: { id: string; label: string }[];
+  /** Audience options for the visibility picker. */
+  departments?: { id: string; name: string }[];
   /** Optional defaults — usually pre-fill initiator = current user. */
   defaultInitiatorId?: string;
   /** Admins get the "Import" shortcut in the dialog header. */
@@ -28,7 +30,7 @@ interface Props {
 
 const HINT_STORAGE_KEY = "vp_seen_new_task_hint";
 
-export function NewTaskDialog({ employees, clients, subjects, projectNodes, defaultInitiatorId, isAdmin, canQuickDump }: Props) {
+export function NewTaskDialog({ employees, clients, subjects, projectNodes, departments, defaultInitiatorId, isAdmin, canQuickDump }: Props) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
@@ -376,6 +378,7 @@ export function NewTaskDialog({ employees, clients, subjects, projectNodes, defa
               clients={clients}
               subjects={subjects}
               projectNodes={projectNodes}
+              departments={departments}
               onSuccess={onSuccess}
               defaults={{ initiatorId: defaultInitiatorId }}
             />

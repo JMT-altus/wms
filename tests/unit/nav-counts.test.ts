@@ -34,6 +34,15 @@ vi.mock("@/lib/queries/notifications", () => ({
   getUnreadCount: vi.fn(() => Promise.resolve(0)),
 }));
 
+// The badges are visibility-filtered and cached per viewer now, which drags in
+// `server-only` and the whole session stack. Stub it: the visibility RULES are
+// covered by tests/unit/visibility.test.ts, and what this file asserts is the
+// returned shape.
+vi.mock("@/lib/auth/task-visibility", () => ({
+  getViewer: vi.fn(() => Promise.resolve(null)),
+  visibleTaskCondition: vi.fn(() => Promise.resolve(undefined)),
+}));
+
 import { getNavCounts } from "@/lib/queries/nav-counts";
 
 describe("getNavCounts", () => {

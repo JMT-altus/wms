@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import * as Dialog from "@radix-ui/react-dialog";
-import { Zap, X, Check, Loader2, Mic, Settings2 } from "lucide-react";
+import { Zap, X, Check, Loader2, Mic, Settings2, Lock, Globe } from "lucide-react";
 import { quickDumpTasks } from "@/app/(app)/tasks/actions";
 import { fireToast } from "@/lib/toast";
 import { useDictation } from "@/lib/hooks/use-dictation";
@@ -64,6 +64,10 @@ export function QuickDumpDialog({
   const [added, setAdded] = React.useState<string[]>([]);
   const [keywordsText, setKeywordsText] = React.useState(DEFAULT_KEYWORDS);
   const [showKw, setShowKw] = React.useState(false);
+  // Quick Dump is the capture box for half-formed thoughts, so it gets the
+  // simple binary rather than the full picker: keep it to yourself, or don't.
+  // Anything finer is a decision for the task's own page later.
+  const [personal, setPersonal] = React.useState(false);
   const inputRef = React.useRef<HTMLInputElement>(null);
 
   // Refs mirror state so the speech callbacks (which capture once) stay fresh.
@@ -93,18 +97,21 @@ export function QuickDumpDialog({
     setInterim(v);
   };
 
-  const saveTitles = React.useCallback(async (titles: string[]) => {
-    const clean = titles.map((t) => t.trim()).filter(Boolean);
-    if (clean.length === 0) return;
-    setPending(true);
-    try {
-      const res = await quickDumpTasks(clean);
-      if (!res.ok) fireToast({ message: res.error || "Couldn't add." });
-      else setAdded((prev) => [...clean, ...prev]);
-    } finally {
-      setPending(false);
-    }
-  }, []);
+  const saveTitles = React.useCallback(
+    async (titles: string[]) => {
+      const clean = titles.map((t) => t.trim()).filter(Boolean);
+      if (clean.length === 0) return;
+      setPending(true);
+      try {
+        const res = await quickDumpTasks(clean, personal ? "private" : "internal");
+        if (!res.ok) fireToast({ message: res.error || "Couldn't add." });
+        else setAdded((prev) => [...clean, ...prev]);
+      } finally {
+        setPending(false);
+      }
+    },
+    [personal],
+  );
 
   // Split raw text into task titles: by line, then by any trigger keyword.
   const splitToTitles = React.useCallback((raw: string): string[] => {
@@ -254,6 +261,29 @@ export function QuickDumpDialog({
                 <Mic size={18} strokeWidth={2.4} />
               </button>
             )}
+            <button
+              type="button"
+              aria-pressed={personal}
+              onClick={() => setPersonal((v) => !v)}
+              title={
+                personal
+                  ? "Personal — only you will see these"
+                  : "Everyone — the whole team will see these"
+              }
+              className="inline-flex items-center gap-1.5 px-3 rounded-chip text-[13px] font-bold transition-colors"
+              style={
+                personal
+                  ? { background: "rgba(15,23,42,0.86)", color: "#fff" }
+                  : {
+                      background: "var(--color-surface-soft)",
+                      color: "var(--color-ink-soft)",
+                      border: "1px solid var(--color-hairline)",
+                    }
+              }
+            >
+              {personal ? <Lock size={14} strokeWidth={2.5} /> : <Globe size={14} strokeWidth={2.5} />}
+              {personal ? "Personal" : "Everyone"}
+            </button>
             <button
               type="button"
               onClick={() => {

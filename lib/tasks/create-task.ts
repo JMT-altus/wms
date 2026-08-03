@@ -1,10 +1,11 @@
 import { afterResponse } from "@/lib/after";
 import { db, tasks } from "@/lib/db";
-import { taskEvents } from "@/db/schema";
+import { taskEvents, taskAudience } from "@/db/schema";
 import { notify } from "@/lib/notifications/dispatch";
 import { reconcileTaskEvent } from "@/lib/google/sync";
 import { deriveShortId, nextShortIdCandidate } from "@/lib/import/short-id";
 import { CreateTaskSchema, type CreateTaskInput } from "@/lib/validators/task";
+import type { Visibility } from "@/db/enums";
 import { taskLabel } from "@/lib/tasks/set-status";
 
 /**
@@ -62,6 +63,7 @@ export async function createTasksCore(
             recurrenceRule: parsed.recurrenceRule ?? null,
             projectNodeId: parsed.projectNodeId ?? null,
             createdById: actor.id,
+            visibility: parsed.visibility,
             shortId,
             status: "dont_know",
           })
@@ -86,6 +88,23 @@ export async function createTasksCore(
       };
     }
 
+    // Audience rows only mean anything for a `restricted` task; the validator
+    // already rejects `restricted` with an empty list, so this can't silently
+    // create a task nobody but its participants can see.
+    if (parsed.visibility === "restricted" && parsed.audience.length > 0) {
+      try {
+        await db.insert(taskAudience).values(
+          parsed.audience.map((a) => ({
+            taskId: row!.id,
+            kind: a.kind,
+            refId: a.kind === "management" ? null : a.refId,
+          })),
+        );
+      } catch (err) {
+        console.error("[createTasksCore] audience insert failed", err);
+      }
+    }
+
     try {
       await db.insert(taskEvents).values({
         taskId: row.id,
@@ -93,6 +112,7 @@ export async function createTasksCore(
         eventType: "created",
         toValue: {
           title: parsed.title,
+          visibility: parsed.visibility,
           doerId,
           initiatorId: parsed.initiatorId,
           priority: parsed.priority,
@@ -152,6 +172,12 @@ const QUICK_DUMP_MAX = 200;
 export async function createUnassignedTasks(
   actor: { id: string; name: string },
   titles: string[],
+  /**
+   * Quick Dump is where the personal space actually gets used: capture a
+   * thought fast, keep it to yourself. An ownerless PRIVATE task is visible to
+   * its creator alone, which is exactly the "personal to-do" case.
+   */
+  visibility: Visibility = "internal",
 ): Promise<{ ok: true; ids: string[] } | { ok: false; error: string }> {
   const clean = titles
     .map((t) => t.trim())
@@ -187,6 +213,7 @@ export async function createUnassignedTasks(
             priority: "not_imp_not_urgent",
             dueAt,
             status: "dont_know",
+            visibility,
             shortId,
           })
           .returning({ id: tasks.id });

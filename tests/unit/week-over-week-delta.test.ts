@@ -26,6 +26,7 @@ function task(partial: Partial<Task>): Task {
     googleSyncedDoerId: null,
     firstReadAt: null,
     archived: false,
+    visibility: "internal",
     createdById: null,
     approvedById: null,
     approvedAt: null,

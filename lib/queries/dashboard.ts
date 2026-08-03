@@ -24,6 +24,8 @@ import {
 } from "@/lib/queries/departments";
 import { unstable_cache } from "next/cache";
 import { CACHE_TAGS } from "@/lib/cache-tags";
+import { getViewer, visibleTaskCondition } from "@/lib/auth/task-visibility";
+import type { Viewer } from "@/lib/access/visibility";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
@@ -49,8 +51,21 @@ const { description: _description, notes: _notes, ...TASK_COLS } =
 export async function loadDashboardData(
   filters: DashboardFilters,
 ): Promise<DashboardData> {
+  // The viewer is PART OF THE KEY. Dashboard aggregates now depend on
+  // row-level visibility, so a key built from filters alone would serve one
+  // person's totals — including counts of tasks they can't open — to the next
+  // person with the same filters. Super-admins collapse to one shared entry
+  // since they see everything.
+  const viewer = await getViewer();
+  const viewerKey = !viewer
+    ? "anon"
+    : viewer.isSuperAdmin
+      ? "super"
+      : `${viewer.id}:${viewer.isManagement ? "m" : "-"}:${[...viewer.departmentIds].sort().join("+")}`;
+
   const keyParts = [
-    "dashboard-data:v1",
+    "dashboard-data:v2",
+    viewerKey,
     filters.startDate?.toISOString() ?? "_",
     filters.endDate?.toISOString() ?? "_",
     filters.view,
@@ -60,7 +75,9 @@ export async function loadDashboardData(
     filters.subjects.join(","),
   ];
   const data = await unstable_cache(
-    () => loadDashboardDataUncached(filters),
+    // The viewer is resolved OUTSIDE the cached function and passed in:
+    // reading the session inside would be both uncacheable and a footgun.
+    () => loadDashboardDataUncached(filters, viewer),
     keyParts,
     { revalidate: 60, tags: [CACHE_TAGS.tasks] },
   )();
@@ -69,6 +86,7 @@ export async function loadDashboardData(
 
 async function loadDashboardDataUncached(
   filters: DashboardFilters,
+  viewer: Viewer | null,
 ): Promise<DashboardData> {
   const start =
     filters.startDate ?? new Date(Date.now() - 30 * MS_PER_DAY);
@@ -82,6 +100,12 @@ async function loadDashboardDataUncached(
     gte(tasks.createdAt, start),
     lt(tasks.createdAt, new Date(end.getTime() + MS_PER_DAY)),
   ];
+  // Every aggregate on this page — KPIs, status table, aging, velocity, top
+  // performers — derives from these conditions, so one push covers them all.
+  // Consequence worth knowing: totals are now per-viewer, and two people with
+  // the same filters can legitimately see different numbers.
+  const visible = await visibleTaskCondition(viewer);
+  if (visible) baseConditions.push(visible);
   if (filters.priorities.length > 0) {
     baseConditions.push(inArray(tasks.priority, filters.priorities));
   }

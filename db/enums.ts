@@ -195,6 +195,26 @@ export const DEPARTMENTS = [
 ] as const;
 export type Department = (typeof DEPARTMENTS)[number];
 
+/**
+ * 0077 — row-level visibility, shared by tasks and project roots.
+ *
+ *   private     only the people ON the row (doer / initiator / creator, plus
+ *               project members) and the super-admins — the personal space
+ *   internal    everyone; the default, and what every pre-existing row got
+ *   restricted  the people on the row, the super-admins, and whoever the
+ *               matching audience rows name (departments / management / people)
+ *
+ * Stored as text with a CHECK rather than a pgEnum: adding a value to a
+ * Postgres enum needs a standalone `ALTER TYPE … ADD VALUE` outside a
+ * transaction, which the migration runner has to special-case (see 0024).
+ */
+export const VISIBILITIES = ["private", "internal", "restricted"] as const;
+export type Visibility = (typeof VISIBILITIES)[number];
+
+/** Who a `restricted` row is opened up to. */
+export const AUDIENCE_KINDS = ["department", "management", "employee"] as const;
+export type AudienceKind = (typeof AUDIENCE_KINDS)[number];
+
 export const AGE_BUCKETS = [
   { id: "0-3", label: "0-3 days", min: 0, max: 3 },
   { id: "4-7", label: "4-7 days", min: 4, max: 7 },

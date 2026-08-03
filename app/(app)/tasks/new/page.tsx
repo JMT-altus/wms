@@ -5,6 +5,7 @@ import { listEmployees } from "@/lib/queries/employees";
 import { listActiveClientNames } from "@/lib/queries/clients";
 import { listActiveSubjectNames } from "@/lib/queries/subjects";
 import { listProjectNodeOptions } from "@/lib/queries/projects";
+import { listActiveDepartments } from "@/lib/queries/departments";
 import { getTaskById } from "@/lib/queries/tasks";
 import { requireUser } from "@/lib/auth/current";
 import { canQuickDump } from "@/lib/auth/quick-dump";
@@ -20,13 +21,15 @@ interface PageProps {
 export default async function NewTaskPage({ searchParams }: PageProps) {
   const me = await requireUser();
   const { from } = await searchParams;
-  const [all, clients, subjects, projectNodes] = await Promise.all([
+  const [all, clients, subjects, projectNodes, departmentRows] = await Promise.all([
     listEmployees(),
     listActiveClientNames(),
     listActiveSubjectNames(),
     listProjectNodeOptions(),
+    listActiveDepartments(),
   ]);
   const options = all.map((e) => ({ id: e.id, name: e.name }));
+  const departments = departmentRows.map((d) => ({ id: d.id, name: d.name }));
 
   // Duplicate flow: prefill the form from an existing task (?from=<id>).
   let defaults: {
@@ -79,6 +82,7 @@ export default async function NewTaskPage({ searchParams }: PageProps) {
             clients={clients}
             subjects={subjects}
             projectNodes={projectNodes}
+            departments={departments}
             defaults={defaults}
           />
         </div>

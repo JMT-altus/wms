@@ -16,6 +16,7 @@ import {
 import { createTask, completePooledTask } from "@/app/(app)/tasks/actions";
 import { EmployeeAvatar } from "@/components/ui/employee-avatar";
 import { ScheduleSection, type ScheduleValue } from "./schedule-section";
+import { VisibilityPicker, type VisibilityValue } from "./visibility-picker";
 import { ClientSelect } from "./client-select";
 import { SubjectSelect } from "./subject-select";
 import { Select } from "@/components/ui/select";
@@ -32,6 +33,8 @@ interface Props {
   subjects: string[];
   /** Project tree nodes (path-labelled) for the optional Project link. */
   projectNodes?: { id: string; label: string }[];
+  /** Audience options for the visibility picker. */
+  departments?: { id: string; name: string }[];
   /** Called after a successful create. Default: navigate to /tasks/[id]. */
   onSuccess?: (taskId: string) => void;
   /** When set, the form runs in "complete a pool task" mode: it UPDATES this
@@ -103,7 +106,13 @@ interface PreviewFile {
   url: string;
 }
 
-export function NewTaskForm({ employees, clients, subjects, projectNodes = [], onSuccess, completeTaskId, onCompleted, defaults }: Props) {
+export function NewTaskForm({ employees, clients, subjects, projectNodes = [], departments = [], onSuccess, completeTaskId, onCompleted, defaults }: Props) {
+  // Defaults to "Everyone", which is the behaviour that existed before
+  // visibility was a concept — creating a task never silently hides it.
+  const [visibility, setVisibility] = React.useState<VisibilityValue>({
+    visibility: "internal",
+    audience: [],
+  });
   const router = useRouter();
   const [pending, startTransition] = React.useTransition();
   const isComplete = Boolean(completeTaskId);
@@ -271,6 +280,8 @@ export function NewTaskForm({ employees, clients, subjects, projectNodes = [], o
         recurrence: schedule.recurrence,
         recurrenceRule: schedule.recurrenceRule,
         projectNodeId: values.projectNodeId || null,
+        visibility: visibility.visibility,
+        audience: visibility.audience,
       });
       if (!result.ok) {
         setError(result.error);
@@ -491,6 +502,20 @@ export function NewTaskForm({ employees, clients, subjects, projectNodes = [], o
                 ]}
               />
             )}
+          />
+        </Field>
+      )}
+
+      {/* Who can see it. Sits with the other assignment decisions rather than
+          buried in an "advanced" drawer — it's a choice you make WHILE
+          deciding who the task is for, not an afterthought. */}
+      {!completeTaskId && (
+        <Field id="nt-visibility" label="Visible to">
+          <VisibilityPicker
+            value={visibility}
+            onChange={setVisibility}
+            departments={departments}
+            people={employees.map((e) => ({ id: e.id, name: e.name }))}
           />
         </Field>
       )}

@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "@/lib/db";
+import { rawVisibleTaskSql } from "@/lib/auth/task-visibility";
 import { normalizeQuery, rankHits, type RankSignals } from "@/lib/search/rank";
 import type { TaskStatus } from "@/db/enums";
 
@@ -67,6 +68,10 @@ export async function globalSearch(rawQuery: string): Promise<GlobalSearchResult
 }
 
 async function searchTasks(q: string, like: string, asNumber: number | null): Promise<TaskHit[]> {
+  // Search reaches every task in the database by design, which makes it the
+  // easiest place to leak a private one. The predicate is ANDed onto the match
+  // clause, not applied to the results, so hidden rows never leave Postgres.
+  const visible = await rawVisibleTaskSql();
   const rows = (await db.execute(sql`
     SELECT t.id, t.task_no, t.title, t.client, t.subject, t.status, t.archived,
            d.name AS doer_name,
@@ -77,10 +82,13 @@ async function searchTasks(q: string, like: string, asNumber: number | null): Pr
            extract(epoch FROM t.created_at) * 1000 AS recency_ms
     FROM tasks t
     LEFT JOIN employees d ON d.id = t.doer_id
-    WHERE t.search_tsv @@ websearch_to_tsquery('english', ${q})
-       OR t.search_text ILIKE ${like}
-       OR t.search_text %> ${q}
-       OR (${asNumber}::int IS NOT NULL AND t.task_no = ${asNumber}::int)
+    WHERE (
+            t.search_tsv @@ websearch_to_tsquery('english', ${q})
+         OR t.search_text ILIKE ${like}
+         OR t.search_text %> ${q}
+         OR (${asNumber}::int IS NOT NULL AND t.task_no = ${asNumber}::int)
+          )
+      AND ${visible}
     ORDER BY GREATEST(
       ts_rank(t.search_tsv, websearch_to_tsquery('english', ${q})),
       word_similarity(${q}, t.search_text)

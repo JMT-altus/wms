@@ -150,6 +150,7 @@ export function task(partial: Partial<Task>): Task {
     googleEventId: partial.googleEventId ?? null,
     googleSyncedDoerId: partial.googleSyncedDoerId ?? null,
     archived: partial.archived ?? false,
+    visibility: partial.visibility ?? "internal",
     createdById: partial.createdById ?? null,
     approvedById: partial.approvedById ?? null,
     approvedAt: partial.approvedAt ?? null,

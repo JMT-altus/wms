@@ -3,8 +3,16 @@ import { asc, desc, eq, sql, and, inArray } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { unstable_cache } from "next/cache";
 import { db } from "@/lib/db";
-import { projectNodes, tasks, employees, projectMembers } from "@/db/schema";
-import type { TaskStatus } from "@/db/enums";
+import {
+  projectNodes,
+  tasks,
+  employees,
+  projectMembers,
+  projectAudience,
+} from "@/db/schema";
+import type { TaskStatus, Visibility } from "@/db/enums";
+import { getViewer, visibleTaskCondition } from "@/lib/auth/task-visibility";
+import { canSee, type AudienceEntry } from "@/lib/access/visibility";
 import { CACHE_TAGS } from "@/lib/cache-tags";
 
 export interface ProjectMemberRef {
@@ -24,6 +32,9 @@ export interface ProjectTreeNode {
   targetDate: Date | null;
   ownerId: string | null;
   ownerName: string | null;
+  createdById: string | null;
+  /** Meaningful on ROOTS only — descendants inherit it. */
+  visibility: Visibility;
   members: ProjectMemberRef[];
   children: ProjectTreeNode[];
 }
@@ -34,7 +45,8 @@ export interface ProjectTreeNode {
  */
 export async function listProjectTree(): Promise<ProjectTreeNode[]> {
   const owner = alias(employees, "owner");
-  const [rows, memberRows] = await Promise.all([
+  const viewer = await getViewer();
+  const [rows, memberRows, audienceRows] = await Promise.all([
     db
       .select({
         id: projectNodes.id,
@@ -47,6 +59,8 @@ export async function listProjectTree(): Promise<ProjectTreeNode[]> {
         targetDate: projectNodes.targetDate,
         ownerId: projectNodes.ownerId,
         ownerName: owner.name,
+        createdById: projectNodes.createdById,
+        visibility: projectNodes.visibility,
         actionCount: sql<number>`count(${tasks.id})::int`,
       })
       .from(projectNodes)
@@ -58,6 +72,7 @@ export async function listProjectTree(): Promise<ProjectTreeNode[]> {
       .where(eq(projectNodes.isArchived, false))
       .groupBy(projectNodes.id, owner.name)
       .orderBy(asc(projectNodes.sortOrder), asc(projectNodes.name)),
+
     db
       .select({
         nodeId: projectMembers.projectNodeId,
@@ -67,7 +82,21 @@ export async function listProjectTree(): Promise<ProjectTreeNode[]> {
       .from(projectMembers)
       .innerJoin(employees, eq(employees.id, projectMembers.employeeId))
       .orderBy(asc(employees.name)),
+    db
+      .select({
+        nodeId: projectAudience.projectNodeId,
+        kind: projectAudience.kind,
+        refId: projectAudience.refId,
+      })
+      .from(projectAudience),
   ]);
+
+  const audienceByNode = new Map<string, AudienceEntry[]>();
+  for (const a of audienceRows) {
+    const list = audienceByNode.get(a.nodeId) ?? [];
+    list.push({ kind: a.kind, refId: a.refId });
+    audienceByNode.set(a.nodeId, list);
+  }
 
   const membersByNode = new Map<string, ProjectMemberRef[]>();
   for (const m of memberRows) {
@@ -92,7 +121,24 @@ export async function listProjectTree(): Promise<ProjectTreeNode[]> {
       roots.push(node);
     }
   }
-  return roots;
+
+  // Visibility is set on the ROOT and inherited, so pruning whole roots is the
+  // entire enforcement — no descendant can outlive its parent. Done in JS
+  // rather than SQL because the tree is fetched whole anyway, and this reuses
+  // the exact same `canSee` the tasks side and the UI use.
+  if (!viewer) return [];
+  return roots.filter((root) =>
+    canSee(viewer, {
+      visibility: root.visibility,
+      // Owner, creator and any member of the project are on it.
+      participantIds: [
+        root.ownerId,
+        root.createdById,
+        ...root.members.map((m) => m.id),
+      ],
+      audience: audienceByNode.get(root.id) ?? [],
+    }),
+  );
 }
 
 export interface ProjectNodeOption {
@@ -153,7 +199,15 @@ export async function listNodeActions(nodeIds: string[]): Promise<NodeAction[]> 
     })
     .from(tasks)
     .leftJoin(employees, eq(tasks.doerId, employees.id))
-    .where(and(inArray(tasks.projectNodeId, nodeIds), eq(tasks.archived, false)))
+    // Seeing a project does not imply seeing every task hung off it — a
+    // private task attached to a shared project stays private.
+    .where(
+      and(
+        inArray(tasks.projectNodeId, nodeIds),
+        eq(tasks.archived, false),
+        await visibleTaskCondition(),
+      ),
+    )
     .orderBy(desc(tasks.createdAt));
   return rows.map((r) => ({ ...r, doerName: r.doerName ?? null }));
 }
@@ -163,19 +217,34 @@ export async function listNodeActions(nodeIds: string[]): Promise<NodeAction[]> 
  * Cached under the `projectNodes` tag — re-fetches only when a node is
  * created/renamed/archived (writers in `app/(app)/projects/actions.ts`
  * call `updateTag(CACHE_TAGS.projectNodes)`).
+ *
+ * The viewer is PART OF THE KEY. The underlying tree is pruned by visibility,
+ * so a single shared entry would hand one person's picker — project names and
+ * all — to whoever asked next.
  */
-export const listProjectNodeOptions = unstable_cache(
-  async (): Promise<ProjectNodeOption[]> => {
-    const tree = await listProjectTree();
-    const out: ProjectNodeOption[] = [];
-    function walk(node: ProjectTreeNode, prefix: string) {
-      const label = prefix ? `${prefix} / ${node.name}` : node.name;
-      out.push({ id: node.id, label });
-      for (const c of node.children) walk(c, label);
-    }
-    for (const r of tree) walk(r, "");
-    return out.sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base" }));
-  },
-  ["list-project-node-options"],
-  { tags: [CACHE_TAGS.projectNodes], revalidate: 600 },
-);
+export async function listProjectNodeOptions(): Promise<ProjectNodeOption[]> {
+  const viewer = await getViewer();
+  const viewerKey = !viewer
+    ? "anon"
+    : viewer.isSuperAdmin
+      ? "super"
+      : `${viewer.id}:${viewer.isManagement ? "m" : "-"}:${[...viewer.departmentIds].sort().join("+")}`;
+
+  return unstable_cache(
+    async (): Promise<ProjectNodeOption[]> => {
+      const tree = await listProjectTree();
+      const out: ProjectNodeOption[] = [];
+      function walk(node: ProjectTreeNode, prefix: string) {
+        const label = prefix ? `${prefix} / ${node.name}` : node.name;
+        out.push({ id: node.id, label });
+        for (const c of node.children) walk(c, label);
+      }
+      for (const r of tree) walk(r, "");
+      return out.sort((a, b) =>
+        a.label.localeCompare(b.label, undefined, { sensitivity: "base" }),
+      );
+    },
+    ["list-project-node-options:v2", viewerKey],
+    { tags: [CACHE_TAGS.projectNodes], revalidate: 600 },
+  )();
+}

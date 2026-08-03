@@ -5,6 +5,7 @@ import { db, employees, tasks } from "@/lib/db";
 import { TASK_STATUSES, TASK_PRIORITIES, PENDING_STATUSES } from "@/db/enums";
 import type { TaskStatus, ApprovalStatus } from "@/db/enums";
 import { employeeIdsInDepartments } from "@/lib/queries/departments";
+import { visibleTaskCondition } from "@/lib/auth/task-visibility";
 import { CACHE_TAGS } from "@/lib/cache-tags";
 import type { TaskListFilters, TaskListRow } from "@/lib/types";
 
@@ -49,6 +50,11 @@ export async function listTasks(filters: TaskListFilters): Promise<TaskListRow[]
   if (filters.subjects.length > 0)   conditions.push(inArray(tasks.subject, filters.subjects));
   if (filters.clients.length > 0)    conditions.push(inArray(tasks.client, filters.clients));
   if (filters.taskId)                conditions.push(eq(tasks.id, filters.taskId));
+  // Row-level visibility. Undefined for super-admins (no restriction), so the
+  // guard is not optional-looking sloppiness — pushing `undefined` would be a
+  // no-op anyway, but skipping keeps their query plan unchanged.
+  const visible = await visibleTaskCondition();
+  if (visible) conditions.push(visible);
 
   if (filters.departments.length > 0) {
     // Match tasks whose doer belongs to ANY selected department, via the
@@ -189,6 +195,8 @@ export async function listTasksPage(
     conditions.push(inArray(tasks.priority, filters.priorities));
   if (filters.subjects.length > 0) conditions.push(inArray(tasks.subject, filters.subjects));
   if (filters.taskId) conditions.push(eq(tasks.id, filters.taskId));
+  const visible = await visibleTaskCondition();
+  if (visible) conditions.push(visible);
 
   if (filters.departments.length > 0) {
     const ids = await employeeIdsInDepartments(filters.departments);
@@ -281,10 +289,13 @@ export async function listTasksPage(
 /** How many unassigned (ownerless, non-archived) tasks are in the pool.
  *  Drives the "Unassigned · N" count on the Tasks list + Kanban. */
 export async function countUnassignedTasks(): Promise<number> {
+  // The pool badge must not count private tasks the viewer can't open —
+  // otherwise the number never reconciles with the list it links to.
+  const visible = await visibleTaskCondition();
   const [row] = await db
     .select({ n: sql<number>`count(*)::int` })
     .from(tasks)
-    .where(and(isNull(tasks.doerId), eq(tasks.archived, false)));
+    .where(and(isNull(tasks.doerId), eq(tasks.archived, false), visible));
   return row?.n ?? 0;
 }
 
@@ -317,6 +328,8 @@ export interface BoardTask {
  */
 export async function listBoardTasks(filters?: TaskListFilters): Promise<BoardTask[]> {
   const conditions = [];
+  const visible = await visibleTaskCondition();
+  if (visible) conditions.push(visible);
   if (filters) {
     if (filters.startDate) conditions.push(gte(tasks.createdAt, filters.startDate));
     if (filters.endDate)
@@ -389,6 +402,10 @@ export async function listAgendaTasks(employeeId: string): Promise<BoardTask[]> 
         eq(tasks.archived, false),
         eq(tasks.doerId, employeeId),
         inArray(tasks.status, [...PENDING_STATUSES]),
+        // Redundant when you're viewing your own agenda (you're the doer, so
+        // the participant rule already covers it), but this is also reachable
+        // for another person's id — so it stays.
+        await visibleTaskCondition(),
       ),
     )
     .orderBy(asc(tasks.dueAt))
@@ -457,6 +474,11 @@ export async function listTasksForExport(
   if (filters.subjects.length > 0)   conditions.push(inArray(tasks.subject, filters.subjects));
   if (filters.clients.length > 0)    conditions.push(inArray(tasks.client, filters.clients));
   if (filters.taskId)                conditions.push(eq(tasks.id, filters.taskId));
+  // Row-level visibility. Undefined for super-admins (no restriction), so the
+  // guard is not optional-looking sloppiness — pushing `undefined` would be a
+  // no-op anyway, but skipping keeps their query plan unchanged.
+  const visible = await visibleTaskCondition();
+  if (visible) conditions.push(visible);
 
   if (filters.departments.length > 0) {
     // Match tasks whose doer belongs to ANY selected department, via the
@@ -640,7 +662,9 @@ export async function getTaskById(taskId: string): Promise<TaskDetail | null> {
     .leftJoin(doerEmp,    eq(tasks.doerId,      doerEmp.id))
     .leftJoin(initEmp,    eq(tasks.initiatorId, initEmp.id))
     .leftJoin(creatorEmp, eq(tasks.createdById, creatorEmp.id))
-    .where(eq(tasks.id, taskId))
+    // Visibility is enforced in the QUERY, not after it: a caller that forgets
+    // to check gets null rather than a populated object it might render.
+    .where(and(eq(tasks.id, taskId), await visibleTaskCondition()))
     .limit(1);
 
   if (!row) return null;
