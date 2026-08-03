@@ -127,7 +127,8 @@ function id() {
   return `00000000-0000-0000-0000-${counter.toString().padStart(12, "0")}`;
 }
 
-function task(partial: Partial<Task>): Task {
+/** Exported so tests can build one-off rows without restating all ~35 columns. */
+export function task(partial: Partial<Task>): Task {
   const createdAt = partial.createdAt ?? new Date("2026-04-01");
   return {
     id: id(),

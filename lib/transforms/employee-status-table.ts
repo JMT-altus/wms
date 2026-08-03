@@ -31,6 +31,14 @@ export function computeEmployeeStatusTable(
   };
 
   for (const t of tasks) {
+    // Archived tasks are out of scope for this table. It reports the period's
+    // WORK — Critical / Done / Pending / Not Approved / Cancelled — and the
+    // rest of the dashboard already treats archived separately (the status
+    // distribution counts it as its own bucket, the nav totals exclude it).
+    // Counting it only here produced a Total that no column could explain and
+    // that pointed at a task the user couldn't open from any list.
+    if (t.archived) continue;
+
     const id = view === "doer" ? t.doerId : t.initiatorId;
     if (!id) continue; // unassigned pool task in doer view — no doer to bucket
     const emp = employeeById.get(id);
@@ -92,8 +100,16 @@ export function computeEmployeeStatusTable(
       case "cancelled":
         row.cancelled += 1;
         break;
-      case "need_info":           // Tier-3 — rolls into the "need" bucket
-                                  // (need_help retired 2026-06-10)
+      case "dont_know":           // "Not Seen" — the status EVERY new task
+                                  // starts in, so leaving it unbucketed made
+                                  // fresh work invisible in every column.
+      case "not_started":
+        row.notStarted += 1;
+        row.pendingTotal += 1;
+        break;
+      case "need_help":           // retired 2026-06-10 but still in the enum,
+                                  // so historic rows must still land somewhere
+      case "need_info":           // Tier-3
         row.needHelp += 1;
         row.pendingTotal += 1;
         break;
@@ -108,10 +124,19 @@ export function computeEmployeeStatusTable(
         row.initiated += 1;
         row.pendingTotal += 1;
         break;
-      case "not_started":
-        row.notStarted += 1;
+      case "on_hold":
+        // No sub-bucket of its own, but it's still open work, so it has to
+        // reach the Pending column the dashboard actually renders.
         row.pendingTotal += 1;
         break;
+      default: {
+        // Compile-time exhaustiveness. Adding a value to TASK_STATUSES without
+        // bucketing it here is now a type error rather than a task that counts
+        // toward Total while every column reads 0 — which is exactly how
+        // dont_know, on_hold and need_help went unnoticed.
+        const unhandled: never = t.status;
+        void unhandled;
+      }
     }
     }
   }
