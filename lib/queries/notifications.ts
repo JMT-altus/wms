@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { alias } from "drizzle-orm/pg-core";
 import {
   and,
@@ -147,8 +148,12 @@ export async function listInboxNotifications(
  * Single integer — count of unread notifications for the user.  Drives
  * the Inbox-pill badge in the main nav.  Indexed on
  * (user_id, read_at, created_at) so this is a covered index scan.
+ *
+ * Memoised per request: the hub renders both the notifications bell and the
+ * avatar menu, and both want this number. `userId` is a plain string, so
+ * React's identity-keyed cache dedupes them into one query.
  */
-export async function getUnreadCount(userId: string): Promise<number> {
+export const getUnreadCount = cache(async (userId: string): Promise<number> => {
   const [row] = await db
     .select({ n: sql<number>`count(*)::int` })
     .from(notifications)
@@ -156,7 +161,7 @@ export async function getUnreadCount(userId: string): Promise<number> {
       and(eq(notifications.userId, userId), isNull(notifications.readAt)),
     );
   return Number(row?.n ?? 0);
-}
+});
 
 /**
  * Marks a single notification as read.  No-op if it's already read or

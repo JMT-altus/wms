@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
+import { useOnline } from "@/lib/use-online";
 
 /**
  * Brand header band across the very top of every app page — a full-bleed navy
@@ -16,6 +17,7 @@ import { usePathname } from "next/navigation";
 export function BrandHero({ companyName = "JMT DRIVE SOLUTIONS" }: { companyName?: string }) {
   const pathname = usePathname();
   const [now, setNow] = useState<Date | null>(null);
+  const online = useOnline();
 
   useEffect(() => {
     setNow(new Date());
@@ -75,9 +77,15 @@ export function BrandHero({ companyName = "JMT DRIVE SOLUTIONS" }: { companyName
           <div className="mt-2.5 flex flex-wrap items-center justify-center gap-2">
             <Chip>{dateLabel || "—"}</Chip>
             <Chip mono>{timeLabel || "--:--"}</Chip>
-            <Chip>
-              <span className="inline-block size-2 rounded-full" style={{ background: "#22c55e", boxShadow: "0 0 8px #22c55e" }} />
-              System Online
+            <Chip live>
+              <span
+                className="inline-block size-2 rounded-full"
+                style={{
+                  background: online ? "#22c55e" : "#ef4444",
+                  boxShadow: `0 0 8px ${online ? "#22c55e" : "#ef4444"}`,
+                }}
+              />
+              {online ? "System Online" : "System Offline"}
             </Chip>
           </div>
         </div>
@@ -182,9 +190,20 @@ export function BrandHero({ companyName = "JMT DRIVE SOLUTIONS" }: { companyName
   );
 }
 
-function Chip({ children, mono }: { children: React.ReactNode; mono?: boolean }) {
+function Chip({
+  children,
+  mono,
+  live,
+}: {
+  children: React.ReactNode;
+  mono?: boolean;
+  /** Announce changes — used by the connectivity chip, whose text is news. */
+  live?: boolean;
+}) {
   return (
     <span
+      role={live ? "status" : undefined}
+      aria-live={live ? "polite" : undefined}
       className="inline-flex items-center gap-2 rounded-full px-3.5 py-1.5"
       style={{
         background: "rgba(255,255,255,0.09)",

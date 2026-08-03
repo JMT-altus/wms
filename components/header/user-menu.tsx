@@ -25,6 +25,15 @@ type Props = {
   avatarUrl: string | null;
   inboxUnread: number;
   archivedTasks: number;
+  /** Documents / Inbox / Archived are WMS routes. Without access to that
+   *  module the app layout bounces them back to the hub, so don't offer them. */
+  canAccessWms?: boolean;
+  /** Surface the trigger sits on. The app header is navy; the hub is a pale
+   *  gradient, where a white avatar ring would vanish. */
+  tone?: "dark" | "light";
+  /** The hub shows a real notifications bell next to the avatar, so the dot
+   *  would just be the same fact twice. */
+  showUnreadDot?: boolean;
 };
 
 export function UserMenu({
@@ -34,6 +43,9 @@ export function UserMenu({
   avatarUrl,
   inboxUnread,
   archivedTasks,
+  canAccessWms = true,
+  tone = "dark",
+  showUnreadDot = true,
 }: Props) {
   const router = useRouter();
 
@@ -64,7 +76,8 @@ export function UserMenu({
         animation: "avatarRingPulse 2.6s ease-out 1",
       }
     : {
-        background: "rgba(255, 255, 255, 0.18)",
+        background:
+          tone === "light" ? "rgba(15, 23, 42, 0.14)" : "rgba(255, 255, 255, 0.18)",
         padding: 1.5,
       };
 
@@ -75,12 +88,14 @@ export function UserMenu({
           aria-label={
             inboxUnread > 0 ? `User menu — ${inboxUnread} unread` : "User menu"
           }
-          className="group relative flex items-center gap-2 rounded-full focus:outline-none focus:ring-2 focus:ring-white/40 transition-transform"
+          className={`group relative flex items-center gap-2 rounded-full focus:outline-none focus:ring-2 transition-transform ${
+            tone === "light" ? "focus:ring-[#0A6CFF]/45" : "focus:ring-white/40"
+          }`}
           style={{ transition: "transform 200ms ease" }}
         >
           {/* Unread-inbox dot — the badge that used to sit on the nav's Inbox
               pill, now that Inbox lives inside this menu. */}
-          {inboxUnread > 0 && (
+          {inboxUnread > 0 && canAccessWms && showUnreadDot && (
             <span
               aria-hidden
               className="absolute -top-0.5 -right-0.5 z-10 h-2.5 w-2.5 rounded-full ring-2 ring-white"
@@ -268,6 +283,11 @@ export function UserMenu({
             </Link>
           </DropdownMenu.Item>
 
+          {/* Documents / Inbox / Archived live in the WMS module — hidden for
+              anyone whose access to it is switched off, since the layout guard
+              would only bounce them back to the hub. Index (/directory) belongs
+              to no module and stays. */}
+          {canAccessWms && (
           <DropdownMenu.Item asChild>
             <Link
               href={"/documents" as Route}
@@ -280,7 +300,9 @@ export function UserMenu({
               <ChevronRight size={14} strokeWidth={2.2} style={{ color: "#94A3B8" }} />
             </Link>
           </DropdownMenu.Item>
+          )}
 
+          {canAccessWms && (
           <DropdownMenu.Item asChild>
             <Link
               href={"/inbox" as Route}
@@ -296,9 +318,10 @@ export function UserMenu({
               </span>
             </Link>
           </DropdownMenu.Item>
+          )}
 
           {/* Archiving is admin-only, so the Archived view is too. */}
-          {isAdmin && (
+          {isAdmin && canAccessWms && (
             <DropdownMenu.Item asChild>
               <Link
                 href={"/archived" as Route}

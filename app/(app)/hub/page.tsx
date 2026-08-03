@@ -4,7 +4,9 @@ import { LayoutGrid, Users, TrendingUp, GraduationCap, ArrowRight, Lock } from "
 import { getCurrentEmployee } from "@/lib/auth/current";
 import { getMyModuleAccess } from "@/lib/auth/module-access";
 import { GlobalSearch } from "@/components/header/global-search";
-import { HubSignOut } from "@/components/dashboard/hub-sign-out";
+import { UserMenuServer } from "@/components/header/user-menu-server";
+import { HubStatus } from "@/components/dashboard/hub-status";
+import { HubBell } from "@/components/dashboard/hub-bell";
 import { MODULES, type ModuleId } from "@/lib/nav-modules";
 
 export const dynamic = "force-dynamic";
@@ -128,16 +130,24 @@ export default async function HubPage({
       </div>
 
       <div className="relative z-10 flex min-h-[100svh] flex-col">
-        {/* Top bar */}
-        <header className="mx-auto w-full max-w-[1440px] px-8 max-md:px-4 pt-5 flex items-center justify-end gap-4">
-          <div className="flex items-center gap-4">
-            <div className="text-right max-sm:hidden">
-              <div className="text-[15px] text-ink-muted">
-                Hi, <span className="font-bold text-ink-strong">{firstName}</span>
-              </div>
-            </div>
+        {/* Top bar — context on the left, actions + identity on the right.
+            The old "Hi, {name}" is gone: the hero greets by name two lines
+            below and the avatar carries the initials, so it was the third
+            printing of the same word. Its slot now holds the clock and
+            connection status, which the hub genuinely lacked (the navy brand
+            band that carries them elsewhere hides itself here). */}
+        <header className="mx-auto w-full max-w-[1440px] px-8 max-md:px-4 pt-5 flex items-center justify-between gap-4">
+          <HubStatus />
+          <div className="flex items-center gap-3">
             <GlobalSearch />
-            <HubSignOut />
+            <HubBell />
+            {/* The same avatar menu as the app header — Admin panel, Profile &
+                preferences, Index/Documents and Sign out, all reachable without
+                first entering a module. It carries Sign out, so the standalone
+                HubSignOut button it replaced would have been a second,
+                redundant affordance. The unread dot is suppressed here because
+                the bell beside it already shows the count. */}
+            <UserMenuServer tone="light" showUnreadDot={false} />
           </div>
         </header>
 
