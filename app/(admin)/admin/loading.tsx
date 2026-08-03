@@ -11,7 +11,7 @@ import { PageBuffering } from "@/components/ui/spinner";
 export default function AdminLoading() {
   return (
     <>
-      <div className="sticky top-0 z-40 h-[96px] max-md:h-[72px] border-b border-[color:var(--color-hairline,#e5e7eb)] bg-white/70 backdrop-blur" />
+      <div className="sticky top-0 z-40 h-[var(--app-header-h)] border-b border-[color:var(--color-hairline,#e5e7eb)] bg-white/70 backdrop-blur" />
 
       <main className="mx-auto max-w-[1400px] px-12 max-md:px-4 py-8 w-full">
         {/* Page header */}

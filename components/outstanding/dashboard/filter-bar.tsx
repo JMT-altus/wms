@@ -120,14 +120,14 @@ export function OutstandingFilterBar({ employees, entities, modes, cycles }: Pro
 
   return (
     <div
-      className="sticky top-[96px] max-md:top-[72px] z-40 border-b border-hairline print:hidden"
+      className="sticky top-[var(--app-header-h)] z-40 border-b border-hairline print:hidden"
       style={{
         backgroundColor: "rgba(250, 251, 252, 0.82)",
         backdropFilter: "blur(20px) saturate(150%)",
         WebkitBackdropFilter: "blur(20px) saturate(150%)",
       }}
     >
-      <div className="mx-auto max-w-[1600px] px-12 py-2.5 max-md:px-4">
+      <div className="mx-auto max-w-[1600px] px-12 py-1.5 max-md:px-4">
         {/* Mobile-only header (Filters label + show/hide). */}
         <div className="hidden max-sm:flex max-sm:w-full max-sm:items-center max-sm:gap-2">
           <span

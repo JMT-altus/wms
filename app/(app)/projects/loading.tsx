@@ -5,7 +5,7 @@ export default function ProjectsLoading() {
   return (
     <>
       <PageBuffering label="Loading projects…" />
-      <div className="sticky top-0 z-40 h-[96px] max-md:h-[72px] border-b border-[color:var(--color-hairline,#e5e7eb)] bg-white/70 backdrop-blur" />
+      <div className="sticky top-0 z-40 h-[var(--app-header-h)] border-b border-[color:var(--color-hairline,#e5e7eb)] bg-white/70 backdrop-blur" />
       <main className="mx-auto max-w-[1480px] px-12 max-md:px-4 pt-10 pb-20 w-full">
         {/* Page header skeleton */}
         <div className="mb-10 flex items-end justify-between gap-6 max-md:flex-col max-md:items-start">

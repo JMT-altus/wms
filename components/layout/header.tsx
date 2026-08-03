@@ -9,7 +9,8 @@ import { GlobalSearch } from "@/components/header/global-search";
 import { getCurrentEmployee } from "@/lib/auth/current";
 
 /**
- * Deep-navy glassy application header — single row, ~96px tall.
+ * Deep-navy glassy application header — single row, `--app-header-h` tall
+ * (see globals.css; sticky filter bars and loading skeletons key off it).
  *
  * JMT logo mark on the left, primary nav centered with airy spacing, right
  * cluster carries live indicator + actions + avatar. Frosted navy surface
@@ -49,7 +50,7 @@ export async function DashboardHeader({
             opacity: 0.85,
           }}
         />
-        <div className="relative w-full h-[96px] px-6 max-md:h-[72px] max-md:px-4 flex items-center gap-4 2xl:gap-6 max-md:gap-3">
+        <div className="relative w-full h-[var(--app-header-h)] px-6 max-md:px-4 flex items-center gap-4 2xl:gap-6 max-md:gap-3">
           {/* LEFT-MOST: Back / Forward history pills (md+ only).
               On mobile, replaced by the hamburger menu (same slot). */}
           <NavHistoryButtons />

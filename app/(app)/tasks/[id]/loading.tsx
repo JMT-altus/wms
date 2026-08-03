@@ -10,7 +10,7 @@ export default function TaskDetailLoading() {
   return (
     <>
       <PageBuffering label="Loading task…" />
-      <div className="sticky top-0 z-40 h-[96px] max-md:h-[72px] border-b border-[color:var(--color-hairline,#e5e7eb)] bg-white/70 backdrop-blur" />
+      <div className="sticky top-0 z-40 h-[var(--app-header-h)] border-b border-[color:var(--color-hairline,#e5e7eb)] bg-white/70 backdrop-blur" />
       <main className="px-6 max-md:px-4 py-6 max-w-[1400px] mx-auto w-full grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-6">
         <section>
           <Skeleton className="h-10 w-3/4 mb-4" />

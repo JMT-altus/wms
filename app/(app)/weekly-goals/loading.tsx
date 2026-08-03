@@ -4,7 +4,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 export default function WeeklyGoalsLoading() {
   return (
     <>
-      <div className="sticky top-0 z-40 h-[96px] max-md:h-[72px] border-b border-[color:var(--color-hairline,#e5e7eb)] bg-white/70 backdrop-blur" />
+      <div className="sticky top-0 z-40 h-[var(--app-header-h)] border-b border-[color:var(--color-hairline,#e5e7eb)] bg-white/70 backdrop-blur" />
       <main className="px-6 max-md:px-4 py-6 max-w-[1600px] mx-auto w-full">
         <div className="flex items-center justify-between mb-6">
           <Skeleton className="h-10 w-56" />

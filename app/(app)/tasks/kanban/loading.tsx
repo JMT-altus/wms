@@ -11,8 +11,8 @@ export default function KanbanLoading() {
   return (
     <>
       <PageBuffering label="Loading board…" />
-      {/* Header placeholder (matches the 96px / 72px chrome) */}
-      <div className="sticky top-0 z-40 h-[96px] max-md:h-[72px] border-b border-[color:var(--color-hairline,#e5e7eb)] bg-white/70 backdrop-blur" />
+      {/* Header placeholder — height comes from --app-header-h so it always matches */}
+      <div className="sticky top-0 z-40 h-[var(--app-header-h)] border-b border-[color:var(--color-hairline,#e5e7eb)] bg-white/70 backdrop-blur" />
 
       <main className="w-full px-6 max-md:px-4 pt-6 pb-10">
         <div className="rounded-section border border-[color:var(--color-hairline,#e5e7eb)] bg-white p-5">
