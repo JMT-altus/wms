@@ -13,6 +13,7 @@ const SUPPORT = "22222222-2222-2222-2222-222222222222";
 const staff = (over: Partial<Viewer> = {}): Viewer => ({
   id: "emp-staff",
   isSuperAdmin: false,
+  isAdmin: false,
   isManagement: false,
   departmentIds: [SALES],
   ...over,
@@ -51,12 +52,22 @@ describe("canSee — private", () => {
     ).toBe(true);
   });
 
-  it("does NOT leak to an ordinary admin", () => {
-    // `is_admin` is deliberately absent from Viewer: only the two super-admin
-    // accounts pierce the personal space. If this ever starts passing, the
-    // personal space has quietly become a shared one.
-    const ordinaryAdmin = staff({ id: "emp-admin" });
-    expect(canSee(ordinaryAdmin, subject({ visibility: "private" }))).toBe(false);
+  it("shows it to an ordinary admin too", () => {
+    // Reversed deliberately (0078). The rule became "everyone except the MD and
+    // admins sees only their own work", which only holds if the admin flag is a
+    // full bypass — a personal space admins could not read would leave them
+    // unable to account for work at all. Narrowing this back means picking a
+    // different exemption, not just editing this line.
+    const ordinaryAdmin = staff({ id: "emp-admin", isAdmin: true });
+    expect(canSee(ordinaryAdmin, subject({ visibility: "private" }))).toBe(true);
+  });
+
+  it("still hides it from a non-admin colleague in the same department", () => {
+    // The guard that matters now: no ordinary employee sees anyone else's work.
+    const colleague = staff({ id: "emp-other", departmentIds: [SALES] });
+    expect(
+      canSee(colleague, { visibility: "private", participantIds: ["emp-staff"] }),
+    ).toBe(false);
   });
 
   it("ignores null participants rather than matching them", () => {

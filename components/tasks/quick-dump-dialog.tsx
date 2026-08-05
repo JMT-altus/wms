@@ -67,7 +67,10 @@ export function QuickDumpDialog({
   // Quick Dump is the capture box for half-formed thoughts, so it gets the
   // simple binary rather than the full picker: keep it to yourself, or don't.
   // Anything finer is a decision for the task's own page later.
-  const [personal, setPersonal] = React.useState(false);
+  // Personal by default (0078) — the capture box is where half-formed thoughts
+  // land, and everyone except the MD and admins now sees only their own work.
+  // Toggle to "Everyone" to share a dump with the team.
+  const [personal, setPersonal] = React.useState(true);
   const inputRef = React.useRef<HTMLInputElement>(null);
 
   // Refs mirror state so the speech callbacks (which capture once) stay fresh.

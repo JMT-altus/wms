@@ -846,7 +846,7 @@ export async function createTask(input: CreateTaskInput): Promise<
  */
 export async function quickDumpTasks(
   titles: string[],
-  visibility: Visibility = "internal",
+  visibility: Visibility = "private",
 ): Promise<{ ok: true; count: number } | { ok: false; error: string }> {
   const me = await requireUser();
   if (!canQuickDump(me.email)) {

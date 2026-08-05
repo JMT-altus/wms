@@ -58,10 +58,19 @@ export const viewerFor = cache(async (me: Employee): Promise<Viewer> => {
   return {
     id: me.id,
     isSuperAdmin: isSuperAdmin(me.email),
+    isAdmin: me.isAdmin,
     isManagement: mgmtRows[0]?.isManagement ?? false,
     departmentIds: [...departmentIds],
   };
 });
+
+/**
+ * The MD + admins are exempt from the "your own work only" rule and see every
+ * row. One predicate so the three condition builders below can't drift apart.
+ */
+function seesEverything(v: Viewer): boolean {
+  return v.isSuperAdmin || v.isAdmin;
+}
 
 /**
  * SQL fragment restricting `tasks` to what the viewer may see.
@@ -74,9 +83,9 @@ export async function visibleTaskCondition(
 ): Promise<SQL | undefined> {
   const v = viewer === undefined ? await getViewer() : viewer;
   if (!v) return sql`false`;
-  // Super-admins see everything; skip the predicate entirely so their queries
-  // stay on the existing plans.
-  if (v.isSuperAdmin) return undefined;
+  // The MD + admins see everything; skip the predicate entirely so their
+  // queries stay on the existing plans.
+  if (seesEverything(v)) return undefined;
 
   return or(
     // On the row → always visible, whatever the setting says.
@@ -129,7 +138,7 @@ function audienceMatches(
 export async function rawVisibleTaskSql(viewer?: Viewer | null): Promise<SQL> {
   const v = viewer === undefined ? await getViewer() : viewer;
   if (!v) return sql`false`;
-  if (v.isSuperAdmin) return sql`true`;
+  if (seesEverything(v)) return sql`true`;
 
   const management = v.isManagement ? sql` OR ta.kind = 'management'` : sql``;
   const departments =
@@ -162,7 +171,7 @@ export async function visibleProjectRootCondition(
 ): Promise<SQL | undefined> {
   const v = viewer === undefined ? await getViewer() : viewer;
   if (!v) return sql`false`;
-  if (v.isSuperAdmin) return undefined;
+  if (seesEverything(v)) return undefined;
 
   return or(
     eq(projectNodes.ownerId, v.id),

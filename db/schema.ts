@@ -602,15 +602,16 @@ export const tasks = pgTable(
     googleSyncedDoerId: uuid("google_synced_doer_id"),
     archived: boolean("archived").notNull().default(false),
     /**
-     * 0077 — row-level visibility. 'internal' (the default, and what every
-     * pre-existing row migrated to) means everyone, i.e. the behaviour before
-     * this column existed. See lib/access/visibility.ts for the rules and
+     * 0077 — row-level visibility. 0078 flipped the default to 'private' and
+     * backfilled every existing 'internal' row: everyone except the MD and
+     * admins now sees only their own work, so team-wide has to be chosen, not
+     * inherited. See lib/access/visibility.ts for the rules and
      * lib/auth/task-visibility.ts for the SQL predicate every read applies.
      */
     visibility: text("visibility")
       .$type<Visibility>()
       .notNull()
-      .default("internal"),
+      .default("private"),
     // M2.1 additions — provenance + approval (approved_* used in M2.2) + optimistic lock
     createdById: uuid("created_by_id").references(() => employees.id, {
       onDelete: "restrict",

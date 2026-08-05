@@ -23,9 +23,15 @@ export const AudienceEntrySchema = z
     "Pick a department or a person for this audience entry",
   );
 
-/** Reused by task create, task edit and the project write path. */
+/**
+ * Reused by task create, task edit and the project write path.
+ *
+ * Defaults to `private`: everyone except the MD and admins sees only their own
+ * work, so a task nobody explicitly shared must not fall back to team-wide.
+ * A caller that wants the whole team to see a row has to say so.
+ */
 export const VisibilityFields = {
-  visibility: z.enum(VISIBILITIES).optional().default("internal"),
+  visibility: z.enum(VISIBILITIES).optional().default("private"),
   audience: z.array(AudienceEntrySchema).max(100).optional().default([]),
 };
 

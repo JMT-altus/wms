@@ -125,6 +125,13 @@ export interface HeatmapCellTask {
 export interface AgingHeatmapData {
   // employeeId -> bucketId -> HeatmapCellTask[]
   byCell: Record<string, Record<string, HeatmapCellTask[]>>;
+  /**
+   * employeeId -> bucketId -> how many tasks in that cell the viewer may NOT
+   * open. The bars are team-wide counts but the popover only lists tasks the
+   * viewer can see, so without this a bar reading 6 could show a single row
+   * and look broken.
+   */
+  hiddenByCell: Record<string, Record<string, number>>;
 }
 
 /** Operational summary metrics surfaced when a KPI card is expanded. All

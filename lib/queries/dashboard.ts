@@ -1,5 +1,6 @@
 import { and, gte, lt, inArray, getTableColumns } from "drizzle-orm";
 import { db, employees, tasks } from "@/lib/db";
+import { taskAudience } from "@/db/schema";
 import type { Task } from "@/lib/db";
 import type { DashboardData, DashboardFilters, KpiSet } from "@/lib/types";
 import {
@@ -24,8 +25,8 @@ import {
 } from "@/lib/queries/departments";
 import { unstable_cache } from "next/cache";
 import { CACHE_TAGS } from "@/lib/cache-tags";
-import { getViewer, visibleTaskCondition } from "@/lib/auth/task-visibility";
-import type { Viewer } from "@/lib/access/visibility";
+import { getViewer } from "@/lib/auth/task-visibility";
+import { canSee, type AudienceEntry, type Viewer } from "@/lib/access/visibility";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
@@ -100,12 +101,13 @@ async function loadDashboardDataUncached(
     gte(tasks.createdAt, start),
     lt(tasks.createdAt, new Date(end.getTime() + MS_PER_DAY)),
   ];
-  // Every aggregate on this page — KPIs, status table, aging, velocity, top
-  // performers — derives from these conditions, so one push covers them all.
-  // Consequence worth knowing: totals are now per-viewer, and two people with
-  // the same filters can legitimately see different numbers.
-  const visible = await visibleTaskCondition(viewer);
-  if (visible) baseConditions.push(visible);
+  // NOTE: the row-visibility predicate is deliberately NOT pushed here.
+  // Task CONTENT is private (see lib/auth/task-visibility.ts), but the
+  // dashboard's team widgets — KPIs, status table, aging bars, velocity, top
+  // performers — are counts, and scoping those to the viewer would collapse
+  // them to a single row for everyone who isn't an admin, which is the whole
+  // point of the page. Counts are team-wide; anything that carries a task
+  // TITLE is filtered instead (see `mayOpen` below).
   if (filters.priorities.length > 0) {
     baseConditions.push(inArray(tasks.priority, filters.priorities));
   }
@@ -277,15 +279,65 @@ async function loadDashboardDataUncached(
   // Aging heatmap shows EVERY pending task (any non-terminal status),
   // sourced from the canonical enum list so Tier-3 statuses appear.
   const PENDING_AGES: Set<TaskStatus> = new Set(PENDING_STATUSES);
+
+  // The heatmap bars are counts (team-wide), but the popover behind them lists
+  // real task titles — so that list, and only that list, is filtered to what
+  // this person may actually open. 'restricted' rows need their audience to
+  // decide, so fetch it for those rows alone; the common private/internal case
+  // is answered from columns we already have.
+  const heatmapTasks = periodTasks.filter(
+    (t) => PENDING_AGES.has(t.status) && t.doerId != null,
+  );
+  const audienceByTask = new Map<string, AudienceEntry[]>();
+  const viewerSeesAll = !viewer || viewer.isSuperAdmin || viewer.isAdmin;
+  if (!viewerSeesAll) {
+    const restrictedIds = heatmapTasks
+      .filter((t) => t.visibility === "restricted")
+      .map((t) => t.id);
+    if (restrictedIds.length > 0) {
+      const audRows = await db
+        .select({
+          taskId: taskAudience.taskId,
+          kind: taskAudience.kind,
+          refId: taskAudience.refId,
+        })
+        .from(taskAudience)
+        .where(inArray(taskAudience.taskId, restrictedIds));
+      for (const r of audRows) {
+        const list = audienceByTask.get(r.taskId);
+        if (list) list.push({ kind: r.kind, refId: r.refId });
+        else audienceByTask.set(r.taskId, [{ kind: r.kind, refId: r.refId }]);
+      }
+    }
+  }
+  const mayOpen = (t: Task): boolean => {
+    if (!viewer) return false;
+    return canSee(viewer, {
+      visibility: t.visibility,
+      participantIds: [t.doerId, t.initiatorId, t.createdById],
+      audience: audienceByTask.get(t.id) ?? [],
+    });
+  };
+
   const byCell: AgingHeatmapData["byCell"] = {};
-  for (const t of periodTasks) {
-    if (!PENDING_AGES.has(t.status)) continue;
-    if (t.doerId == null) continue; // unassigned pool task — not on the aging heatmap
+  // Counted per cell so the popover can own up to the gap instead of silently
+  // listing 1 task under a bar that says 6.
+  const hiddenByCell: AgingHeatmapData["hiddenByCell"] = {};
+  for (const t of heatmapTasks) {
+    const doerId = t.doerId;
+    if (doerId == null) continue; // narrowed above; keeps TS happy
     const ageDays = Math.floor((now.getTime() - t.createdAt.getTime()) / MS_PER_DAY);
     const bucket = AGE_BUCKETS.find((b) => ageDays >= b.min && ageDays <= b.max);
     if (!bucket) continue;
-    if (!byCell[t.doerId]) byCell[t.doerId] = {};
-    const empBuckets = byCell[t.doerId];
+    if (!mayOpen(t)) {
+      if (!hiddenByCell[doerId]) hiddenByCell[doerId] = {};
+      const empHidden = hiddenByCell[doerId];
+      if (!empHidden) continue;
+      empHidden[bucket.id] = (empHidden[bucket.id] ?? 0) + 1;
+      continue;
+    }
+    if (!byCell[doerId]) byCell[doerId] = {};
+    const empBuckets = byCell[doerId];
     if (!empBuckets) continue;
     if (!empBuckets[bucket.id]) empBuckets[bucket.id] = [];
     const bucketList = empBuckets[bucket.id];
@@ -342,7 +394,7 @@ async function loadDashboardDataUncached(
     agingTable: computeEmployeeAgingTable(periodTasks, allEmployees, now),
     agingHeatmap: [],
     agingByDate: computeAgingByDate(periodTasks, now),
-    agingHeatmapData: { byCell },
+    agingHeatmapData: { byCell, hiddenByCell },
     generatedAt: now,
   };
 }

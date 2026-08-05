@@ -24,6 +24,12 @@ export interface Viewer {
   id: string;
   /** True for the two accounts in SUPER_ADMIN_EMAILS. */
   isSuperAdmin: boolean;
+  /**
+   * Carries the `is_admin` flag. Admins see every task, including personal
+   * ones — the MD + admins are the only people exempt from the "your own work
+   * only" rule, so this is a full bypass, not a wider audience.
+   */
+  isAdmin: boolean;
   /** Holds a designation flagged `is_management`. */
   isManagement: boolean;
   /** Every department they belong to (M2M, not just the primary one). */
@@ -46,11 +52,14 @@ export interface Subject {
  *
  *  1. Participants always win. Without this you can create orphans — a private
  *     task reassigned to someone they can't see, sitting in nobody's list.
- *  2. Super-admins always win. "I" in the brief is Mihir Veera + Altus Corp,
- *     so those two accounts are the personal space AND the pair that keeps
- *     company-wide reporting honest. Note this deliberately does NOT extend to
- *     every `is_admin` user: an ordinary admin cannot read the personal space.
- *  3. `internal` → everyone. The pre-existing behaviour.
+ *  2. The MD and admins always win. Everyone else sees only their own work, so
+ *     the `is_admin` flag is the single exemption that keeps company-wide
+ *     reporting and oversight possible. This DOES include personal tasks: an
+ *     earlier revision withheld those from ordinary admins, but the rule is now
+ *     "admins see everything, nobody else sees anyone else's".
+ *  3. `internal` → everyone. Reaching this means someone deliberately chose to
+ *     share the row with the whole team; it is no longer the default a task
+ *     gets by accident (new tasks are created `private`).
  *  4. `restricted` → whoever the audience names.
  *  5. otherwise (`private`) → no.
  */
@@ -58,7 +67,7 @@ export function canSee(viewer: Viewer, subject: Subject): boolean {
   if (subject.participantIds.some((id) => id != null && id === viewer.id)) {
     return true;
   }
-  if (viewer.isSuperAdmin) return true;
+  if (viewer.isSuperAdmin || viewer.isAdmin) return true;
   if (subject.visibility === "internal") return true;
   if (subject.visibility === "restricted") {
     return matchesAudience(viewer, subject.audience ?? []);
@@ -87,10 +96,14 @@ export const VISIBILITY_LABEL: Record<Visibility, string> = {
 };
 
 export const VISIBILITY_HINT: Record<Visibility, string> = {
-  private: "Only you and anyone assigned. Hidden from other admins.",
+  private: "Only you and anyone assigned. The default for new tasks.",
   internal: "Every signed-in member of the team can see this.",
   restricted: "Only the departments, managers or people you pick.",
 };
+
+/** Shown once beside the picker so nobody has to infer the org-wide rule. */
+export const VISIBILITY_FOOTNOTE =
+  "Management and admins can see every task regardless of this setting.";
 
 /**
  * Human summary of who can see a restricted row — for the detail page chip and

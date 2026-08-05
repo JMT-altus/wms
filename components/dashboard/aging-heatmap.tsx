@@ -47,9 +47,12 @@ type SortMode = "risk" | "total" | "oldest";
 export function AgingHeatmap({
   rows,
   cellTasks,
+  hiddenCells = {},
 }: {
   rows: AgingRow[];
   cellTasks: Record<string, Record<string, HeatmapCellTask[]>>;
+  /** Per cell, how many tasks this viewer isn't allowed to open. */
+  hiddenCells?: Record<string, Record<string, number>>;
 }) {
   const [sortMode, setSortMode] = React.useState<SortMode>("risk");
 
@@ -158,6 +161,7 @@ export function AgingHeatmap({
                   maxTotal={maxTotal}
                   index={i}
                   employeeTasks={cellTasks[r.employeeId] ?? {}}
+                  employeeHidden={hiddenCells[r.employeeId] ?? {}}
                 />
               ))}
             </div>
@@ -335,11 +339,13 @@ function Lane({
   maxTotal,
   index,
   employeeTasks,
+  employeeHidden,
 }: {
   row: AgingRow & { risk: number };
   maxTotal: number;
   index: number;
   employeeTasks: Record<string, HeatmapCellTask[]>;
+  employeeHidden: Record<string, number>;
 }) {
   const router = useRouter();
   const lengthPct = (row.total / maxTotal) * 100;
@@ -412,6 +418,7 @@ function Lane({
                 widthPct={segPct}
                 employeeName={row.employeeName}
                 tasks={employeeTasks[b.id] ?? []}
+                hidden={employeeHidden[b.id] ?? 0}
               />
             );
           })}
@@ -504,6 +511,7 @@ function Segment({
   widthPct,
   employeeName,
   tasks,
+  hidden,
 }: {
   bucketId: AgeBucketId;
   bucketLabel: string;
@@ -511,18 +519,28 @@ function Segment({
   widthPct: number;
   employeeName: string;
   tasks: HeatmapCellTask[];
+  /** Tasks in this cell the viewer may not open (private to someone else). */
+  hidden: number;
 }) {
   const c = BUCKET_COLOR[bucketId];
   const showLabel = widthPct > 8;
   const isCritical = CRITICAL_BUCKETS.includes(bucketId);
 
   const [open, setOpen] = React.useState(false);
-  // Close the panel on any scroll — once the bar it anchors to scrolls away,
-  // a detached floating popover is confusing. Capture phase catches scrolls
-  // in nested containers too.
+  const contentRef = React.useRef<HTMLDivElement | null>(null);
+  // Close the panel when the PAGE scrolls — once the bar it anchors to scrolls
+  // away, a detached floating popover is confusing. Capture phase is needed to
+  // catch scrolls in nested containers, but that also catches the popover's own
+  // task list, which used to dismiss the panel the moment you tried to reach
+  // the tasks at the bottom of it. Scrolls originating inside the content are
+  // therefore ignored.
   React.useEffect(() => {
     if (!open) return;
-    const close = () => setOpen(false);
+    const close = (e: Event) => {
+      const target = e.target as Node | null;
+      if (target && contentRef.current?.contains(target)) return;
+      setOpen(false);
+    };
     window.addEventListener("scroll", close, true);
     return () => window.removeEventListener("scroll", close, true);
   }, [open]);
@@ -559,6 +577,7 @@ function Segment({
       </Popover.Trigger>
       <Popover.Portal>
         <Popover.Content
+          ref={contentRef}
           side="top"
           align="center"
           sideOffset={10}
@@ -616,7 +635,9 @@ function Segment({
                 className="py-4 px-3 font-semibold"
                 style={{ fontSize: 16, color: "var(--color-ink-muted)" }}
               >
-                No tasks.
+                {hidden > 0
+                  ? `${hidden} ${hidden === 1 ? "task" : "tasks"} — private to ${employeeName}.`
+                  : "No tasks."}
               </li>
             )}
             {tasks.map((t) => (
@@ -655,6 +676,22 @@ function Segment({
               </li>
             ))}
           </ul>
+          {/* The bar counts every pending task; the list above only shows the
+              ones this viewer may open. Say so rather than letting a "6" bar
+              quietly render one row. */}
+          {tasks.length > 0 && hidden > 0 && (
+            <p
+              className="shrink-0 px-5 py-2.5 font-semibold"
+              style={{
+                fontSize: 13.5,
+                color: "var(--color-ink-subtle)",
+                borderTop: "1px solid var(--color-hairline)",
+                background: "var(--color-surface-soft)",
+              }}
+            >
+              +{hidden} more private to {employeeName}
+            </p>
+          )}
           <Popover.Arrow style={{ fill: c.deep }} width={14} height={8} />
         </Popover.Content>
       </Popover.Portal>

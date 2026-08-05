@@ -107,10 +107,12 @@ interface PreviewFile {
 }
 
 export function NewTaskForm({ employees, clients, subjects, projectNodes = [], departments = [], onSuccess, completeTaskId, onCompleted, defaults }: Props) {
-  // Defaults to "Everyone", which is the behaviour that existed before
-  // visibility was a concept — creating a task never silently hides it.
+  // Defaults to "Personal" (0078). Everyone except the MD and admins sees only
+  // their own work, so a task nobody deliberately shared must not start out
+  // team-wide — the people ON it (doer, initiator, creator) always see it, and
+  // sharing wider is an explicit choice made right here in the picker.
   const [visibility, setVisibility] = React.useState<VisibilityValue>({
-    visibility: "internal",
+    visibility: "private",
     audience: [],
   });
   const router = useRouter();

@@ -177,7 +177,7 @@ export async function createUnassignedTasks(
    * thought fast, keep it to yourself. An ownerless PRIVATE task is visible to
    * its creator alone, which is exactly the "personal to-do" case.
    */
-  visibility: Visibility = "internal",
+  visibility: Visibility = "private",
 ): Promise<{ ok: true; ids: string[] } | { ok: false; error: string }> {
   const clean = titles
     .map((t) => t.trim())

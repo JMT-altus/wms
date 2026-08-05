@@ -154,7 +154,11 @@ export default async function DashboardPage({ searchParams }: PageProps) {
                 <TopPerformersSection performers={data.topPerformers} />
               </div>
               <StatusTable rows={data.statusTable} view={filters.view} />
-              <AgingHeatmap rows={data.agingTable} cellTasks={data.agingHeatmapData.byCell} />
+              <AgingHeatmap
+                rows={data.agingTable}
+                cellTasks={data.agingHeatmapData.byCell}
+                hiddenCells={data.agingHeatmapData.hiddenByCell}
+              />
             </div>
           </>
         )}
