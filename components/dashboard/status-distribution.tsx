@@ -2,8 +2,8 @@
 import * as React from "react";
 import Link from "next/link";
 import type { Route } from "next";
-import { PieChart, LayoutGrid } from "lucide-react";
-import { PENDING_STATUSES, isDeprecatedStatus } from "@/db/enums";
+import { PieChart, LayoutGrid, Archive } from "lucide-react";
+import { isDeprecatedStatus } from "@/db/enums";
 import type {
   StatusDistributionPayload,
   StatusDistribution,
@@ -49,13 +49,15 @@ export function StatusDistributionChart({
   // to zeros so the card renders instead of throwing on `summary.pending`.
   const summary = data.summary ?? { pending: 0, notApproved: 0, archived: 0 };
 
-  if (rows.length === 0) {
+  // Zero-count statuses are kept (so the grid is stable), which means `rows` is
+  // never empty — "nothing matched this filter" has to be judged on the counts.
+  if (totalCount === 0) {
     return (
       <section
         className="rounded-section bg-surface-card border border-hairline p-8 max-md:p-5"
         style={{ boxShadow: "0 14px 32px -20px rgba(10, 108, 255, 0.16), 0 2px 6px -2px rgba(15, 23, 42, 0.06)" }}
       >
-        <Header isAdmin={isAdmin} />
+        <Header isAdmin={isAdmin} archived={summary.archived} />
         <p className="mt-3 text-body-lg text-ink-subtle">
           No data for the current filter.
         </p>
@@ -72,7 +74,7 @@ export function StatusDistributionChart({
         animation: "fadeUp 500ms ease-out 500ms forwards",
       }}
     >
-      <Header isAdmin={isAdmin} />
+      <Header isAdmin={isAdmin} archived={summary.archived} />
 
       {/* Proportional ribbon — a VISUAL OVERVIEW only (not clickable):
           tiny segments can't be both proportional and tappable, so the
@@ -136,9 +138,15 @@ export function StatusDistributionChart({
         })}
       </div>
 
-      {/* Legend grid — one continuous grid of status tiles followed by the
-          pending / not-approved / archived summary tiles (same design), so the
-          cards flow without odd mid-grid gaps. 3 cols desktop, 2 tablet, 1 mobile. */}
+      {/* Legend grid — ONE tile per live status, nothing else.
+          It previously also carried "Pending", "Not approved" and "Archived"
+          summary tiles, which broke the panel in two ways: "Not approved" was
+          already a status tile, so it rendered twice; and "Pending" is a
+          roll-up of Not Seen + Not Started + Initiated, so the tiles
+          double-counted and no longer summed to the total. A distribution has
+          to be mutually exclusive to be readable. Pending still has its own KPI
+          in the strip above, and Archived is a link in the header (it is a flag
+          on a task, not a status). 3 cols desktop, 2 tablet, 1 mobile. */}
       <ul className="mt-6 grid grid-cols-3 gap-3 max-lg:grid-cols-2 max-sm:grid-cols-1">
         {rows.map((r, i) => (
           <StatTile
@@ -150,120 +158,12 @@ export function StatusDistributionChart({
             tone={resolvedTones[r.status]}
           />
         ))}
-        <SummaryTile
-          label="Pending"
-          value={summary.pending}
-          tone="amber"
-          denom={denom}
-          index={rows.length}
-          href={`/tasks?status=${PENDING_STATUSES.join(",")}` as Route}
-        />
-        <SummaryTile
-          label="Not approved"
-          value={summary.notApproved}
-          tone="rose"
-          denom={denom}
-          index={rows.length + 1}
-          href={"/tasks?status=not_approved" as Route}
-        />
-        {/* Archived view is admin-only — hide the jump-to-archive tile from doers. */}
-        {isAdmin && (
-          <SummaryTile
-            label="Archived"
-            value={summary.archived}
-            tone="slate"
-            denom={denom}
-            index={rows.length + 2}
-            href={"/archived" as Route}
-          />
-        )}
       </ul>
     </section>
   );
 }
 
-/**
- * Same visual language as StatTile (the 9 status cards) so the
- * pending/not-approved/archived row blends in seamlessly: coloured dot +
- * uppercase label, big count, share % of open work, and a bottom share bar.
- */
-function SummaryTile({
-  label,
-  value,
-  tone,
-  denom,
-  index,
-  href,
-}: {
-  label: string;
-  value: number;
-  tone: Tone;
-  denom: number;
-  index: number;
-  href: Route;
-}) {
-  const animated = useCountUp(value, 900 + index * 70);
-  const pct = denom > 0 ? (value / denom) * 100 : 0;
-  return (
-    <li>
-      <Link
-        href={href}
-        className="dist-tile group flex h-full cursor-pointer flex-col p-4 rounded-chip bg-surface-soft transition-all"
-        style={{ border: "1px solid var(--color-hairline)" }}
-      >
-        <div className="flex items-center gap-2">
-          <span
-            aria-hidden
-            className="size-2.5 shrink-0 rounded-full"
-            style={{ background: `var(--color-${tone})` }}
-          />
-          <span
-            className="uppercase font-bold tracking-[0.06em] truncate text-ink-soft"
-            style={{ fontSize: 12 }}
-          >
-            {label}
-          </span>
-        </div>
-
-        <div className="mt-3 flex items-baseline gap-2">
-          <span
-            className="tabular-nums font-black leading-none text-ink-strong"
-            style={{
-              fontFamily: "var(--font-display), system-ui, sans-serif",
-              fontSize: 34,
-            }}
-          >
-            {animated}
-          </span>
-          <span
-            className="ml-auto tabular-nums font-semibold text-ink-subtle"
-            style={{ fontSize: 14 }}
-          >
-            {denom > 0 ? `${pct.toFixed(1)}%` : "—"}
-          </span>
-        </div>
-
-        <div
-          aria-hidden
-          className="mt-3 h-1.5 w-full overflow-hidden rounded-full"
-          style={{ background: "var(--color-surface-track)" }}
-        >
-          <span
-            className="block h-full rounded-full"
-            style={{
-              width: `${Math.max(Math.min(pct, 100), pct > 0 ? 3 : 0)}%`,
-              background: `linear-gradient(90deg, var(--color-${tone}), var(--color-${tone}-deep))`,
-              animation: `barGrow 900ms cubic-bezier(.2,.8,.2,1) ${400 + index * 70}ms backwards`,
-              transformOrigin: "left",
-            }}
-          />
-        </div>
-      </Link>
-    </li>
-  );
-}
-
-function Header({ isAdmin }: { isAdmin: boolean }) {
+function Header({ isAdmin, archived }: { isAdmin: boolean; archived: number }) {
   return (
     <header className="flex items-start justify-between gap-3">
       <div className="flex items-start gap-3 min-w-0">
@@ -284,19 +184,36 @@ function Header({ isAdmin }: { isAdmin: boolean }) {
           </p>
         </div>
       </div>
-      {/* Kanban is admin-only — doers don't see the jump-to-board link. */}
+      {/* Kanban + Archive are admin-only — doers don't see either jump link.
+          Archive lives here rather than in the tile grid below: archived is a
+          flag on a task, not one of the statuses, so a tile for it would break
+          the "these add up to 100%" reading of the distribution. */}
       {isAdmin && (
-        <Link
-          href={"/tasks/kanban" as Route}
-          className="shrink-0 inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-[14px] font-semibold text-white transition-all hover:-translate-y-0.5"
-          style={{
-            background: "linear-gradient(135deg, #0A6CFF 0%, #0A6CFF 42%, #17B6A0 100%)",
-            boxShadow: "0 4px 12px rgba(10, 108, 255, 0.25)",
-          }}
-        >
-          <LayoutGrid size={15} strokeWidth={2.4} />
-          View in Kanban
-        </Link>
+        <div className="shrink-0 flex items-center gap-2">
+          <Link
+            href={"/archived" as Route}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full text-[14px] font-semibold text-ink-soft transition-all hover:-translate-y-0.5 hover:text-ink-strong"
+            style={{
+              background: "rgba(15, 23, 42, 0.05)",
+              border: "1px solid var(--color-hairline)",
+            }}
+          >
+            <Archive size={15} strokeWidth={2.4} />
+            Archive
+            <span className="tabular-nums font-bold">{archived}</span>
+          </Link>
+          <Link
+            href={"/tasks/kanban" as Route}
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-[14px] font-semibold text-white transition-all hover:-translate-y-0.5"
+            style={{
+              background: "linear-gradient(135deg, #0A6CFF 0%, #0A6CFF 42%, #17B6A0 100%)",
+              boxShadow: "0 4px 12px rgba(10, 108, 255, 0.25)",
+            }}
+          >
+            <LayoutGrid size={15} strokeWidth={2.4} />
+            View in Kanban
+          </Link>
+        </div>
       )}
     </header>
   );

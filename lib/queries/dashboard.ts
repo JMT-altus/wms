@@ -163,8 +163,11 @@ async function loadDashboardDataUncached(
 
   const totals = computeKpiTotals(periodTasks);
 
-  const approvedCount = periodTasks.filter((t) => t.status === "approved").length;
-  const statusDistributionDenominator = totals.total - approvedCount;
+  // Every live status now gets a tile, Approved included, so the denominator is
+  // the whole set and the shares add up to 100%. It used to exclude approved
+  // work (the panel only showed open statuses), which made the percentages
+  // shares-of-open — correct then, wrong the moment Approved became a tile.
+  const statusDistributionDenominator = totals.total;
 
   const sparklineFor = (predicate: (s: TaskStatus) => boolean) =>
     computeDailySparkline(
@@ -369,7 +372,7 @@ async function loadDashboardDataUncached(
       departmentMap,
     ),
     statusDistribution: {
-      rows: computeStatusDistribution(periodTasks).filter((r) => r.status !== "approved"),
+      rows: computeStatusDistribution(periodTasks),
       denominator: statusDistributionDenominator,
       summary: {
         // Open work still awaiting a verdict (non-terminal, not archived,

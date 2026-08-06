@@ -48,6 +48,31 @@ export function computeKpiTotals(tasks: Task[]): KpiTotals {
   };
 }
 
+/**
+ * A task's status spans two columns: the working `status` and the admin
+ * `approval_status` verdict. Everywhere else in the app an approval verdict
+ * wins — the KPI totals above, and the task-list filter (see
+ * APPROVAL_VERDICTS in lib/queries/tasks.ts). The distribution has to agree,
+ * or the same task reads "Done" in one panel and "Not Approved" in another.
+ *
+ * Only the approved / not_approved verdicts are folded in. `cancelled` and
+ * `transferred` are retired values (DEPRECATED_TASK_STATUSES); mapping onto
+ * them would move a task into a bucket nothing renders, and the counts would
+ * silently stop summing to the total.
+ */
+function effectiveStatus(t: Task): TaskStatus {
+  if (t.approvalStatus === "approved" || t.approvalStatus === "not_approved") {
+    return t.approvalStatus;
+  }
+  return t.status;
+}
+
+/**
+ * Counts per status. Zero-count statuses are RETAINED so the dashboard grid is
+ * the full, stable set of live statuses rather than a list that reshuffles as
+ * work moves — "Done: 0" is information, and a tile that vanishes is not.
+ * Retired statuses are dropped by the renderer via `isDeprecatedStatus`.
+ */
 export function computeStatusDistribution(
   tasks: Task[],
 ): StatusDistribution[] {
@@ -56,11 +81,12 @@ export function computeStatusDistribution(
   );
 
   for (const t of tasks) {
-    counts.set(t.status, (counts.get(t.status) ?? 0) + 1);
+    const status = effectiveStatus(t);
+    counts.set(status, (counts.get(status) ?? 0) + 1);
   }
 
   return TASK_STATUSES.map((status) => ({
     status,
     count: counts.get(status) ?? 0,
-  })).filter((d) => d.count > 0);
+  }));
 }
