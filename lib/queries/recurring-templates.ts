@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, eq, gt, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { tasks, employees } from "@/db/schema";
 import type { TaskStatus } from "@/db/enums";
@@ -28,8 +28,6 @@ export interface RecurringTemplateRow {
  * Integrations tab so an admin can audit what's spawning.
  */
 export async function listRecurringTemplates(): Promise<RecurringTemplateRow[]> {
-  const doerEmp = sql.raw("doer_emp").mapWith(String);
-  const initEmp = sql.raw("init_emp").mapWith(String);
   // Two-step approach: pick templates first, then count children +
   // earliest-future-due in a second join — simpler than a 3-way self-join
   // in drizzle's builder.
@@ -58,22 +56,41 @@ export async function listRecurringTemplates(): Promise<RecurringTemplateRow[]> 
   if (templates.length === 0) return [];
 
   // Build doer/initiator name lookup in one round-trip.
+  //
+  // `doerId` is nullable (migration 0075 — unassigned pool tasks), so the nulls
+  // are stripped before the lookup: a null in the id list matches nothing and
+  // only widens the parameter list.
+  //
+  // Uses `inArray`, NOT sql`… = ANY(${ids})`. Interpolating a JS array into a
+  // sql`` template expands it to a row constructor — `= ANY(($1, $2))` — which
+  // Postgres rejects, because ANY needs an array or a subquery. That threw on
+  // every render of /admin/settings as soon as a recurring template existed.
   const peopleIds = Array.from(
     new Set(templates.flatMap((t) => [t.doerId, t.initiatorId])),
-  );
-  const people = await db
-    .select({ id: employees.id, name: employees.name })
-    .from(employees)
-    .where(sql`${employees.id} = ANY(${peopleIds})`);
+  ).filter((id): id is string => id !== null);
+  const people =
+    peopleIds.length > 0
+      ? await db
+          .select({ id: employees.id, name: employees.name })
+          .from(employees)
+          .where(inArray(employees.id, peopleIds))
+      : [];
   const nameById = new Map(people.map((p) => [p.id, p.name]));
 
   // Child counts + earliest future due per template in one query.
-  const now = new Date();
+  //
+  // `now` is passed as an ISO string with an explicit ::timestamptz cast. A raw
+  // Date interpolated into a sql`` fragment serialises via .toString() —
+  // "Thu Aug 06 2026 14:18:10 GMT+0530 (India Standard Time)" — which Postgres
+  // cannot parse. Drizzle only knows to call .toISOString() when the column
+  // type is in scope, which it isn't inside an arbitrary fragment. Same trap,
+  // same fix as the optimistic-lock predicate in app/(app)/tasks/actions.ts.
+  const nowIso = new Date().toISOString();
   const counts = (await db
     .select({
       parentId: tasks.recurrenceParentId,
       n: sql<number>`count(*)::int`,
-      nextDue: sql<Date | null>`min(case when ${tasks.dueAt} > ${now} then ${tasks.dueAt} else null end)`,
+      nextDue: sql<Date | null>`min(case when ${tasks.dueAt} > ${nowIso}::timestamptz then ${tasks.dueAt} else null end)`,
     })
     .from(tasks)
     .where(
