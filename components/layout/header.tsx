@@ -1,3 +1,4 @@
+import { headers } from "next/headers";
 import { LiveIndicator } from "./live-indicator";
 import { MainNavServer } from "./main-nav-server";
 import { NavHistoryButtons } from "./nav-history-buttons";
@@ -7,6 +8,7 @@ import { NewTaskTrigger } from "@/components/header/new-task-trigger";
 import { AdminPill } from "@/components/header/admin-pill";
 import { GlobalSearch } from "@/components/header/global-search";
 import { getCurrentEmployee } from "@/lib/auth/current";
+import { moduleIdForPath } from "@/lib/nav-modules";
 
 /**
  * Deep-navy glassy application header — single row, `--app-header-h` tall
@@ -26,6 +28,21 @@ export async function DashboardHeader({
 }: { generatedAt: Date }) {
   const me = await getCurrentEmployee();
   const isAdmin = me?.isAdmin ?? false;
+
+  // "New Task" belongs to WMS. Employees, Incentive Tracker and Training have
+  // nothing to do with tasks, so the button (and the `N` hotkey, which lives
+  // inside the dialog it mounts) is scoped to that module.
+  //
+  // Not rendering it also skips the five roster queries NewTaskTrigger fires —
+  // employees, clients, subjects, project nodes, departments — on every page of
+  // the other three modules.
+  //
+  // Fails OPEN: `x-pathname` is stamped by middleware, but if it is ever
+  // missing we cannot tell which module we're in, and a stray button is a far
+  // smaller problem than losing task creation on the dashboard.
+  const pathname = (await headers()).get("x-pathname");
+  const moduleId = pathname ? moduleIdForPath(pathname) : null;
+  const showNewTask = moduleId === null || moduleId === "wms";
 
   return (
     <header className="sticky top-0 z-50 header-navy">
@@ -76,7 +93,7 @@ export async function DashboardHeader({
             <span className="max-2xl:hidden">
               <LiveIndicator />
             </span>
-            <NewTaskTrigger />
+            {showNewTask && <NewTaskTrigger />}
             {isAdmin && (
               <span className="max-2xl:hidden">
                 <AdminPill />

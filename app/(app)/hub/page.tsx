@@ -1,6 +1,14 @@
 import Link from "next/link";
 import type { Route } from "next";
-import { LayoutGrid, Users, TrendingUp, GraduationCap, ArrowRight, Lock } from "lucide-react";
+import {
+  LayoutGrid,
+  Users,
+  TrendingUp,
+  GraduationCap,
+  DatabaseZap,
+  ArrowRight,
+  Lock,
+} from "lucide-react";
 import { getCurrentEmployee } from "@/lib/auth/current";
 import { getMyModuleAccess } from "@/lib/auth/module-access";
 import { GlobalSearch } from "@/components/header/global-search";
@@ -22,7 +30,16 @@ type Style = {
   ring: string;
 };
 
-const STYLES: Record<ModuleId, Style> = {
+/**
+ * Keyed by ModuleId, plus the synthetic "masters" tile.
+ *
+ * Admin & Master Setup is deliberately NOT a nav module: it lives in the
+ * `(admin)` route group with its own sidebar, so it has no top-nav pills, and
+ * adding it to MODULES would put a grantable column in /admin/access — letting
+ * someone hand a non-admin a tile that leads straight to a Forbidden page.
+ * It is gated on `isAdmin`, which is exactly what every /admin page enforces.
+ */
+const STYLES: Record<ModuleId | "masters", Style> = {
   wms: {
     Icon: LayoutGrid,
     bg: "linear-gradient(150deg, #f4f8ff 0%, #dfeaff 55%, #cfe0ff 100%)",
@@ -59,7 +76,24 @@ const STYLES: Record<ModuleId, Style> = {
     glow: "rgba(16, 183, 201, 0.42)",
     ring: "rgba(16, 183, 201, 0.55)",
   },
+  masters: {
+    Icon: DatabaseZap,
+    bg: "linear-gradient(150deg, #fff8f0 0%, #ffeede 55%, #ffe2c9 100%)",
+    ink: "#9a4b12",
+    title: "#B45309",
+    btn: "linear-gradient(135deg, #f59e0b, #b45309)",
+    glow: "rgba(245, 158, 11, 0.42)",
+    ring: "rgba(245, 158, 11, 0.55)",
+  },
 };
+
+/** One tile on the hub grid — a module, or the admin-only masters entry. */
+interface HubTile {
+  key: string;
+  label: string;
+  tagline: string;
+  href: string;
+}
 
 /** Time-of-day greeting + a warm line, computed in IST so it matches the team. */
 function greetingForHour(hour: number): { hello: string; line: string } {
@@ -91,6 +125,32 @@ export default async function HubPage({
   const deniedModule = params.denied
     ? MODULES.find((m) => m.id === params.denied)
     : undefined;
+
+  const tiles: HubTile[] = [
+    ...visibleModules.map((m) => ({
+      key: m.id,
+      label: m.label,
+      tagline: m.tagline,
+      href: m.landing,
+    })),
+    // Admins only — every /master-setup page calls requireAdmin(), so showing
+    // this to anyone else would be a link to a 403.
+    //
+    // Master Setup is its OWN area (/master-setup), a sibling of the Admin
+    // Panel (/admin) rather than a section inside it: one holds the reference
+    // data the business runs on, the other administers people and org settings.
+    // The Admin Panel keeps its own entry point via the header pill.
+    ...(me?.isAdmin
+      ? [
+          {
+            key: "masters",
+            label: "Admin & Master Setup",
+            tagline: "Products, customers, libraries, permissions & data import.",
+            href: "/master-setup",
+          },
+        ]
+      : []),
+  ];
 
   const istHour = Number(
     new Intl.DateTimeFormat("en-US", { hour: "numeric", hour12: false, timeZone: "Asia/Kolkata" }).format(new Date()),
@@ -243,32 +303,36 @@ export default async function HubPage({
         {/* Module tiles — only the ones this person may open. */}
         <div
           className={`mx-auto w-full px-8 max-md:px-4 pb-2 grid gap-6 max-md:gap-5 grid-cols-1 lg:flex-1 lg:content-center ${
-            visibleModules.length >= 4
-              ? "sm:grid-cols-2 xl:grid-cols-4"
-              : visibleModules.length === 3
-                ? "sm:grid-cols-2 xl:grid-cols-3"
-                : visibleModules.length === 2
-                  ? "sm:grid-cols-2"
-                  : ""
+            tiles.length >= 5
+              ? "sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5"
+              : tiles.length === 4
+                ? "sm:grid-cols-2 xl:grid-cols-4"
+                : tiles.length === 3
+                  ? "sm:grid-cols-2 xl:grid-cols-3"
+                  : tiles.length === 2
+                    ? "sm:grid-cols-2"
+                    : ""
           }`}
           style={{
             maxWidth:
-              visibleModules.length >= 4
-                ? 1440
-                : visibleModules.length === 3
-                  ? 1140
-                  : visibleModules.length === 2
-                    ? 800
-                    : 420,
+              tiles.length >= 5
+                ? 1680
+                : tiles.length === 4
+                  ? 1440
+                  : tiles.length === 3
+                    ? 1140
+                    : tiles.length === 2
+                      ? 800
+                      : 420,
           }}
         >
-          {visibleModules.map((m) => {
-            const s = STYLES[m.id];
+          {tiles.map((m) => {
+            const s = STYLES[m.key as ModuleId | "masters"];
             const Icon = s.Icon;
             return (
               <Link
-                key={m.id}
-                href={m.landing as Route}
+                key={m.key}
+                href={m.href as Route}
                 className="group relative flex flex-col overflow-hidden rounded-[24px] p-6 transition-transform duration-300 ease-out hover:-translate-y-2"
                 style={{
                   background: s.bg,
@@ -340,7 +404,7 @@ export default async function HubPage({
           })}
         </div>
 
-        {visibleModules.length === 0 && (
+        {tiles.length === 0 && (
           <div className="mx-auto w-full max-w-[1440px] px-8 max-md:px-4 lg:flex-1 lg:flex lg:items-center lg:justify-center">
             <div
               className="mx-auto rounded-[24px] px-8 py-12 text-center"

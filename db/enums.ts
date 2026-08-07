@@ -475,6 +475,168 @@ export const SEED_PRODUCTS = [
   "Rent",
   "Retainer",
 ] as const;
+// ── Training Centre (migration 0079) ──────────────────────────────────────
+// DB columns are `text` with CHECK constraints, so these unions are the
+// canonical source of truth.
+
+export const TRAINING_MATERIAL_KINDS = [
+  "video_link",
+  "document",
+  "pdf",
+  "slide",
+  "other",
+] as const;
+export type TrainingMaterialKind = (typeof TRAINING_MATERIAL_KINDS)[number];
+export const TRAINING_MATERIAL_KIND_LABELS: Record<TrainingMaterialKind, string> = {
+  video_link: "Video link",
+  document: "Document",
+  pdf: "PDF",
+  slide: "Slides",
+  other: "Other",
+};
+
+export const SELF_LEARNING_KINDS = ["book", "video", "youtube", "other"] as const;
+export type SelfLearningKind = (typeof SELF_LEARNING_KINDS)[number];
+export const SELF_LEARNING_KIND_LABELS: Record<SelfLearningKind, string> = {
+  book: "Book",
+  video: "Video",
+  youtube: "YouTube",
+  other: "Other",
+};
+
+// The three Training policy numbers — monthly self-learning target, weekly
+// share minimum, session cadence — deliberately do NOT live here. They are org
+// policy that admins change from Training → Settings, so they live on
+// `org_settings` (migration 0080) and are read via `getTrainingSettings()`.
+// Putting them back here would make a policy change a code change again.
+
+// ── Phase 1 master data (migration 0081) ──────────────────────────────────
+// DB columns are `text` + CHECK, so these unions are the source of truth.
+
+export const FLANGE_TYPES = ["with_flange", "without_flange", "not_applicable"] as const;
+export type FlangeType = (typeof FLANGE_TYPES)[number];
+export const FLANGE_TYPE_LABELS: Record<FlangeType, string> = {
+  with_flange: "With Flange",
+  without_flange: "Without Flange",
+  not_applicable: "Not Applicable",
+};
+
+export const VOLUME_CLASSES = ["A", "B", "C"] as const;
+export type VolumeClass = (typeof VOLUME_CLASSES)[number];
+export const VOLUME_CLASS_LABELS: Record<VolumeClass, string> = {
+  A: "A — High volume",
+  B: "B — Medium volume",
+  C: "C — Low volume",
+};
+
+export const PURCHASE_PATTERNS = ["regular", "seasonal", "one_time"] as const;
+export type PurchasePattern = (typeof PURCHASE_PATTERNS)[number];
+export const PURCHASE_PATTERN_LABELS: Record<PurchasePattern, string> = {
+  regular: "Regular (monthly)",
+  seasonal: "Seasonal (specific cycles)",
+  one_time: "One-time",
+};
+
+export const CUSTOMER_SENSITIVITIES = ["cost_sensitive", "neutral", "loyal"] as const;
+export type CustomerSensitivity = (typeof CUSTOMER_SENSITIVITIES)[number];
+export const CUSTOMER_SENSITIVITY_LABELS: Record<CustomerSensitivity, string> = {
+  cost_sensitive: "Cost sensitive (price-driven)",
+  neutral: "Neutral",
+  loyal: "Loyal / relationship-based",
+};
+
+/**
+ * Editable dropdowns, keyed by `lookup_items.list_key`. Adding a KEY here adds
+ * a managed list to /admin/libraries; adding OPTIONS to a list needs no code —
+ * that is the whole point of the table.
+ */
+export const LOOKUP_LISTS = [
+  {
+    key: "customer_category",
+    label: "Customer Categories",
+    hint: "What kind of business a customer is — OEM, User, Dealer, Panel Builder and so on. Drives the Category column and filter on Customer Masters.",
+  },
+  {
+    key: "enquiry_pending_reason",
+    label: "Enquiry — Pending Reasons",
+    hint: "Why an enquiry is still open. Shown wherever an enquiry is parked.",
+  },
+  {
+    key: "enquiry_lost_reason",
+    label: "Enquiry — Lost Reasons",
+    hint: "Why an enquiry was lost. Drives lost-reason reporting.",
+  },
+] as const;
+export type LookupListKey = (typeof LOOKUP_LISTS)[number]["key"];
+
+/** The list key whose options populate the customer Category dropdown. */
+export const CUSTOMER_CATEGORY_LIST_KEY = "customer_category";
+
+export const IMPORT_SOURCES = ["csv", "google_sheets", "tally"] as const;
+export type ImportSource = (typeof IMPORT_SOURCES)[number];
+export const IMPORT_SOURCE_LABELS: Record<ImportSource, string> = {
+  csv: "CSV upload",
+  google_sheets: "Google Sheets export",
+  tally: "Tally extract",
+};
+
+export const IMPORT_TARGETS = ["customers", "products", "skus", "categories"] as const;
+export type ImportTarget = (typeof IMPORT_TARGETS)[number];
+
+export const TALLY_MAPS_TO = ["customer", "supplier", "product", "ignore"] as const;
+export type TallyMapsTo = (typeof TALLY_MAPS_TO)[number];
+export const TALLY_MAPS_TO_LABELS: Record<TallyMapsTo, string> = {
+  customer: "Customer master",
+  supplier: "Supplier (not imported as customer)",
+  product: "Product master",
+  ignore: "Ignore",
+};
+
+/**
+ * Sensitive fields whose edit rights are toggled per person/department in
+ * /admin/access-control. Adding one here adds a row to the matrix; the guard
+ * is `canEditField()` in lib/access/field-permissions.ts.
+ */
+export const PERMISSION_FIELDS = [
+  {
+    key: "enquiry.quantity",
+    label: "Enquiry — Quantity",
+    hint: "Edit quantities on an enquiry line.",
+    defaultAllowed: true,
+  },
+  {
+    key: "enquiry.avg_rate",
+    label: "Enquiry — Average Rate",
+    hint: "Edit the average rate on an enquiry line.",
+    defaultAllowed: false,
+  },
+  {
+    key: "forecast.quantity",
+    label: "Forecast — Quantity",
+    hint: "Edit forecast quantities during sales forecasting.",
+    defaultAllowed: true,
+  },
+  {
+    key: "forecast.avg_rate",
+    label: "Forecast — Average Rate",
+    hint: "Edit the average rate during sales forecasting.",
+    defaultAllowed: false,
+  },
+  {
+    key: "master.product",
+    label: "Masters — Products & SKUs",
+    hint: "Create and edit product masters.",
+    defaultAllowed: false,
+  },
+  {
+    key: "master.customer",
+    label: "Masters — Customers",
+    hint: "Create and edit customer masters.",
+    defaultAllowed: false,
+  },
+] as const;
+export type PermissionFieldKey = (typeof PERMISSION_FIELDS)[number]["key"];
+
 export const SEED_PAYMENT_MODES = [
   "Kotak - Altus",
   "Pay U",

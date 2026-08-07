@@ -39,6 +39,9 @@ const DEFAULTS: OrgSettings = {
   attEarlyBefore: "19:20",
   attFullDayHours: "9",
   attHalfDayHours: "5",
+  trainingSelfLearningTargetMin: 90,
+  trainingShareMinMinutes: 10,
+  trainingCadenceDays: 6,
   updatedAt: new Date(0),
   updatedById: null,
 };

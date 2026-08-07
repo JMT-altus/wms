@@ -4,6 +4,7 @@ import {
   LayoutDashboard, ListTodo, CalendarDays, FolderKanban, SquareKanban, Target,
   CalendarCheck, CalendarRange, Award, IndianRupee, Receipt, CalendarOff,
   Contact, Sparkles, GraduationCap, LayoutGrid, Users,
+  BookOpen, Share2, Gauge, ListChecks, MessageSquare, Settings,
 } from "lucide-react";
 import type { Route } from "next";
 import { MainNavPill } from "./main-nav-pill";
@@ -19,6 +20,7 @@ const ICONS: Record<string, typeof LayoutDashboard> = {
   LayoutDashboard, ListTodo, CalendarDays, FolderKanban, SquareKanban, Target,
   CalendarCheck, CalendarRange, Award, IndianRupee, Receipt, CalendarOff,
   Contact, Sparkles, GraduationCap, LayoutGrid, Users,
+  BookOpen, Share2, Gauge, ListChecks, MessageSquare, Settings,
 };
 
 export function MainNav({ activeTasks, isAdmin, variant }: Props) {

@@ -25,7 +25,19 @@ import {
   TASK_PRIORITIES,
   APPROVAL_STATUSES,
 } from "./enums";
-import type { AudienceKind, Visibility } from "./enums";
+import type {
+  AudienceKind,
+  CustomerSensitivity,
+  FlangeType,
+  ImportSource,
+  ImportTarget,
+  PurchasePattern,
+  SelfLearningKind,
+  TallyMapsTo,
+  TrainingMaterialKind,
+  Visibility,
+  VolumeClass,
+} from "./enums";
 import type { FormFieldDef } from "@/lib/forms/field-types";
 
 export const taskStatusEnum = pgEnum("task_status", TASK_STATUSES);
@@ -969,6 +981,14 @@ export const orgSettings = pgTable("org_settings", {
   attEarlyBefore: time("att_early_before").default("19:20"),
   attFullDayHours: numeric("att_full_day_hours").default("9"),
   attHalfDayHours: numeric("att_half_day_hours").default("5"),
+  // Training Centre policy (0080). Admin-editable from Training → Settings —
+  // these are org policy, not constants, so changing them must not need a
+  // developer. Defaults match the values they replaced in db/enums.ts.
+  trainingSelfLearningTargetMin: integer("training_self_learning_target_min")
+    .notNull()
+    .default(90),
+  trainingShareMinMinutes: integer("training_share_min_minutes").notNull().default(10),
+  trainingCadenceDays: integer("training_cadence_days").notNull().default(6),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -2232,3 +2252,414 @@ export const incentiveAudit = pgTable(
 
 export type IncentiveAudit = typeof incentiveAudit.$inferSelect;
 export type NewIncentiveAudit = typeof incentiveAudit.$inferInsert;
+
+// ════════════════════════════════════════════════════════════════════════════
+// TRAINING CENTRE (migration 0079)
+//
+// Write access splits two ways and the actions enforce it:
+//   • Admin / MD only — materials, sessions, attendance. The library is
+//     curated; staff consume it.
+//   • Anyone, own row only — watches, self-learning entries, the weekly share,
+//     ratings of a colleague's share, feedback on a session. Wherever a person
+//     contributes their own words, they own and may edit that row.
+//
+// Obligations and the Dashboard are DERIVED from these tables, never stored,
+// so there is no second copy of the truth to drift.
+// ════════════════════════════════════════════════════════════════════════════
+
+export const trainingMaterials = pgTable(
+  "training_materials",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    title: text("title").notNull(),
+    subject: text("subject"),
+    kind: text("kind").$type<TrainingMaterialKind>().notNull().default("video_link"),
+    url: text("url"),
+    notes: text("notes"),
+    /** Induction material is what every new hire must complete. */
+    isInduction: boolean("is_induction").notNull().default(false),
+    archived: boolean("archived").notNull().default(false),
+    createdById: uuid("created_by_id").references(() => employees.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("training_materials_created_idx").on(t.archived, t.createdAt),
+    index("training_materials_subject_idx").on(t.subject),
+  ],
+);
+
+/** One row per (person, material) — "watched" is a fact, not a counter. */
+export const trainingWatches = pgTable(
+  "training_watches",
+  {
+    materialId: uuid("material_id")
+      .notNull()
+      .references(() => trainingMaterials.id, { onDelete: "cascade" }),
+    employeeId: uuid("employee_id")
+      .notNull()
+      .references(() => employees.id, { onDelete: "cascade" }),
+    watchedAt: timestamp("watched_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.materialId, t.employeeId] }),
+    index("training_watches_employee_idx").on(t.employeeId),
+  ],
+);
+
+export const trainingSessions = pgTable(
+  "training_sessions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    title: text("title").notNull(),
+    scheduledAt: timestamp("scheduled_at", { withTimezone: true }).notNull(),
+    durationMin: integer("duration_min").notNull().default(60),
+    trainerId: uuid("trainer_id").references(() => employees.id, { onDelete: "set null" }),
+    location: text("location"),
+    notes: text("notes"),
+    cancelled: boolean("cancelled").notNull().default(false),
+    createdById: uuid("created_by_id").references(() => employees.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("training_sessions_when_idx").on(t.scheduledAt)],
+);
+
+export const trainingSessionAttendance = pgTable(
+  "training_session_attendance",
+  {
+    sessionId: uuid("session_id")
+      .notNull()
+      .references(() => trainingSessions.id, { onDelete: "cascade" }),
+    employeeId: uuid("employee_id")
+      .notNull()
+      .references(() => employees.id, { onDelete: "cascade" }),
+    present: boolean("present").notNull().default(true),
+    markedById: uuid("marked_by_id").references(() => employees.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.sessionId, t.employeeId] })],
+);
+
+/** Feedback ABOUT a session, by the people who attended it. One per person. */
+export const trainingSessionFeedback = pgTable(
+  "training_session_feedback",
+  {
+    sessionId: uuid("session_id")
+      .notNull()
+      .references(() => trainingSessions.id, { onDelete: "cascade" }),
+    employeeId: uuid("employee_id")
+      .notNull()
+      .references(() => employees.id, { onDelete: "cascade" }),
+    rating: integer("rating").notNull(),
+    comment: text("comment"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.sessionId, t.employeeId] })],
+);
+
+export const selfLearningEntries = pgTable(
+  "self_learning_entries",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    employeeId: uuid("employee_id")
+      .notNull()
+      .references(() => employees.id, { onDelete: "cascade" }),
+    kind: text("kind").$type<SelfLearningKind>().notNull().default("book"),
+    source: text("source").notNull(),
+    entryDate: date("entry_date").notNull(),
+    minutes: integer("minutes").notNull().default(0),
+    sourceLink: text("source_link"),
+    evidenceLink: text("evidence_link"),
+    notes: text("notes"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("self_learning_emp_date_idx").on(t.employeeId, t.entryDate)],
+);
+
+/** `weekStart` is the Monday, matching weekly_goals so both bucket alike. */
+export const weeklyShares = pgTable(
+  "weekly_shares",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    employeeId: uuid("employee_id")
+      .notNull()
+      .references(() => employees.id, { onDelete: "cascade" }),
+    weekStart: date("week_start").notNull(),
+    topic: text("topic").notNull(),
+    minutes: integer("minutes").notNull().default(10),
+    videoLink: text("video_link"),
+    notes: text("notes"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("weekly_shares_emp_week_uq").on(t.employeeId, t.weekStart),
+    index("weekly_shares_week_idx").on(t.weekStart),
+  ],
+);
+
+export const shareRatings = pgTable(
+  "share_ratings",
+  {
+    shareId: uuid("share_id")
+      .notNull()
+      .references(() => weeklyShares.id, { onDelete: "cascade" }),
+    raterId: uuid("rater_id")
+      .notNull()
+      .references(() => employees.id, { onDelete: "cascade" }),
+    rating: integer("rating").notNull(),
+    comment: text("comment"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.shareId, t.raterId] })],
+);
+
+// ════════════════════════════════════════════════════════════════════════════
+// PHASE 1 — ADMIN & MASTER DATA (migration 0081)
+//
+// Product hierarchy · customer masters · editable libraries · field-level
+// permissions · data ingestion. See the migration for the design rationale;
+// the short version is that every classification column is nullable on purpose
+// so legacy Tally/Sheets rows import without tripping validation.
+// ════════════════════════════════════════════════════════════════════════════
+
+export const productCategories = pgTable(
+  "product_categories",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    name: text("name").notNull(),
+    code: text("code"),
+    /** Self-referential: "Three-Phase Motor" → "5 HP". */
+    parentId: uuid("parent_id").references((): AnyPgColumn => productCategories.id, {
+      onDelete: "set null",
+    }),
+    description: text("description"),
+    sortOrder: integer("sort_order").notNull().default(100),
+    isActive: boolean("is_active").notNull().default(true),
+    createdById: uuid("created_by_id").references(() => employees.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("product_categories_parent_idx").on(t.parentId),
+    index("product_categories_active_idx").on(t.isActive, t.sortOrder, t.name),
+  ],
+);
+
+export const products = pgTable(
+  "products",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    categoryId: uuid("category_id").references(() => productCategories.id, {
+      onDelete: "set null",
+    }),
+    name: text("name").notNull(),
+    code: text("code"),
+    brand: text("brand"),
+    description: text("description"),
+    hp: numeric("hp", { precision: 10, scale: 2 }),
+    powerRating: text("power_rating"),
+    flangeType: text("flange_type").$type<FlangeType>(),
+    kvh: text("kvh"),
+    /** Escape hatch for attributes we haven't given a column. */
+    attributes: jsonb("attributes").notNull().$type<Record<string, string>>().default({}),
+    tallyName: text("tally_name"),
+    isActive: boolean("is_active").notNull().default(true),
+    createdById: uuid("created_by_id").references(() => employees.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("products_category_idx").on(t.categoryId),
+    index("products_active_name_idx").on(t.isActive, t.name),
+  ],
+);
+
+export const productSkus = pgTable(
+  "product_skus",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    productId: uuid("product_id")
+      .notNull()
+      .references(() => products.id, { onDelete: "cascade" }),
+    skuCode: text("sku_code").notNull(),
+    variantLabel: text("variant_label"),
+    uom: text("uom").notNull().default("Nos"),
+    listRate: numeric("list_rate", { precision: 14, scale: 2 }),
+    tallyItemName: text("tally_item_name"),
+    isActive: boolean("is_active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("product_skus_product_idx").on(t.productId)],
+);
+
+export const customerMasters = pgTable(
+  "customer_masters",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    name: text("name").notNull(),
+    code: text("code"),
+    /** Required by the form, nullable in the DB — see the migration comment. */
+    salesRepId: uuid("sales_rep_id").references(() => employees.id, { onDelete: "set null" }),
+    /**
+     * What kind of business this is — OEM (L), Dealer, Panel Builder, etc.
+     * Free text backed by the `customer_category` lookup list (0082) rather
+     * than an enum, so admins can extend it without a migration.
+     */
+    customerCategory: text("customer_category"),
+    volumeClass: text("volume_class").$type<VolumeClass>(),
+    purchasePattern: text("purchase_pattern").$type<PurchasePattern>(),
+    sensitivity: text("sensitivity").$type<CustomerSensitivity>(),
+    contactPerson: text("contact_person"),
+    phone: text("phone"),
+    email: text("email"),
+    city: text("city"),
+    state: text("state"),
+    gstin: text("gstin"),
+    tallyGroup: text("tally_group"),
+    notes: text("notes"),
+    isActive: boolean("is_active").notNull().default(true),
+    createdById: uuid("created_by_id").references(() => employees.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("customer_masters_rep_idx").on(t.salesRepId),
+    index("customer_masters_active_name_idx").on(t.isActive, t.name),
+    index("customer_masters_class_idx").on(t.volumeClass),
+  ],
+);
+
+/** Customer → Category → Product → SKU, every level below customer optional. */
+export const customerProductMap = pgTable(
+  "customer_product_map",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    customerId: uuid("customer_id")
+      .notNull()
+      .references(() => customerMasters.id, { onDelete: "cascade" }),
+    categoryId: uuid("category_id").references(() => productCategories.id, {
+      onDelete: "set null",
+    }),
+    productId: uuid("product_id").references(() => products.id, { onDelete: "set null" }),
+    skuId: uuid("sku_id").references(() => productSkus.id, { onDelete: "set null" }),
+    note: text("note"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("customer_product_map_customer_idx").on(t.customerId)],
+);
+
+/** One table for every editable dropdown, keyed by `listKey`. */
+export const lookupItems = pgTable(
+  "lookup_items",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    listKey: text("list_key").notNull(),
+    label: text("label").notNull(),
+    value: text("value"),
+    sortOrder: integer("sort_order").notNull().default(100),
+    isActive: boolean("is_active").notNull().default(true),
+    createdById: uuid("created_by_id").references(() => employees.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("lookup_items_key_idx").on(t.listKey, t.isActive, t.sortOrder)],
+);
+
+export const incentiveSlabs = pgTable(
+  "incentive_slabs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    label: text("label"),
+    overdueFromDays: integer("overdue_from_days").notNull().default(0),
+    /** NULL = open-ended top slab ("60+ days"). */
+    overdueToDays: integer("overdue_to_days"),
+    graceDays: integer("grace_days").notNull().default(0),
+    payoutPct: numeric("payout_pct", { precision: 6, scale: 3 }).notNull().default("0"),
+    sortOrder: integer("sort_order").notNull().default(100),
+    isActive: boolean("is_active").notNull().default(true),
+    createdById: uuid("created_by_id").references(() => employees.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("incentive_slabs_order_idx").on(t.isActive, t.sortOrder)],
+);
+
+/**
+ * The FIELD layer beneath module_access_grants (0076) — same subject shape and
+ * same resolution order, so there is one mental model for permissions, not two.
+ */
+export const fieldPermissionGrants = pgTable(
+  "field_permission_grants",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    fieldKey: text("field_key").notNull(),
+    subjectType: text("subject_type").notNull().$type<"everyone" | "department" | "employee">(),
+    subjectId: uuid("subject_id"),
+    allowed: boolean("allowed").notNull(),
+    updatedBy: uuid("updated_by").references(() => employees.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("field_permission_subject_idx").on(t.subjectType, t.subjectId)],
+);
+
+export const importBatches = pgTable(
+  "import_batches",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    source: text("source").$type<ImportSource>().notNull().default("csv"),
+    target: text("target").$type<ImportTarget>().notNull(),
+    fileName: text("file_name"),
+    rowCount: integer("row_count").notNull().default(0),
+    importedCount: integer("imported_count").notNull().default(0),
+    skippedCount: integer("skipped_count").notNull().default(0),
+    status: text("status").$type<"draft" | "applied" | "failed">().notNull().default("draft"),
+    mapping: jsonb("mapping").notNull().$type<Record<string, string>>().default({}),
+    error: text("error"),
+    createdById: uuid("created_by_id").references(() => employees.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("import_batches_created_idx").on(t.createdAt)],
+);
+
+export const tallyGroupMappings = pgTable("tally_group_mappings", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tallyGroup: text("tally_group").notNull(),
+  mapsTo: text("maps_to").$type<TallyMapsTo>().notNull(),
+  targetCategoryId: uuid("target_category_id").references(() => productCategories.id, {
+    onDelete: "set null",
+  }),
+  note: text("note"),
+  isActive: boolean("is_active").notNull().default(true),
+  createdById: uuid("created_by_id").references(() => employees.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type ProductCategory = typeof productCategories.$inferSelect;
+export type Product = typeof products.$inferSelect;
+export type ProductSku = typeof productSkus.$inferSelect;
+export type CustomerMaster = typeof customerMasters.$inferSelect;
+export type LookupItem = typeof lookupItems.$inferSelect;
+export type IncentiveSlab = typeof incentiveSlabs.$inferSelect;
+export type FieldPermissionGrant = typeof fieldPermissionGrants.$inferSelect;
+export type ImportBatch = typeof importBatches.$inferSelect;
+export type TallyGroupMapping = typeof tallyGroupMappings.$inferSelect;
+
+export type TrainingMaterial = typeof trainingMaterials.$inferSelect;
+export type NewTrainingMaterial = typeof trainingMaterials.$inferInsert;
+export type TrainingSession = typeof trainingSessions.$inferSelect;
+export type NewTrainingSession = typeof trainingSessions.$inferInsert;
+export type SelfLearningEntry = typeof selfLearningEntries.$inferSelect;
+export type NewSelfLearningEntry = typeof selfLearningEntries.$inferInsert;
+export type WeeklyShare = typeof weeklyShares.$inferSelect;
+export type NewWeeklyShare = typeof weeklyShares.$inferInsert;

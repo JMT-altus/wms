@@ -90,13 +90,37 @@ export const MODULES: ModuleDef[] = [
   {
     id: "training",
     label: "Training",
-    tagline: "Material library, tests, induction & feedback.",
+    tagline: "Material library, sessions, self-learning & feedback.",
     icon: "GraduationCap",
     landing: "/training",
     routes: ["/training"],
     accent: { from: "#0EA5B7", to: "#0B7C8A", ink: "#0B7C8A" },
     items: [
-      { href: "/training", label: "Library", icon: "GraduationCap" },
+      // `notMatch` lists every sibling so the Library pill (which sits at the
+      // module root) doesn't stay lit on all of them — same pattern as Tasks.
+      {
+        href: "/training",
+        label: "Library",
+        icon: "GraduationCap",
+        notMatch: [
+          "/training/calendar",
+          "/training/self-learning",
+          "/training/share",
+          "/training/obligations",
+          "/training/induction",
+          "/training/feedback",
+          "/training/dashboard",
+          "/training/settings",
+        ],
+      },
+      { href: "/training/calendar", label: "Calendar", icon: "CalendarDays" },
+      { href: "/training/self-learning", label: "Self-Learning", icon: "BookOpen" },
+      { href: "/training/share", label: "Share", icon: "Share2" },
+      { href: "/training/obligations", label: "Obligations", icon: "Gauge" },
+      { href: "/training/induction", label: "Induction", icon: "ListChecks" },
+      { href: "/training/feedback", label: "Feedback", icon: "MessageSquare" },
+      { href: "/training/dashboard", label: "Dashboard", icon: "LayoutDashboard" },
+      { href: "/training/settings", label: "Settings", icon: "Settings", adminOnly: true },
     ],
   },
 ];
