@@ -55,6 +55,7 @@ export const ProductSchema = z.object({
   code: emptyToNull(60),
   brand: emptyToNull(120),
   description: emptyToNull(2000),
+  specification: emptyToNull(2000),
   // Blank stays blank — a motor with no recorded HP is not a 0 HP motor.
   hp: z
     .union([z.string(), z.number()])
@@ -131,6 +132,49 @@ export const CustomerSchema = z.object({
   isActive: z.boolean().default(true),
 });
 export type CustomerInput = z.input<typeof CustomerSchema>;
+
+/* ── Masters module (/masters) ───────────────────────────────────────────── */
+
+/**
+ * The Masters screens edit a SUBSET of the same rows /master-setup edits, so
+ * they get their own narrow schemas and their save actions write only these
+ * columns.
+ *
+ * Reusing ProductSchema/CustomerSchema here would look tidier and be wrong: a
+ * form that never renders `brand` still submits it as undefined, the schema
+ * normalises that to null, and saving a product from /masters would silently
+ * blank the brand somebody set in /master-setup. Narrow schema, narrow write.
+ */
+export const MasterProductSchema = z.object({
+  name: z.string().trim().min(1, "Name is required").max(200),
+  code: emptyToNull(60),
+  specification: emptyToNull(2000),
+  isActive: z.boolean().default(true),
+});
+export type MasterProductInput = z.input<typeof MasterProductSchema>;
+
+export const MasterCustomerSchema = z.object({
+  name: z.string().trim().min(1, "Name is required").max(200),
+  code: emptyToNull(60),
+  // Free text against the editable `customer_category` list, not an enum —
+  // see migration 0082 for why.
+  customerCategory: emptyToNull(120),
+  purchasePattern: z
+    .enum(PURCHASE_PATTERNS)
+    .nullable()
+    .optional()
+    .transform((v) => v ?? null),
+  sensitivity: z
+    .enum(CUSTOMER_SENSITIVITIES)
+    .nullable()
+    .optional()
+    .transform((v) => v ?? null),
+  // Required by the form, nullable in the column: allocation is the point of
+  // the screen, but a legacy row imported without a rep must still exist.
+  salesRepId: z.string().uuid("Assign a salesperson"),
+  isActive: z.boolean().default(true),
+});
+export type MasterCustomerInput = z.input<typeof MasterCustomerSchema>;
 
 /* ── Libraries ───────────────────────────────────────────────────────────── */
 

@@ -28,6 +28,9 @@ export const MODULE_CODE_DEFAULTS: Record<ModuleId, boolean> = {
   employees: false,
   sales: false,
   training: true,
+  // Reference data the whole business quotes from — wrong here is expensive
+  // and hard to notice. Off by default; granted per person or per department.
+  masters: false,
 };
 
 /** Where a resolved yes/no came from — surfaced in the admin matrix. */

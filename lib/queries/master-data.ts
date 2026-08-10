@@ -89,6 +89,8 @@ export interface ProductRow {
   id: string;
   name: string;
   code: string | null;
+  /** 0083 — the technical spec string the /masters screen owns. */
+  specification: string | null;
   brand: string | null;
   categoryId: string | null;
   categoryName: string | null;
@@ -99,6 +101,8 @@ export interface ProductRow {
   tallyName: string | null;
   isActive: boolean;
   skuCount: number;
+  /** Serialised for the client — the Masters table sorts newest-first on it. */
+  createdAt: string;
 }
 
 export async function listProducts(): Promise<ProductRow[]> {
@@ -107,6 +111,7 @@ export async function listProducts(): Promise<ProductRow[]> {
       id: products.id,
       name: products.name,
       code: products.code,
+      specification: products.specification,
       brand: products.brand,
       categoryId: products.categoryId,
       categoryName: productCategories.name,
@@ -116,6 +121,7 @@ export async function listProducts(): Promise<ProductRow[]> {
       kvh: products.kvh,
       tallyName: products.tallyName,
       isActive: products.isActive,
+      createdAt: products.createdAt,
       skuCount: sql<number>`(
         select count(*)::int from product_skus s where s.product_id = ${products.id}
       )`,
@@ -123,7 +129,11 @@ export async function listProducts(): Promise<ProductRow[]> {
     .from(products)
     .leftJoin(productCategories, eq(productCategories.id, products.categoryId))
     .orderBy(asc(products.name));
-  return rows.map((r) => ({ ...r, categoryName: r.categoryName ?? null }));
+  return rows.map((r) => ({
+    ...r,
+    categoryName: r.categoryName ?? null,
+    createdAt: r.createdAt.toISOString(),
+  }));
 }
 
 export interface SkuRow {
@@ -185,6 +195,8 @@ export interface CustomerRow {
   tallyGroup: string | null;
   isActive: boolean;
   mappedSkuCount: number;
+  /** Serialised for the client — the Masters table sorts newest-first on it. */
+  createdAt: string;
 }
 
 export async function listCustomers(): Promise<CustomerRow[]> {
@@ -207,6 +219,7 @@ export async function listCustomers(): Promise<CustomerRow[]> {
       gstin: customerMasters.gstin,
       tallyGroup: customerMasters.tallyGroup,
       isActive: customerMasters.isActive,
+      createdAt: customerMasters.createdAt,
       mappedSkuCount: sql<number>`(
         select count(*)::int from customer_product_map m where m.customer_id = ${customerMasters.id}
       )`,
@@ -214,7 +227,11 @@ export async function listCustomers(): Promise<CustomerRow[]> {
     .from(customerMasters)
     .leftJoin(employees, eq(employees.id, customerMasters.salesRepId))
     .orderBy(asc(customerMasters.name));
-  return rows.map((r) => ({ ...r, salesRepName: r.salesRepName ?? null }));
+  return rows.map((r) => ({
+    ...r,
+    salesRepName: r.salesRepName ?? null,
+    createdAt: r.createdAt.toISOString(),
+  }));
 }
 
 /* ── Libraries ───────────────────────────────────────────────────────────── */

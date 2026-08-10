@@ -2464,6 +2464,12 @@ export const products = pgTable(
     code: text("code"),
     brand: text("brand"),
     description: text("description"),
+    /**
+     * 0083 — the technical spec string the Masters screen records, kept apart
+     * from `description` (the catalogue blurb) so the two surfaces that both
+     * edit this row can't overwrite each other's field.
+     */
+    specification: text("specification"),
     hp: numeric("hp", { precision: 10, scale: 2 }),
     powerRating: text("power_rating"),
     flangeType: text("flange_type").$type<FlangeType>(),
@@ -2479,6 +2485,7 @@ export const products = pgTable(
   (t) => [
     index("products_category_idx").on(t.categoryId),
     index("products_active_name_idx").on(t.isActive, t.name),
+    index("products_code_idx").on(t.code),
   ],
 );
 

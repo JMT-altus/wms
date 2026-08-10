@@ -7,7 +7,7 @@
  * them (kept as strings here so this file stays server/client neutral).
  */
 
-export type ModuleId = "wms" | "employees" | "sales" | "training";
+export type ModuleId = "wms" | "employees" | "sales" | "training" | "masters";
 
 export interface ModuleNavItem {
   href: string;
@@ -122,6 +122,21 @@ export const MODULES: ModuleDef[] = [
       { href: "/training/dashboard", label: "Dashboard", icon: "LayoutDashboard" },
       { href: "/training/settings", label: "Settings", icon: "Settings", adminOnly: true },
     ],
+  },
+  {
+    id: "masters",
+    label: "Masters",
+    tagline: "Products, customers & the reference data behind every quote.",
+    icon: "Boxes",
+    landing: "/masters",
+    routes: ["/masters"],
+    // Deliberately the WMS blue over a navy panel: Masters is reference data
+    // for the same work, not a separate-feeling product.
+    accent: { from: "#0A6CFF", to: "#0047B3", ink: "#0A47B3" },
+    // Empty: Masters renders a left sidebar in its own route group rather than
+    // the top pill row, because the list of masters grows (grade, tolerance,
+    // condition, size…) and pills stop working past about six.
+    items: [],
   },
 ];
 

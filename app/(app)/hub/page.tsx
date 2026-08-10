@@ -6,6 +6,7 @@ import {
   TrendingUp,
   GraduationCap,
   DatabaseZap,
+  Boxes,
   ArrowRight,
   Lock,
 } from "lucide-react";
@@ -39,7 +40,7 @@ type Style = {
  * someone hand a non-admin a tile that leads straight to a Forbidden page.
  * It is gated on `isAdmin`, which is exactly what every /admin page enforces.
  */
-const STYLES: Record<ModuleId | "masters", Style> = {
+const STYLES: Record<ModuleId | "admin", Style> = {
   wms: {
     Icon: LayoutGrid,
     bg: "linear-gradient(150deg, #f4f8ff 0%, #dfeaff 55%, #cfe0ff 100%)",
@@ -76,7 +77,18 @@ const STYLES: Record<ModuleId | "masters", Style> = {
     glow: "rgba(16, 183, 201, 0.42)",
     ring: "rgba(16, 183, 201, 0.55)",
   },
+  // The Masters module — WMS blue on a cooler, deeper card so it reads as the
+  // reference-data half of the same family rather than a fifth colour.
   masters: {
+    Icon: Boxes,
+    bg: "linear-gradient(150deg, #eef4ff 0%, #dce8ff 55%, #c8dcff 100%)",
+    ink: "#1c3f7d",
+    title: "#0A3B8C",
+    btn: "linear-gradient(135deg, #0A6CFF 0%, #0EA5B7 58%, #12B3A0 100%)",
+    glow: "rgba(14, 165, 183, 0.42)",
+    ring: "rgba(14, 165, 183, 0.55)",
+  },
+  admin: {
     Icon: DatabaseZap,
     bg: "linear-gradient(150deg, #fff8f0 0%, #ffeede 55%, #ffe2c9 100%)",
     ink: "#9a4b12",
@@ -143,7 +155,7 @@ export default async function HubPage({
     ...(me?.isAdmin
       ? [
           {
-            key: "masters",
+            key: "admin",
             label: "Admin & Master Setup",
             tagline: "Products, customers, libraries, permissions & data import.",
             href: "/master-setup",
@@ -327,7 +339,7 @@ export default async function HubPage({
           }}
         >
           {tiles.map((m) => {
-            const s = STYLES[m.key as ModuleId | "masters"];
+            const s = STYLES[m.key as ModuleId | "admin"];
             const Icon = s.Icon;
             return (
               <Link

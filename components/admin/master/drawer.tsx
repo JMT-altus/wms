@@ -183,14 +183,23 @@ export function SaveButton({
   pending,
   children = "Save",
   accent = "#0A6CFF",
+  form,
 }: {
   pending: boolean;
   children?: React.ReactNode;
   accent?: string;
+  /**
+   * Id of the <form> to submit. Required whenever this button is passed as the
+   * Drawer's `footer`, because the footer is a SIBLING of the drawer body — a
+   * bare type="submit" outside its form submits nothing, and the only thing
+   * that still works is pressing Enter inside a field.
+   */
+  form?: string;
 }) {
   return (
     <button
       type="submit"
+      form={form}
       disabled={pending}
       className="rounded-xl px-5 py-2.5 text-white font-bold disabled:opacity-60"
       style={{ fontSize: 14.5, background: accent }}

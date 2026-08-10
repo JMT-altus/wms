@@ -1,11 +1,14 @@
 "use client";
 import * as React from "react";
 import {
+  ArrowUpDown,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Download,
   Plus,
   Search,
+  SlidersHorizontal,
 } from "lucide-react";
 
 /**
@@ -36,6 +39,16 @@ export interface FilterDef<T> {
   matches: (row: T, value: string) => boolean;
 }
 
+/**
+ * A sort the caller offers. The comparator lives with the caller because only
+ * it knows which of its columns are dates, numbers or collated text.
+ */
+export interface SortDef<T> {
+  value: string;
+  label: string;
+  compare: (a: T, b: T) => number;
+}
+
 const PAGE_SIZES = [25, 50, 100];
 
 export function DataTable<T extends { id: string }>({
@@ -46,10 +59,15 @@ export function DataTable<T extends { id: string }>({
   csvName = "export",
   onNew,
   newLabel = "New",
+  extraActions,
   actions,
   emptyTitle = "Nothing here yet.",
   emptySub,
   accent = "#0A6CFF",
+  title,
+  sorts,
+  exportLabel = "CSV",
+  tintHeader = false,
 }: {
   rows: T[];
   columns: Column<T>[];
@@ -58,16 +76,28 @@ export function DataTable<T extends { id: string }>({
   csvName?: string;
   onNew?: () => void;
   newLabel?: string;
+  /** Toolbar controls that sit left of CSV — e.g. the Masters bulk upload. */
+  extraActions?: React.ReactNode;
   /** Per-row trailing controls (edit / delete). */
   actions?: (row: T) => React.ReactNode;
   emptyTitle?: string;
   emptySub?: string;
   accent?: string;
+  /**
+   * Opt into the two-row Masters chrome: title + search + sort + actions on
+   * one line, then a labelled filter strip below. Omitted, the toolbar renders
+   * as it always has, so the /master-setup screens are untouched.
+   */
+  title?: string;
+  sorts?: SortDef<T>[];
+  exportLabel?: string;
+  tintHeader?: boolean;
 }) {
   const [q, setQ] = React.useState("");
   const [active, setActive] = React.useState<Record<string, string>>({});
   const [page, setPage] = React.useState(0);
   const [pageSize, setPageSize] = React.useState(25);
+  const [sortValue, setSortValue] = React.useState(sorts?.[0]?.value ?? "");
 
   const cellValue = React.useCallback(
     (row: T, col: Column<T>): string => {
@@ -81,7 +111,7 @@ export function DataTable<T extends { id: string }>({
 
   const filtered = React.useMemo(() => {
     const needle = q.trim().toLowerCase();
-    return rows.filter((row) => {
+    const kept = rows.filter((row) => {
       for (const f of filters) {
         const val = active[f.key];
         if (val && !f.matches(row, val)) return false;
@@ -89,7 +119,11 @@ export function DataTable<T extends { id: string }>({
       if (!needle) return true;
       return columns.some((c) => cellValue(row, c).toLowerCase().includes(needle));
     });
-  }, [rows, q, active, filters, columns, cellValue]);
+    const sort = sorts?.find((s) => s.value === sortValue);
+    // Copy before sorting — `rows` is the caller's array (often straight off a
+    // server component's props), and sorting in place would mutate it.
+    return sort ? [...kept].sort(sort.compare) : kept;
+  }, [rows, q, active, filters, columns, cellValue, sorts, sortValue]);
 
   // Any filter change can shrink the list below the current page — snap back so
   // the user never lands on a blank page 4 of 2.
@@ -125,69 +159,175 @@ export function DataTable<T extends { id: string }>({
     URL.revokeObjectURL(url);
   }
 
+  /**
+   * `flexible` search grows and shrinks with the row instead of pinning 260px.
+   * The title layout needs that: with every item shrink-0 the row can only
+   * overflow, which clipped the action buttons off the right edge.
+   */
+  const renderSearch = (flexible: boolean) => (
+    <div
+      className={`inline-flex items-center gap-2 rounded-chip px-4 h-10 bg-surface-card border border-hairline ${
+        flexible ? "flex-1 min-w-[200px]" : "shrink-0"
+      }`}
+      style={flexible ? { maxWidth: 520 } : { width: 260 }}
+    >
+      <Search size={16} strokeWidth={2.2} className="text-ink-subtle shrink-0" />
+      <input
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        placeholder={searchPlaceholder}
+        className="bg-transparent outline-none text-[14.5px] w-full min-w-0 text-ink-strong"
+      />
+    </div>
+  );
+
+  // Every control on the filter row shares one height so the row reads as a
+  // single band. The legacy toolbar keeps the taller 40px controls.
+  const rowH = title ? "h-9" : "h-10";
+
+  const exportButton = (
+    <button
+      type="button"
+      onClick={exportCsv}
+      disabled={filtered.length === 0}
+      title={exportLabel}
+      className={`inline-flex items-center gap-1.5 rounded-chip px-3 ${rowH} ${
+        title ? "text-[13px]" : "text-[14px]"
+      } font-semibold text-ink-soft bg-surface-card border border-hairline disabled:opacity-45 whitespace-nowrap`}
+    >
+      <Download size={15} strokeWidth={2.3} className="shrink-0" />
+      {exportLabel}
+    </button>
+  );
+
+  const newButton = onNew ? (
+    <button
+      type="button"
+      onClick={onNew}
+      className="shrink-0 inline-flex items-center gap-1.5 rounded-chip px-4 h-10 text-[14px] font-bold text-white whitespace-nowrap"
+      style={{ background: accent }}
+    >
+      <Plus size={15} strokeWidth={2.6} className="shrink-0" />
+      {newLabel}
+    </button>
+  ) : null;
+
+  /** The legacy single-row toolbar keeps all three together. */
+  const actionButtons = (
+    <>
+      {extraActions}
+      {exportButton}
+      {newButton}
+    </>
+  );
+
+  const count = (
+    <span className="shrink-0 text-[13px] font-semibold text-ink-muted tabular-nums">
+      {filtered.length}
+      {filtered.length !== rows.length && ` of ${rows.length}`}
+    </span>
+  );
+
   return (
     <div>
-      {/* Toolbar */}
-      <div className="flex items-center gap-2.5 flex-wrap mb-4">
-        <div
-          className="inline-flex items-center gap-2 rounded-pill px-4 h-10 bg-surface-card border border-hairline"
-          style={{ minWidth: 260 }}
-        >
-          <Search size={16} strokeWidth={2.2} className="text-ink-subtle shrink-0" />
-          <input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder={searchPlaceholder}
-            className="bg-transparent outline-none text-[14.5px] w-full text-ink-strong"
-          />
-        </div>
-
-        {filters.map((f) => (
-          <select
-            key={f.key}
-            value={active[f.key] ?? ""}
-            onChange={(e) =>
-              setActive((prev) => ({ ...prev, [f.key]: e.target.value }))
-            }
-            className="rounded-pill px-3.5 h-10 bg-surface-card border border-hairline text-[14px] font-semibold text-ink-soft outline-none"
-          >
-            <option value="">{f.label}</option>
-            {f.options.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-        ))}
-
-        <span className="text-[13.5px] font-semibold text-ink-muted tabular-nums ml-1">
-          {filtered.length}
-          {filtered.length !== rows.length && ` of ${rows.length}`}
-        </span>
-
-        <div className="ml-auto flex items-center gap-2">
-          <button
-            type="button"
-            onClick={exportCsv}
-            disabled={filtered.length === 0}
-            className="inline-flex items-center gap-1.5 rounded-pill px-3.5 h-10 text-[14px] font-semibold text-ink-soft bg-surface-card border border-hairline disabled:opacity-45"
-          >
-            <Download size={15} strokeWidth={2.3} />
-            CSV
-          </button>
-          {onNew && (
-            <button
-              type="button"
-              onClick={onNew}
-              className="inline-flex items-center gap-1.5 rounded-pill px-4 h-10 text-[14px] font-bold text-white"
-              style={{ background: accent }}
+      {title ? (
+        /* Reference layout, two bands: WHO you're looking at and the one action
+           that creates a row on top; everything that narrows or exports what's
+           already there below. */
+        <>
+          {/* Line one never wraps. Title and the New button hold their width,
+              so the search absorbs whatever is left. Phones wrap. */}
+          <div className="flex items-center gap-3 mb-2.5 flex-nowrap max-md:flex-wrap max-md:gap-y-2">
+            <h1
+              className="shrink-0 font-bold text-ink-strong whitespace-nowrap"
+              style={{
+                fontFamily: "var(--font-display), system-ui, sans-serif",
+                fontSize: "clamp(19px, 1.9vw, 26px)",
+                letterSpacing: "-0.02em",
+                lineHeight: 1.1,
+              }}
             >
-              <Plus size={15} strokeWidth={2.6} />
-              {newLabel}
-            </button>
-          )}
+              {title}
+            </h1>
+            {renderSearch(true)}
+            <div className="ml-auto shrink-0">{newButton}</div>
+          </div>
+
+          {/* Line two — one band, one control height (see `rowH`). */}
+          <div className="flex items-center gap-2 mb-4 min-w-0">
+            <SlidersHorizontal
+              size={14}
+              strokeWidth={2.4}
+              aria-label="Filters"
+              className="shrink-0 text-ink-subtle"
+            />
+            {/* No overflow-x-auto: a scrollbar under the chips is the row
+                admitting it doesn't fit. The chips shrink and ellipsize their
+                labels instead, so the row is always exactly one line. */}
+            <div className="flex items-center gap-1.5 flex-1 min-w-0">
+              {filters.map((f) => (
+                <FilterChip
+                  key={f.key}
+                  def={f}
+                  value={active[f.key] ?? ""}
+                  onChange={(v) => setActive((prev) => ({ ...prev, [f.key]: v }))}
+                  height={rowH}
+                />
+              ))}
+            </div>
+            <div className="shrink-0 flex items-center gap-1.5">
+              {sorts && sorts.length > 0 && (
+                <div className="inline-flex items-center gap-1.5">
+                  <ArrowUpDown
+                    size={14}
+                    strokeWidth={2.4}
+                    aria-label="Sort"
+                    className="text-ink-subtle shrink-0"
+                  />
+                  <select
+                    value={sortValue}
+                    onChange={(e) => setSortValue(e.target.value)}
+                    aria-label="Sort"
+                    className={`rounded-chip px-2.5 ${rowH} bg-surface-card border border-hairline text-[13px] font-semibold text-ink-soft outline-none`}
+                  >
+                    {sorts.map((s) => (
+                      <option key={s.value} value={s.value}>
+                        {s.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              {extraActions}
+              {exportButton}
+            </div>
+          </div>
+        </>
+      ) : (
+        /* The original single-row toolbar, unchanged for /master-setup. */
+        <div className="flex items-center gap-2.5 mb-4 min-w-0">
+          {renderSearch(false)}
+          <div className="flex items-center gap-2 flex-1 min-w-0 overflow-x-auto py-0.5">
+            {filters.map((f) => (
+              <select
+                key={f.key}
+                value={active[f.key] ?? ""}
+                onChange={(e) => setActive((prev) => ({ ...prev, [f.key]: e.target.value }))}
+                className="shrink-0 rounded-pill px-3.5 h-10 bg-surface-card border border-hairline text-[14px] font-semibold text-ink-soft outline-none"
+              >
+                <option value="">{f.label}</option>
+                {f.options.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            ))}
+            <span className="ml-1">{count}</span>
+          </div>
+          <div className="shrink-0 flex items-center gap-2">{actionButtons}</div>
         </div>
-      </div>
+      )}
 
       {/* Table */}
       <div className="rounded-section border border-hairline bg-surface-card overflow-hidden">
@@ -195,8 +335,16 @@ export function DataTable<T extends { id: string }>({
           <table className="w-full" style={{ minWidth: 720 }}>
             <thead>
               <tr
-                className="text-left uppercase tracking-[0.08em] text-ink-subtle"
-                style={{ fontSize: 11, fontWeight: 700 }}
+                className="text-left uppercase tracking-[0.08em]"
+                style={{
+                  fontSize: 11,
+                  fontWeight: 700,
+                  // Tinted band behind the headings, per the reference layout.
+                  background: tintHeader
+                    ? "color-mix(in srgb, var(--color-blue) 8%, var(--color-surface-soft))"
+                    : undefined,
+                  color: tintHeader ? "var(--color-ink-soft)" : "var(--color-ink-subtle)",
+                }}
               >
                 {columns.map((c) => (
                   <th
@@ -207,7 +355,9 @@ export function DataTable<T extends { id: string }>({
                     {c.header}
                   </th>
                 ))}
-                {actions && <th className="px-4 py-3 text-right">Manage</th>}
+                {actions && (
+                  <th className="px-4 py-3 text-right">{tintHeader ? "" : "Manage"}</th>
+                )}
               </tr>
             </thead>
             <tbody>
@@ -310,6 +460,66 @@ function PageBtn({
     >
       {children}
     </button>
+  );
+}
+
+/**
+ * One filter as a compact labelled chip — "STATUS  All ⌄".
+ *
+ * A real <select> sits invisibly over the chip rather than a custom popup, so
+ * it keeps native keyboard handling and the OS picker on mobile for free.
+ * `def.label` is the FIELD NAME here ("Status"); the chip renders the current
+ * value itself.
+ */
+function FilterChip<T>({
+  def,
+  value,
+  onChange,
+  height = "h-8",
+}: {
+  def: FilterDef<T>;
+  value: string;
+  onChange: (v: string) => void;
+  /** Matched to the rest of the filter row so the band is one height. */
+  height?: string;
+}) {
+  const current = def.options.find((o) => o.value === value);
+  return (
+    <label
+      title={current ? `${def.label}: ${current.label}` : def.label}
+      className={`relative min-w-0 inline-flex items-center gap-1.5 rounded-chip px-2.5 ${height} bg-surface-card border border-hairline cursor-pointer`}
+      style={value ? { borderColor: "color-mix(in srgb, var(--color-blue) 45%, transparent)" } : undefined}
+    >
+      {/* Truncates rather than forcing the row to scroll. At normal widths
+          nothing is cut; when it is, the title attribute carries the full text. */}
+      <span
+        className="uppercase font-bold tracking-[0.08em] text-ink-subtle truncate"
+        style={{ fontSize: 10 }}
+      >
+        {def.label}
+      </span>
+      {/* Nothing shown when unset. "All" was five chips repeating the same
+          word — the absence of a value already means no filter. */}
+      {current && (
+        <span className="font-bold text-ink-strong truncate" style={{ fontSize: 12 }}>
+          {current.label}
+        </span>
+      )}
+      <ChevronDown size={12} strokeWidth={2.6} className="text-ink-subtle shrink-0" />
+      <select
+        aria-label={def.label}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+      >
+        <option value="">All</option>
+        {def.options.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }
 
