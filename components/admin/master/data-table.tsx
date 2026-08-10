@@ -253,54 +253,52 @@ export function DataTable<T extends { id: string }>({
             <div className="ml-auto shrink-0">{newButton}</div>
           </div>
 
-          {/* Line two — one band, one control height (see `rowH`). */}
-          <div className="flex items-center gap-2 mb-4 min-w-0">
+          {/* Line two — ONE flex row with ONE gap, so the spacing between every
+              control is identical. The chips used to sit in a `flex-1` strip,
+              which pushed Sort and the buttons to the far right and left a gap
+              there several times wider than the gaps between the chips.
+              No overflow-x-auto either: a scrollbar under the chips is the row
+              admitting it doesn't fit. Chips shrink and ellipsize instead. */}
+          <div className="flex items-center gap-2 mb-4 min-w-0 flex-nowrap">
             <SlidersHorizontal
               size={14}
               strokeWidth={2.4}
               aria-label="Filters"
               className="shrink-0 text-ink-subtle"
             />
-            {/* No overflow-x-auto: a scrollbar under the chips is the row
-                admitting it doesn't fit. The chips shrink and ellipsize their
-                labels instead, so the row is always exactly one line. */}
-            <div className="flex items-center gap-1.5 flex-1 min-w-0">
-              {filters.map((f) => (
-                <FilterChip
-                  key={f.key}
-                  def={f}
-                  value={active[f.key] ?? ""}
-                  onChange={(v) => setActive((prev) => ({ ...prev, [f.key]: v }))}
-                  height={rowH}
+            {filters.map((f) => (
+              <FilterChip
+                key={f.key}
+                def={f}
+                value={active[f.key] ?? ""}
+                onChange={(v) => setActive((prev) => ({ ...prev, [f.key]: v }))}
+                height={rowH}
+              />
+            ))}
+            {sorts && sorts.length > 0 && (
+              <>
+                <ArrowUpDown
+                  size={14}
+                  strokeWidth={2.4}
+                  aria-label="Sort"
+                  className="text-ink-subtle shrink-0"
                 />
-              ))}
-            </div>
-            <div className="shrink-0 flex items-center gap-1.5">
-              {sorts && sorts.length > 0 && (
-                <div className="inline-flex items-center gap-1.5">
-                  <ArrowUpDown
-                    size={14}
-                    strokeWidth={2.4}
-                    aria-label="Sort"
-                    className="text-ink-subtle shrink-0"
-                  />
-                  <select
-                    value={sortValue}
-                    onChange={(e) => setSortValue(e.target.value)}
-                    aria-label="Sort"
-                    className={`rounded-chip px-2.5 ${rowH} bg-surface-card border border-hairline text-[13px] font-semibold text-ink-soft outline-none`}
-                  >
-                    {sorts.map((s) => (
-                      <option key={s.value} value={s.value}>
-                        {s.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-              {extraActions}
-              {exportButton}
-            </div>
+                <select
+                  value={sortValue}
+                  onChange={(e) => setSortValue(e.target.value)}
+                  aria-label="Sort"
+                  className={`shrink-0 rounded-chip px-2.5 ${rowH} bg-surface-card border border-hairline text-[13px] font-semibold text-ink-soft outline-none`}
+                >
+                  {sorts.map((s) => (
+                    <option key={s.value} value={s.value}>
+                      {s.label}
+                    </option>
+                  ))}
+                </select>
+              </>
+            )}
+            {extraActions}
+            {exportButton}
           </div>
         </>
       ) : (
@@ -490,22 +488,20 @@ function FilterChip<T>({
       className={`relative min-w-0 inline-flex items-center gap-1.5 rounded-chip px-2.5 ${height} bg-surface-card border border-hairline cursor-pointer`}
       style={value ? { borderColor: "color-mix(in srgb, var(--color-blue) 45%, transparent)" } : undefined}
     >
-      {/* Truncates rather than forcing the row to scroll. At normal widths
-          nothing is cut; when it is, the title attribute carries the full text. */}
-      <span
-        className="uppercase font-bold tracking-[0.08em] text-ink-subtle truncate"
-        style={{ fontSize: 10 }}
-      >
+      {/* Same 13px/semibold as Sort, Bulk Upload and Export — the row is one
+          set of controls, so it gets one type style. Truncates rather than
+          forcing the strip to scroll; the title attribute keeps the full text. */}
+      <span className="font-semibold text-ink-soft truncate" style={{ fontSize: 13 }}>
         {def.label}
       </span>
       {/* Nothing shown when unset. "All" was five chips repeating the same
           word — the absence of a value already means no filter. */}
       {current && (
-        <span className="font-bold text-ink-strong truncate" style={{ fontSize: 12 }}>
+        <span className="font-bold text-ink-strong truncate" style={{ fontSize: 13 }}>
           {current.label}
         </span>
       )}
-      <ChevronDown size={12} strokeWidth={2.6} className="text-ink-subtle shrink-0" />
+      <ChevronDown size={14} strokeWidth={2.4} className="text-ink-subtle shrink-0" />
       <select
         aria-label={def.label}
         value={value}
