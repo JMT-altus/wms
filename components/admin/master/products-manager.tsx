@@ -119,7 +119,7 @@ function CategoriesTab({
     { key: "name", header: "Category", render: (r) => <strong className="text-ink-strong">{r.name}</strong> },
     { key: "code", header: "Code" },
     { key: "parentName", header: "Parent", render: (r) => r.parentName ?? <Dash /> },
-    { key: "productCount", header: "Products", align: "right" },
+    { key: "productCount", header: "Products" },
     {
       key: "isActive",
       header: "Status",
@@ -284,7 +284,7 @@ function ProductsTab({
     { key: "code", header: "Code" },
     { key: "categoryName", header: "Category", render: (r) => r.categoryName ?? <Dash /> },
     { key: "brand", header: "Brand" },
-    { key: "hp", header: "HP", align: "right" },
+    { key: "hp", header: "HP" },
     { key: "powerRating", header: "Power" },
     {
       key: "flangeType",
@@ -293,7 +293,7 @@ function ProductsTab({
       value: (r) => (r.flangeType ? FLANGE_TYPE_LABELS[r.flangeType] : ""),
     },
     { key: "kvh", header: "KVH" },
-    { key: "skuCount", header: "SKUs", align: "right" },
+    { key: "skuCount", header: "SKUs" },
   ];
 
   return (
@@ -471,7 +471,7 @@ function SkusTab({ skus, products }: { skus: SkuRow[]; products: ProductRow[] })
     { key: "categoryName", header: "Category", render: (r) => r.categoryName ?? <Dash /> },
     { key: "variantLabel", header: "Variant" },
     { key: "uom", header: "UOM" },
-    { key: "listRate", header: "List rate", align: "right" },
+    { key: "listRate", header: "List rate" },
     { key: "tallyItemName", header: "Tally item" },
   ];
 

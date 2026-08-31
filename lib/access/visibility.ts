@@ -96,8 +96,8 @@ export const VISIBILITY_LABEL: Record<Visibility, string> = {
 };
 
 export const VISIBILITY_HINT: Record<Visibility, string> = {
-  private: "Only you and anyone assigned. The default for new tasks.",
-  internal: "Every signed-in member of the team can see this.",
+  private: "Only you and anyone assigned.",
+  internal: "Every signed-in member of the team can see this. The default for new tasks.",
   restricted: "Only the departments, managers or people you pick.",
 };
 

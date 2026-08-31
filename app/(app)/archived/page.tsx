@@ -72,6 +72,7 @@ export default async function ArchivedPage({ searchParams }: PageProps) {
         }}
       />
       <TaskListPage
+        showStats={false}
         title="Archived"
         rows={rows}
         filters={filters}

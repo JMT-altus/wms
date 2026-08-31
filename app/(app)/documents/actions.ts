@@ -257,8 +257,10 @@ export async function replaceDocumentFile(id: string, form: FormData): Promise<R
     fromValue: { storagePath: auth.doc.storagePath, mimeType: auth.doc.mimeType, sizeBytes: auth.doc.sizeBytes },
     toValue: { storagePath: path, mimeType: file.type || null, sizeBytes: file.size },
   });
-  // Best-effort cleanup of the old object.
-  await admin.storage.from(DOCUMENTS_BUCKET).remove([auth.doc.storagePath]).catch(() => {});
+  // Best-effort cleanup of the old object. A link row has no object to remove.
+  if (auth.doc.storagePath) {
+    await admin.storage.from(DOCUMENTS_BUCKET).remove([auth.doc.storagePath]).catch(() => {});
+  }
   revalidatePath("/documents");
   return { ok: true };
 }
@@ -274,7 +276,9 @@ export async function deleteDocument(id: string): Promise<Result> {
   if (!auth.ok) return auth;
 
   const admin = getSupabaseAdmin();
-  await admin.storage.from(DOCUMENTS_BUCKET).remove([auth.doc.storagePath]).catch(() => {});
+  if (auth.doc.storagePath) {
+    await admin.storage.from(DOCUMENTS_BUCKET).remove([auth.doc.storagePath]).catch(() => {});
+  }
   await db
     .delete(documents)
     .where(

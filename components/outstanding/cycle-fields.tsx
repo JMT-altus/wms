@@ -82,7 +82,16 @@ export function RowsEditor({
     ]);
   }
 
-  let cumulative = 0;
+  // Running balance after each row (total − cumulative), paired up front
+  // rather than accumulated inside the map — mutating a binding from within a
+  // render callback is not safe under the React compiler.
+  const rowsWithBalance: Array<{ row: InstallmentRow; balance: number }> = [];
+  let remaining = t;
+  for (const row of rows) {
+    const amt = Number(row.amount);
+    remaining -= Number.isFinite(amt) ? amt : 0;
+    rowsWithBalance.push({ row, balance: remaining });
+  }
 
   return (
     <div className="space-y-2.5">
@@ -93,10 +102,7 @@ export function RowsEditor({
         <span className="w-7" />
       </div>
 
-      {rows.map((r) => {
-        const amt = Number(r.amount);
-        cumulative += Number.isFinite(amt) ? amt : 0;
-        const balance = t - cumulative;
+      {rowsWithBalance.map(({ row: r, balance }) => {
         return (
           <div
             key={r.id}

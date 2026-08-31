@@ -2,6 +2,7 @@ import "server-only";
 import { asc, eq, sql } from "drizzle-orm";
 import { unstable_cache } from "next/cache";
 import { db } from "@/lib/db";
+import { withDbRetry } from "@/lib/db/retry";
 import { subjects, tasks, type Subject } from "@/db/schema";
 import { CACHE_TAGS } from "@/lib/cache-tags";
 
@@ -13,11 +14,13 @@ import { CACHE_TAGS } from "@/lib/cache-tags";
  */
 export const listActiveSubjectNames = unstable_cache(
   async (): Promise<string[]> => {
-    const rows = await db
-      .select({ name: subjects.name })
-      .from(subjects)
-      .where(eq(subjects.isActive, true))
-      .orderBy(asc(subjects.name));
+    const rows = await withDbRetry("active subject names", () =>
+      db
+        .select({ name: subjects.name })
+        .from(subjects)
+        .where(eq(subjects.isActive, true))
+        .orderBy(asc(subjects.name)),
+    );
     return rows
       .map((r) => r.name)
       .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));

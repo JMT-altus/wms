@@ -7,7 +7,7 @@
  * them (kept as strings here so this file stays server/client neutral).
  */
 
-export type ModuleId = "wms" | "employees" | "sales" | "training" | "masters";
+export type ModuleId = "wms" | "employees" | "sales" | "training" | "masters" | "targets";
 
 export interface ModuleNavItem {
   href: string;
@@ -16,6 +16,8 @@ export interface ModuleNavItem {
   adminOnly?: boolean;
   /** When true, the pill shows the live active-task count. */
   taskCount?: boolean;
+  /** When true, the pill shows the live archived-task count. */
+  archivedCount?: boolean;
   /** Extra path prefixes that also belong to this item (for active-state). */
   match?: string[];
   /** Paths that must NOT match (so sibling routes don't both highlight). */
@@ -52,19 +54,32 @@ export const MODULES: ModuleDef[] = [
       { href: "/tasks/kanban", label: "Kanban", icon: "SquareKanban" },
       { href: "/projects", label: "Projects", icon: "FolderKanban" },
       { href: "/weekly-goals", label: "Weekly Goals", icon: "Target" },
+      // Admin-only, matching the /archived page's own guard — it redirects
+      // non-admins to /tasks, so a pill they can't use would be a dead end.
+      {
+        href: "/archived",
+        label: "Archive",
+        icon: "Archive",
+        adminOnly: true,
+        archivedCount: true,
+      },
     ],
   },
   {
     id: "employees",
     label: "Employees",
-    tagline: "Attendance, leave, salary & the team roster.",
+    tagline: "Attendance, leave, salary, daily compliance & the team roster.",
     icon: "Users",
     landing: "/attendance",
-    routes: ["/attendance", "/salary", "/reimbursements", "/leave-approval"],
+    routes: ["/attendance", "/salary", "/reimbursements", "/leave-approval", "/dcc"],
     accent: { from: "#12B3A0", to: "#0C7C6F", ink: "#0C7C6F" },
     items: [
       { href: "/attendance", label: "Attendance", icon: "CalendarCheck", notMatch: ["/attendance/dashboard"] },
       { href: "/attendance/dashboard", label: "Att Report", icon: "CalendarRange", adminOnly: true },
+      // DCC — the daily KPI checklist. Sibling routes listed in notMatch so the
+      // board pill doesn't stay lit on Team and Ranking, same pattern as Tasks.
+      { href: "/dcc", label: "DCC", icon: "Gauge", notMatch: ["/dcc/dashboard", "/dcc/ranking"] },
+      { href: "/dcc/dashboard", label: "DCC Team", icon: "Users" },
       { href: "/salary", label: "Salary", icon: "IndianRupee", adminOnly: true },
       { href: "/reimbursements", label: "Reimbursements", icon: "Receipt" },
       { href: "/leave-approval", label: "Leave Approval", icon: "CalendarOff" },
@@ -136,6 +151,18 @@ export const MODULES: ModuleDef[] = [
     // Empty: Masters renders a left sidebar in its own route group rather than
     // the top pill row, because the list of masters grows (grade, tolerance,
     // condition, size…) and pills stop working past about six.
+    items: [],
+  },
+  {
+    id: "targets",
+    label: "Targets & Forecasts",
+    tagline: "Break the annual number down, then track it week by week.",
+    icon: "Target",
+    landing: "/targets",
+    routes: ["/targets"],
+    accent: { from: "#7C3AED", to: "#4F46E5", ink: "#5B21B6" },
+    // Left rail, same reasoning as Masters — Annual / Quarterly / Monthly /
+    // Weekly / Dashboard / Hygiene is already six entries.
     items: [],
   },
 ];

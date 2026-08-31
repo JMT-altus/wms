@@ -7,6 +7,7 @@ import {
   TrendingUp,
   GraduationCap,
   Boxes,
+  Target,
   Search,
   RotateCcw,
   ShieldCheck,
@@ -41,6 +42,7 @@ const MODULE_ICONS: Record<ModuleId, LucideIcon> = {
   sales: TrendingUp,
   training: GraduationCap,
   masters: Boxes,
+  targets: Target,
 };
 
 type Tab = "everyone" | "departments" | "people";

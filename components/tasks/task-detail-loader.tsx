@@ -7,6 +7,8 @@ import { listEmployees } from "@/lib/queries/employees";
 import { listActiveClientNames } from "@/lib/queries/clients";
 import { listActiveSubjectNames } from "@/lib/queries/subjects";
 import { listProjectNodeOptions } from "@/lib/queries/projects";
+import { listActiveDepartments } from "@/lib/queries/departments";
+import { listTaskAttachments, getTaskAudience } from "@/lib/queries/task-attachments";
 import { getStatusDisplayMap, getStatusList } from "@/lib/queries/status-display";
 import type { TaskStatus, StatusColorToken } from "@/db/enums";
 import {
@@ -41,7 +43,18 @@ export async function TaskDetailLoader({ taskId, me }: Props) {
   const task = await getTaskById(taskId);
   if (!task) notFound();
 
-  const [events, all, statusDisplay, statusList, clients, subjects, projectNodes] = await Promise.all([
+  const [
+    events,
+    all,
+    statusDisplay,
+    statusList,
+    clients,
+    subjects,
+    projectNodes,
+    attachments,
+    audience,
+    departmentRows,
+  ] = await Promise.all([
     listTaskEvents(taskId),
     listEmployees(),
     getStatusDisplayMap(),
@@ -49,6 +62,11 @@ export async function TaskDetailLoader({ taskId, me }: Props) {
     listActiveClientNames(),
     listActiveSubjectNames(),
     listProjectNodeOptions(),
+    listTaskAttachments(taskId),
+    // Only a restricted task has a named audience; the query is cheap enough
+    // that branching on visibility here would cost more than it saves.
+    getTaskAudience(taskId),
+    listActiveDepartments(),
   ]);
   // Active statuses in the admin's display order — drives the picker's options
   // (hidden ones drop out, reordering reflects here too).
@@ -92,6 +110,20 @@ export async function TaskDetailLoader({ taskId, me }: Props) {
       clients={clients}
       subjects={subjects}
       projectNodes={projectNodes}
+      attachments={attachments}
+      audience={audience}
+      departments={departmentRows.map((d) => ({ id: d.id, name: d.name }))}
+      // Mirrors the rule inside `setTaskVisibility`: someone ON the task, or
+      // an admin. Widening is a disclosure and narrowing can hide the task
+      // from the person doing the work, so it stays a deliberate act — but
+      // admins already see every task, and locking them out meant nobody
+      // could re-scope a task they were not personally on.
+      canChangeVisibility={
+        me.isAdmin ||
+        task.doerId === me.id ||
+        task.initiatorId === me.id ||
+        task.createdById === me.id
+      }
       me={me}
       statusLabels={statusLabels}
       statusTones={statusTones}

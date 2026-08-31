@@ -24,14 +24,17 @@ export const AudienceEntrySchema = z
   );
 
 /**
- * Reused by task create, task edit and the project write path.
+ * Spread into CreateTaskSchema only — the create path. Editing visibility goes
+ * through SetVisibilitySchema above, which requires the field, so nothing here
+ * can silently re-scope an existing task.
  *
- * Defaults to `private`: everyone except the MD and admins sees only their own
- * work, so a task nobody explicitly shared must not fall back to team-wide.
- * A caller that wants the whole team to see a row has to say so.
+ * Defaults to `internal` (Everyone): a new task on a shared board is shared
+ * unless its creator narrows it. This reverses migration 0078's default;
+ * 0078's rule still decides who can SEE a task, it is only the starting
+ * position of the picker that moved.
  */
 export const VisibilityFields = {
-  visibility: z.enum(VISIBILITIES).optional().default("private"),
+  visibility: z.enum(VISIBILITIES).optional().default("internal"),
   audience: z.array(AudienceEntrySchema).max(100).optional().default([]),
 };
 

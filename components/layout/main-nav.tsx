@@ -4,7 +4,7 @@ import {
   LayoutDashboard, ListTodo, CalendarDays, FolderKanban, SquareKanban, Target,
   CalendarCheck, CalendarRange, Award, IndianRupee, Receipt, CalendarOff,
   Contact, Sparkles, GraduationCap, LayoutGrid, Users,
-  BookOpen, Share2, Gauge, ListChecks, MessageSquare, Settings,
+  BookOpen, Share2, Gauge, ListChecks, MessageSquare, Settings, Archive,
 } from "lucide-react";
 import type { Route } from "next";
 import { MainNavPill } from "./main-nav-pill";
@@ -12,6 +12,7 @@ import { moduleForPath, type ModuleNavItem } from "@/lib/nav-modules";
 
 interface Props {
   activeTasks: number;
+  archivedTasks: number;
   isAdmin: boolean;
   variant?: "drawer";
 }
@@ -20,10 +21,10 @@ const ICONS: Record<string, typeof LayoutDashboard> = {
   LayoutDashboard, ListTodo, CalendarDays, FolderKanban, SquareKanban, Target,
   CalendarCheck, CalendarRange, Award, IndianRupee, Receipt, CalendarOff,
   Contact, Sparkles, GraduationCap, LayoutGrid, Users,
-  BookOpen, Share2, Gauge, ListChecks, MessageSquare, Settings,
+  BookOpen, Share2, Gauge, ListChecks, MessageSquare, Settings, Archive,
 };
 
-export function MainNav({ activeTasks, isAdmin, variant }: Props) {
+export function MainNav({ activeTasks, archivedTasks, isAdmin, variant }: Props) {
   const pathname = usePathname();
   const activeModule = moduleForPath(pathname);
 
@@ -62,7 +63,13 @@ export function MainNav({ activeTasks, isAdmin, variant }: Props) {
             label={item.label}
             Icon={Icon}
             active={isActive(item)}
-            count={item.taskCount ? activeTasks : undefined}
+            count={
+              item.taskCount
+                ? activeTasks
+                : item.archivedCount
+                  ? archivedTasks
+                  : undefined
+            }
             variant={variant}
           />
         );

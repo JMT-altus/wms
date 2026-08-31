@@ -374,6 +374,7 @@ export function NewTaskDialog({ employees, clients, subjects, projectNodes, depa
             }}
           >
             <NewTaskForm
+              isAdmin={Boolean(isAdmin)}
               employees={employees}
               clients={clients}
               subjects={subjects}

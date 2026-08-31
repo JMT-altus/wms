@@ -25,6 +25,21 @@ const emptyToNull = (max: number) =>
     .optional()
     .transform((v) => v ?? null);
 
+/**
+ * 0086 — an optional non-negative amount/count. Blank stays blank (nullable
+ * column); anything present must parse as a number ≥ 0, matching the "Cannot
+ * be negative" rule for Credit Limit / Credit Period. Rounded to whole days
+ * when `round` is set, so Credit Period can't be saved as "12.5 Days".
+ */
+const nonNegativeNumberOrNull = (message: string, round = false) =>
+  z
+    .union([z.string(), z.number()])
+    .optional()
+    .transform((v) => (v === undefined || v === null || `${v}`.trim() === "" ? null : Number(v)))
+    .nullable()
+    .refine((v) => v === null || (Number.isFinite(v) && v >= 0), { message })
+    .transform((v) => (v === null ? null : round ? Math.round(v) : v));
+
 const uuidOrNull = z
   .string()
   .trim()
@@ -155,10 +170,17 @@ export type MasterProductInput = z.input<typeof MasterProductSchema>;
 
 export const MasterCustomerSchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(200),
-  code: emptyToNull(60),
+  // Code is NOT part of this schema — 0086 made it a system-generated,
+  // read-only value on this screen (see saveMasterCustomer), so the form
+  // never submits one and there is nothing here to validate.
   // Free text against the editable `customer_category` list, not an enum —
   // see migration 0082 for why.
   customerCategory: emptyToNull(120),
+  // 0086 — Credit Limit (currency, 2dp) and Credit Period (whole days).
+  creditLimit: nonNegativeNumberOrNull("Credit limit must be a number, 0 or more."),
+  creditPeriodDays: nonNegativeNumberOrNull("Credit period must be a whole number of days, 0 or more.", true),
+  // 0086 — Yes/No, defaults to No (not in the Focused View list).
+  focusedView: z.boolean().default(false),
   purchasePattern: z
     .enum(PURCHASE_PATTERNS)
     .nullable()
@@ -169,9 +191,10 @@ export const MasterCustomerSchema = z.object({
     .nullable()
     .optional()
     .transform((v) => v ?? null),
-  // Required by the form, nullable in the column: allocation is the point of
-  // the screen, but a legacy row imported without a rep must still exist.
-  salesRepId: z.string().uuid("Assign a salesperson"),
+  // No longer collected by this form (Salesperson field removed on request) —
+  // nullable so a save from here can't wipe an allocation set elsewhere
+  // (bulk upload or Master Setup's fuller form still assign it).
+  salesRepId: uuidOrNull,
   isActive: z.boolean().default(true),
 });
 export type MasterCustomerInput = z.input<typeof MasterCustomerSchema>;

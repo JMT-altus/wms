@@ -1,7 +1,8 @@
-import { db, employees } from "@/lib/db";
+import { db, employees, type Employee } from "@/lib/db";
 import { asc, eq } from "drizzle-orm";
 import { unstable_cache } from "next/cache";
 import { CACHE_TAGS } from "@/lib/cache-tags";
+import { withDbRetry } from "@/lib/db/retry";
 
 /**
  * Returns the employee roster ordered by name.
@@ -16,11 +17,22 @@ import { CACHE_TAGS } from "@/lib/cache-tags";
  */
 export async function listEmployees(
   opts: { includeInactive?: boolean } = {},
-) {
-  const q = db.select().from(employees);
-  return opts.includeInactive
-    ? q.orderBy(asc(employees.name))
-    : q.where(eq(employees.isActive, true)).orderBy(asc(employees.name));
+): Promise<Employee[]> {
+  // Retried for the same reason as listActiveDepartments — a roster read on
+  // the render path of every page that shows the New Task trigger.
+  //
+  // The explicit return type matters: the two branches are different builder
+  // types, so without it the union widens to `unknown[]` and every caller
+  // that maps over the result loses its types.
+  return withDbRetry("employees roster", () =>
+    opts.includeInactive
+      ? db.select().from(employees).orderBy(asc(employees.name))
+      : db
+          .select()
+          .from(employees)
+          .where(eq(employees.isActive, true))
+          .orderBy(asc(employees.name)),
+  );
 }
 
 export interface EmployeeOption {

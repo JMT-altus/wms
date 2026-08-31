@@ -121,11 +121,11 @@
  * showing through under the sticky bar. Overridden below Tailwind's `md`
  * breakpoint so callers don't need their own responsive variant. */
 :root {
-  --app-header-h: 72px;
+  --app-header-h: 46px;
 }
 @media (max-width: 767px) {
   :root {
-    --app-header-h: 60px;
+    --app-header-h: 42px;
   }
 }
 
@@ -2354,4 +2354,117 @@ select.nt-input {
     box-shadow: none !important;
     border-color: #d4d4d8 !important;
   }
+}
+
+/* Create New Client KYC print — what the form's "View in PDF Format" button
+   produces. The other PDF exports in this app are pdfkit routes that render a
+   SAVED record; this form is printed while it is still a draft, so there is no
+   id to fetch and the live DOM is the only source of the values. Same scoping
+   trick as the Outstanding sheet above: gated on :has(.kyc-form) so no other
+   page inherits it. */
+@media print {
+  body:has(.kyc-form) aside,
+  body:has(.kyc-form) .kyc-actions {
+    display: none !important;
+  }
+  .kyc-form {
+    gap: 10px !important;
+  }
+  .kyc-form section {
+    break-inside: avoid;
+    box-shadow: none !important;
+    border-color: #d4d4d8 !important;
+  }
+  /* A dashed upload square prints as an empty box that says nothing. */
+  .kyc-form button[disabled] {
+    display: none !important;
+  }
+}
+
+/* Left-rail offset. The workspace rail is `fixed`, so the page column has to
+   be pushed clear of it; the width comes from --app-rail-w, which the rail's
+   offset component rewrites when it collapses. Scoped to md+ because the rail
+   itself is hidden below that and the phone drawer takes over. */
+@media (min-width: 768px) {
+  .app-rail-offset {
+    padding-left: var(--app-rail-w, 216px);
+  }
+}
+
+/*
+ * Full screen — set on <html> by components/masters/fullscreen-toggle.tsx.
+ *
+ * The browser Fullscreen API removes the BROWSER's chrome; the app's own left
+ * rail would still sit there taking a quarter of the screen the user just
+ * asked to fill. This folds the module rail (Forms, Masters) and the
+ * workspace rail's page offset away, so the table gets the whole width.
+ *
+ * Only the navigation goes. Nothing that is content, and nothing that is the
+ * way OUT — the toolbar's Exit button is part of the screen being maximised.
+ */
+:root[data-app-fullscreen] .module-rail {
+  display: none;
+}
+
+:root[data-app-fullscreen] .app-rail-offset {
+  padding-left: 0;
+}
+
+/* ────────────────────────────────────────────────────────────────────
+   Navy chrome — one surface, two orientations.
+
+   The app header (components/layout/header.tsx) and every left rail used to
+   be painted differently: the header a warm navy gradient with a blur, the
+   rails a flat cool slate with blue radial glows. Side by side they read as
+   two separate panels bolted together rather than one piece of chrome.
+
+   These two classes are the single definition of that surface. Same three
+   stops, same blur, same hairline — only the axis changes:
+
+     .rail-navy      vertical, for the left rails (right-edge hairline)
+     .rail-navy-top  horizontal, for the phone strips that replace them
+
+   The rails' gradient runs 170deg so the top of the rail lands on #001b3d,
+   exactly where the header's own gradient starts — the two meet at the
+   top-left corner on the same colour and the seam disappears.
+
+   Consumed by: components/layout/app-sidebar.tsx,
+   components/masters/masters-sidebar.tsx, components/forms/forms-sidebar.tsx.
+   ──────────────────────────────────────────────────────────────────── */
+.rail-navy {
+  background-image: linear-gradient(170deg, #001b3d 0%, #012a58 52%, #013a6b 100%);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* Blue → teal accent hairline down the right edge. The header carries the
+   same hairline along its bottom edge, so together they trace the top-left
+   corner of the content area in one continuous accent line.
+   Requires a positioned ancestor — every rail using this is fixed or sticky. */
+.rail-navy::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: 2px;
+  pointer-events: none;
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    #0a6cff 30%,
+    #17b6a0 70%,
+    transparent 100%
+  );
+  opacity: 0.85;
+}
+
+/* Phone counterpart: the rail collapses to a horizontal strip, so the
+   gradient and the hairline both rotate to match the header exactly. */
+.rail-navy-top {
+  background-image: linear-gradient(100deg, #001b3d 0%, #012a58 48%, #013a6b 100%);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }

@@ -65,6 +65,7 @@ import {
 import { addTaskComment } from "@/lib/tasks/add-comment";
 import { createTasksCore, createUnassignedTasks } from "@/lib/tasks/create-task";
 import { canQuickDump } from "@/lib/auth/quick-dump";
+import { archiveIfApproved } from "@/lib/tasks/auto-archive";
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -488,6 +489,11 @@ export async function bulkSetStatus(
     return { ok: false, error: `Could not update: ${(err as Error).message}` };
   }
   for (const id of allowed) afterResponse(() => reconcileTaskEvent(id));
+  // Same rule as the single-task path: approving archives immediately when the
+  // setting is on.
+  if (status === "approved") {
+    for (const id of allowed) await archiveIfApproved(id);
+  }
   revalidateTaskRoutes();
   return { ok: true, updated: allowed.length, skipped: ids.length - allowed.length };
 }
@@ -748,6 +754,27 @@ export async function bulkDelete(taskIds: string[]): Promise<BulkResult> {
  * not an ordinary editable field, because widening it is a disclosure and
  * narrowing it can hide a task from the person doing the work.
  */
+/**
+ * Turn a thrown driver error into something worth showing a user.
+ *
+ * The remote pool drops connections and its hostname intermittently fails to
+ * resolve; both surface as `ECONNRESET` / `ENOTFOUND` wrapped in drizzle's
+ * "Failed query: select ..." message. Dumping that whole SQL string into a
+ * toast tells the user nothing and leaks the schema, so connection faults get
+ * a plain sentence and anything else keeps its own message.
+ */
+function dbErrorMessage(err: unknown, doing: string): string {
+  const text = `${(err as Error)?.message ?? ""} ${
+    ((err as { cause?: Error })?.cause?.message ?? "")
+  }`;
+  const transient = /ECONNRESET|ENOTFOUND|ETIMEDOUT|ECONNREFUSED|EPIPE|CONNECTION_|timeout/i.test(
+    text,
+  );
+  return transient
+    ? `Couldn't reach the database to ${doing}. Try again in a moment.`
+    : `Couldn't ${doing}: ${(err as Error)?.message ?? "unknown error"}`;
+}
+
 export async function setTaskVisibility(
   taskId: string,
   input: SetVisibilityInput,
@@ -762,24 +789,46 @@ export async function setTaskVisibility(
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
   }
 
-  const current = await db.query.tasks.findFirst({
-    where: eq(tasks.id, taskId),
-    columns: {
-      id: true,
-      visibility: true,
-      doerId: true,
-      initiatorId: true,
-      createdById: true,
-    },
-  });
+  // "Specific people" is admin-only, on the edit path as well as create.
+  if (parsed.data.visibility === "restricted" && !me.isAdmin) {
+    return { ok: false, error: "Only an admin can share a task with specific people." };
+  }
+
+  // Guarded: an unhandled throw from here does NOT become a toast, it escapes
+  // the action, and React re-throws it inside the caller's `useTransition` —
+  // which lands on the (app) error boundary and replaces the whole screen with
+  // "That didn't go through". A read that failed is worth a message, not the
+  // user losing their place.
+  let current: {
+    id: string;
+    visibility: Visibility;
+    doerId: string | null;
+    initiatorId: string | null;
+    createdById: string | null;
+  } | undefined;
+  try {
+    current = await db.query.tasks.findFirst({
+      where: eq(tasks.id, taskId),
+      columns: {
+        id: true,
+        visibility: true,
+        doerId: true,
+        initiatorId: true,
+        createdById: true,
+      },
+    });
+  } catch (err) {
+    console.error("[setTaskVisibility] could not load task", { taskId, err });
+    return { ok: false, error: dbErrorMessage(err, "load this task") };
+  }
   if (!current) return { ok: false, error: "Task not found." };
 
   const onTheTask =
     current.doerId === me.id ||
     current.initiatorId === me.id ||
     current.createdById === me.id;
-  if (!onTheTask && !isSuperAdmin(me.email)) {
-    return { ok: false, error: "Only someone on this task can change who sees it." };
+  if (!onTheTask && !me.isAdmin && !isSuperAdmin(me.email)) {
+    return { ok: false, error: "Only someone on this task, or an admin, can change who sees it." };
   }
 
   try {
@@ -802,7 +851,8 @@ export async function setTaskVisibility(
       }
     });
   } catch (err) {
-    return { ok: false, error: `Could not save: ${(err as Error).message}` };
+    console.error("[setTaskVisibility] write failed", { taskId, err });
+    return { ok: false, error: dbErrorMessage(err, "save who can see this task") };
   }
 
   try {
@@ -817,8 +867,16 @@ export async function setTaskVisibility(
     console.error("[setTaskVisibility] audit write failed", err);
   }
 
-  revalidateTaskRoutes();
-  revalidatePath(`/tasks/${taskId}`);
+  // Also guarded, and deliberately AFTER the write is already committed: if
+  // busting the caches fails, the change still happened. Reporting failure
+  // here would tell the user their task did not change when it did, and
+  // throwing would take the screen down over a stale cache entry.
+  try {
+    revalidateTaskRoutes();
+    revalidatePath(`/tasks/${taskId}`);
+  } catch (err) {
+    console.error("[setTaskVisibility] revalidate failed", { taskId, err });
+  }
   return { ok: true };
 }
 
@@ -831,7 +889,10 @@ export async function createTask(input: CreateTaskInput): Promise<
   if (limited) return limited;
 
   // Delegate to the shared core (same rules as the mobile create API).
-  const result = await createTasksCore({ id: me.id, name: me.name }, input);
+  const result = await createTasksCore(
+    { id: me.id, name: me.name, isAdmin: me.isAdmin },
+    input,
+  );
   if (!result.ok) return result;
 
   revalidateTaskRoutes();
@@ -1279,6 +1340,8 @@ export async function approveTask(
     return false;
   });
   if (stale) return { ok: false, error: "stale" };
+  // Approving archives immediately when the setting is on.
+  if (parsed.decision === "approved") await archiveIfApproved(taskId);
 
   // Fan-out: tell the doer the verdict.  Approve → "approved" kind,
   // decline → "declined" kind so the recipient's UI can colour each
@@ -1577,6 +1640,9 @@ export async function setTaskApprovalStatus(
     return { ok: true as const, noop: false as const };
   });
   if (!result.ok) return result;
+
+  // Same rule for the admin verdict dropdown: approving archives immediately.
+  if (parsed.approvalStatus === "approved") await archiveIfApproved(taskId);
 
   revalidateTaskRoutes();
   revalidatePath(`/tasks/${taskId}`);

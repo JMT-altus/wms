@@ -203,7 +203,7 @@ function buildColumns(
       id: "select",
       enableSorting: false,
       enableHiding: false,
-      meta: { narrow: true, align: "center" },
+      meta: { narrow: true },
       header: ({ table }) => (
         <Checkbox
           checked={table.getIsAllPageRowsSelected()}
@@ -226,11 +226,32 @@ function buildColumns(
       meta: { narrow: true },
       cell: (info) => {
         const n = info.getValue<number | null>();
-        return n == null ? (
-          <span className="text-ink-subtle">—</span>
-        ) : (
-          <span className="font-bold tabular-nums text-ink-soft" style={{ fontSize: 14 }}>
-            #{n}
+        // Approved after its due date. Only ever true on approved tasks, so in
+        // practice this shows up in the Archive — which is the point: it says
+        // "this one landed, but late" without needing a separate column.
+        const late = info.row.original.approvedLate === true;
+        return (
+          <span className="inline-flex flex-col items-start gap-0.5">
+            {n == null ? (
+              <span className="text-ink-subtle">—</span>
+            ) : (
+              <span className="font-bold tabular-nums text-ink-soft" style={{ fontSize: 14 }}>
+                #{n}
+              </span>
+            )}
+            {late && (
+              <span
+                title="Approved after the due date"
+                className="inline-flex rounded-pill px-1.5 py-0.5 font-bold uppercase tracking-[0.06em]"
+                style={{
+                  fontSize: 9,
+                  background: "color-mix(in srgb, var(--color-red) 12%, transparent)",
+                  color: "var(--color-red-deep)",
+                }}
+              >
+                Late
+              </span>
+            )}
           </span>
         );
       },
@@ -325,7 +346,7 @@ function buildColumns(
     {
       accessorKey: "createdAt",
       header: "Created",
-      meta: { mobileHide: true, align: "center" },
+      meta: { mobileHide: true },
       cell: (info) => (
         <span className="text-body-lg text-ink-muted tabular-nums">
           {safeFormat(info.getValue<Date>(), "MMM d")}
@@ -335,7 +356,6 @@ function buildColumns(
     {
       accessorKey: "dueAt",
       header: "Due",
-      meta: { align: "center" },
       cell: ({ row }) => (
         <InlineDueCell
           taskId={row.original.id}
@@ -348,7 +368,7 @@ function buildColumns(
     {
       accessorKey: "ageDays",
       header: "Age",
-      meta: { mobileHide: true, align: "center" },
+      meta: { mobileHide: true },
       cell: (info) => (
         <span className="text-body-lg text-ink tabular-nums">
           {info.getValue<number>()}d

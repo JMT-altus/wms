@@ -1,6 +1,7 @@
 import "server-only";
 import { asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
+import { withDbRetry } from "@/lib/db/retry";
 import {
   departments,
   employeeDepartments,
@@ -122,9 +123,15 @@ export async function listActiveDepartmentNames(): Promise<string[]> {
  * Just active departments, used by employee pickers (invite + edit).
  */
 export async function listActiveDepartments(): Promise<Department[]> {
-  return db
-    .select()
-    .from(departments)
-    .where(eq(departments.isActive, true))
-    .orderBy(asc(departments.sortOrder), asc(departments.name));
+  // Retried: this is one of the five roster reads the header's New Task
+  // trigger fires on every page render. A dropped pooler socket here does not
+  // degrade a screen, it takes the whole screen down with "Failed query" —
+  // which is exactly what withDbRetry exists for.
+  return withDbRetry("active departments", () =>
+    db
+      .select()
+      .from(departments)
+      .where(eq(departments.isActive, true))
+      .orderBy(asc(departments.sortOrder), asc(departments.name)),
+  );
 }

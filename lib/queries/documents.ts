@@ -24,6 +24,7 @@ export async function listDocuments(): Promise<DocumentRow[]> {
       title: documents.title,
       description: documents.description,
       storagePath: documents.storagePath,
+      linkUrl: documents.linkUrl,
       mimeType: documents.mimeType,
       sizeBytes: documents.sizeBytes,
       uploadedByName: employees.name,
@@ -39,7 +40,10 @@ export async function listDocuments(): Promise<DocumentRow[]> {
   // round-trips. createSignedUrls (plural) takes a path array and
   // returns the same signed URLs in one call.
   const admin = getSupabaseAdmin();
-  const paths = rows.map((r) => r.storagePath);
+  // 0085 — a document may now be a LINK, which has no object to sign. Filter
+  // those out before calling Storage; passing a null path makes the whole
+  // batch fail, taking every real file's URL down with it.
+  const paths = rows.map((r) => r.storagePath).filter((p): p is string => p !== null);
   const signedByPath = new Map<string, string>();
   if (paths.length > 0) {
     const { data, error } = await admin.storage
@@ -61,6 +65,7 @@ export async function listDocuments(): Promise<DocumentRow[]> {
     sizeBytes: r.sizeBytes,
     uploadedByName: r.uploadedByName ?? null,
     createdAt: r.createdAt,
-    url: signedByPath.get(r.storagePath) ?? null,
+    // A link row carries its URL directly; a file row gets a signed one.
+    url: r.storagePath ? (signedByPath.get(r.storagePath) ?? null) : (r.linkUrl ?? null),
   }));
 }

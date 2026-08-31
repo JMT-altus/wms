@@ -28,6 +28,10 @@ import Link from "next/link";
 import type { Route } from "next";
 import { TaskDetail } from "./task-detail";
 import { TaskEditForm } from "./task-edit-form";
+import { TaskAttachments } from "./task-attachments";
+import { VisibilityEditor } from "./visibility-editor";
+import type { TaskAttachment } from "@/lib/queries/task-attachments";
+import type { AudienceEntry } from "@/lib/access/visibility";
 import { AuditFeed } from "./audit-feed";
 import { ActionRail } from "./action-rail";
 import { CommentInput } from "./comment-input";
@@ -59,6 +63,14 @@ interface Props {
   subjects: string[];
   /** Project tree nodes for the Edit Task "Project" link. */
   projectNodes?: { id: string; label: string }[];
+  /** Files and links attached to this task. */
+  attachments: TaskAttachment[];
+  /** The named audience, when visibility is "restricted". */
+  audience: AudienceEntry[];
+  /** Department roster for the visibility picker. */
+  departments: { id: string; name: string }[];
+  /** Visibility is changeable only by someone on the task (or a super-admin). */
+  canChangeVisibility: boolean;
   /** Current user — drives the comment composer avatar.  Optional so the
    *  page route can defer fetching it; falls back to "You". */
   me?: {
@@ -230,6 +242,10 @@ export function TaskDetailView({
   clients,
   subjects,
   projectNodes,
+  attachments,
+  audience,
+  departments,
+  canChangeVisibility,
   me,
   statusLabels,
   statusTones,
@@ -588,6 +604,29 @@ export function TaskDetailView({
                 />
               </section>
             )}
+
+            {/* (3) Attachments — files and links. Sits in the rail rather than
+                the body because it is reference material for the work, not
+                part of the brief itself. */}
+            <TaskAttachments
+              taskId={task.id}
+              attachments={attachments}
+              meId={me?.id ?? null}
+              isAdmin={me?.isAdmin ?? false}
+              canAttach={canCommentOnTask}
+            />
+
+            {/* (4) Who can see this — editable after creation, which it
+                previously was not. */}
+            <VisibilityEditor
+              taskId={task.id}
+              visibility={task.visibility}
+              audience={audience}
+              departments={departments}
+              people={employees}
+              canEdit={canChangeVisibility}
+              isAdmin={me?.isAdmin ?? false}
+            />
 
             {/* Audit feed used to live here. It has moved to the
                 ActivityCard on the left column so the right rail stays

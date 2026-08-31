@@ -1,15 +1,9 @@
 "use client";
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import {
-  CUSTOMER_SENSITIVITIES,
-  CUSTOMER_SENSITIVITY_LABELS,
-  PURCHASE_PATTERNS,
-  PURCHASE_PATTERN_LABELS,
-  type CustomerSensitivity,
-  type PurchasePattern,
-} from "@/db/enums";
 import type { CustomerRow } from "@/lib/queries/master-data";
+import { formatInr } from "@/lib/format";
 import {
   deleteMasterCustomer,
   saveMasterCustomer,
@@ -37,22 +31,15 @@ import { BulkUpload } from "./bulk-upload";
 const ACCENT = MASTERS_GRADIENT;
 const FORM_ID = "masters-customer-form";
 
-const SENSITIVITY_TONE: Record<CustomerSensitivity, string> = {
-  cost_sensitive: "rose",
-  neutral: "slate",
-  loyal: "teal",
-};
-
 export function CustomerMasterManager({
   customers,
-  salesReps,
   categoryOptions,
 }: {
   customers: CustomerRow[];
-  salesReps: { id: string; name: string }[];
   /** Active options from the admin-managed `customer_category` list. */
   categoryOptions: string[];
 }) {
+  const router = useRouter();
   const [editing, setEditing] = React.useState<CustomerRow | null | "new">(null);
   const [pending, start] = React.useTransition();
 
@@ -70,36 +57,91 @@ export function CustomerMasterManager({
     },
     {
       key: "customerCategory",
-      header: "Category",
+      header: "Customer Category",
       render: (r) => (r.customerCategory ? <Pill tone="purple">{r.customerCategory}</Pill> : <Dash />),
       value: (r) => r.customerCategory ?? "",
     },
     {
-      key: "purchasePattern",
-      header: "Purchase pattern",
-      render: (r) =>
-        r.purchasePattern ? <Pill tone="blue">{PURCHASE_PATTERN_LABELS[r.purchasePattern]}</Pill> : <Dash />,
-      value: (r) => (r.purchasePattern ? PURCHASE_PATTERN_LABELS[r.purchasePattern] : ""),
+      key: "creditLimit",
+      header: "Credit Limit",
+      render: (r) => (r.creditLimit ? formatInr(Number(r.creditLimit)) : <Dash />),
+      value: (r) => r.creditLimit ?? "",
     },
     {
-      key: "sensitivity",
-      header: "Sensitivity",
+      key: "creditPeriodDays",
+      header: "Credit Period",
       render: (r) =>
-        r.sensitivity ? (
-          <Pill tone={SENSITIVITY_TONE[r.sensitivity]}>{CUSTOMER_SENSITIVITY_LABELS[r.sensitivity]}</Pill>
-        ) : (
-          <Dash />
-        ),
-      value: (r) => (r.sensitivity ? CUSTOMER_SENSITIVITY_LABELS[r.sensitivity] : ""),
+        r.creditPeriodDays != null ? `${r.creditPeriodDays} Day${r.creditPeriodDays === 1 ? "" : "s"}` : <Dash />,
+      value: (r) => r.creditPeriodDays ?? "",
     },
     {
-      key: "salesRepName",
-      header: "Salesperson",
-      // The one gap worth shouting about: allocation is the point of this
-      // screen, and bulk-uploaded rows arrive without a rep.
-      render: (r) => r.salesRepName ?? <Pill tone="red">Unassigned</Pill>,
-      value: (r) => r.salesRepName ?? "Unassigned",
+      key: "focusedView",
+      header: "Focused View",
+      render: (r) =>
+        r.focusedView ? <Pill tone="cyan">Yes</Pill> : <span className="text-ink-subtle">No</span>,
+      value: (r) => (r.focusedView ? "Yes" : "No"),
     },
+
+    /* Everything Create New Client KYC writes to this same row.
+     *
+     * The Client Master and this screen are two views of `customer_masters`,
+     * so a field the KYC form fills in and this table cannot show is a field
+     * that looks lost. Contacts, addresses and bank accounts are excluded —
+     * each has a master of its own and does not belong repeated here.
+     *
+     * Hidden by default to keep the table readable — still searchable, one
+     * tick away in the Columns menu, in the CSV once ticked, and always
+     * listed in the row detail. Same order as the KYC form. */
+    ...([
+      ["customerTypes", "Customer Type", 150, (r) => r.customerTypes.join(", ")],
+      ["industryTypes", "Industry Type", 150, (r) => r.industryTypes.join(", ")],
+      ["tags", "Tags", 130, (r) => r.tags.join(", ")],
+      ["reference", "Reference", 150, (r) => r.reference],
+      ["panNo", "PAN / IT No", 130, (r) => r.panNo],
+      ["msmeUdyamNo", "MSME / Udyam No", 160, (r) => r.msmeUdyamNo],
+      ["gstRegistrationType", "GST Registration Type", 160, (r) => r.gstRegistrationType],
+      ["tinNumber", "TIN No", 120, (r) => r.tinNumber],
+      ["website", "Website", 160, (r) => r.website],
+      ["paymentTerms", "Payment Terms", 150, (r) => r.paymentTerms],
+      ["freightCharges", "Freight Charges", 140, (r) => r.freightCharges],
+      ["transporter", "Transporter", 130, (r) => r.transporter],
+      ["quantityDeviation", "Quantity Deviation", 140, (r) => r.quantityDeviation],
+      ["exportClient", "Export", 100, (r) => r.exportClient],
+      ["iecNumber", "IEC Code", 120, (r) => r.iecNumber],
+      ["currency", "Currency", 90, (r) => r.currency],
+      ["country", "Country", 110, (r) => r.country],
+      ["otherReferences", "Other References", 160, (r) => r.otherReferences],
+      ["notes", "Client Notes", 220, (r) => r.notes],
+      ["state", "State", 130, (r) => r.state],
+      ["gstin", "GSTIN", 150, (r) => r.gstin],
+      ["tallyGroup", "Tally Group", 130, (r) => r.tallyGroup],
+    ] as [string, string, number, (r: CustomerRow) => string | null][]).map(
+      ([key, header, width, pick]) => ({
+        key,
+        header,
+        width,
+        defaultHidden: true,
+        render: (r: CustomerRow) => pick(r) || <Dash />,
+        value: (r: CustomerRow) => pick(r) ?? "",
+      } satisfies Column<CustomerRow>),
+    ),
+    {
+      key: "testCertificateNeeded",
+      header: "Test Certificate Needed",
+      width: 165,
+      defaultHidden: true,
+      render: (r) => (r.testCertificateNeeded ? "Yes" : "No"),
+      value: (r) => (r.testCertificateNeeded ? "Yes" : "No"),
+    },
+    {
+      key: "tcsApplicable",
+      header: "TCS Applicable",
+      width: 130,
+      defaultHidden: true,
+      render: (r) => (r.tcsApplicable ? "Yes" : "No"),
+      value: (r) => (r.tcsApplicable ? "Yes" : "No"),
+    },
+
     {
       key: "isActive",
       header: "Status",
@@ -114,16 +156,11 @@ export function CustomerMasterManager({
     { value: "oldest", label: "Oldest First", compare: (a, b) => a.createdAt.localeCompare(b.createdAt) },
     { value: "name", label: "Name A–Z", compare: (a, b) => a.name.localeCompare(b.name) },
     { value: "name_desc", label: "Name Z–A", compare: (a, b) => b.name.localeCompare(a.name) },
-    {
-      value: "rep",
-      label: "Salesperson",
-      // Unassigned first: this sort exists to find the gaps, not to hide them.
-      compare: (a, b) =>
-        (a.salesRepName ?? "").localeCompare(b.salesRepName ?? "") || a.name.localeCompare(b.name),
-    },
   ];
 
-  const unassigned = customers.filter((c) => !c.salesRepId).length;
+  // Derived live from the rows on every render — never a stored/hardcoded
+  // count, so it moves the instant a customer's Focused View flag changes.
+  const focusedCount = customers.filter((c) => c.focusedView).length;
 
   function remove(row: CustomerRow) {
     if (!confirm(`Delete "${row.name}"? This can't be undone.`)) return;
@@ -136,21 +173,6 @@ export function CustomerMasterManager({
 
   return (
     <>
-      {unassigned > 0 && (
-        <div
-          className="mb-4 rounded-chip px-4 py-3 font-semibold"
-          style={{
-            fontSize: 14,
-            background: "color-mix(in srgb, var(--color-amber) 12%, transparent)",
-            border: "1px solid color-mix(in srgb, var(--color-amber) 32%, transparent)",
-            color: "var(--color-amber-deep)",
-          }}
-        >
-          {unassigned} customer{unassigned === 1 ? " has" : "s have"} no salesperson allocated. Filter
-          by &ldquo;Unassigned&rdquo; to fix them.
-        </div>
-      )}
-
       <DataTable
         rows={customers}
         columns={columns}
@@ -160,49 +182,50 @@ export function CustomerMasterManager({
         exportLabel="Export to Excel"
         csvName="customer-master"
         searchPlaceholder="Search customers"
-        onNew={() => setEditing("new")}
-        newLabel="New Customer"
+        // New customers are created through Client KYC, not the narrow dialog
+        // this screen edits with. Both write the same `customer_masters` row,
+        // but the dialog only covers a dozen fields — a client created here
+        // would be missing its contacts, addresses, bank accounts and half its
+        // registration detail, and would land in the Client Master looking
+        // complete. The KYC form is the one path that collects all of it.
+        //
+        // The dialog stays for EDITING an existing row, which is a different
+        // job: correcting a field on a record that already has the rest.
+        onNew={() => router.push("/forms/client-kyc/new")}
+        newLabel="New Client"
         accent={ACCENT}
-        extraActions={<BulkUpload target="customers" label="customers" />}
+        fullscreen
+        extraActions={
+          <>
+            <span
+              title="Customers with Add to Focused View List = Yes"
+              className="inline-flex items-center gap-1.5 rounded-pill px-3 h-8 text-[13px] font-semibold whitespace-nowrap"
+              style={{
+                background: "color-mix(in srgb, var(--color-cyan) 10%, transparent)",
+                border: "1px solid color-mix(in srgb, var(--color-cyan) 30%, transparent)",
+                color: "var(--color-cyan-deep)",
+              }}
+            >
+              Focused View — {focusedCount}
+            </span>
+            <BulkUpload target="customers" label="customers" />
+          </>
+        }
         filters={[
           {
             key: "category",
-            label: "Category",
+            label: "Customer Category",
             options: categoryOptions.map((c) => ({ value: c, label: c })),
             matches: (r, v) => r.customerCategory === v,
           },
           {
-            key: "pattern",
-            label: "Pattern",
-            options: PURCHASE_PATTERNS.map((p) => ({ value: p, label: PURCHASE_PATTERN_LABELS[p] })),
-            matches: (r, v) => r.purchasePattern === v,
-          },
-          {
-            key: "sensitivity",
-            label: "Sensitivity",
-            options: CUSTOMER_SENSITIVITIES.map((s) => ({
-              value: s,
-              label: CUSTOMER_SENSITIVITY_LABELS[s],
-            })),
-            matches: (r, v) => r.sensitivity === v,
-          },
-          {
-            key: "rep",
-            label: "Salesperson",
+            key: "focusedView",
+            label: "Focused View",
             options: [
-              { value: "__none", label: "Unassigned" },
-              ...salesReps.map((s) => ({ value: s.id, label: s.name })),
+              { value: "yes", label: "Yes" },
+              { value: "no", label: "No" },
             ],
-            matches: (r, v) => (v === "__none" ? !r.salesRepId : r.salesRepId === v),
-          },
-          {
-            key: "status",
-            label: "Status",
-            options: [
-              { value: "active", label: "Active" },
-              { value: "inactive", label: "Inactive" },
-            ],
-            matches: (r, v) => (v === "active" ? r.isActive : !r.isActive),
+            matches: (r, v) => (v === "yes" ? r.focusedView : !r.focusedView),
           },
         ]}
         emptyTitle="No customers yet."
@@ -220,7 +243,6 @@ export function CustomerMasterManager({
       {editing !== null && (
         <CustomerForm
           row={editing === "new" ? null : editing}
-          salesReps={salesReps}
           categoryOptions={categoryOptions}
           onClose={() => setEditing(null)}
         />
@@ -231,22 +253,28 @@ export function CustomerMasterManager({
 
 function CustomerForm({
   row,
-  salesReps,
   categoryOptions,
   onClose,
 }: {
   row: CustomerRow | null;
-  salesReps: { id: string; name: string }[];
   categoryOptions: string[];
   onClose: () => void;
 }) {
   const [f, setF] = React.useState({
     name: row?.name ?? "",
-    code: row?.code ?? "",
     customerCategory: row?.customerCategory ?? "",
-    purchasePattern: (row?.purchasePattern ?? "") as PurchasePattern | "",
-    sensitivity: (row?.sensitivity ?? "") as CustomerSensitivity | "",
-    salesRepId: row?.salesRepId ?? "",
+    // Numbers live as strings in form state (same pattern as the SKU form's
+    // List rate) — an empty input has to stay "", not 0.
+    creditLimit: row?.creditLimit ?? "",
+    creditPeriodDays: row?.creditPeriodDays != null ? String(row.creditPeriodDays) : "",
+    focusedView: row?.focusedView ?? false,
+    // Purchase pattern, Sensitivity and Salesperson no longer have inputs on
+    // this form (removed on request) — carried through unedited so saving a
+    // customer here can't silently blank out a value set elsewhere (bulk
+    // upload or Master Setup's fuller form).
+    purchasePattern: row?.purchasePattern ?? null,
+    sensitivity: row?.sensitivity ?? null,
+    salesRepId: row?.salesRepId ?? null,
     isActive: row?.isActive ?? true,
   });
   const [pending, start] = React.useTransition();
@@ -257,10 +285,8 @@ function CustomerForm({
     start(async () => {
       const res = await saveMasterCustomer(row?.id ?? null, {
         ...f,
-        // "" is the placeholder option, not a value — send null so the column
-        // stays genuinely blank rather than storing an empty string.
-        purchasePattern: f.purchasePattern === "" ? null : f.purchasePattern,
-        sensitivity: f.sensitivity === "" ? null : f.sensitivity,
+        creditLimit: f.creditLimit === "" ? null : f.creditLimit,
+        creditPeriodDays: f.creditPeriodDays === "" ? null : f.creditPeriodDays,
       });
       if (res.ok) {
         toast.success(row ? "Customer updated." : "Customer added.");
@@ -276,7 +302,7 @@ function CustomerForm({
       open
       width={640}
       title={row ? "Edit customer" : "New customer"}
-      subtitle="Name and salesperson are required. Classifications can be left blank until you know."
+      subtitle="Name is required. Everything else can be left blank until you know."
       onClose={onClose}
       footer={
         <>
@@ -299,11 +325,18 @@ function CustomerForm({
           />
         </Field>
 
-        <Field label="Code" hint="Your internal or Tally ledger code, if you use one.">
+        <Field
+          label="Customer code"
+          hint={
+            row
+              ? "Assigned automatically. Existing codes never change."
+              : "Assigned automatically when you save."
+          }
+        >
           <TextInput
-            value={f.code}
-            onChange={(e) => set("code", e.target.value)}
-            maxLength={60}
+            value={row?.code ?? "Assigned automatically on save"}
+            disabled
+            readOnly
           />
         </Field>
 
@@ -324,47 +357,36 @@ function CustomerForm({
           </SelectInput>
         </Field>
 
-        <Field label="Purchasing pattern" hint="How often they buy.">
-          <SelectInput
-            value={f.purchasePattern}
-            onChange={(e) => set("purchasePattern", e.target.value)}
-          >
-            <option value="">— not set —</option>
-            {PURCHASE_PATTERNS.map((p) => (
-              <option key={p} value={p}>
-                {PURCHASE_PATTERN_LABELS[p]}
-              </option>
-            ))}
-          </SelectInput>
-        </Field>
+        <div className="grid grid-cols-2 gap-4">
+          <Field label="Credit limit" hint="Maximum credit allowed, in ₹.">
+            <TextInput
+              type="number"
+              min="0"
+              step="0.01"
+              value={f.creditLimit}
+              onChange={(e) => set("creditLimit", e.target.value)}
+            />
+          </Field>
 
-        <Field label="Sensitivity / behaviour" hint="Why they buy from us.">
-          <SelectInput value={f.sensitivity} onChange={(e) => set("sensitivity", e.target.value)}>
-            <option value="">— not set —</option>
-            {CUSTOMER_SENSITIVITIES.map((s) => (
-              <option key={s} value={s}>
-                {CUSTOMER_SENSITIVITY_LABELS[s]}
-              </option>
-            ))}
-          </SelectInput>
-        </Field>
+          <Field label="Credit period" hint="Days of credit allowed, e.g. 30.">
+            <TextInput
+              type="number"
+              min="0"
+              step="1"
+              value={f.creditPeriodDays}
+              onChange={(e) => set("creditPeriodDays", e.target.value)}
+            />
+          </Field>
+        </div>
 
-        <Field label="Salesperson" required hint="Every customer needs an owner.">
-          <SelectInput
-            value={f.salesRepId}
-            onChange={(e) => set("salesRepId", e.target.value)}
-            required
-          >
-            <option value="">— pick a salesperson —</option>
-            {salesReps.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </SelectInput>
-        </Field>
-
-        <Toggle checked={f.isActive} onChange={(v) => set("isActive", v)} label="Active" />
+        <div className="flex items-center gap-6">
+          <Toggle checked={f.isActive} onChange={(v) => set("isActive", v)} label="Active" />
+          <Toggle
+            checked={f.focusedView}
+            onChange={(v) => set("focusedView", v)}
+            label="Add to Focused View List"
+          />
+        </div>
       </form>
     </MastersDialog>
   );

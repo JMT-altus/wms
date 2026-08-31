@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { AdminSidebar } from "./admin-sidebar";
 import { AdminMobileBar } from "./admin-mobile-bar";
+import { DashboardHeader } from "@/components/layout/header";
 
 type Props = {
   children: ReactNode;
@@ -32,6 +33,9 @@ export function AdminShell({
       />
       <div className="flex-1 min-w-0 max-md:flex max-md:flex-col">
         <AdminMobileBar adminName={adminName} adminEmail={adminEmail} />
+        {/* The app's slim header bar, same as every other module, so search /
+            Live / account are reachable here too. */}
+        <DashboardHeader generatedAt={new Date()} />
         <main className="flex-1 min-w-0 px-10 py-10 max-md:px-4 max-md:py-6">
           <div className="mx-auto max-w-[1280px]">{children}</div>
         </main>

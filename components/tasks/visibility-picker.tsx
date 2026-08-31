@@ -46,9 +46,15 @@ export function VisibilityPicker({
   allowRestricted = true,
   disabled,
 }: Props) {
+  // Everyone first — it is the default for new tasks, so the pre-selected card
+  // sits where the eye lands rather than second. Narrowing (Personal, then
+  // Specific people) reads left to right as progressively tighter.
+  //
+  // Display order only: the `VISIBILITIES` enum keeps its own order, which the
+  // DB column and every stored value depend on.
   const options: Visibility[] = allowRestricted
-    ? ["private", "internal", "restricted"]
-    : ["private", "internal"];
+    ? ["internal", "private", "restricted"]
+    : ["internal", "private"];
 
   const selectedDepartments = value.audience
     .filter((a) => a.kind === "department" && a.refId)

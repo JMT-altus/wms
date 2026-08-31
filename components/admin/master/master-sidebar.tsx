@@ -14,6 +14,12 @@ import {
   ArrowLeft,
   type LucideIcon,
 } from "lucide-react";
+import {
+  RAIL_WIDTH,
+  RAIL_WIDTH_COLLAPSED,
+  useRailCollapsed,
+} from "@/components/layout/rail-collapse";
+import { RailToggle } from "@/components/layout/rail-toggle";
 
 /**
  * Master Setup's own sidebar.
@@ -78,6 +84,8 @@ const NAV: ReadonlyArray<NavItem> = [
 const ACCENT = "linear-gradient(135deg, #f59e0b 0%, #f59e0b 42%, #b45309 100%)";
 
 export function MasterSidebar({ adminName }: { adminName: string }) {
+  // Shared across every rail so the choice follows you between modules.
+  const collapsed = useRailCollapsed();
   const pathname = usePathname();
 
   function isActive(item: NavItem): boolean {
@@ -87,11 +95,8 @@ export function MasterSidebar({ adminName }: { adminName: string }) {
 
   return (
     <aside
-      className="header-dark sticky top-0 self-start h-screen max-h-screen relative w-[284px] shrink-0 flex flex-col max-md:hidden"
-      style={{
-        backgroundColor: "rgba(15, 23, 42, 0.96)",
-        borderRight: "1px solid rgba(255, 255, 255, 0.08)",
-      }}
+      className="module-rail header-dark rail-navy sticky top-0 self-start h-screen max-h-screen relative shrink-0 flex flex-col max-md:hidden transition-[width] duration-200"
+      style={{ width: collapsed ? RAIL_WIDTH_COLLAPSED : RAIL_WIDTH }}
     >
       <div
         aria-hidden
@@ -103,29 +108,43 @@ export function MasterSidebar({ adminName }: { adminName: string }) {
       />
 
       <div className="relative flex flex-col h-full overflow-hidden">
-        <div className="px-6 pt-8 pb-5 shrink-0">
-          <div
-            className="inline-flex items-center gap-2.5 rounded-xl bg-white px-3 py-2"
-            style={{ boxShadow: "0 4px 14px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.6)" }}
-          >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/logo.png" alt="JMT Drive Solutions" style={{ height: 44, width: "auto", display: "block" }} />
-            <span
-              className="inline-flex items-center text-[10px] font-bold uppercase text-white px-2 py-0.5 rounded-full"
-              style={{
-                background: ACCENT,
-                boxShadow: "0 2px 8px rgba(245, 158, 11, 0.35)",
-                letterSpacing: "0.08em",
-              }}
+        <div className={`shrink-0 pt-3.5 pb-3 ${collapsed ? "px-2.5" : "px-3.5"}`}>
+          <div className={`flex items-start gap-2 ${collapsed ? "flex-col items-center" : ""}`}>
+            <div
+              className="flex items-center gap-2 rounded-lg bg-white px-2 py-1.5 min-w-0 flex-1"
+              style={{ boxShadow: "0 4px 14px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.6)" }}
             >
-              Masters
-            </span>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/logo.png"
+                alt="JMT Drive Solutions"
+                className="shrink-0"
+                style={{ height: collapsed ? 22 : 30, width: "auto", display: "block" }}
+              />
+              {!collapsed && (
+                <span
+                  className="inline-block min-w-0 break-words text-center text-[10px] font-bold uppercase leading-[1.25] text-white px-2 py-0.5 rounded-lg"
+                  style={{
+                    background: ACCENT,
+                    boxShadow: "0 2px 8px rgba(245, 158, 11, 0.35)",
+                    letterSpacing: "0.08em",
+                  }}
+                >
+                  Masters
+                </span>
+              )}
+            </div>
+            <RailToggle className={collapsed ? "mt-2" : "ml-auto shrink-0"} />
           </div>
-          <p className="text-[13px] mt-3 font-bold text-white/90">Admin &amp; Master Setup</p>
-          <p className="text-[12px] mt-0.5 text-white/50">Signed in as {adminName}</p>
+          {!collapsed && (
+            <>
+              <p className="text-[12.5px] mt-2.5 font-bold text-white/90">Admin &amp; Master Setup</p>
+              <p className="text-[11.5px] mt-0.5 text-white/50 leading-snug">Signed in as {adminName}</p>
+            </>
+          )}
         </div>
 
-        <nav className="px-3 flex flex-col gap-1 flex-1 overflow-y-auto min-h-0">
+        <nav className="px-2.5 flex flex-col gap-0.5 flex-1 overflow-y-auto min-h-0">
           {NAV.map((item) => {
             const Icon = item.icon;
             const active = isActive(item);
@@ -134,7 +153,10 @@ export function MasterSidebar({ adminName }: { adminName: string }) {
                 key={item.href}
                 href={item.href}
                 aria-current={active ? "page" : undefined}
-                className="group relative flex items-start gap-3 px-3.5 py-3 rounded-lg transition-all"
+                title={collapsed ? item.label : undefined}
+                className={`group relative flex gap-3 py-2 rounded-lg transition-all ${
+                  collapsed ? "items-center justify-center px-0" : "items-start px-2.5"
+                }`}
                 style={
                   active
                     ? {
@@ -154,20 +176,22 @@ export function MasterSidebar({ adminName }: { adminName: string }) {
                   />
                 )}
                 <Icon
-                  size={18}
+                  size={17}
                   strokeWidth={2.2}
-                  className="relative shrink-0 mt-0.5"
+                  className={`relative shrink-0 ${collapsed ? "" : "mt-0.5"}`}
                   style={{ color: active ? "rgba(255,255,255,0.95)" : "rgba(255,255,255,0.65)" }}
                 />
-                <span className="relative min-w-0">
-                  <span className="block text-[15px] font-medium">{item.label}</span>
-                  <span
-                    className="block text-[11.5px] mt-0.5"
-                    style={{ color: active ? "rgba(255,255,255,0.75)" : "rgba(255,255,255,0.45)" }}
-                  >
-                    {item.hint}
+                {!collapsed && (
+                  <span className="relative min-w-0">
+                    <span className="block text-[13.5px] font-medium">{item.label}</span>
+                    <span
+                      className="block text-[11.5px] mt-0.5"
+                      style={{ color: active ? "rgba(255,255,255,0.75)" : "rgba(255,255,255,0.45)" }}
+                    >
+                      {item.hint}
+                    </span>
                   </span>
-                </span>
+                )}
               </Link>
             );
           })}
@@ -177,17 +201,23 @@ export function MasterSidebar({ adminName }: { adminName: string }) {
           {/* Explicit crossing point — the two areas are siblings, not nested. */}
           <Link
             href={"/admin" as Route}
-            className="group flex items-center gap-2.5 px-3.5 py-2.5 rounded-lg text-[14px] text-white/75 hover:text-white hover:bg-white/[0.06] transition-colors"
+            title={collapsed ? "Admin Panel" : undefined}
+            className={`group flex items-center gap-2.5 py-2 rounded-lg text-[13.5px] text-white/75 hover:text-white hover:bg-white/[0.06] transition-colors ${
+              collapsed ? "px-0 justify-center" : "px-3"
+            }`}
           >
-            <ShieldCheck size={16} strokeWidth={2.2} />
-            Admin Panel
+            <ShieldCheck size={16} strokeWidth={2.2} className="shrink-0" />
+            {!collapsed && "Admin Panel"}
           </Link>
           <Link
             href={"/hub" as Route}
-            className="group flex items-center gap-2.5 px-3.5 py-2.5 rounded-lg text-[14px] text-white/75 hover:text-white hover:bg-white/[0.06] transition-colors"
+            title={collapsed ? "Back to Hub" : undefined}
+            className={`group flex items-center gap-2.5 py-2 rounded-lg text-[13.5px] text-white/75 hover:text-white hover:bg-white/[0.06] transition-colors ${
+              collapsed ? "px-0 justify-center" : "px-3"
+            }`}
           >
-            <ArrowLeft size={16} strokeWidth={2.2} className="transition-transform group-hover:-translate-x-0.5" />
-            Back to Hub
+            <ArrowLeft size={16} strokeWidth={2.2} className="shrink-0 transition-transform group-hover:-translate-x-0.5" />
+            {!collapsed && "Back to Hub"}
           </Link>
         </div>
       </div>

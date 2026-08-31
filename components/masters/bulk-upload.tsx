@@ -14,7 +14,12 @@ import {
   type BulkTarget,
   type MappedRow,
 } from "@/lib/masters/bulk-parse";
-import { bulkUploadMasters, type BulkUploadResult } from "@/app/(masters-module)/masters/actions";
+import {
+  bulkUploadCustomerWorkbook,
+  bulkUploadMasters,
+  type BulkUploadResult,
+  type CustomerWorkbookResult,
+} from "@/app/(masters-module)/masters/actions";
 
 const ACCENT = MASTERS_GRADIENT;
 
@@ -25,20 +30,74 @@ interface Loaded {
 }
 
 /**
- * Bulk upload for one master.
- *
- * The file is parsed and mapped IN THE BROWSER, and only the mapped rows are
- * sent — so the person sees exactly what will be imported before anything is
- * written, and an unrecognised column is visibly ignored rather than silently
- * dropped server-side. The server re-normalises everything it receives anyway
- * (lib/masters/bulk-parse.ts is shared by both sides); this is a preview, not
- * a trust boundary.
- *
- * .xlsx is read with a dynamic import of the `xlsx` package so the ~400 KB
- * parser only downloads for the person who actually picks a spreadsheet.
+ * Same entry-point button for both targets — this is the ONE thing that must
+ * never change shape between them. What opens behind it differs completely:
+ * Products keeps the original flexible CSV/XLSX-mapping flow; Customers uses
+ * the 3-sheet (Basic Details / Account Details / Sales) workbook flow, since
+ * that format's columns are fixed by the downloadable template rather than
+ * mapped by the uploader.
  */
-export function BulkUpload({ target, label }: { target: BulkTarget; label: string }) {
+export function BulkUpload({
+  target,
+  label,
+  size = "band",
+}: {
+  target: BulkTarget;
+  label: string;
+  /**
+   * Where this button is sitting.
+   *
+   * `band` matches the filter row's chips, Sort and Export — one band, one
+   * style. `header` matches New client and Full screen up on the title row,
+   * which are a size larger.
+   */
+  size?: "band" | "header";
+}) {
   const [open, setOpen] = React.useState(false);
+  const triggerButton = (
+    <button
+      type="button"
+      onClick={() => setOpen(true)}
+      title="Bulk Upload"
+      className={
+        size === "header"
+          ? "shrink-0 inline-flex items-center gap-1.5 rounded-chip px-3.5 h-10 text-[14px] font-semibold text-ink-soft bg-surface-card border border-hairline whitespace-nowrap"
+          : "shrink-0 inline-flex items-center gap-1 rounded-pill px-2 h-7 text-[12px] font-semibold text-ink-soft bg-surface-card border border-hairline whitespace-nowrap"
+      }
+    >
+      <Upload size={size === "header" ? 15 : 13} strokeWidth={2.3} className="shrink-0" />
+      Bulk Upload
+    </button>
+  );
+
+  if (target === "customers") {
+    return (
+      <>
+        {triggerButton}
+        <CustomerWorkbookUpload open={open} onClose={() => setOpen(false)} />
+      </>
+    );
+  }
+  return (
+    <>
+      {triggerButton}
+      <ProductBulkUpload open={open} onClose={() => setOpen(false)} target={target} label={label} />
+    </>
+  );
+}
+
+/** The original single-sheet CSV/XLSX bulk upload — unchanged, Products only now. */
+function ProductBulkUpload({
+  open,
+  onClose,
+  target,
+  label,
+}: {
+  open: boolean;
+  onClose: () => void;
+  target: BulkTarget;
+  label: string;
+}) {
   const [loaded, setLoaded] = React.useState<Loaded | null>(null);
   const [mapping, setMapping] = React.useState<Record<string, string>>({});
   const [busy, setBusy] = React.useState(false);
@@ -58,7 +117,7 @@ export function BulkUpload({ target, label }: { target: BulkTarget; label: strin
   }
 
   function close() {
-    setOpen(false);
+    onClose();
     reset();
   }
 
@@ -130,17 +189,6 @@ export function BulkUpload({ target, label }: { target: BulkTarget; label: strin
 
   return (
     <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        title="Bulk Upload"
-        // h-9 / 13px matches the chips, Sort and Export — one band, one style.
-        className="inline-flex items-center gap-1.5 rounded-chip px-3 h-9 text-[13px] font-semibold text-ink-soft bg-surface-card border border-hairline whitespace-nowrap"
-      >
-        <Upload size={15} strokeWidth={2.3} className="shrink-0" />
-        Bulk Upload
-      </button>
-
       <MastersDialog
         open={open}
         title={`Bulk upload ${label}`}
@@ -366,5 +414,221 @@ export function BulkUpload({ target, label }: { target: BulkTarget; label: strin
         )}
       </MastersDialog>
     </>
+  );
+}
+
+/**
+ * 0087 — Customer Master bulk upload: one workbook, three linked sheets
+ * (Basic Details / Account Details / Sales), replacing the old flexible
+ * single-sheet mapping flow for this target only — Products is untouched
+ * above. The template's columns are fixed, so there's no per-header mapping
+ * step here: the file is sent as-is to the server, which reads the three
+ * named sheets, validates every row, and reports exactly what happened.
+ */
+function CustomerWorkbookUpload({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const [file, setFile] = React.useState<File | null>(null);
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const [result, setResult] = React.useState<CustomerWorkbookResult | null>(null);
+  const inputRef = React.useRef<HTMLInputElement>(null);
+
+  function reset() {
+    setFile(null);
+    setError(null);
+    setResult(null);
+    setBusy(false);
+    if (inputRef.current) inputRef.current.value = "";
+  }
+
+  function close() {
+    onClose();
+    reset();
+  }
+
+  function onFile(f: File) {
+    setError(null);
+    setResult(null);
+    if (!/\.xlsx?$/i.test(f.name)) {
+      setError("That's not an Excel file. Download the template below and fill it in as .xlsx.");
+      return;
+    }
+    setFile(f);
+  }
+
+  async function onImport() {
+    if (!file) return;
+    setBusy(true);
+    setError(null);
+    const formData = new FormData();
+    formData.append("file", file);
+    const res = await bulkUploadCustomerWorkbook(formData);
+    setBusy(false);
+    if (!res.ok) {
+      setError(res.error);
+      return;
+    }
+    setResult(res);
+    setFile(null);
+  }
+
+  return (
+    <MastersDialog
+      open={open}
+      title="Bulk upload customers"
+      subtitle="One workbook, three sheets — Basic Details, Account Details, Sales — linked by Customer Code."
+      onClose={close}
+      width={720}
+      footer={
+        <>
+          <CancelButton onClick={close} />
+          {file && (
+            <button
+              type="button"
+              onClick={onImport}
+              disabled={busy}
+              className="rounded-xl px-5 py-2.5 text-white font-bold disabled:opacity-60"
+              style={{ fontSize: 14.5, background: ACCENT }}
+            >
+              {busy ? "Importing…" : "Import workbook"}
+            </button>
+          )}
+        </>
+      }
+    >
+      {error && (
+        <div
+          className="mb-4 rounded-chip px-3.5 py-3 flex items-start gap-2.5"
+          style={{
+            background: "color-mix(in srgb, var(--color-red) 10%, transparent)",
+            border: "1px solid color-mix(in srgb, var(--color-red) 28%, transparent)",
+          }}
+        >
+          <AlertTriangle size={16} strokeWidth={2.3} style={{ color: "var(--color-red-deep)", marginTop: 1 }} />
+          <p className="text-[14px]" style={{ color: "var(--color-red-deep)" }}>{error}</p>
+        </div>
+      )}
+
+      {result && (
+        <div
+          className="rounded-chip px-4 py-4"
+          style={{
+            background:
+              result.rowErrors.length > 0
+                ? "color-mix(in srgb, var(--color-amber) 10%, transparent)"
+                : "color-mix(in srgb, var(--color-green) 10%, transparent)",
+            border:
+              result.rowErrors.length > 0
+                ? "1px solid color-mix(in srgb, var(--color-amber) 28%, transparent)"
+                : "1px solid color-mix(in srgb, var(--color-green) 28%, transparent)",
+          }}
+        >
+          <p
+            className="flex items-center gap-2 font-bold text-[15px]"
+            style={{ color: result.rowErrors.length > 0 ? "var(--color-amber-deep)" : "var(--color-green-deep)" }}
+          >
+            <CheckCircle2 size={17} strokeWidth={2.4} />
+            {result.customersCreated} customer{result.customersCreated === 1 ? "" : "s"} added,{" "}
+            {result.customersUpdated} updated, {result.salesLinesImported} Sales line
+            {result.salesLinesImported === 1 ? "" : "s"} imported.
+          </p>
+          {result.rowErrors.length > 0 && (
+            <div className="mt-3 max-h-56 overflow-y-auto rounded-chip bg-surface-card border border-hairline p-3">
+              <p className="font-bold text-ink-strong mb-1.5" style={{ fontSize: 13 }}>
+                {result.rowErrors.length} row{result.rowErrors.length === 1 ? "" : "s"} skipped:
+              </p>
+              <ul className="text-[13px] text-ink-soft list-disc pl-5 space-y-0.5">
+                {result.rowErrors.map((e, i) => (
+                  <li key={i}>{e}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={reset}
+            className="mt-3 rounded-xl px-4 py-2 font-semibold text-ink-soft"
+            style={{ fontSize: 14, border: "1px solid var(--color-hairline)" }}
+          >
+            Upload another file
+          </button>
+        </div>
+      )}
+
+      {!file && !result && (
+        <div>
+          <label
+            className="flex flex-col items-center justify-center gap-2 rounded-section px-6 py-10 cursor-pointer text-center"
+            style={{
+              border: "1.5px dashed var(--color-hairline)",
+              background: "var(--color-surface-soft)",
+            }}
+          >
+            <FileSpreadsheet size={26} strokeWidth={1.9} className="text-ink-subtle" />
+            <span className="font-bold text-ink-strong text-[15px]">Choose the filled-in .xlsx workbook</span>
+            <span className="text-[13px] text-ink-muted">
+              Basic Details, Account Details and Sales sheets, from the template below.
+            </span>
+            <input
+              ref={inputRef}
+              type="file"
+              accept=".xlsx,.xls"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) onFile(f);
+              }}
+            />
+          </label>
+
+          <div className="mt-5">
+            <p className="uppercase font-bold tracking-[0.08em] text-ink-subtle" style={{ fontSize: 11 }}>
+              Sheets in the workbook
+            </p>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {["Basic Details", "Account Details", "Sales"].map((s) => (
+                <span
+                  key={s}
+                  className="rounded-pill px-2.5 py-1 font-semibold"
+                  style={{
+                    fontSize: 12,
+                    background: "var(--color-surface-soft)",
+                    border: "1px solid var(--color-hairline)",
+                    color: "var(--color-ink-soft)",
+                  }}
+                >
+                  {s}
+                </span>
+              ))}
+            </div>
+            <p className="mt-2 text-[13px] text-ink-muted">
+              Customer Code links the three sheets — not Customer Name. Leave it blank on Basic
+              Details for a brand-new customer with no Account Details/Sales rows in this file;
+              fill it in yourself if other rows need to reference that customer.
+            </p>
+            <a
+              href="/masters/customer-template.xlsx"
+              download
+              className="inline-block mt-3 text-[13.5px] font-semibold"
+              style={{ color: MASTERS_INK }}
+            >
+              Download the template
+            </a>
+          </div>
+        </div>
+      )}
+
+      {file && !result && (
+        <div>
+          <p className="text-[14px] text-ink-soft">
+            <span className="font-bold text-ink-strong">{file.name}</span> ready to import.
+          </p>
+          <p className="mt-2 text-[13px] text-ink-muted">
+            Every row across all three sheets is validated before anything is saved. A row with a
+            problem is skipped and listed by sheet and row number — the rest of the file still
+            imports.
+          </p>
+        </div>
+      )}
+    </MastersDialog>
   );
 }

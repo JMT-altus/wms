@@ -7,7 +7,7 @@ export async function MainNavServer({ variant }: { variant?: "drawer" } = {}) {
   // Only the active-tasks badge lives on the nav now; Inbox / Archived counts
   // moved into the user menu (see UserMenuServer). The task totals come from a
   // shared cache, so re-reading them there is a cache hit, not a second query.
-  const { activeTasks } = await getNavCounts(
+  const { activeTasks, archivedTasks } = await getNavCounts(
     me
       ? {
           userId: me.id,
@@ -19,6 +19,7 @@ export async function MainNavServer({ variant }: { variant?: "drawer" } = {}) {
   return (
     <MainNav
       activeTasks={activeTasks}
+      archivedTasks={archivedTasks}
       isAdmin={Boolean(me?.isAdmin)}
       variant={variant}
     />

@@ -186,6 +186,10 @@ export interface CustomerRow {
   volumeClass: VolumeClass | null;
   purchasePattern: PurchasePattern | null;
   sensitivity: CustomerSensitivity | null;
+  /** 0086 — numeric columns come back as strings from postgres-js. */
+  creditLimit: string | null;
+  creditPeriodDays: number | null;
+  focusedView: boolean;
   contactPerson: string | null;
   phone: string | null;
   email: string | null;
@@ -197,6 +201,28 @@ export interface CustomerRow {
   mappedSkuCount: number;
   /** Serialised for the client — the Masters table sorts newest-first on it. */
   createdAt: string;
+  /* Written by Create New Client KYC into this same row — see listCustomers. */
+  customerTypes: string[];
+  industryTypes: string[];
+  tags: string[];
+  panNo: string | null;
+  gstRegistrationType: string | null;
+  msmeUdyamNo: string | null;
+  tinNumber: string | null;
+  website: string | null;
+  testCertificateNeeded: boolean;
+  tcsApplicable: boolean;
+  paymentTerms: string | null;
+  freightCharges: string | null;
+  transporter: string | null;
+  quantityDeviation: string | null;
+  exportClient: string | null;
+  iecNumber: string | null;
+  currency: string | null;
+  country: string | null;
+  reference: string | null;
+  otherReferences: string | null;
+  notes: string | null;
 }
 
 export async function listCustomers(): Promise<CustomerRow[]> {
@@ -211,6 +237,9 @@ export async function listCustomers(): Promise<CustomerRow[]> {
       volumeClass: customerMasters.volumeClass,
       purchasePattern: customerMasters.purchasePattern,
       sensitivity: customerMasters.sensitivity,
+      creditLimit: customerMasters.creditLimit,
+      creditPeriodDays: customerMasters.creditPeriodDays,
+      focusedView: customerMasters.focusedView,
       contactPerson: customerMasters.contactPerson,
       phone: customerMasters.phone,
       email: customerMasters.email,
@@ -220,6 +249,30 @@ export async function listCustomers(): Promise<CustomerRow[]> {
       tallyGroup: customerMasters.tallyGroup,
       isActive: customerMasters.isActive,
       createdAt: customerMasters.createdAt,
+      // Everything Create New Client KYC writes to this same row. The two
+      // screens are two views of `customer_masters`, so a field the KYC form
+      // fills in and this one cannot show is a field that looks lost.
+      customerTypes: customerMasters.customerTypes,
+      industryTypes: customerMasters.industryTypes,
+      tags: customerMasters.tags,
+      panNo: customerMasters.panNo,
+      gstRegistrationType: customerMasters.gstRegistrationType,
+      msmeUdyamNo: customerMasters.msmeUdyamNo,
+      tinNumber: customerMasters.tinNumber,
+      website: customerMasters.website,
+      testCertificateNeeded: customerMasters.testCertificateNeeded,
+      tcsApplicable: customerMasters.tcsApplicable,
+      paymentTerms: customerMasters.paymentTerms,
+      freightCharges: customerMasters.freightCharges,
+      transporter: customerMasters.transporter,
+      quantityDeviation: customerMasters.quantityDeviation,
+      exportClient: customerMasters.exportClient,
+      iecNumber: customerMasters.iecNumber,
+      currency: customerMasters.currency,
+      country: customerMasters.country,
+      reference: customerMasters.referenceBy,
+      otherReferences: customerMasters.otherReferences,
+      notes: customerMasters.notes,
       mappedSkuCount: sql<number>`(
         select count(*)::int from customer_product_map m where m.customer_id = ${customerMasters.id}
       )`,
@@ -231,6 +284,9 @@ export async function listCustomers(): Promise<CustomerRow[]> {
     ...r,
     salesRepName: r.salesRepName ?? null,
     createdAt: r.createdAt.toISOString(),
+    customerTypes: r.customerTypes ?? [],
+    industryTypes: r.industryTypes ?? [],
+    tags: r.tags ?? [],
   }));
 }
 

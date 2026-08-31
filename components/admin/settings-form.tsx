@@ -27,6 +27,9 @@ export function SettingsForm({ current }: Props) {
   const [workingDays, setWorkingDays] = useState<number[]>(current.workingDays);
   const [timezone, setTimezone] = useState(current.timezone);
   const [idleTimeout, setIdleTimeout] = useState(current.idleTimeoutMinutes);
+  const [autoArchiveOn, setAutoArchiveOn] = useState(
+    current.autoArchiveApprovedEnabled,
+  );
   const [allowSelfRegister, setAllowSelfRegister] = useState(
     current.allowSelfRegister,
   );
@@ -76,6 +79,7 @@ export function SettingsForm({ current }: Props) {
     setWorkingDays(current.workingDays);
     setTimezone(current.timezone);
     setIdleTimeout(current.idleTimeoutMinutes);
+    setAutoArchiveOn(current.autoArchiveApprovedEnabled);
     setAllowSelfRegister(current.allowSelfRegister);
     setOfficeLat(current.officeLat != null ? String(current.officeLat) : "");
     setOfficeLng(current.officeLng != null ? String(current.officeLng) : "");
@@ -98,6 +102,7 @@ export function SettingsForm({ current }: Props) {
       workingDays?: number[];
       timezone?: string;
       idleTimeoutMinutes?: number;
+      autoArchiveApprovedEnabled?: boolean;
       allowSelfRegister?: boolean;
       officeLat?: number | null;
       officeLng?: number | null;
@@ -114,6 +119,8 @@ export function SettingsForm({ current }: Props) {
     if (trimmedTz !== current.timezone) patch.timezone = trimmedTz;
     if (idleTimeout !== current.idleTimeoutMinutes)
       patch.idleTimeoutMinutes = idleTimeout;
+    if (autoArchiveOn !== current.autoArchiveApprovedEnabled)
+      patch.autoArchiveApprovedEnabled = autoArchiveOn;
     if (allowSelfRegister !== current.allowSelfRegister)
       patch.allowSelfRegister = allowSelfRegister;
 
@@ -237,6 +244,23 @@ export function SettingsForm({ current }: Props) {
               className="w-28 tabular-nums"
             />
           </Field>
+          <Field
+            label="Auto-archive approved tasks"
+            hint="Approval is the only trigger and it is immediate — due dates are ignored. An approved task moves to the Archive straight away, whether it was approved before or after its due date; a task that is not approved never archives, however old or overdue. Ones approved after its due date are marked Late in the Archive."
+          >
+            <label className="flex cursor-pointer select-none items-center gap-2.5">
+              <input
+                type="checkbox"
+                checked={autoArchiveOn}
+                onChange={(e) => setAutoArchiveOn(e.target.checked)}
+                className="size-4"
+              />
+              <span className="text-[13.5px] font-semibold text-ink-soft">
+                Move approved tasks to the Archive automatically
+              </span>
+            </label>
+          </Field>
+
           <Field
             label="Working days"
             hint="Days when the digest fires. Weekend days unchecked = no digest on those days."

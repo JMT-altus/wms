@@ -16,6 +16,7 @@ import {
   doublePrecision,
   real,
   bigint,
+  smallint,
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
@@ -27,8 +28,11 @@ import {
 } from "./enums";
 import type {
   AudienceKind,
+  ClientAddressType,
   CustomerSensitivity,
+  KycStage,
   FlangeType,
+  ForecastPeriodKind,
   ImportSource,
   ImportTarget,
   PurchasePattern,
@@ -544,10 +548,20 @@ export const documents = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     title: text("title").notNull(),
     description: text("description"),
-    storagePath: text("storage_path").notNull(),
+    /**
+     * 0085 — null for a LINK row. A document is a stored file or an external
+     * link, never both; the DB enforces the XOR.
+     */
+    storagePath: text("storage_path"),
+    /** 0085 — an external URL (Drive, SharePoint, anything) instead of a file. */
+    linkUrl: text("link_url"),
     mimeType: text("mime_type"),
     sizeBytes: integer("size_bytes"),
     taskId: uuid("task_id").references(() => tasks.id, { onDelete: "set null" }),
+    /** 0088 — a document attached to a Client KYC record instead of a task. */
+    customerMasterId: uuid("customer_master_id").references(() => customerMasters.id, {
+      onDelete: "cascade",
+    }),
     uploadedById: uuid("uploaded_by_id").references(() => employees.id, {
       onDelete: "set null",
     }),
@@ -557,6 +571,7 @@ export const documents = pgTable(
   (t) => [
     index("documents_created_idx").on(t.createdAt),
     index("documents_task_idx").on(t.taskId),
+    index("documents_customer_master_idx").on(t.customerMasterId),
   ],
 );
 
@@ -975,6 +990,21 @@ export const orgSettings = pgTable("org_settings", {
   officeLat: doublePrecision("office_lat"),
   officeLng: doublePrecision("office_lng"),
   attendanceRadiusM: integer("attendance_radius_m").notNull().default(100),
+  /**
+   * 0091 — days after `tasks.approved_at` that an approved task moves itself
+   * to the Archive. 0 disables the sweep entirely, which is the default: it
+   * has to be switched on deliberately, because the first run archives every
+   * approved task already past the window.
+   */
+  autoArchiveApprovedDays: integer("auto_archive_approved_days").notNull().default(0),
+  /**
+   * 0092 — the on/off switch, kept separate from the day count so that
+   * `days = 0` can mean "archive as soon as it is approved" rather than
+   * "never". Approval is the trigger; the delay is optional.
+   */
+  autoArchiveApprovedEnabled: boolean("auto_archive_approved_enabled")
+    .notNull()
+    .default(false),
   // Attendance Phase A (0058) — org-wide schedule defaults. Per-employee
   // overrides live on `employees`; null there => fall back to these.
   attLateAfter: time("att_late_after").default("10:50"),
@@ -989,6 +1019,14 @@ export const orgSettings = pgTable("org_settings", {
     .default(90),
   trainingShareMinMinutes: integer("training_share_min_minutes").notNull().default(10),
   trainingCadenceDays: integer("training_cadence_days").notNull().default(6),
+  // Targets & Forecasts cadence (0084). "Monthly on the 27th, weekly before
+  // Friday logout", and a period locks `lockDays` after its deadline so nobody
+  // can retro-fit a forecast to the result. Policy, not constants — same
+  // reasoning as the training numbers above.
+  forecastMonthlyDay: integer("forecast_monthly_day").notNull().default(27),
+  /** ISO day-of-week, 1 = Monday … 7 = Sunday. 5 = Friday. */
+  forecastWeeklyDow: integer("forecast_weekly_dow").notNull().default(5),
+  forecastLockDays: integer("forecast_lock_days").notNull().default(3),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -2525,6 +2563,15 @@ export const customerMasters = pgTable(
     volumeClass: text("volume_class").$type<VolumeClass>(),
     purchasePattern: text("purchase_pattern").$type<PurchasePattern>(),
     sensitivity: text("sensitivity").$type<CustomerSensitivity>(),
+    /**
+     * 0086 — Customer Master additions (Credit Limit / Credit Period / Focused
+     * View). All three are nullable/default-safe so pre-existing rows keep
+     * working untouched, same rule as every other Phase-1 classification
+     * column on this table.
+     */
+    creditLimit: numeric("credit_limit", { precision: 14, scale: 2 }),
+    creditPeriodDays: integer("credit_period_days"),
+    focusedView: boolean("focused_view").notNull().default(false),
     contactPerson: text("contact_person"),
     phone: text("phone"),
     email: text("email"),
@@ -2533,6 +2580,86 @@ export const customerMasters = pgTable(
     gstin: text("gstin"),
     tallyGroup: text("tally_group"),
     notes: text("notes"),
+    /**
+     * 0087 — Customer Information Form fields (Basic Details / Account
+     * Details), added for the multi-sheet bulk-upload workbook. All
+     * nullable/default-safe, same rule as every other classification column
+     * on this table — populated only via that bulk upload for now, the
+     * manual create/edit form doesn't render them.
+     */
+    billingAddress: text("billing_address"),
+    deliveryAddress: text("delivery_address"),
+    invoiceMailingAddress: text("invoice_mailing_address"),
+    purchaseDeptContact: text("purchase_dept_contact"),
+    accountsDeptContact: text("accounts_dept_contact"),
+    otherContact: text("other_contact"),
+    referenceBy: text("reference_by"),
+    panNo: text("pan_no"),
+    tinNumber: text("tin_number"),
+    iecNumber: text("iec_number"),
+    website: text("website"),
+    paymentTerms: text("payment_terms"),
+    salesCoordinator: text("sales_coordinator"),
+    accountsContactName: text("accounts_contact_name"),
+    accountsContactPhone: text("accounts_contact_phone"),
+    accountsContactEmail: text("accounts_contact_email"),
+    tcsApplicable: boolean("tcs_applicable").notNull().default(false),
+    /**
+     * 0095 — the Registration & Tax row's "Test Certificate Needed" Yes/No.
+     * Boolean rather than nullable text so it matches `tcsApplicable` above,
+     * the field it renders beside and shares a shape with.
+     */
+    testCertificateNeeded: boolean("test_certificate_needed").notNull().default(false),
+    /**
+     * 0088 — Create New Client KYC form fields. All nullable/default-safe,
+     * same rule as every other classification column on this table —
+     * populated by the /forms/client-kyc/new onboarding form; the
+     * manual create/edit form and bulk upload don't render them.
+     */
+    customerTypes: text("customer_types").array().notNull().default([]),
+    industryTypes: text("industry_types").array().notNull().default([]),
+    tags: text("tags").array().notNull().default([]),
+    gstRegistrationType: text("gst_registration_type"),
+    currency: text("currency"),
+    country: text("country"),
+    otherReferences: text("other_references"),
+    msmeUdyamNo: text("msme_udyam_no"),
+    freightCharges: text("freight_charges"),
+    transporter: text("transporter"),
+    quantityDeviation: text("quantity_deviation"),
+    /**
+     * 0089 — the Identity row's Export Yes/No. Text, not boolean, so a third
+     * state (SEZ, deemed export) doesn't need another migration.
+     */
+    exportClient: text("export_client"),
+    /**
+     * 0084 — the join to the sales spine, so a Tally actual can find its
+     * forecast row. Nullable on purpose: a master that has never traded has no
+     * `customers` row, and forcing one would invent turnover that never happened.
+     */
+    /**
+     * 0096 — where this record sits in the KYC lifecycle:
+     * `draft` (missing something lib/masters/kyc-completeness.ts requires),
+     * `complete` (a real client, shown in the Client Master), or
+     * `recycled` (a draft nobody finished within 7 days).
+     *
+     * Defaults to `complete` so every pre-0096 row is grandfathered — see
+     * the migration comment for why they are not re-judged.
+     */
+    kycStage: text("kyc_stage").$type<KycStage>().notNull().default("complete"),
+    /**
+     * Set while this draft is open in the KYC form (0098). Non-null hides it
+     * from the Draft list — it is checked out, not missing — and the sweep
+     * clears anything stale so an abandoned checkout always comes back.
+     */
+    editingSince: timestamp("editing_since", { withTimezone: true }),
+    /** When the 7-day draft clock started. Null unless `kycStage` is draft. */
+    draftSince: timestamp("draft_since", { withTimezone: true }),
+    /** When the sweep (or a person) moved this to the Recycle Bin. */
+    recycledAt: timestamp("recycled_at", { withTimezone: true }),
+    linkedCustomerId: uuid("linked_customer_id").references((): AnyPgColumn => customers.id, {
+      onDelete: "set null",
+    }),
     isActive: boolean("is_active").notNull().default(true),
     createdById: uuid("created_by_id").references(() => employees.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -2542,7 +2669,155 @@ export const customerMasters = pgTable(
     index("customer_masters_rep_idx").on(t.salesRepId),
     index("customer_masters_active_name_idx").on(t.isActive, t.name),
     index("customer_masters_class_idx").on(t.volumeClass),
+    index("customer_masters_focused_view_idx").on(t.focusedView),
+    index("customer_masters_kyc_stage_idx").on(t.kycStage, t.draftSince),
   ],
+);
+
+/**
+ * 0087 — the Sales sheet of the Customer Master bulk-upload workbook: a
+ * customer's PO / material lines. Deliberately its OWN table, not a reuse of
+ * `sales_orders`/`invoices` — those are single-value-per-row aggregates that
+ * feed the incentive/KPI engine, not a qty/rate/GST line-item log, and
+ * repurposing them would corrupt incentive calculations. One Customer Code
+ * (via `customerMasterId`) can have many rows — a customer typically has
+ * several material lines per PO, and several POs over time.
+ */
+export const customerSalesLines = pgTable(
+  "customer_sales_lines",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    customerMasterId: uuid("customer_master_id")
+      .notNull()
+      .references(() => customerMasters.id, { onDelete: "cascade" }),
+    customerPoNo: text("customer_po_no"),
+    customerPoEmailDate: date("customer_po_email_date"),
+    materialDescription: text("material_description"),
+    qty: numeric("qty", { precision: 14, scale: 2 }),
+    rate: numeric("rate", { precision: 14, scale: 2 }),
+    /** Qty × Rate, computed at import time and stored for query convenience. */
+    total: numeric("total", { precision: 14, scale: 2 }),
+    gstPercent: numeric("gst_percent", { precision: 5, scale: 2 }),
+    /** Total × gstPercent/100. */
+    gstAmount: numeric("gst_amount", { precision: 14, scale: 2 }),
+    /** Total + gstAmount. */
+    lineTotal: numeric("line_total", { precision: 14, scale: 2 }),
+    freightCharges: numeric("freight_charges", { precision: 14, scale: 2 }),
+    installationCharges: numeric("installation_charges", { precision: 14, scale: 2 }),
+    /** lineTotal + freightCharges + installationCharges. */
+    salesTotal: numeric("sales_total", { precision: 14, scale: 2 }),
+    tcRequired: boolean("tc_required").notNull().default(false),
+    specialInstruction: text("special_instruction"),
+    remarks: text("remarks"),
+    filledBy: text("filled_by"),
+    filledByName: text("filled_by_name"),
+    /** Plain text (signer's name/initials) — not an e-signature capture. */
+    filledBySign: text("filled_by_sign"),
+    instructedBy: text("instructed_by"),
+    enteredVerifiedBy: text("entered_verified_by"),
+    createdById: uuid("created_by_id").references(() => employees.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("customer_sales_lines_customer_idx").on(t.customerMasterId)],
+);
+
+/**
+ * 0088 — one row per Contact Person block on the Create New Client KYC form.
+ * A customer can have several; the first one saved is the primary contact.
+ */
+export const customerContacts = pgTable(
+  "customer_contacts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    customerMasterId: uuid("customer_master_id")
+      .notNull()
+      .references(() => customerMasters.id, { onDelete: "cascade" }),
+    firstName: text("first_name"),
+    lastName: text("last_name"),
+    contactNo: text("contact_no"),
+    email: text("email"),
+    designationId: uuid("designation_id").references(() => designations.id, {
+      onDelete: "set null",
+    }),
+    departmentId: uuid("department_id").references(() => departments.id, {
+      onDelete: "set null",
+    }),
+    notes: text("notes"),
+    /**
+     * 0093 — which of the three Contact Person groups this row belongs to:
+     * `purchase` | `accounts` | `other` (db/enums.ts CLIENT_CONTACT_TYPES).
+     * Rows written before 0093 carry 'other', the type meaning "unrecorded".
+     */
+    contactType: text("contact_type").notNull().default("other"),
+    isPrimary: boolean("is_primary").notNull().default(false),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("customer_contacts_customer_idx").on(t.customerMasterId),
+    index("customer_contacts_customer_type_idx").on(
+      t.customerMasterId,
+      t.contactType,
+      t.sortOrder,
+    ),
+  ],
+);
+
+/**
+ * 0088 — one row per Address block on the Create New Client KYC form
+ * (billing, delivery or invoice-mailing); a customer can have several of each.
+ */
+export const customerAddresses = pgTable(
+  "customer_addresses",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    customerMasterId: uuid("customer_master_id")
+      .notNull()
+      .references(() => customerMasters.id, { onDelete: "cascade" }),
+    addressType: text("address_type").$type<ClientAddressType>().notNull(),
+    line1: text("line1"),
+    line2: text("line2"),
+    line3: text("line3"),
+    line4: text("line4"),
+    city: text("city"),
+    state: text("state"),
+    country: text("country"),
+    pinCode: text("pin_code"),
+    /**
+     * 0094 — where an invoice is emailed. Present on every row, but only the
+     * Invoice Mailing block on the KYC form collects it.
+     */
+    email: text("email"),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("customer_addresses_customer_idx").on(t.customerMasterId)],
+);
+
+/**
+ * 0088 — one row per Bank Account block on the Create New Client KYC form.
+ * At most one row per customer should carry `isPrimary = true`, enforced in
+ * the app layer (uncheck-the-others-on-check), same as `is_primary` on
+ * `employee_departments`.
+ */
+export const customerBankAccounts = pgTable(
+  "customer_bank_accounts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    customerMasterId: uuid("customer_master_id")
+      .notNull()
+      .references(() => customerMasters.id, { onDelete: "cascade" }),
+    accountName: text("account_name"),
+    bankName: text("bank_name"),
+    accountNo: text("account_no"),
+    ifscSwift: text("ifsc_swift"),
+    branch: text("branch"),
+    accountType: text("account_type"),
+    isPrimary: boolean("is_primary").notNull().default(false),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("customer_bank_accounts_customer_idx").on(t.customerMasterId)],
 );
 
 /** Customer → Category → Product → SKU, every level below customer optional. */
@@ -2652,10 +2927,163 @@ export const tallyGroupMappings = pgTable("tally_group_mappings", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+/* ── Targets & Forecasts (0084) ─────────────────────────────────────────────
+ *
+ * period_kind ∈ annual | quarter | month | week
+ * period_key  ∈ 'FY2026' | '2026-Q1' | '2026-04' | '2026-04-06' (Monday)
+ * fyStartYear is the April year: FY 2026-27 → 2026.
+ *
+ * Money is integer paise, matching lib/incentives/types.ts. Quantity is the
+ * only decimal. See lib/targets/period.ts for the cascade arithmetic.
+ */
+
+/** Top-down allocation. `employeeId` NULL = the company-level row. */
+export const forecastTargets = pgTable(
+  "forecast_targets",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    fyStartYear: integer("fy_start_year").notNull(),
+    periodKind: text("period_kind").$type<ForecastPeriodKind>().notNull(),
+    periodKey: text("period_key").notNull(),
+    employeeId: uuid("employee_id").references(() => employees.id, { onDelete: "cascade" }),
+    targetPaise: bigint("target_paise", { mode: "number" }).notNull().default(0),
+    /** Still the value the cascade seeded — nobody has typed over it. */
+    isDerived: boolean("is_derived").notNull().default(true),
+    createdById: uuid("created_by_id").references(() => employees.id, { onDelete: "set null" }),
+    updatedById: uuid("updated_by_id").references(() => employees.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("forecast_targets_lookup_idx").on(t.fyStartYear, t.periodKind, t.employeeId)],
+);
+
+/**
+ * The 30 / 70 growth split. `employeeId` NULL = the org default for that FY.
+ * Only `existingPct` is stored — the new-customer share is 100 minus it, so
+ * the two halves can never disagree.
+ */
+export const forecastGrowthSplits = pgTable("forecast_growth_splits", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  fyStartYear: integer("fy_start_year").notNull(),
+  employeeId: uuid("employee_id").references(() => employees.id, { onDelete: "cascade" }),
+  existingPct: numeric("existing_pct", { precision: 5, scale: 2 }).notNull().default("30"),
+  updatedById: uuid("updated_by_id").references(() => employees.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** One customer, one period: Forecasted / Estimated, with Actual joined on read. */
+export const forecastLines = pgTable(
+  "forecast_lines",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    fyStartYear: integer("fy_start_year").notNull(),
+    periodKind: text("period_kind").$type<ForecastPeriodKind>().notNull(),
+    periodKey: text("period_key").notNull(),
+    employeeId: uuid("employee_id")
+      .notNull()
+      .references(() => employees.id, { onDelete: "cascade" }),
+    /** NULL only for the pinned "New business" row, which has no named customer. */
+    customerMasterId: uuid("customer_master_id").references(() => customerMasters.id, {
+      onDelete: "cascade",
+    }),
+    isNewBusiness: boolean("is_new_business").notNull().default(false),
+
+    quantity: numeric("quantity", { precision: 14, scale: 2 }),
+    avgRatePaise: bigint("avg_rate_paise", { mode: "number" }),
+    /** quantity × avgRate when both are set, otherwise typed directly. */
+    forecastPaise: bigint("forecast_paise", { mode: "number" }).notNull().default(0),
+
+    estimatedPaise: bigint("estimated_paise", { mode: "number" }),
+    estimatedNotes: text("estimated_notes"),
+    estimatedAt: timestamp("estimated_at", { withTimezone: true }),
+    estimatedById: uuid("estimated_by_id").references(() => employees.id, { onDelete: "set null" }),
+
+    notes: text("notes"),
+    seededFromId: uuid("seeded_from_id").references((): AnyPgColumn => forecastLines.id, {
+      onDelete: "set null",
+    }),
+    isDerived: boolean("is_derived").notNull().default(false),
+
+    createdById: uuid("created_by_id").references(() => employees.id, { onDelete: "set null" }),
+    updatedById: uuid("updated_by_id").references(() => employees.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("forecast_lines_period_idx").on(t.fyStartYear, t.periodKind, t.periodKey),
+    index("forecast_lines_owner_idx").on(t.employeeId, t.fyStartYear),
+  ],
+);
+
+/**
+ * Imported actuals — deliberately NOT `sales_orders`.
+ *
+ * `sales_orders` is the incentive engine's input; dumping a Tally export into
+ * it would double-count against rep-logged sales and change real payouts. This
+ * table is reporting-only, so an import here can never move anybody's money.
+ */
+export const forecastActuals = pgTable(
+  "forecast_actuals",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    customerId: uuid("customer_id").references(() => customers.id, { onDelete: "set null" }),
+    customerMasterId: uuid("customer_master_id").references(() => customerMasters.id, {
+      onDelete: "set null",
+    }),
+    employeeId: uuid("employee_id").references(() => employees.id, { onDelete: "set null" }),
+    /** Kept verbatim so an unmatched row can be reported, never guessed. */
+    customerNameRaw: text("customer_name_raw"),
+    valuePaise: bigint("value_paise", { mode: "number" }).notNull(),
+    bookedAt: date("booked_at").notNull(),
+    voucherNo: text("voucher_no"),
+    productRef: text("product_ref"),
+    source: text("source").notNull().default("tally"),
+    importBatchId: uuid("import_batch_id").references(() => importBatches.id, {
+      onDelete: "set null",
+    }),
+    createdById: uuid("created_by_id").references(() => employees.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("forecast_actuals_period_idx").on(t.bookedAt),
+    index("forecast_actuals_customer_idx").on(t.customerMasterId, t.bookedAt),
+    index("forecast_actuals_owner_idx").on(t.employeeId, t.bookedAt),
+  ],
+);
+
+/** Append-only audit, same shape as task_events / settings_events. */
+export const forecastEvents = pgTable(
+  "forecast_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    lineId: uuid("line_id").references(() => forecastLines.id, { onDelete: "cascade" }),
+    targetId: uuid("target_id").references(() => forecastTargets.id, { onDelete: "cascade" }),
+    actorId: uuid("actor_id").references(() => employees.id, { onDelete: "set null" }),
+    action: text("action").notNull(),
+    field: text("field"),
+    fromValue: text("from_value"),
+    toValue: text("to_value"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("forecast_events_line_idx").on(t.lineId, t.createdAt),
+    index("forecast_events_actor_idx").on(t.actorId, t.createdAt),
+  ],
+);
+
+export type ForecastTarget = typeof forecastTargets.$inferSelect;
+export type ForecastGrowthSplit = typeof forecastGrowthSplits.$inferSelect;
+export type ForecastLine = typeof forecastLines.$inferSelect;
+export type ForecastActual = typeof forecastActuals.$inferSelect;
+export type ForecastEvent = typeof forecastEvents.$inferSelect;
+
 export type ProductCategory = typeof productCategories.$inferSelect;
 export type Product = typeof products.$inferSelect;
 export type ProductSku = typeof productSkus.$inferSelect;
 export type CustomerMaster = typeof customerMasters.$inferSelect;
+export type CustomerSalesLine = typeof customerSalesLines.$inferSelect;
+export type NewCustomerSalesLine = typeof customerSalesLines.$inferInsert;
 export type LookupItem = typeof lookupItems.$inferSelect;
 export type IncentiveSlab = typeof incentiveSlabs.$inferSelect;
 export type FieldPermissionGrant = typeof fieldPermissionGrants.$inferSelect;
@@ -2670,3 +3098,187 @@ export type SelfLearningEntry = typeof selfLearningEntries.$inferSelect;
 export type NewSelfLearningEntry = typeof selfLearningEntries.$inferInsert;
 export type WeeklyShare = typeof weeklyShares.$inferSelect;
 export type NewWeeklyShare = typeof weeklyShares.$inferInsert;
+
+/* ══════════════════════════════════════════════════════════════════════
+   DCC — Daily Compliance Checklist (migration 0099)
+
+   Per-employee daily KPI checklist. The load-bearing rule is in
+   `scheduleKind`: only 'scheduled' + non-participant items are ever "due"
+   today. Everything else lives in a tray and never inflates the daily
+   count, breaks a streak or blocks a gate. See lib/dcc/util.ts.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/**
+ * A "client" is an INSTANCE of a section, letting the same section repeat per
+ * client (Section B for "Client X", again for "Client Y") without duplicating
+ * item definitions in the UI.
+ */
+export const dccClients = pgTable(
+  "dcc_clients",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ownerEmployeeId: uuid("owner_employee_id")
+      .notNull()
+      .references(() => employees.id, { onDelete: "cascade" }),
+    section: text("section").notNull(),
+    name: text("name").notNull(),
+    sortOrder: integer("sort_order").notNull().default(0),
+    archived: boolean("archived").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("dcc_clients_owner_idx").on(t.ownerEmployeeId, t.sortOrder)],
+);
+
+/**
+ * Participant roster — external people (NOT employees) tracked by a
+ * participant-list KPI. Deduped per owner by lower(name) via a unique
+ * expression index declared in the migration.
+ */
+export const dccSubjects = pgTable(
+  "dcc_subjects",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ownerEmployeeId: uuid("owner_employee_id")
+      .notNull()
+      .references(() => employees.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    /** Optional tag: "mentee", "vendor" … */
+    kind: text("kind"),
+    sortOrder: integer("sort_order").notNull().default(0),
+    archived: boolean("archived").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("dcc_subjects_owner_idx").on(t.ownerEmployeeId, t.sortOrder)],
+);
+
+/**
+ * One checklist line owned by one employee. `frequency` keeps the raw human
+ * string; `weekdays` + `scheduleKind` + `needsReview` are derived from it by
+ * parseFrequency() on every create and update.
+ */
+export const dccKpiItems = pgTable(
+  "dcc_kpi_items",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ownerEmployeeId: uuid("owner_employee_id")
+      .notNull()
+      .references(() => employees.id, { onDelete: "cascade" }),
+    /** Heading that groups items on the board: "A", "Weekly KPI", "Client work"… */
+    section: text("section"),
+    /** Short code like "A1".."B8". */
+    code: text("code"),
+    title: text("title").notNull(),
+    /** Raw human string: "Daily", "Wed & Sat", "Every Sat", "Monthly", "Adhoc". */
+    frequency: text("frequency"),
+    /** Bitmask, bit0=Mon … bit6=Sun. NULL/0 = always due. */
+    weekdays: smallint("weekdays"),
+    /** 'scheduled' | 'weekly' | 'monthly' | 'adhoc' | 'event'. */
+    scheduleKind: text("schedule_kind").notNull().default("scheduled"),
+    isParticipantList: boolean("is_participant_list").notNull().default(false),
+    clientId: uuid("client_id").references(() => dccClients.id, { onDelete: "cascade" }),
+    templateCode: text("template_code"),
+    /** The frequency string was unparseable; a human should classify it. */
+    needsReview: boolean("needs_review").notNull().default(false),
+    targetNumber: numeric("target_number", { precision: 14, scale: 2 }),
+    unit: text("unit"),
+    sortOrder: integer("sort_order"),
+    archived: boolean("archived").notNull().default(false),
+    createdById: uuid("created_by_id").references(() => employees.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("dcc_kpi_items_owner_idx").on(t.ownerEmployeeId, t.sortOrder),
+    index("dcc_kpi_items_client_idx").on(t.clientId),
+  ],
+);
+
+/** Which subjects a participant-list KPI tracks (+ optional schedule override). */
+export const dccItemSubjects = pgTable(
+  "dcc_item_subjects",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    itemId: uuid("item_id")
+      .notNull()
+      .references(() => dccKpiItems.id, { onDelete: "cascade" }),
+    subjectId: uuid("subject_id")
+      .notNull()
+      .references(() => dccSubjects.id, { onDelete: "cascade" }),
+    scheduleKind: text("schedule_kind"),
+    weekdays: smallint("weekdays"),
+    sortOrder: integer("sort_order").notNull().default(0),
+    archived: boolean("archived").notNull().default(false),
+  },
+  (t) => [uniqueIndex("dcc_item_subjects_item_subject_uq").on(t.itemId, t.subjectId)],
+);
+
+/**
+ * One fill of one item for one date. `subjectId` NULL = a simple KPI's own row.
+ *
+ * NOTE: the real uniqueness is a COALESCE expression index declared in
+ * migration 0099 — `(item_id, entry_date, COALESCE(subject_id, <zero-uuid>))`.
+ * Drizzle cannot express that, so the upsert is written as raw SQL in
+ * lib/dcc/write.ts and must target the same expression.
+ */
+export const dccEntries = pgTable(
+  "dcc_entries",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    itemId: uuid("item_id")
+      .notNull()
+      .references(() => dccKpiItems.id, { onDelete: "cascade" }),
+    entryDate: date("entry_date").notNull(),
+    /** 'Done' | 'Not done' | 'NA' | 'Pending'. */
+    status: text("status"),
+    valueNumber: numeric("value_number", { precision: 14, scale: 2 }),
+    note: text("note"),
+    filledById: uuid("filled_by_id").references(() => employees.id, {
+      onDelete: "set null",
+    }),
+    subjectId: uuid("subject_id").references(() => dccSubjects.id, {
+      onDelete: "cascade",
+    }),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("dcc_entries_date_idx").on(t.entryDate),
+    index("dcc_entries_subject_idx").on(t.subjectId),
+    index("dcc_entries_item_date_idx").on(t.itemId, t.entryDate),
+  ],
+);
+
+/** A manager's sign-off on one person's one day. */
+export const dccReviews = pgTable(
+  "dcc_reviews",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ownerEmployeeId: uuid("owner_employee_id")
+      .notNull()
+      .references(() => employees.id, { onDelete: "cascade" }),
+    reviewDate: date("review_date").notNull(),
+    reviewerId: uuid("reviewer_id").references(() => employees.id, {
+      onDelete: "set null",
+    }),
+    /** 'approved' | 'needs_rework'. */
+    status: text("status"),
+    note: text("note"),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("dcc_reviews_owner_date_uq").on(t.ownerEmployeeId, t.reviewDate),
+    index("dcc_reviews_date_idx").on(t.reviewDate),
+  ],
+);
+
+export type DccClient = typeof dccClients.$inferSelect;
+export type NewDccClient = typeof dccClients.$inferInsert;
+export type DccSubject = typeof dccSubjects.$inferSelect;
+export type NewDccSubject = typeof dccSubjects.$inferInsert;
+export type DccKpiItem = typeof dccKpiItems.$inferSelect;
+export type NewDccKpiItem = typeof dccKpiItems.$inferInsert;
+export type DccItemSubject = typeof dccItemSubjects.$inferSelect;
+export type DccEntry = typeof dccEntries.$inferSelect;
+export type NewDccEntry = typeof dccEntries.$inferInsert;
+export type DccReview = typeof dccReviews.$inferSelect;

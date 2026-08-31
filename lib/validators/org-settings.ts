@@ -48,6 +48,17 @@ export const UpdateOrgSettingsSchema = z
       .max(60, "Idle timeout must be at most 60 minutes")
       .optional(),
     allowSelfRegister: z.boolean().optional(),
+    // 0091/0092 — how long after approval a task archives itself. 0 means
+    // "as soon as it is approved"; whether the sweep runs at all is the
+    // separate `autoArchiveApprovedEnabled` flag. Capped at two years, past
+    // which the value is almost certainly a typo.
+    autoArchiveApprovedDays: z
+      .number()
+      .int("Days must be a whole number")
+      .min(0, "Days cannot be negative")
+      .max(730, "That's over two years — pick a smaller number")
+      .optional(),
+    autoArchiveApprovedEnabled: z.boolean().optional(),
     // 0054 — attendance geofence. Lat+lng move together; null clears the
     // fence (punches accepted from anywhere again).
     officeLat: z.number().min(-90).max(90).optional().nullable(),

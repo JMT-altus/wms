@@ -35,6 +35,8 @@ interface Props {
   projectNodes?: { id: string; label: string }[];
   /** Audience options for the visibility picker. */
   departments?: { id: string; name: string }[];
+  /** "Specific people" is admin-only; the create action rejects it otherwise. */
+  isAdmin?: boolean;
   /** Called after a successful create. Default: navigate to /tasks/[id]. */
   onSuccess?: (taskId: string) => void;
   /** When set, the form runs in "complete a pool task" mode: it UPDATES this
@@ -106,13 +108,17 @@ interface PreviewFile {
   url: string;
 }
 
-export function NewTaskForm({ employees, clients, subjects, projectNodes = [], departments = [], onSuccess, completeTaskId, onCompleted, defaults }: Props) {
-  // Defaults to "Personal" (0078). Everyone except the MD and admins sees only
-  // their own work, so a task nobody deliberately shared must not start out
-  // team-wide — the people ON it (doer, initiator, creator) always see it, and
-  // sharing wider is an explicit choice made right here in the picker.
+export function NewTaskForm({ employees, clients, subjects, projectNodes = [], departments = [], isAdmin = false, onSuccess, completeTaskId, onCompleted, defaults }: Props) {
+  // Defaults to "Everyone" — new tasks are team-visible unless someone
+  // narrows them here.
+  //
+  // This reverses migration 0078, which made "Personal" the default so people
+  // saw only their own work. That rule still governs everything already
+  // created; what changed is the starting position of this one picker, on the
+  // grounds that work in a shared board is normally shared. Narrowing to
+  // Personal or Specific people is now the deliberate act.
   const [visibility, setVisibility] = React.useState<VisibilityValue>({
-    visibility: "private",
+    visibility: "internal",
     audience: [],
   });
   const router = useRouter();
@@ -518,6 +524,7 @@ export function NewTaskForm({ employees, clients, subjects, projectNodes = [], d
             onChange={setVisibility}
             departments={departments}
             people={employees.map((e) => ({ id: e.id, name: e.name }))}
+            allowRestricted={isAdmin}
           />
         </Field>
       )}

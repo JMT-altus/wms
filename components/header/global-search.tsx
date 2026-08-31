@@ -72,7 +72,7 @@ export function GlobalSearch() {
         <button
           type="button"
           aria-label="Search"
-          className="inline-flex items-center gap-2 rounded-pill border border-hairline bg-surface-soft px-3 h-10 text-ink-subtle transition-colors hover:bg-surface-card hover:border-hairline-strong max-md:h-9 max-md:px-2.5"
+          className="inline-flex items-center gap-2 rounded-pill border border-hairline bg-surface-soft px-2.5 h-8 text-ink-subtle transition-colors hover:bg-surface-card hover:border-hairline-strong max-md:h-7 max-md:px-2"
         >
           <Search size={16} strokeWidth={2.2} className="shrink-0" />
           <span className="text-[14px] font-medium max-2xl:hidden">Search everything…</span>

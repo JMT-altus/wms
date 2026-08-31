@@ -2,6 +2,7 @@ import "server-only";
 import { asc, eq, sql } from "drizzle-orm";
 import { unstable_cache } from "next/cache";
 import { db } from "@/lib/db";
+import { withDbRetry } from "@/lib/db/retry";
 import { clients, tasks, type Client } from "@/db/schema";
 import { CACHE_TAGS } from "@/lib/cache-tags";
 
@@ -17,11 +18,13 @@ import { CACHE_TAGS } from "@/lib/cache-tags";
  */
 export const listActiveClientNames = unstable_cache(
   async (): Promise<string[]> => {
-    const rows = await db
-      .select({ name: clients.name })
-      .from(clients)
-      .where(eq(clients.isActive, true))
-      .orderBy(asc(clients.name));
+    const rows = await withDbRetry("active client names", () =>
+      db
+        .select({ name: clients.name })
+        .from(clients)
+        .where(eq(clients.isActive, true))
+        .orderBy(asc(clients.name)),
+    );
     // Postgres `order by name` is byte-order (uppercase before lowercase);
     // re-sort with a locale-aware collator so "app" and "AA Tech" land where
     // a human expects.

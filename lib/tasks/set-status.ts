@@ -5,6 +5,7 @@ import { TASK_STATUSES, type TaskStatus } from "@/db/enums";
 import { canTransitionTo, type ActorRole } from "@/lib/auth/status-transitions";
 import { notifyManyForTask } from "@/lib/notifications/dispatch";
 import { getStatusDisplayMap } from "@/lib/queries/status-display";
+import { archiveIfApproved } from "@/lib/tasks/auto-archive";
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -132,6 +133,11 @@ export async function applyTaskStatusChange(
     }),
     recipients: [current.createdById, current.initiatorId, current.doerId],
   });
+
+  // Approving a task moves it straight to the Archive when auto-archiving is
+  // switched on. Done here rather than in the web action so the mobile API
+  // gets the same behaviour — this is the shared core both call. Never throws.
+  if (status === "approved") await archiveIfApproved(taskId);
 
   return { ok: true, updatedAt: now.toISOString() };
 }

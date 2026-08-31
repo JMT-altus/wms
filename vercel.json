@@ -2,7 +2,9 @@
   "regions": ["bom1"],
   "crons": [
     { "path": "/api/cron/digest",                 "schedule": "30 4 * * *" },
+    { "path": "/api/cron/auto-archive",           "schedule": "0 1 * * *" },
     { "path": "/api/cron/materialize-recurring",  "schedule": "0 2 * * *" },
+    { "path": "/api/cron/kyc-draft-sweep",        "schedule": "0 3 * * *" },
     { "path": "/api/cron/retry-dispatch",         "schedule": "30 4 * * *" },
     { "path": "/api/cron/weekly-goals?job=monday",     "schedule": "30 4 * * 1" },
     { "path": "/api/cron/weekly-goals?job=fill",       "schedule": "30 12 * * 6" },

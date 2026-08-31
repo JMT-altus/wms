@@ -243,17 +243,16 @@ function SlabsTab({ slabs, overlaps }: { slabs: SlabRow[]; overlaps: [string, st
         </span>
       ),
     },
-    { key: "graceDays", header: "Grace days", align: "right" },
+    { key: "graceDays", header: "Grace days" },
     {
       key: "payoutPct",
       header: "Payout %",
-      align: "right",
       render: (r) => (
         <span className="tabular-nums font-black text-ink-strong">{Number(r.payoutPct)}%</span>
       ),
       value: (r) => r.payoutPct,
     },
-    { key: "sortOrder", header: "Order", align: "right" },
+    { key: "sortOrder", header: "Order" },
     {
       key: "isActive",
       header: "Status",

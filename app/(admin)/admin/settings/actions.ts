@@ -61,6 +61,10 @@ export async function updateOrgSettings(
     patch.idleTimeoutMinutes = parsed.data.idleTimeoutMinutes;
   if (parsed.data.allowSelfRegister !== undefined)
     patch.allowSelfRegister = parsed.data.allowSelfRegister;
+  if (parsed.data.autoArchiveApprovedDays !== undefined)
+    patch.autoArchiveApprovedDays = parsed.data.autoArchiveApprovedDays;
+  if (parsed.data.autoArchiveApprovedEnabled !== undefined)
+    patch.autoArchiveApprovedEnabled = parsed.data.autoArchiveApprovedEnabled;
   if (parsed.data.officeLat !== undefined) patch.officeLat = parsed.data.officeLat;
   if (parsed.data.officeLng !== undefined) patch.officeLng = parsed.data.officeLng;
   if (parsed.data.attendanceRadiusM !== undefined)

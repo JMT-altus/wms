@@ -51,8 +51,12 @@ export const BULK_FIELDS: Record<BulkTarget, BulkField[]> = {
   ],
   customers: [
     { key: "name", label: "Name", aliases: ["customer", "customername", "party", "partyname", "account"], required: true },
-    { key: "code", label: "Code", aliases: ["customercode", "partycode", "accountcode"] },
-    { key: "customerCategory", label: "Category", aliases: ["customercategory", "type", "customertype", "channel"] },
+    // No "Code" field here — 0086 made Customer Code system-generated on this
+    // screen, for a form-created row and a bulk-imported one alike.
+    { key: "customerCategory", label: "Customer Category", aliases: ["category", "customercategory", "type", "customertype", "channel"] },
+    { key: "creditLimit", label: "Credit Limit", aliases: ["creditlimit", "credit", "creditamount", "climit"] },
+    { key: "creditPeriod", label: "Credit Period", aliases: ["creditperiod", "creditdays", "creditperioddays"] },
+    { key: "focusedView", label: "Add to Focused View List", aliases: ["focusedview", "addtofocusedviewlist", "focused", "nifty50"] },
     { key: "purchasePattern", label: "Purchase pattern", aliases: ["pattern", "buyingpattern", "frequency"] },
     { key: "sensitivity", label: "Sensitivity", aliases: ["behaviour", "behavior", "loyalty"] },
     { key: "salesRep", label: "Salesperson", aliases: ["salesrep", "rep", "salesperson", "owner", "executive"] },
@@ -172,6 +176,27 @@ export function normaliseSensitivity(raw: string | undefined): CustomerSensitivi
   if (n === "neutral") return "neutral";
   if (n === "loyal" || n === "relationship" || n === "relationshipbased") return "loyal";
   return null;
+}
+
+/**
+ * 0086 — a bulk-upload cell for Credit Limit / Credit Period: strip stray
+ * currency formatting ("₹", commas, whitespace) and accept it only if it
+ * parses as a number ≥ 0. Anything else imports blank rather than guessing,
+ * same leniency as every other bulk field here. `round` truncates Credit
+ * Period to whole days.
+ */
+export function normaliseNonNegative(raw: string | undefined, round = false): number | null {
+  if (!raw) return null;
+  const n = Number(raw.replace(/[₹,\s]/g, ""));
+  if (!Number.isFinite(n) || n < 0) return null;
+  return round ? Math.round(n) : n;
+}
+
+/** 0086 — "Yes"/"No" (also y/n, true/false, 1/0). Unrecognised or blank → No, the field's default. */
+export function normaliseFocusedView(raw: string | undefined): boolean {
+  if (!raw) return false;
+  const n = norm(raw);
+  return n === "yes" || n === "y" || n === "true" || n === "1";
 }
 
 /**

@@ -14,8 +14,8 @@ export function NavHistoryButtons() {
   const router = useRouter();
 
   const baseStyle: React.CSSProperties = {
-    width: 36,
-    height: 36,
+    width: 30,
+    height: 30,
     display: "inline-flex",
     alignItems: "center",
     justifyContent: "center",
@@ -55,7 +55,7 @@ export function NavHistoryButtons() {
         onMouseLeave={onLeave}
         style={baseStyle}
       >
-        <ChevronLeft size={18} strokeWidth={2.4} />
+        <ChevronLeft size={16} strokeWidth={2.4} />
       </button>
       <button
         type="button"
@@ -65,14 +65,14 @@ export function NavHistoryButtons() {
         onMouseLeave={onLeave}
         style={baseStyle}
       >
-        <ChevronRight size={18} strokeWidth={2.4} />
+        <ChevronRight size={16} strokeWidth={2.4} />
       </button>
       <span
         aria-hidden
         className="ml-2 mr-1 inline-block"
         style={{
           width: 1,
-          height: 24,
+          height: 20,
           background: "rgba(255, 255, 255, 0.15)",
         }}
       />

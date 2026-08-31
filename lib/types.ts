@@ -211,4 +211,10 @@ export interface TaskListRow {
   approvalStatus: "approved" | "not_approved" | "cancelled" | "transferred" | null;
   firstReadAt: Date | null;
   completedAt: Date | null;
+  /**
+   * True when the task was approved AFTER its due date — surfaced as a "Late"
+   * marker in the Archive. Null when it isn't approved, or when the approval
+   * moment can't be established (no `approved_at` and no audit event).
+   */
+  approvedLate: boolean | null;
 }

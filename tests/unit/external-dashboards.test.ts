@@ -31,17 +31,21 @@ function fakeEmployee(over: Partial<Employee>): Employee {
   } as unknown as Employee;
 }
 
-const ALL_IDS = ["leads", "liasoning", "mandate-collection"] as const;
-
 describe("EXTERNAL_DASHBOARDS", () => {
-  it("declares exactly three dashboards in stable order", () => {
-    expect(EXTERNAL_DASHBOARDS.map((d) => d.id)).toEqual(ALL_IDS);
+  // JMT Drive Solutions ships with no external dashboards — the Altus-specific
+  // Google Apps Script links were dropped during the rebrand. When JMT's own
+  // links are added, the shape assertions below start doing real work.
+  it("is empty until JMT's own dashboards are registered", () => {
+    expect(EXTERNAL_DASHBOARDS).toEqual([]);
   });
 
-  it("every dashboard has a non-empty URL and accent token", () => {
+  it("every registered dashboard has a unique id, an https URL and a known accent", () => {
+    const ids = EXTERNAL_DASHBOARDS.map((d) => d.id);
+    expect(new Set(ids).size).toBe(ids.length);
     for (const d of EXTERNAL_DASHBOARDS) {
-      expect(d.url).toMatch(/^https:\/\/script\.google\.com\//);
+      expect(d.url).toMatch(/^https:\/\//);
       expect(["blue", "amber", "purple"]).toContain(d.accent);
+      expect(d.label.trim()).not.toBe("");
     }
   });
 });
@@ -51,32 +55,27 @@ describe("getVisibleDashboards", () => {
     expect(getVisibleDashboards(null)).toEqual([]);
   });
 
-  it("non-admin, non-special email sees no Reports dashboards", () => {
-    const me = fakeEmployee({ email: "shilpa@vpinnacle.com", isAdmin: false });
-    const ids = getVisibleDashboards(me).map((d) => d.id);
-    expect(ids).toEqual([]);
+  it("returns nothing for a regular employee while the registry is empty", () => {
+    const me = fakeEmployee({ email: "shilpa@jmtds.com", isAdmin: false });
+    expect(getVisibleDashboards(me)).toEqual([]);
   });
 
-  it("non-admin user with altus@vpinnacle.com sees all three", () => {
-    const me = fakeEmployee({ email: "altus@vpinnacle.com", isAdmin: false });
-    const ids = getVisibleDashboards(me).map((d) => d.id);
-    expect(ids).toEqual(ALL_IDS);
+  it("returns nothing for an admin while the registry is empty", () => {
+    const me = fakeEmployee({ email: "mihir.jmtds@gmail.com", isAdmin: true });
+    expect(getVisibleDashboards(me)).toEqual([]);
   });
 
-  it("non-admin user with pravin@vpinnacle.com sees all three (case-insensitive)", () => {
-    const me = fakeEmployee({ email: "Pravin@VPinnacle.com", isAdmin: false });
-    const ids = getVisibleDashboards(me).map((d) => d.id);
-    expect(ids).toEqual(ALL_IDS);
+  it("never returns more links than are registered", () => {
+    const me = fakeEmployee({ isAdmin: true });
+    expect(getVisibleDashboards(me).length).toBeLessThanOrEqual(
+      EXTERNAL_DASHBOARDS.length,
+    );
   });
 
-  it("admin with an unrelated email still sees all three", () => {
-    const me = fakeEmployee({ email: "hetesh@altuscorp.in", isAdmin: true });
-    const ids = getVisibleDashboards(me).map((d) => d.id);
-    expect(ids).toEqual(ALL_IDS);
-  });
-
-  it("trims surrounding whitespace before comparing emails", () => {
-    const me = fakeEmployee({ email: "  altus@vpinnacle.com  ", isAdmin: false });
-    expect(getVisibleDashboards(me)).toHaveLength(3);
+  it("drops the visibleTo predicate from what it hands the client", () => {
+    const me = fakeEmployee({ isAdmin: true });
+    for (const d of getVisibleDashboards(me)) {
+      expect(d).not.toHaveProperty("visibleTo");
+    }
   });
 });

@@ -35,6 +35,9 @@ const DEFAULTS: OrgSettings = {
   officeLat: null,
   officeLng: null,
   attendanceRadiusM: 100,
+  // 0091/0092 — approved-task archive sweep. See lib/tasks/auto-archive.ts.
+  autoArchiveApprovedDays: 0,
+  autoArchiveApprovedEnabled: false,
   attLateAfter: "10:50",
   attEarlyBefore: "19:20",
   attFullDayHours: "9",
@@ -42,6 +45,9 @@ const DEFAULTS: OrgSettings = {
   trainingSelfLearningTargetMin: 90,
   trainingShareMinMinutes: 10,
   trainingCadenceDays: 6,
+  forecastMonthlyDay: 27,
+  forecastWeeklyDow: 5,
+  forecastLockDays: 3,
   updatedAt: new Date(0),
   updatedById: null,
 };

@@ -3,7 +3,7 @@ import { alias } from "drizzle-orm/pg-core";
 import { unstable_cache } from "next/cache";
 import { db, employees, tasks } from "@/lib/db";
 import { TASK_STATUSES, TASK_PRIORITIES, PENDING_STATUSES } from "@/db/enums";
-import type { TaskStatus, ApprovalStatus } from "@/db/enums";
+import type { TaskStatus, ApprovalStatus, Visibility } from "@/db/enums";
 import { employeeIdsInDepartments } from "@/lib/queries/departments";
 import { visibleTaskCondition } from "@/lib/auth/task-visibility";
 import { CACHE_TAGS } from "@/lib/cache-tags";
@@ -94,6 +94,25 @@ export async function listTasks(filters: TaskListFilters): Promise<TaskListRow[]
       approvalStatus: tasks.approvalStatus,
       firstReadAt: tasks.firstReadAt,
       completedAt: tasks.completedAt,
+      // Was it approved after its due date? The approval moment is
+      // `approved_at` when the Approve action stamped it, else the audit row
+      // the status dropdown left behind — the two paths record it in
+      // different places. NULL when the task isn't approved at all, which
+      // reads as "not late" rather than a false alarm.
+      approvedLate: sql<boolean | null>`(
+        CASE WHEN ${tasks.approvalStatus} = 'approved' OR ${tasks.status} = 'approved'
+          THEN COALESCE(
+                 ${tasks.approvedAt},
+                 (SELECT max(e.created_at) FROM task_events e
+                   WHERE e.task_id = ${tasks.id}
+                     AND ((e.event_type = 'status_changed'
+                            AND e.to_value ->> 'status' = 'approved')
+                       OR (e.event_type = 'field_updated'
+                            AND e.to_value ->> 'field' = 'approvalStatus'
+                            AND e.to_value ->> 'value' = 'approved')))
+               ) > ${tasks.dueAt}
+          ELSE NULL END
+      )`,
     })
     .from(tasks)
     .leftJoin(doerEmp, eq(tasks.doerId, doerEmp.id))
@@ -126,6 +145,7 @@ export async function listTasks(filters: TaskListFilters): Promise<TaskListRow[]
     approvalStatus: r.approvalStatus,
     firstReadAt: r.firstReadAt,
     completedAt: r.completedAt,
+    approvedLate: r.approvedLate ?? null,
   }));
 }
 
@@ -244,6 +264,21 @@ export async function listTasksPage(
       approvalStatus: tasks.approvalStatus,
       firstReadAt: tasks.firstReadAt,
       completedAt: tasks.completedAt,
+      // Same "approved after its due date?" expression as listTasks above.
+      approvedLate: sql<boolean | null>`(
+        CASE WHEN ${tasks.approvalStatus} = 'approved' OR ${tasks.status} = 'approved'
+          THEN COALESCE(
+                 ${tasks.approvedAt},
+                 (SELECT max(e.created_at) FROM task_events e
+                   WHERE e.task_id = ${tasks.id}
+                     AND ((e.event_type = 'status_changed'
+                            AND e.to_value ->> 'status' = 'approved')
+                       OR (e.event_type = 'field_updated'
+                            AND e.to_value ->> 'field' = 'approvalStatus'
+                            AND e.to_value ->> 'value' = 'approved')))
+               ) > ${tasks.dueAt}
+          ELSE NULL END
+      )`,
     })
     .from(tasks)
     .leftJoin(doerEmp, eq(tasks.doerId, doerEmp.id))
@@ -281,6 +316,7 @@ export async function listTasksPage(
     approvalStatus: r.approvalStatus,
     firstReadAt: r.firstReadAt,
     completedAt: r.completedAt,
+    approvedLate: r.approvedLate ?? null,
   }));
 
   return { rows, nextCursor };
@@ -616,6 +652,7 @@ export type TaskDetail = {
   recurrenceParentId: string | null;
   recurrenceOccurrenceDate: string | null;
   projectNodeId: string | null;
+  visibility: Visibility;
 };
 
 export async function getTaskById(taskId: string): Promise<TaskDetail | null> {
@@ -657,6 +694,9 @@ export async function getTaskById(taskId: string): Promise<TaskDetail | null> {
       recurrenceParentId: tasks.recurrenceParentId,
       recurrenceOccurrenceDate: tasks.recurrenceOccurrenceDate,
       projectNodeId: tasks.projectNodeId,
+      // 0085 — the detail screen now lets you change who can see the task, so
+      // it has to know what the answer currently is.
+      visibility: tasks.visibility,
     })
     .from(tasks)
     .leftJoin(doerEmp,    eq(tasks.doerId,      doerEmp.id))

@@ -28,6 +28,31 @@ const client =
     idle_timeout: 60,
     max_lifetime: 60 * 30,
     connect_timeout: 10,
+    // How long a pooled socket may sit silent before TCP starts probing the
+    // far end.
+    //
+    // This is not a tuning knob, it is a hang fix. The remote pooler drops
+    // connections without a FIN (a network blip, or the pooler reaping its
+    // side). postgres-js hands the dead socket to the next query anyway,
+    // that query waits for a reply that will never come, and nothing in the
+    // driver bounds the wait: there is no read timeout in postgres-js 3.x,
+    // only `connect_timeout`, which is already spent. The wait therefore
+    // runs to the OS TCP retransmission limit — observed here as a single
+    // page request sitting in `application-code` for 14 minutes before
+    // finally surfacing `read ECONNRESET`, with the page stuck on its
+    // loading skeleton the whole time.
+    //
+    // At 15s, the probes start early and the dead peer is detected in well
+    // under a minute, so the query fails fast and the UI can say so. The
+    // default of 60 was slow enough that a stalled request outlived the
+    // user's patience by an order of magnitude.
+    keep_alive: 15,
+    // NOTE: no `connection: { statement_timeout }` here. Startup parameters
+    // do not survive the transaction-mode pooler — setting it was verified to
+    // leave the session on the pooler's own `statement_timeout = 2min`, so the
+    // option was a comment that lied about what the connection did. The
+    // server side is already bounded by that 2 minutes; the client side is
+    // what `keep_alive` above is for, and that was the half with no bound.
   });
 
 if (process.env.NODE_ENV !== "production") {

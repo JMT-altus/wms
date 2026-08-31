@@ -4,19 +4,33 @@ import { redirect } from "next/navigation";
 import type { Route } from "next";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
+import { withDbRetry } from "@/lib/db/retry";
 import { employees, type Employee } from "@/db/schema";
 import { readSession } from "@/lib/auth/session";
 
 /**
  * Resolves the signed-in employee row, or null if not signed in.
  * Looks up by Firebase UID.  Used inside Server Components / Server Actions.
+ *
+ * Retried, because this is the one read every guarded page makes before it
+ * renders anything: a single dropped connection here does not degrade a
+ * screen, it takes the whole screen down with "Failed query". The pooler
+ * resets sockets from time to time and the transient codes that come back —
+ * ECONNRESET, and 57014 when a queued statement hits the pooler's own
+ * two-minute timeout — are exactly the ones `withDbRetry` already knows to
+ * try again. Everything else still surfaces on the first attempt.
+ *
+ * Inside `cache()`, so the retry runs at most once per request no matter how
+ * many components ask who is signed in.
  */
 export const getCurrentEmployee = cache(async (): Promise<Employee | null> => {
   const claims = await readSession();
   if (!claims) return null;
-  const row = await db.query.employees.findFirst({
-    where: eq(employees.firebaseUid, claims.uid),
-  });
+  const row = await withDbRetry("current employee", () =>
+    db.query.employees.findFirst({
+      where: eq(employees.firebaseUid, claims.uid),
+    }),
+  );
   return row ?? null;
 });
 

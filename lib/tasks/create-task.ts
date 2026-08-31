@@ -16,7 +16,7 @@ import { taskLabel } from "@/lib/tasks/set-status";
  * callers.
  */
 export async function createTasksCore(
-  actor: { id: string; name: string },
+  actor: { id: string; name: string; isAdmin?: boolean },
   input: CreateTaskInput,
 ): Promise<{ ok: true; id: string; ids: string[] } | { ok: false; error: string }> {
   let parsed;
@@ -24,6 +24,13 @@ export async function createTasksCore(
     parsed = CreateTaskSchema.parse(input);
   } catch (err: unknown) {
     return { ok: false, error: err instanceof Error ? err.message : "Invalid input" };
+  }
+
+  // "Specific people" is admin-only. Enforced here rather than only in the
+  // picker: hiding a control is not a permission check, and this core is also
+  // the mobile API's create path, which has no picker at all.
+  if (parsed.visibility === "restricted" && !actor.isAdmin) {
+    return { ok: false, error: "Only an admin can share a task with specific people." };
   }
 
   const doerIds = parsed.doerIds ?? (parsed.doerId ? [parsed.doerId] : []);

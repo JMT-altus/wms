@@ -25,6 +25,12 @@ import {
   LogOut,
   type LucideIcon,
 } from "lucide-react";
+import {
+  RAIL_WIDTH,
+  RAIL_WIDTH_COLLAPSED,
+  useRailCollapsed,
+} from "@/components/layout/rail-collapse";
+import { RailToggle } from "@/components/layout/rail-toggle";
 import { getFirebaseAuth } from "@/lib/firebase/client";
 
 interface Props {
@@ -63,6 +69,8 @@ const NAV: ReadonlyArray<NavItem> = [
 ];
 
 export function AdminSidebar({ adminName, adminEmail, avatarUrl }: Props) {
+  // Shared across every rail so the choice follows you between modules.
+  const collapsed = useRailCollapsed();
   const pathname = usePathname();
   const router = useRouter();
 
@@ -94,11 +102,8 @@ export function AdminSidebar({ adminName, adminEmail, avatarUrl }: Props) {
       // Back / Sign out footer is always one click away on long pages
       // (employees, activity, notifications). Without this the aside grew
       // with the page and the footer ended up below the fold.
-      className="header-dark sticky top-0 self-start h-screen max-h-screen relative w-[284px] shrink-0 flex flex-col max-md:hidden"
-      style={{
-        backgroundColor: "rgba(15, 23, 42, 0.96)",
-        borderRight: "1px solid rgba(255, 255, 255, 0.08)",
-      }}
+      className="module-rail header-dark rail-navy sticky top-0 self-start h-screen max-h-screen relative shrink-0 flex flex-col max-md:hidden transition-[width] duration-200"
+      style={{ width: collapsed ? RAIL_WIDTH_COLLAPSED : RAIL_WIDTH }}
     >
       {/* Brighter radial accent washes — mirror the public-app header treatment */}
       <div
@@ -116,36 +121,46 @@ export function AdminSidebar({ adminName, adminEmail, avatarUrl }: Props) {
       <div className="relative flex flex-col h-full overflow-hidden">
         {/* Brand block — logo on a white panel so the indigo block in the
             logo stays visible against the dark sidebar surface. */}
-        <div className="px-6 pt-8 pb-6 shrink-0">
-          <div
-            className="inline-flex items-center gap-2.5 rounded-xl bg-white px-3 py-2"
-            style={{
-              boxShadow:
-                "0 4px 14px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.6)",
-            }}
-          >
-            <img
-              src="/logo.png"
-              alt="JMT Drive Solutions"
-              style={{ height: 48, width: "auto", display: "block" }}
-            />
-            <span
-              className="inline-flex items-center text-[10px] font-bold uppercase text-white px-2 py-0.5 rounded-full"
+        <div className={`shrink-0 pt-3.5 pb-3 ${collapsed ? "px-2.5" : "px-3.5"}`}>
+          <div className={`flex items-start gap-2 ${collapsed ? "flex-col items-center" : ""}`}>
+            <div
+              className="flex items-center gap-2 rounded-lg bg-white px-2 py-1.5 min-w-0 flex-1"
               style={{
-                background:
-                  "linear-gradient(135deg, #0A6CFF 0%, #0A6CFF 42%, #17B6A0 100%)",
-                boxShadow: "0 2px 8px rgba(10, 108, 255, 0.35)",
-                letterSpacing: "0.08em",
+                boxShadow:
+                  "0 4px 14px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.6)",
               }}
             >
-              Admin
-            </span>
+              <img
+                src="/logo.png"
+                alt="JMT Drive Solutions"
+                className="shrink-0"
+                style={{ height: collapsed ? 22 : 30, width: "auto", display: "block" }}
+              />
+              {!collapsed && (
+                <span
+                  className="inline-block min-w-0 break-words text-center text-[10px] font-bold uppercase leading-[1.25] text-white px-2 py-0.5 rounded-lg"
+                  style={{
+                    background:
+                      "linear-gradient(135deg, #0A6CFF 0%, #0A6CFF 42%, #17B6A0 100%)",
+                    boxShadow: "0 2px 8px rgba(10, 108, 255, 0.35)",
+                    letterSpacing: "0.08em",
+                  }}
+                >
+                  Admin
+                </span>
+              )}
+            </div>
+            <RailToggle className={collapsed ? "mt-2" : "ml-auto shrink-0"} />
           </div>
-          <p className="text-[12.5px] mt-3 text-white/60">jmtdrives.com</p>
+          {!collapsed && (
+            <p className="text-[11.5px] mt-2.5 text-white/60">jmtdrives.com</p>
+          )}
         </div>
 
-        {/* Avatar + identity chip */}
-        <div className="px-6 pb-5 shrink-0">
+        {/* Avatar + identity chip. Dropped when collapsed: it is name and
+            email, neither of which survives a 64px rail. */}
+        {!collapsed && (
+        <div className="px-3.5 pb-4 shrink-0">
           <div
             className="flex items-center gap-3 rounded-xl p-3"
             style={{
@@ -190,9 +205,10 @@ export function AdminSidebar({ adminName, adminEmail, avatarUrl }: Props) {
             </div>
           </div>
         </div>
+        )}
 
         {/* Nav items — scrollable if they ever exceed the available height */}
-        <nav className="px-3 flex flex-col gap-1 flex-1 overflow-y-auto min-h-0">
+        <nav className="px-2.5 flex flex-col gap-0.5 flex-1 overflow-y-auto min-h-0">
           {NAV.map((item) => {
             const Icon = item.icon;
             const active = isActive(item);
@@ -201,7 +217,10 @@ export function AdminSidebar({ adminName, adminEmail, avatarUrl }: Props) {
                 key={item.href}
                 href={item.href}
                 aria-current={active ? "page" : undefined}
-                className="group relative flex items-center gap-3 px-3.5 py-3 rounded-lg text-[15px] font-medium transition-all"
+                title={collapsed ? item.label : undefined}
+                className={`group relative flex items-center gap-3 py-2 rounded-lg text-[13.5px] font-medium transition-all ${
+                  collapsed ? "justify-center px-0" : "px-2.5"
+                }`}
                 style={
                   active
                     ? {
@@ -251,22 +270,28 @@ export function AdminSidebar({ adminName, adminEmail, avatarUrl }: Props) {
               where "back" drops them. */}
           <Link
             href={"/hub" as Route}
-            className="group flex items-center gap-2.5 px-3.5 py-2.5 rounded-lg text-[14px] text-white/75 hover:text-white hover:bg-white/[0.06] transition-colors"
+            title={collapsed ? "Back to app" : undefined}
+            className={`group flex items-center gap-2.5 py-2 rounded-lg text-[13.5px] text-white/75 hover:text-white hover:bg-white/[0.06] transition-colors ${
+              collapsed ? "px-0 justify-center" : "px-3"
+            }`}
           >
             <ArrowLeft
               size={16}
               strokeWidth={2.2}
-              className="transition-transform group-hover:-translate-x-0.5"
+              className="shrink-0 transition-transform group-hover:-translate-x-0.5"
             />
-            Back to app
+            {!collapsed && "Back to app"}
           </Link>
           <button
             type="button"
             onClick={handleSignOut}
-            className="w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-lg text-[14px] text-white/75 hover:text-white hover:bg-white/[0.06] transition-colors text-left"
+            title={collapsed ? "Sign out" : undefined}
+            className={`w-full flex items-center gap-2.5 py-2 rounded-lg text-[13.5px] text-white/75 hover:text-white hover:bg-white/[0.06] transition-colors text-left ${
+              collapsed ? "px-0 justify-center" : "px-3"
+            }`}
           >
-            <LogOut size={16} strokeWidth={2.2} />
-            Sign out
+            <LogOut size={16} strokeWidth={2.2} className="shrink-0" />
+            {!collapsed && "Sign out"}
           </button>
         </div>
       </div>

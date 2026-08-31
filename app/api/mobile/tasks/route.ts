@@ -54,7 +54,10 @@ export async function POST(req: Request) {
   }
 
   const result = await createTasksCore(
-    { id: me.id, name: me.name },
+    // This body never sets `visibility`, so it takes the schema default
+    // (Everyone) and the admin-only "Specific people" rule can't be hit from
+    // here. Passed anyway so the rule holds if a visibility field is ever added.
+    { id: me.id, name: me.name, isAdmin: me.isAdmin },
     {
       title: b.title,
       doerId: b.doerId,

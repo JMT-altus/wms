@@ -566,6 +566,83 @@ export const LOOKUP_LISTS = [
     label: "Enquiry — Lost Reasons",
     hint: "Why an enquiry was lost. Drives lost-reason reporting.",
   },
+  // 0088 — Create New Client KYC form dropdowns. Each seeded with only the
+  // values the reference design showed as selected/example — everything
+  // else is left for an admin to add via /master-setup/libraries, same rule
+  // customer_category above already follows.
+  {
+    key: "customer_type",
+    label: "Client KYC — Customer Types",
+    hint: "End User, Traders, OEMs and so on. Multi-select on the Create New Client KYC form.",
+  },
+  {
+    key: "industry_type",
+    label: "Client KYC — Industry Types",
+    hint: "Mining, Pharma, Petrochem and so on. Multi-select on the Create New Client KYC form.",
+  },
+  {
+    key: "gst_registration_type",
+    label: "Client KYC — GST Registration Types",
+    hint: "The seven statutory GST registration types — Regular, Composition, Unregistered, SEZ, Overseas, UIN, Deemed Export.",
+  },
+  {
+    key: "currency",
+    label: "Client KYC — Currencies",
+    hint: "Billing currency offered on the Create New Client KYC form.",
+  },
+  {
+    key: "country",
+    label: "Client KYC — Countries",
+    hint: "Country options on the Create New Client KYC form.",
+  },
+  {
+    key: "credit_days",
+    label: "Client KYC — Credit Days",
+    hint: "Preset credit-period options (plain numbers — rendered as \"N days\").",
+  },
+  {
+    key: "kyc_payment_terms",
+    label: "Client KYC — Payment Terms",
+    hint: "Against Delivery, Advance and so on. Separate from the free-text Payment Terms field elsewhere in Masters.",
+  },
+  {
+    key: "freight_charges",
+    label: "Client KYC — Freight Charges",
+    hint: "Who bears freight — Paid by Us, To Pay and so on.",
+  },
+  {
+    key: "transporter",
+    label: "Client KYC — Transporters",
+    hint: "Preferred transporter options on the Create New Client KYC form.",
+  },
+  {
+    key: "quantity_deviation",
+    label: "Client KYC — Quantity Deviation",
+    hint: "Allowed order-quantity tolerance, e.g. ±5%.",
+  },
+  {
+    key: "bank_account_type",
+    label: "Client KYC — Bank Account Types",
+    hint: "Current, Savings and so on.",
+  },
+  {
+    key: "bank_name",
+    label: "Client KYC — Bank Names",
+    hint: "Seeded empty — add the banks your clients actually use.",
+  },
+  // Added with Client Master DD, which made every Client KYC dropdown
+  // editable. Both were previously fixed: Credit Limit was a free-text number
+  // and State came from the hardcoded GST state list.
+  {
+    key: "credit_limit",
+    label: "Client KYC — Credit Limits",
+    hint: "Preset credit-limit figures offered on the Create New Client KYC form.",
+  },
+  {
+    key: "state",
+    label: "Client KYC — States",
+    hint: "The State dropdown on client addresses. Falls back to the official GST state list while empty.",
+  },
 ] as const;
 export type LookupListKey = (typeof LOOKUP_LISTS)[number]["key"];
 
@@ -580,8 +657,40 @@ export const IMPORT_SOURCE_LABELS: Record<ImportSource, string> = {
   tally: "Tally extract",
 };
 
-export const IMPORT_TARGETS = ["customers", "products", "skus", "categories"] as const;
+export const IMPORT_TARGETS = [
+  "customers",
+  "products",
+  "skus",
+  "categories",
+  // 0084 — Tally actuals for Targets & Forecasts. Lands in `forecast_actuals`,
+  // never in `sales_orders`, so an import can't move anybody's incentive.
+  "forecast_actuals",
+] as const;
 export type ImportTarget = (typeof IMPORT_TARGETS)[number];
+
+/* ── Targets & Forecasts (0084) ─────────────────────────────────────────────*/
+
+/**
+ * The four levels the annual turnover target breaks into. Ordered
+ * coarse → fine; `lib/targets/period.ts` relies on that order for the cascade.
+ */
+export const FORECAST_PERIOD_KINDS = ["annual", "quarter", "month", "week"] as const;
+export type ForecastPeriodKind = (typeof FORECAST_PERIOD_KINDS)[number];
+
+export const FORECAST_PERIOD_LABELS: Record<ForecastPeriodKind, string> = {
+  annual: "Annual",
+  quarter: "Quarterly",
+  month: "Monthly",
+  week: "Weekly",
+};
+
+/** How many children each level seeds into. Month→week is the "divide by 4". */
+export const FORECAST_CHILD_COUNT: Record<ForecastPeriodKind, number> = {
+  annual: 4, // → quarters
+  quarter: 3, // → months
+  month: 4, // → weeks
+  week: 0, // leaf
+};
 
 export const TALLY_MAPS_TO = ["customer", "supplier", "product", "ignore"] as const;
 export type TallyMapsTo = (typeof TALLY_MAPS_TO)[number];
@@ -652,3 +761,54 @@ export const SEED_PAYMENT_MODES = [
   "PDC",
   "Barter",
 ] as const;
+
+/**
+ * 0093 — the three kinds of Contact Person a Client KYC record can hold.
+ * Each is its own "add more" group on the form; a client may have any
+ * number of each, and the first Purchase contact is the primary.
+ *
+ * `other` is also what pre-0093 contacts were backfilled to, since those
+ * rows predate the distinction and nothing recorded which kind they were.
+ */
+export const CLIENT_CONTACT_TYPES = ["purchase", "accounts", "other"] as const;
+export type ClientContactType = (typeof CLIENT_CONTACT_TYPES)[number];
+export const CLIENT_CONTACT_TYPE_LABELS: Record<ClientContactType, string> = {
+  purchase: "Purchase Contact",
+  accounts: "Accounts Contact",
+  other: "Other Contact",
+};
+
+/**
+ * 0094 — the three kinds of Address a Client KYC record can hold. Each is its
+ * own "add more" group on the form.
+ *
+ * `delivery` is what 0088 called `shipping`; 0094 renamed the stored value so
+ * the two names can't both exist and mean the same place. `invoice_mailing`
+ * is the address an invoice is posted or emailed to, which is often a head
+ * office that never receives goods — the distinction the old two-way split
+ * could not express.
+ */
+export const CLIENT_ADDRESS_TYPES = ["billing", "delivery", "invoice_mailing"] as const;
+export type ClientAddressType = (typeof CLIENT_ADDRESS_TYPES)[number];
+export const CLIENT_ADDRESS_TYPE_LABELS: Record<ClientAddressType, string> = {
+  billing: "Billing Address",
+  delivery: "Delivery Address",
+  invoice_mailing: "Invoice Mailing Address",
+};
+
+/**
+ * 0096 — where a Client KYC record sits in its lifecycle.
+ *
+ * `draft` is anything still missing a requirement from
+ * lib/masters/kyc-completeness.ts; `complete` is a real client and the only
+ * stage the Client Master lists; `recycled` is a draft nobody finished
+ * within DRAFT_EXPIRY_DAYS. Mutually exclusive by design — see the migration
+ * comment for why this is one column and not two booleans.
+ */
+export const KYC_STAGES = ["draft", "complete", "recycled"] as const;
+export type KycStage = (typeof KYC_STAGES)[number];
+export const KYC_STAGE_LABELS: Record<KycStage, string> = {
+  draft: "Draft",
+  complete: "Complete",
+  recycled: "Recycle Bin",
+};

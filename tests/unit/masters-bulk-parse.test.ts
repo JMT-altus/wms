@@ -3,6 +3,8 @@ import {
   applyMapping,
   autoMap,
   matchSalesRep,
+  normaliseFocusedView,
+  normaliseNonNegative,
   normalisePurchasePattern,
   normaliseSensitivity,
   parseDelimited,
@@ -121,6 +123,46 @@ describe("normaliseSensitivity", () => {
   it("returns null for anything unrecognised", () => {
     expect(normaliseSensitivity("maybe")).toBeNull();
     expect(normaliseSensitivity(undefined)).toBeNull();
+  });
+});
+
+describe("normaliseNonNegative", () => {
+  it("parses a plain number", () => {
+    expect(normaliseNonNegative("50000")).toBe(50000);
+    expect(normaliseNonNegative("30")).toBe(30);
+  });
+
+  it("strips currency formatting", () => {
+    expect(normaliseNonNegative("₹1,25,000")).toBe(125000);
+    expect(normaliseNonNegative(" 45 ")).toBe(45);
+  });
+
+  it("rounds when asked, for a whole-day count", () => {
+    expect(normaliseNonNegative("30.6", true)).toBe(31);
+    expect(normaliseNonNegative("30.4", true)).toBe(30);
+  });
+
+  it("returns null for blank, negative or unparseable input rather than guessing", () => {
+    expect(normaliseNonNegative(undefined)).toBeNull();
+    expect(normaliseNonNegative("")).toBeNull();
+    expect(normaliseNonNegative("-5")).toBeNull();
+    expect(normaliseNonNegative("not a number")).toBeNull();
+  });
+});
+
+describe("normaliseFocusedView", () => {
+  it("accepts common spellings of yes", () => {
+    expect(normaliseFocusedView("Yes")).toBe(true);
+    expect(normaliseFocusedView("y")).toBe(true);
+    expect(normaliseFocusedView("TRUE")).toBe(true);
+    expect(normaliseFocusedView("1")).toBe(true);
+  });
+
+  it("defaults to false for no, blank or anything unrecognised", () => {
+    expect(normaliseFocusedView("No")).toBe(false);
+    expect(normaliseFocusedView(undefined)).toBe(false);
+    expect(normaliseFocusedView("")).toBe(false);
+    expect(normaliseFocusedView("maybe")).toBe(false);
   });
 });
 

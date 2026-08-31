@@ -7,6 +7,8 @@ import {
   GraduationCap,
   DatabaseZap,
   Boxes,
+  Target,
+  FileText,
   ArrowRight,
   Lock,
 } from "lucide-react";
@@ -32,15 +34,19 @@ type Style = {
 };
 
 /**
- * Keyed by ModuleId, plus the synthetic "masters" tile.
+ * Keyed by ModuleId, plus the synthetic "masters" and "forms" tiles.
  *
  * Admin & Master Setup is deliberately NOT a nav module: it lives in the
  * `(admin)` route group with its own sidebar, so it has no top-nav pills, and
  * adding it to MODULES would put a grantable column in /admin/access — letting
  * someone hand a non-admin a tile that leads straight to a Forbidden page.
  * It is gated on `isAdmin`, which is exactly what every /admin page enforces.
+ *
+ * Forms (reimbursement/leave/reference/breakthrough requests) is the same
+ * story — those four pages have no entry point anywhere in the app yet, so
+ * the tile is admin-gated for now rather than opened to everyone sight unseen.
  */
-const STYLES: Record<ModuleId | "admin", Style> = {
+const STYLES: Record<ModuleId | "admin" | "forms", Style> = {
   wms: {
     Icon: LayoutGrid,
     bg: "linear-gradient(150deg, #f4f8ff 0%, #dfeaff 55%, #cfe0ff 100%)",
@@ -88,6 +94,16 @@ const STYLES: Record<ModuleId | "admin", Style> = {
     glow: "rgba(14, 165, 183, 0.42)",
     ring: "rgba(14, 165, 183, 0.55)",
   },
+  // Violet → indigo, the one accent not already spoken for by another module.
+  targets: {
+    Icon: Target,
+    bg: "linear-gradient(150deg, #f6f3ff 0%, #ebe4ff 55%, #ded2ff 100%)",
+    ink: "#5b3fa8",
+    title: "#5B21B6",
+    btn: "linear-gradient(135deg, #7C3AED, #4F46E5)",
+    glow: "rgba(124, 58, 237, 0.42)",
+    ring: "rgba(124, 58, 237, 0.55)",
+  },
   admin: {
     Icon: DatabaseZap,
     bg: "linear-gradient(150deg, #fff8f0 0%, #ffeede 55%, #ffe2c9 100%)",
@@ -96,6 +112,16 @@ const STYLES: Record<ModuleId | "admin", Style> = {
     btn: "linear-gradient(135deg, #f59e0b, #b45309)",
     glow: "rgba(245, 158, 11, 0.42)",
     ring: "rgba(245, 158, 11, 0.55)",
+  },
+  // Rose — the one accent family not already spoken for by another tile.
+  forms: {
+    Icon: FileText,
+    bg: "linear-gradient(150deg, #fff1f3 0%, #ffe1e6 55%, #ffd0d9 100%)",
+    ink: "#a8264a",
+    title: "#BE123C",
+    btn: "linear-gradient(135deg, #FB7185, #BE123C)",
+    glow: "rgba(244, 63, 94, 0.42)",
+    ring: "rgba(244, 63, 94, 0.55)",
   },
 };
 
@@ -159,6 +185,16 @@ export default async function HubPage({
             label: "Admin & Master Setup",
             tagline: "Products, customers, libraries, permissions & data import.",
             href: "/master-setup",
+          },
+          // Admin-gated alongside Admin & Master Setup; see the STYLES comment.
+          // Opens Client KYC rather than Reimbursements: KYC is the only form
+          // here without a second way in, while Reimbursements and Leave
+          // Approval both keep their pills in the Employees module.
+          {
+            key: "forms",
+            label: "Forms",
+            tagline: "Onboard a client end to end.",
+            href: "/forms/client-kyc/new",
           },
         ]
       : []),
@@ -339,7 +375,7 @@ export default async function HubPage({
           }}
         >
           {tiles.map((m) => {
-            const s = STYLES[m.key as ModuleId | "admin"];
+            const s = STYLES[m.key as ModuleId | "admin" | "forms"];
             const Icon = s.Icon;
             return (
               <Link

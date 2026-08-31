@@ -1,7 +1,7 @@
 import { headers } from "next/headers";
 import { LiveIndicator } from "./live-indicator";
-import { MainNavServer } from "./main-nav-server";
 import { NavHistoryButtons } from "./nav-history-buttons";
+import { FullscreenToggle } from "@/components/masters/fullscreen-toggle";
 import { MobileMenuServer } from "./mobile-menu-server";
 import { UserMenuServer } from "@/components/header/user-menu-server";
 import { NewTaskTrigger } from "@/components/header/new-task-trigger";
@@ -42,7 +42,14 @@ export async function DashboardHeader({
   // smaller problem than losing task creation on the dashboard.
   const pathname = (await headers()).get("x-pathname");
   const moduleId = pathname ? moduleIdForPath(pathname) : null;
-  const showNewTask = moduleId === null || moduleId === "wms";
+  // Admin Panel and Master Setup belong to no module, so moduleIdForPath
+  // returns null for them and the fail-open below would light up New Task —
+  // and fire its five roster queries — on every admin page. Excluded by path
+  // rather than by widening moduleIdForPath, which the access guard also uses.
+  const isAdminArea =
+    pathname?.startsWith("/admin") === true ||
+    pathname?.startsWith("/master-setup") === true;
+  const showNewTask = !isAdminArea && (moduleId === null || moduleId === "wms");
 
   return (
     <header className="sticky top-0 z-50 header-navy">
@@ -73,16 +80,13 @@ export async function DashboardHeader({
           <NavHistoryButtons />
           <MobileMenuServer isAdmin={isAdmin} />
 
-          {/* CENTER: primary pill nav — visible on every desktop width (and
-              under zoom). It stays centred while it fits; when space gets tight
-              it scrolls horizontally FROM THE LEFT (w-max + mx-auto) so pills
-              are never clipped, never overlap, and never disappear. Collapses
-              to the hamburger drawer only on real phones (max-md). */}
-          <div className="flex-1 min-w-0 overflow-x-auto nav-scroll max-md:hidden">
-            <div className="flex w-max mx-auto">
-              <MainNavServer />
-            </div>
-          </div>
+          {/* CENTER: intentionally empty. The primary nav moved out of this bar
+              and into the left rail (components/layout/app-sidebar.tsx), which
+              is where the Masters module already kept its own. The spacer
+              keeps search and the avatar hard right, where they have always
+              been. The phone drawer (MobileMenuServer, above) still carries the
+              same items below md, where the rail is hidden. */}
+          <div className="flex-1 min-w-0" />
 
           {/* RIGHT: search + live indicator + actions + avatar. Every item is
               shrink-0; secondary chrome (Live / Admin pill) hides below 2xl and
@@ -99,6 +103,10 @@ export async function DashboardHeader({
                 <AdminPill />
               </span>
             )}
+            {/* Full screen — folds away the browser chrome AND the app's own
+                left rail (globals.css keys off data-app-fullscreen). Hidden on
+                phones, where the rail is already gone and the API is flaky. */}
+            <FullscreenToggle variant="header" />
             <UserMenuServer />
           </div>
         </div>

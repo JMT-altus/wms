@@ -3,6 +3,7 @@ import { requireAdmin } from "@/lib/auth/current";
 import { getOrgSettings } from "@/lib/queries/org-settings";
 import { IdleTimerClient } from "@/components/auth/idle-timer-client";
 import { MasterSidebar } from "@/components/admin/master/master-sidebar";
+import { DashboardHeader } from "@/components/layout/header";
 
 /**
  * Master Setup's own shell — a sibling of the Admin Panel, not a section of it.
@@ -18,6 +19,9 @@ export default async function MasterSetupLayout({ children }: { children: ReactN
       <div className="min-h-screen flex max-md:block">
         <MasterSidebar adminName={me.name} />
         <div className="flex-1 min-w-0 max-md:flex max-md:flex-col">
+        {/* The app's slim header bar, same as every other module, so search /
+            Live / account are reachable here too. */}
+        <DashboardHeader generatedAt={new Date()} />
           <main className="flex-1 min-w-0 px-10 py-10 max-md:px-4 max-md:py-6">
             <div className="mx-auto max-w-[1280px]">{children}</div>
           </main>

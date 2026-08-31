@@ -8,7 +8,8 @@ import { moduleIdForPath } from "@/lib/nav-modules";
 import { getOrgSettings } from "@/lib/queries/org-settings";
 import { IdleTimerClient } from "@/components/auth/idle-timer-client";
 import { KeyboardShortcuts } from "@/components/layout/keyboard-shortcuts";
-import { BrandHero } from "@/components/dashboard/brand-hero";
+import { AppSidebarServer } from "@/components/layout/app-sidebar-server";
+import { AppSidebarOffset } from "@/components/layout/app-sidebar";
 
 export default async function AppLayout({ children }: { children: ReactNode }) {
   await requireUser();
@@ -32,9 +33,12 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
     <div className="app-wallpaper">
       <IdleTimerClient timeoutMinutes={settings.idleTimeoutMinutes} />
       <KeyboardShortcuts />
-      {/* Brand header band on every app page. Self-hides on /hub + focus mode. */}
-      <BrandHero companyName="JMT DRIVE SOLUTIONS" />
-      {children}
+      {/* Module nav as a left rail, matching the Masters module. It replaces
+          the pill row that used to sit in the middle of DashboardHeader; both
+          the rail and the offset self-hide on /hub and focus mode, and the
+          phone drawer in the header still carries the same items below md. */}
+      <AppSidebarServer />
+      <AppSidebarOffset>{children}</AppSidebarOffset>
     </div>
   );
 }

@@ -31,6 +31,9 @@ export const MODULE_CODE_DEFAULTS: Record<ModuleId, boolean> = {
   // Reference data the whole business quotes from — wrong here is expensive
   // and hard to notice. Off by default; granted per person or per department.
   masters: false,
+  // Turnover targets and everyone's forecast against them. Off by default:
+  // this is the commercial plan, not general team information.
+  targets: false,
 };
 
 /** Where a resolved yes/no came from — surfaced in the admin matrix. */

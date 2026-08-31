@@ -1,0 +1,23 @@
+-- 0090 — CUST Dropdown Master: two list keys that had no home.
+--
+-- No schema change: `lookup_items` is already the app's generic master-list
+-- store (list_key / label / sort_order / is_active), and both of these are
+-- just new values of list_key. The change is that two Client KYC dropdowns
+-- that used to be fixed are now editable like the rest:
+--
+--   credit_limit — was a free-text number on the form.
+--   state        — came from the hardcoded GST state list in lib/masters/gstin.ts.
+--
+-- Deliberately seeded with NOTHING. A list with no rows reports itself as
+-- DEFAULT and both the config screen and the KYC form fall back to the
+-- defaults in lib/masters/kyc-dropdowns.ts, so the State dropdown keeps
+-- offering all 36 GST states until an admin chooses to customise it. Seeding
+-- rows here would flip both lists to CUSTOM on day one and misreport the
+-- "Customized" count.
+--
+-- The index that serves these lookups already exists:
+--   lookup_items_key_idx (list_key, is_active, sort_order)
+
+-- Nothing to apply. Kept as a numbered record of the two new list_key values
+-- so the enum change in db/enums.ts has a matching migration entry.
+SELECT 1;

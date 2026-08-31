@@ -82,6 +82,7 @@ export function TaskListPage({
   subjects,
   clients,
   basePath = "/tasks",
+  showStats = true,
 }: {
   title: string;
   rows: TaskListRow[];
@@ -95,6 +96,13 @@ export function TaskListPage({
   clients?: string[];
   /** List route the summary cards link into (so Archived keeps its own scope). */
   basePath?: string;
+  /**
+   * Show the six-card KPI strip. Off in the Archive, where the cards measure
+   * open work — Pending, Critical, Urgent and Not Read are 0 by definition
+   * once everything on the page is archived, so the row reads as five empty
+   * boxes next to a Done count that just restates the list length.
+   */
+  showStats?: boolean;
 }) {
   const counts = computeStatCounts(rows);
 
@@ -164,6 +172,7 @@ export function TaskListPage({
       {/* KPI summary — 4 stat cards in the same visual language as the
           main dashboard tiles. Each card has a top channel-color bar,
           font-black label, big count, sublabel. */}
+      {showStats && (
       <div className="mb-4 grid grid-cols-6 gap-3 max-xl:grid-cols-3 max-md:grid-cols-2 max-sm:grid-cols-1">
         {KPI_SPECS.map((spec) => {
           // notApproved + notRead don't map to the status/priority filter
@@ -188,6 +197,7 @@ export function TaskListPage({
           );
         })}
       </div>
+      )}
 
       {rows.length === 0 ? (
         <div

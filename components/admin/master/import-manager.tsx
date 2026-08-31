@@ -31,6 +31,16 @@ import {
 
 /** Fields an admin can map an incoming column onto, per target. */
 const TARGET_FIELDS: Record<ImportTarget, { key: string; label: string; required?: boolean }[]> = {
+  // Tally turnover for Targets & Forecasts. Imported from that module's own
+  // screen (it writes `forecast_actuals`, never `sales_orders`); listed here so
+  // the map stays exhaustive over ImportTarget.
+  forecast_actuals: [
+    { key: "customer", label: "Customer name", required: true },
+    { key: "value", label: "Value (₹)", required: true },
+    { key: "date", label: "Date (yyyy-mm-dd)", required: true },
+    { key: "voucher", label: "Voucher no." },
+    { key: "product", label: "Item / product" },
+  ],
   customers: [
     { key: "name", label: "Customer name", required: true },
     { key: "code", label: "Code" },
