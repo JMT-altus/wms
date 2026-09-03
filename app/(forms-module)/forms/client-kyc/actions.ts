@@ -28,8 +28,20 @@ import {
   ClientMasterEditSchema,
 } from "@/lib/validators/client-kyc";
 import { nextCustomerCodes } from "@/app/(masters-module)/masters/actions";
-import { CLIENT_ADDRESS_TYPES, CLIENT_CONTACT_TYPES } from "@/db/enums";
+import { CLIENT_ADDRESS_TYPES, CLIENT_CONTACT_TYPES, VOLUME_CLASSES } from "@/db/enums";
+import {
+  listClientBulkOptions,
+  type ClientBulkRosters,
+} from "@/lib/queries/client-bulk-options";
 import { missingKycFields } from "@/lib/masters/kyc-completeness";
+import {
+  COLUMN_BY_KEY,
+  isBlankRow,
+  matchOption,
+  splitMulti,
+  validateCell,
+  type SheetRow,
+} from "@/lib/forms/client-bulk-columns";
 import { isPlausibleGstin } from "@/lib/masters/gstin";
 import { lookupGstin, type GstinDetails } from "@/lib/gst";
 import type { LookupListKey } from "@/db/enums";
@@ -1243,3 +1255,237 @@ export async function verifyGstin(
   if (!res.ok) return { ok: false, error: res.error };
   return { ok: true, data: res.data };
 }
+
+/* ── Bulk import from the Client Master sheet ────────────────────────────── */
+
+/** One row the import could not take, by its number in the sheet. */
+export interface BulkImportRowError {
+  /** 1-based, matching the row number shown in the sheet. */
+  row: number;
+  message: string;
+}
+
+export type BulkImportClientsResult =
+  | { ok: false; error: string }
+  | {
+      ok: true;
+      /** Rows that became a Client Master record. */
+      created: number;
+      rowErrors: BulkImportRowError[];
+    };
+
+/** The sheet sends at most this many rows in one go. */
+const BULK_IMPORT_MAX_ROWS = 500;
+
+const keyOf = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+
+/**
+ * Turn one sheet row into the payload `ClientKycSchema` already validates.
+ *
+ * The sheet carries the Client Master's columns and only those, so there are
+ * no contacts, addresses or bank accounts to fan back out — each of those has
+ * a master of its own, which is where they get added. Building the same
+ * payload the KYC form builds is still what lets this reuse
+ * `kycColumnValues` rather than growing a second, drifting write path into
+ * `customer_masters`.
+ */
+function rowToKycInput(
+  row: SheetRow,
+  ctx: ClientBulkRosters,
+): Record<string, unknown> {
+  const cell = (k: string): string => (row[k] ?? "").trim();
+  const orNull = (k: string): string | null => cell(k) || null;
+
+  const multi = (k: string): string[] => {
+    const column = COLUMN_BY_KEY.get(k);
+    const parts = splitMulti(cell(k));
+    if (!column?.optionKey) return parts;
+    const list = ctx.options[column.optionKey] ?? [];
+    // Store the master's own spelling, not the typist's — see `matchOption`.
+    return parts.map((p) => matchOption(p, list) ?? p);
+  };
+
+  const productIds = splitMulti(cell("products"))
+    .map((p) => ctx.productsByName.get(keyOf(p)))
+    .filter((id): id is string => Boolean(id));
+
+  return {
+    name: cell("name"),
+    salesRepId: ctx.salesByName.get(keyOf(cell("salesRep"))) ?? null,
+    customerTypes: multi("customerTypes"),
+    industryTypes: multi("industryTypes"),
+    tags: multi("tags"),
+    gstin: orNull("gstin"),
+    state: orNull("state"),
+    website: orNull("website"),
+    // `matchOption`, not a hardcoded A/B/C: it is the same case- and
+    // punctuation-blind match the sheet flagged the cell with, and it hands
+    // back the enum's own spelling rather than the typist's.
+    grade: matchOption(cell("grade"), VOLUME_CLASSES),
+    exportClient: orNull("exportClient"),
+    reference: orNull("reference"),
+
+    gstRegistrationType: orNull("gstRegistrationType"),
+    panNo: orNull("panNo"),
+    tinNumber: orNull("tinNumber"),
+    msmeUdyamNo: orNull("msmeUdyamNo"),
+    iecNumber: orNull("iecNumber"),
+    currency: orNull("currency"),
+    country: orNull("country"),
+    testCertificateNeeded: orNull("testCertificateNeeded"),
+    tcsApplicable: orNull("tcsApplicable"),
+
+    contacts: [],
+    addresses: [],
+    bankAccounts: [],
+
+    creditLimit: cell("creditLimit").replace(/,/g, ""),
+    creditDays: cell("creditDays").replace(/,/g, ""),
+    paymentTerms: orNull("paymentTerms"),
+    freightCharges: orNull("freightCharges"),
+    transporter: orNull("transporter"),
+    quantityDeviation: orNull("quantityDeviation"),
+    productIds,
+
+    otherReferences: orNull("otherReferences"),
+    notes: orNull("notes"),
+  };
+}
+
+/**
+ * Create many clients from the Client Master bulk-import sheet.
+ *
+ * Rows land in the Client Master, not in Drafts.
+ *
+ * That is a deliberate departure from `saveClientKyc`, which sends anything
+ * short of `missingKycFields` to Drafts. The rule cannot apply here: it wants
+ * a contact and a billing address, and this sheet offers the Client Master's
+ * own columns, which by that table's own design carry neither — contacts and
+ * addresses have masters of their own. Running the rule anyway would send
+ * every single imported row to Drafts and leave the Client Master empty,
+ * which is the opposite of what importing into it means. A client onboarded
+ * one at a time still goes through the form and still gets judged by it.
+ *
+ * A row with a real problem (no name, a salesperson nobody is called, a
+ * company already on record) is skipped and returned by row number. The good
+ * rows still import: a hundred-row paste with two typos in it should cost two
+ * corrections, not the whole paste.
+ *
+ * One transaction for the whole batch. A half-written import is worse than a
+ * failed one — you cannot tell which half by looking.
+ */
+export async function bulkImportClients(input: unknown): Promise<BulkImportClientsResult> {
+  const g = await guard();
+  if ("error" in g) return g.error;
+
+  const raw = (input as { rows?: unknown })?.rows;
+  if (!Array.isArray(raw)) return { ok: false, error: "Nothing to import." };
+  if (raw.length > BULK_IMPORT_MAX_ROWS) {
+    return {
+      ok: false,
+      error: `That is ${raw.length} rows — import up to ${BULK_IMPORT_MAX_ROWS} at a time.`,
+    };
+  }
+
+  // Keep each row's sheet number: every message below is only useful if it
+  // names the row the user is looking at, not its position after filtering.
+  const numbered = raw
+    .map((r, i) => ({ row: i + 1, values: (r ?? {}) as SheetRow }))
+    .filter((r) => typeof r.values === "object" && !isBlankRow(r.values));
+  if (numbered.length === 0) return { ok: false, error: "Every row is blank." };
+
+  const ctx = await listClientBulkOptions();
+  const rowErrors: BulkImportRowError[] = [];
+
+  /* Cell rules first — the same ones the sheet flags with, re-run here. */
+  const cellChecked = numbered.filter(({ row, values }) => {
+    for (const [key, value] of Object.entries(values)) {
+      const column = COLUMN_BY_KEY.get(key);
+      if (!column) continue;
+      const problem = validateCell(column, value ?? "", ctx.options);
+      if (problem) {
+        rowErrors.push({ row, message: problem });
+        return false;
+      }
+    }
+    if (!(values.name ?? "").trim()) {
+      rowErrors.push({ row, message: "Company is required." });
+      return false;
+    }
+    return true;
+  });
+
+  /*
+   * Duplicates — against the batch itself and against what is already saved.
+   *
+   * Every complete name, not a filtered `in (...)`: the match ignores case
+   * AND punctuation (`keyOf`), which SQL cannot express against an index, so
+   * a narrowed query would miss exactly the near-duplicates this is for —
+   * "ABC Engineering Pvt. Ltd." against "ABC Engineering Pvt Ltd". One text
+   * column across the master is a cheap read next to the import itself.
+   */
+  const existing = await db
+    .select({ name: customerMasters.name })
+    .from(customerMasters)
+    .where(eq(customerMasters.kycStage, "complete"));
+  const taken = new Set(existing.map((r) => keyOf(r.name)));
+  const seen = new Set<string>();
+
+  const parsed: { row: number; values: KycValues; flags: SheetRow }[] = [];
+  for (const { row, values } of cellChecked) {
+    const name = (values.name ?? "").trim();
+    const k = keyOf(name);
+    if (taken.has(k)) {
+      rowErrors.push({ row, message: `${name} is already in the Client Master.` });
+      continue;
+    }
+    if (seen.has(k)) {
+      rowErrors.push({ row, message: `${name} appears more than once in this sheet.` });
+      continue;
+    }
+
+    const result = ClientKycSchema.safeParse(rowToKycInput(values, ctx));
+    if (!result.success) {
+      rowErrors.push({ row, message: zodError(result.error) });
+      continue;
+    }
+    seen.add(k);
+    parsed.push({ row, values: result.data, flags: values });
+  }
+
+  if (parsed.length === 0) return { ok: true, created: 0, rowErrors };
+
+  try {
+    const codes = await nextCustomerCodes(parsed.length);
+    await db.transaction(async (tx) => {
+      for (let i = 0; i < parsed.length; i++) {
+        const { values: v, flags } = parsed[i]!;
+
+        const [inserted] = await tx
+          .insert(customerMasters)
+          .values({
+            ...kycColumnValues(v, v.creditLimit === null ? null : String(v.creditLimit)),
+            code: codes[i],
+            kycStage: "complete",
+            // The record's own two flags, which the form does not collect but
+            // the Client Master shows and this sheet therefore offers. Both
+            // columns are NOT NULL, so a blank cell has to mean something:
+            // Focused View off, and Active — the state a brand-new client is
+            // in unless the sheet explicitly says otherwise.
+            focusedView: keyOf(flags.focusedView ?? "") === "yes",
+            isActive: keyOf(flags.isActive ?? "") !== "inactive",
+            createdById: g.me.id,
+          })
+          .returning({ id: customerMasters.id });
+
+        await replaceKycChildren(tx, inserted!.id, v);
+      }
+    });
+  } catch (err) {
+    return { ok: false, error: dbError(err, "client") };
+  }
+
+  revalidateKyc();
+  return { ok: true, created: parsed.length, rowErrors };
+}
+

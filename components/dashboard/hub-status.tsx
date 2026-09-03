@@ -57,16 +57,18 @@ export function HubStatus() {
       })
     : "--:--";
 
-  const dot = online ? "#16a34a" : "#dc2626";
+  const dot = online ? "#22c55e" : "#ef4444";
 
   return (
     <div
       className="inline-flex items-center gap-2.5 rounded-full px-4 py-2"
+      // Dark glass: the hub's canvas is navy, so a white pill here read as a
+      // bright hole in it. Same treatment as the eyebrow pill below the bar.
       style={{
-        background: "rgba(255,255,255,0.55)",
-        border: "1px solid rgba(10,108,255,0.16)",
+        background: "rgba(255,255,255,0.07)",
+        border: "1px solid rgba(255,255,255,0.16)",
         boxShadow:
-          "0 10px 24px -12px rgba(10,108,255,0.4), 0 1px 2px rgba(15,23,42,0.05), inset 0 1px 0 rgba(255,255,255,0.9)",
+          "0 10px 24px -12px rgba(10,108,255,0.5), inset 0 1px 0 rgba(255,255,255,0.18)",
         backdropFilter: "blur(8px)",
         WebkitBackdropFilter: "blur(8px)",
       }}
@@ -74,7 +76,7 @@ export function HubStatus() {
       {/* Date drops on the narrowest screens; the clock and status stay. */}
       <span
         className="text-[13px] font-semibold max-sm:hidden"
-        style={{ color: "#475569" }}
+        style={{ color: "rgba(255,255,255,0.70)" }}
       >
         {dateLabel || "—"}
       </span>
@@ -82,7 +84,7 @@ export function HubStatus() {
       <span
         className="text-[13px] font-bold tabular-nums"
         style={{
-          color: "#334155",
+          color: "rgba(255,255,255,0.92)",
           fontFamily: "var(--font-mono-display), ui-monospace, monospace",
         }}
       >
@@ -93,7 +95,7 @@ export function HubStatus() {
         role="status"
         aria-live="polite"
         className="inline-flex items-center gap-1.5 text-[13px] font-semibold"
-        style={{ color: online ? "#15803d" : "#b91c1c" }}
+        style={{ color: online ? "#4ADE80" : "#FCA5A5" }}
       >
         <span
           aria-hidden
@@ -108,7 +110,7 @@ export function HubStatus() {
 
 function Dot() {
   return (
-    <span aria-hidden style={{ color: "rgba(15,23,42,0.25)", fontSize: 12 }}>
+    <span aria-hidden style={{ color: "rgba(255,255,255,0.30)", fontSize: 12 }}>
       ·
     </span>
   );

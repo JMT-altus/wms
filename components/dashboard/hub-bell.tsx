@@ -32,15 +32,17 @@ export async function HubBell() {
       style={{
         width: 40,
         height: 40,
-        background: "rgba(255,255,255,0.72)",
-        border: "1px solid rgba(10,108,255,0.16)",
+        // Dark glass, matching the hub's other top-bar pills — the canvas is
+        // navy, so a white chip here read as a bright hole in it.
+        background: "rgba(255,255,255,0.07)",
+        border: "1px solid rgba(255,255,255,0.16)",
         boxShadow:
-          "0 10px 24px -12px rgba(10,108,255,0.4), 0 1px 2px rgba(15,23,42,0.05), inset 0 1px 0 rgba(255,255,255,0.9)",
+          "0 10px 24px -12px rgba(10,108,255,0.5), inset 0 1px 0 rgba(255,255,255,0.18)",
         backdropFilter: "blur(8px)",
         WebkitBackdropFilter: "blur(8px)",
       }}
     >
-      <Bell size={18} strokeWidth={2.2} style={{ color: "#334155" }} />
+      <Bell size={18} strokeWidth={2.2} style={{ color: "rgba(255,255,255,0.88)" }} />
       {unread > 0 && (
         <span
           className="absolute -top-1 -right-1 inline-flex items-center justify-center rounded-full text-white tabular-nums"

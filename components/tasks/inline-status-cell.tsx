@@ -99,7 +99,11 @@ export function InlineStatusCell({
           onClick={(e) => e.stopPropagation()}
           disabled={pending}
           aria-label={`Status: ${labels[shown] ?? shown}. Click to change.`}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-pill text-[13px] font-bold tabular-nums transition-colors"
+          // `min-w`, never a fixed width: status labels are admin-editable, so
+          // a hard width silently truncates a renamed status. A minimum keeps
+          // the column reading as one uniform stack of chips while still
+          // letting a long custom label grow the pill.
+          className="inline-flex min-w-[118px] items-center justify-center gap-1.5 rounded-pill px-3 py-1.5 text-[13px] font-bold tabular-nums transition-colors max-md:min-w-[104px]"
           style={{
             background: `color-mix(in srgb, var(--color-${tone}) 12%, transparent)`,
             color: `var(--color-${tone}-deep)`,

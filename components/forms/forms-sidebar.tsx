@@ -1,5 +1,6 @@
 "use client";
 
+import type { CSSProperties } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import type { Route } from "next";
@@ -18,7 +19,6 @@ import {
 // The same brand ramp the Masters rail uses. Imported rather than re-declared
 // on purpose — a second hand-copied gradient string is exactly what drifts the
 // moment one of the two gets tweaked.
-import { MASTERS_GRADIENT } from "@/components/masters/theme";
 import {
   RAIL_WIDTH,
   RAIL_WIDTH_COLLAPSED,
@@ -95,7 +95,12 @@ const NAV: ReadonlyArray<NavItem> = [
   },
 ];
 
-const ACCENT = MASTERS_GRADIENT;
+/* The Forms accent, taken from the module's own hub tile (see STYLES.forms
+   in app/(app)/hub/page.tsx) rather than borrowed from Masters — the tile is
+   rose and the rail was blue, so the two read as different products. */
+const ACCENT_FROM = "#FB7185";
+const ACCENT_TO = "#BE123C";
+const ACCENT = `linear-gradient(135deg, ${ACCENT_FROM} 0%, ${ACCENT_TO} 100%)`;
 
 export function FormsSidebar({ userName }: { userName: string }) {
   const pathname = usePathname();
@@ -106,41 +111,48 @@ export function FormsSidebar({ userName }: { userName: string }) {
       // `module-rail` is the hook globals.css uses to fold this away in
       // full screen — see the [data-app-fullscreen] rule there.
       className="module-rail header-dark rail-navy sticky top-0 self-start h-screen max-h-screen relative shrink-0 flex flex-col max-md:hidden transition-[width] duration-200"
-      style={{ width: collapsed ? RAIL_WIDTH_COLLAPSED : RAIL_WIDTH }}
+      style={
+        {
+          width: collapsed ? RAIL_WIDTH_COLLAPSED : RAIL_WIDTH,
+          "--module-accent-from": ACCENT_FROM,
+          "--module-accent-to": ACCENT_TO,
+        } as CSSProperties
+      }
     >
 
       <div className="relative flex flex-col h-full overflow-hidden">
-        <div className={`shrink-0 pt-4 pb-4 ${collapsed ? "px-3" : "px-5"}`}>
-          <div className={`flex items-start gap-2 ${collapsed ? "flex-col items-center" : ""}`}>
-            <div
-              className="inline-flex items-center gap-2.5 rounded-xl bg-white px-2.5 py-2 min-w-0"
-              style={{ boxShadow: "0 4px 14px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.6)" }}
+        <div className={`relative shrink-0 pb-4 ${collapsed ? "px-3 pt-4" : "px-5"}`}>
+          <div
+            className={`flex gap-2 ${collapsed ? "flex-col items-center" : "items-stretch"}`}
+            // Expanded, the block is exactly the header's height, so the line
+            // under the mark sits on the header's own bottom edge and the two
+            // read as one line turning the corner.
+            style={collapsed ? undefined : { height: "var(--app-header-h)" }}
+          >
+            {/* Logo only — the module name now carries its own accent block
+                below, the same treatment the WMS rail uses. */}
+            {/* The mark is the way back to the hub — the same destination as the
+                "Back to Hub" footer, on the thing people reach for first. */}
+            <Link
+              href={"/hub" as Route}
+              title="Back to Hub"
+              className="flex items-center justify-center brand-plate rounded-xl px-2.5 py-2 min-w-0 flex-1"
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src="/logo.png"
+                src="/logo-mark.png"
                 alt="JMT Drive Solutions"
                 style={{ height: collapsed ? 26 : 40, width: "auto", display: "block" }}
               />
-              {!collapsed && (
-                <span
-                  className="inline-flex items-center text-[10px] font-bold uppercase text-white px-2 py-0.5 rounded-full"
-                  style={{
-                    background: ACCENT,
-                    boxShadow: "0 2px 8px rgba(10, 108, 255, 0.35)",
-                    letterSpacing: "0.08em",
-                  }}
-                >
-                  Forms
-                </span>
-              )}
-            </div>
-            <RailToggle className={collapsed ? "mt-2" : "ml-auto"} />
+            </Link>
+            <RailToggle className={collapsed ? "mt-2" : "rail-toggle-in-band absolute right-4 z-10"} />
           </div>
           {!collapsed && (
             <>
-              <p className="text-[13px] mt-3 font-bold text-white/90">Client KYC</p>
-              <p className="text-[12px] mt-0.5 text-white/50">Signed in as {userName}</p>
+              <p className="module-chip text-[13px] mt-3 px-2.5 py-1.5 rounded-lg font-bold text-white leading-[1.25]">
+                Client KYC
+              </p>
+              <p className="text-[12px] mt-1.5 text-white/50">Signed in as {userName}</p>
             </>
           )}
         </div>
@@ -154,9 +166,9 @@ export function FormsSidebar({ userName }: { userName: string }) {
                 key={item.href}
                 href={item.href}
                 aria-current={active ? "page" : undefined}
-                title={collapsed ? item.label : undefined}
+                title={collapsed ? item.label : item.hint}
                 className={`group relative flex gap-2.5 py-2.5 rounded-lg transition-all ${
-                  collapsed ? "items-center justify-center px-0" : "items-start px-3"
+                  collapsed ? "items-center justify-center px-0" : "items-center px-3"
                 }`}
                 style={
                   active
@@ -179,19 +191,13 @@ export function FormsSidebar({ userName }: { userName: string }) {
                 <Icon
                   size={18}
                   strokeWidth={2.2}
-                  className={`relative shrink-0 ${collapsed ? "" : "mt-0.5"}`}
+                  className="relative shrink-0"
                   style={{ color: active ? "rgba(255,255,255,0.95)" : "rgba(255,255,255,0.65)" }}
                 />
                 {!collapsed && (
-                <span className="relative min-w-0">
-                  <span className="block text-[13.5px] font-medium">{item.label}</span>
-                  <span
-                    className="block text-[11.5px] mt-0.5"
-                    style={{ color: active ? "rgba(255,255,255,0.75)" : "rgba(255,255,255,0.45)" }}
-                  >
-                    {item.hint}
+                  <span className="relative min-w-0 block text-[13.5px] font-medium">
+                    {item.label}
                   </span>
-                </span>
                 )}
               </Link>
             );

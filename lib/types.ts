@@ -203,7 +203,12 @@ export interface TaskListRow {
   initiatorId: string;
   initiatorName: string | null;
   createdAt: Date;
+  /** The ORIGINAL committed deadline. Immutable after creation — never
+   *  compare against this directly; use pickEffectiveDue(row). */
   dueAt: Date;
+  /** Admin-set reschedule. When present it, not `dueAt`, is what the task is
+   *  judged against — see lib/tasks/effective-due.ts. */
+  revisedTargetDate: Date | null;
   ageDays: number;
   archived: boolean;
   createdById: string | null;

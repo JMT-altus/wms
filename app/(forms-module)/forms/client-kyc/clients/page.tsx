@@ -1,4 +1,5 @@
 import { listClientMasterRows } from "@/lib/queries/client-kyc";
+import { listClientBulkOptions } from "@/lib/queries/client-bulk-options";
 import { listEmployeeOptions } from "@/lib/queries/employees";
 import { allWithDbRetry } from "@/lib/db/retry";
 import { ClientMasterTable } from "@/components/forms/client-master-table";
@@ -11,9 +12,20 @@ import { ClientMasterTable } from "@/components/forms/client-master-table";
 export default async function ClientMasterPage() {
   // Sales people feed the edit dialog's Co-ordinator picker — Edit now opens
   // here rather than sending the user to /masters/customers.
-  const [clients, salesPeople] = await allWithDbRetry([
+  //
+  // The bulk options are the lists behind Bulk Import's dropdown cells, from
+  // the one loader the .xlsx template and the import itself also read.
+  const [clients, salesPeople, bulk] = await allWithDbRetry([
     ["client master", listClientMasterRows],
     ["sales people", listEmployeeOptions],
+    ["bulk import options", listClientBulkOptions],
   ] as const);
-  return <ClientMasterTable clients={clients} salesPeople={salesPeople} />;
+
+  return (
+    <ClientMasterTable
+      clients={clients}
+      salesPeople={salesPeople}
+      bulkOptions={bulk.options}
+    />
+  );
 }

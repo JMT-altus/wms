@@ -61,37 +61,38 @@ export function MastersSidebar({ userName }: { userName: string }) {
     >
 
       <div className="relative flex flex-col h-full overflow-hidden">
-        <div className={`shrink-0 pt-4 pb-4 ${collapsed ? "px-3" : "px-5"}`}>
-          <div className={`flex items-start gap-2 ${collapsed ? "flex-col items-center" : ""}`}>
-            <div
-              className="inline-flex items-center gap-2.5 rounded-xl bg-white px-2.5 py-2 min-w-0"
-              style={{ boxShadow: "0 4px 14px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.6)" }}
+        <div className={`relative shrink-0 pb-4 ${collapsed ? "px-3 pt-4" : "px-5"}`}>
+          <div
+            className={`flex gap-2 ${collapsed ? "flex-col items-center" : "items-stretch"}`}
+            // Expanded, the block is exactly the header's height, so the line
+            // under the mark sits on the header's own bottom edge and the two
+            // read as one line turning the corner.
+            style={collapsed ? undefined : { height: "var(--app-header-h)" }}
+          >
+            {/* Logo only — the module name now carries its own accent block
+                below, the same treatment the WMS rail uses. */}
+            {/* The mark is the way back to the hub — the same destination as the
+                "Back to Hub" footer, on the thing people reach for first. */}
+            <Link
+              href={"/hub" as Route}
+              title="Back to Hub"
+              className="flex items-center justify-center brand-plate rounded-xl px-2.5 py-2 min-w-0 flex-1"
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src="/logo.png"
+                src="/logo-mark.png"
                 alt="JMT Drive Solutions"
                 style={{ height: collapsed ? 26 : 40, width: "auto", display: "block" }}
               />
-              {!collapsed && (
-                <span
-                  className="inline-flex items-center text-[10px] font-bold uppercase text-white px-2 py-0.5 rounded-full"
-                  style={{
-                    background: ACCENT,
-                    boxShadow: "0 2px 8px rgba(10, 108, 255, 0.35)",
-                    letterSpacing: "0.08em",
-                  }}
-                >
-                  Masters
-                </span>
-              )}
-            </div>
-            <RailToggle className={collapsed ? "mt-2" : "ml-auto"} />
+            </Link>
+            <RailToggle className={collapsed ? "mt-2" : "rail-toggle-in-band absolute right-4 z-10"} />
           </div>
           {!collapsed && (
             <>
-              <p className="text-[13px] mt-3 font-bold text-white/90">Masters</p>
-              <p className="text-[12px] mt-0.5 text-white/50">Signed in as {userName}</p>
+              <p className="module-chip text-[13px] mt-3 px-2.5 py-1.5 rounded-lg font-bold text-white leading-[1.25]">
+                Masters
+              </p>
+              <p className="text-[12px] mt-1.5 text-white/50">Signed in as {userName}</p>
             </>
           )}
         </div>

@@ -1,5 +1,6 @@
 "use client";
 
+import type { CSSProperties } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import type { Route } from "next";
@@ -96,7 +97,13 @@ export function MasterSidebar({ adminName }: { adminName: string }) {
   return (
     <aside
       className="module-rail header-dark rail-navy sticky top-0 self-start h-screen max-h-screen relative shrink-0 flex flex-col max-md:hidden transition-[width] duration-200"
-      style={{ width: collapsed ? RAIL_WIDTH_COLLAPSED : RAIL_WIDTH }}
+      style={
+        {
+          width: collapsed ? RAIL_WIDTH_COLLAPSED : RAIL_WIDTH,
+          "--module-accent-from": "#f59e0b",
+          "--module-accent-to": "#b45309",
+        } as CSSProperties
+      }
     >
       <div
         aria-hidden
@@ -108,38 +115,37 @@ export function MasterSidebar({ adminName }: { adminName: string }) {
       />
 
       <div className="relative flex flex-col h-full overflow-hidden">
-        <div className={`shrink-0 pt-3.5 pb-3 ${collapsed ? "px-2.5" : "px-3.5"}`}>
-          <div className={`flex items-start gap-2 ${collapsed ? "flex-col items-center" : ""}`}>
-            <div
-              className="flex items-center gap-2 rounded-lg bg-white px-2 py-1.5 min-w-0 flex-1"
-              style={{ boxShadow: "0 4px 14px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.6)" }}
+        <div className={`relative shrink-0 pb-3 ${collapsed ? "px-2.5 pt-3.5" : "px-3.5"}`}>
+          <div
+            className={`flex gap-2 ${collapsed ? "flex-col items-center" : "items-stretch"}`}
+            // Expanded, the block is exactly the header's height, so the line
+            // under the mark sits on the header's own bottom edge and the two
+            // read as one line turning the corner.
+            style={collapsed ? undefined : { height: "var(--app-header-h)" }}
+          >
+            {/* The mark is the way back to the hub — the same destination as the
+                "Back to Hub" footer, on the thing people reach for first. */}
+            <Link
+              href={"/hub" as Route}
+              title="Back to Hub"
+              className="flex items-center justify-center brand-plate rounded-lg px-2 py-1.5 min-w-0 flex-1"
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src="/logo.png"
+                src="/logo-mark.png"
                 alt="JMT Drive Solutions"
                 className="shrink-0"
                 style={{ height: collapsed ? 22 : 30, width: "auto", display: "block" }}
               />
-              {!collapsed && (
-                <span
-                  className="inline-block min-w-0 break-words text-center text-[10px] font-bold uppercase leading-[1.25] text-white px-2 py-0.5 rounded-lg"
-                  style={{
-                    background: ACCENT,
-                    boxShadow: "0 2px 8px rgba(245, 158, 11, 0.35)",
-                    letterSpacing: "0.08em",
-                  }}
-                >
-                  Masters
-                </span>
-              )}
-            </div>
-            <RailToggle className={collapsed ? "mt-2" : "ml-auto shrink-0"} />
+            </Link>
+            <RailToggle className={collapsed ? "mt-2" : "rail-toggle-in-band absolute right-3.5 z-10"} />
           </div>
           {!collapsed && (
             <>
-              <p className="text-[12.5px] mt-2.5 font-bold text-white/90">Admin &amp; Master Setup</p>
-              <p className="text-[11.5px] mt-0.5 text-white/50 leading-snug">Signed in as {adminName}</p>
+              <p className="module-chip text-[12.5px] mt-2.5 px-2.5 py-1.5 rounded-lg font-bold text-white leading-[1.25]">
+                Admin &amp; Master Setup
+              </p>
+              <p className="text-[11.5px] mt-1.5 text-white/50 leading-snug">Signed in as {adminName}</p>
             </>
           )}
         </div>

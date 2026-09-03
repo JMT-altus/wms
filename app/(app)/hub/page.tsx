@@ -206,30 +206,37 @@ export default async function HubPage({
   const { hello, line } = greetingForHour(istHour);
 
   return (
+    // `header-dark` flips the ink tokens to white for everything below, so the
+    // greeting and body copy follow the canvas instead of being restyled one
+    // by one; `header-navy` is the same scope the app header uses, which
+    // styles the search chip and its kbd hint for a navy surface.
     <div
-      className="relative min-h-[100svh] overflow-hidden"
-      style={{ background: "linear-gradient(168deg, #e8f0ff 0%, #f2f7ff 44%, #ebf8f4 100%)" }}
+      className="header-dark header-navy relative min-h-[100svh] overflow-hidden"
+      style={{ background: "linear-gradient(168deg, #02203f 0%, #04305e 46%, #063f70 100%)" }}
     >
       {/* ── Aurora backdrop — slow-drifting colour glows + a dot mesh, so the
              launcher reads as a living, premium canvas rather than flat white. */}
       <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
         <div
           className="hub-blob-1 absolute rounded-full"
-          style={{ width: "44vw", height: "44vw", minWidth: 460, minHeight: 460, left: "-12%", top: "-18%", background: "radial-gradient(circle, rgba(10,108,255,0.34), transparent 66%)", filter: "blur(64px)" }}
+          style={{ width: "44vw", height: "44vw", minWidth: 460, minHeight: 460, left: "-12%", top: "-18%", background: "radial-gradient(circle, rgba(10,108,255,0.46), transparent 66%)", filter: "blur(64px)" }}
         />
         <div
           className="hub-blob-2 absolute rounded-full"
-          style={{ width: "40vw", height: "40vw", minWidth: 440, minHeight: 440, right: "-10%", top: "-8%", background: "radial-gradient(circle, rgba(23,182,160,0.30), transparent 66%)", filter: "blur(66px)" }}
+          style={{ width: "40vw", height: "40vw", minWidth: 440, minHeight: 440, right: "-10%", top: "-8%", background: "radial-gradient(circle, rgba(23,182,160,0.40), transparent 66%)", filter: "blur(66px)" }}
         />
         <div
           className="hub-blob-3 absolute rounded-full"
-          style={{ width: "40vw", height: "40vw", minWidth: 420, minHeight: 420, left: "32%", bottom: "-26%", background: "radial-gradient(circle, rgba(124,58,237,0.18), transparent 66%)", filter: "blur(74px)" }}
+          style={{ width: "40vw", height: "40vw", minWidth: 420, minHeight: 420, left: "32%", bottom: "-26%", background: "radial-gradient(circle, rgba(124,58,237,0.32), transparent 66%)", filter: "blur(74px)" }}
         />
+        {/* the canvas sweep — see .hub-canvas-shine in globals.css */}
+        <div className="hub-canvas-shine" />
+
         {/* fine dot mesh, faded toward the edges */}
         <div
           className="absolute inset-0"
           style={{
-            backgroundImage: "radial-gradient(rgba(10,108,255,0.07) 1px, transparent 1px)",
+            backgroundImage: "radial-gradient(rgba(255,255,255,0.09) 1px, transparent 1px)",
             backgroundSize: "26px 26px",
             maskImage: "radial-gradient(ellipse 85% 72% at 50% 26%, black 22%, transparent 82%)",
             WebkitMaskImage: "radial-gradient(ellipse 85% 72% at 50% 26%, black 22%, transparent 82%)",
@@ -255,7 +262,7 @@ export default async function HubPage({
                 HubSignOut button it replaced would have been a second,
                 redundant affordance. The unread dot is suppressed here because
                 the bell beside it already shows the count. */}
-            <UserMenuServer tone="light" showUnreadDot={false} />
+            <UserMenuServer tone="dark" showUnreadDot={false} />
           </div>
         </header>
 
@@ -266,17 +273,28 @@ export default async function HubPage({
             <div
               className="inline-flex items-center gap-2.5 rounded-full px-4 py-1.5"
               style={{
-                background: "rgba(255,255,255,0.55)",
-                border: "1px solid rgba(10,108,255,0.16)",
+                background: "rgba(255,255,255,0.07)",
+                border: "1px solid rgba(255,255,255,0.16)",
                 boxShadow:
-                  "0 10px 24px -12px rgba(10,108,255,0.4), 0 1px 2px rgba(15,23,42,0.05), inset 0 1px 0 rgba(255,255,255,0.9)",
+                  "0 10px 24px -12px rgba(10,108,255,0.5), inset 0 1px 0 rgba(255,255,255,0.18)",
                 backdropFilter: "blur(8px)",
                 WebkitBackdropFilter: "blur(8px)",
               }}
             >
-              <span
-                className="inline-block size-1.5 rounded-full"
-                style={{ background: "linear-gradient(135deg, #0a6cff, #12b6a0)", boxShadow: "0 0 8px rgba(10,108,255,0.7)" }}
+              {/* The mark itself, in the slot the brand dot used to hold —
+                  it says the same thing the dot only gestured at, and the
+                  hub is the one screen with no rail to carry it. Decorative
+                  beside the wordmark it sits against, so no alt text. */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/logo-mark.png"
+                alt=""
+                className="block h-auto shrink-0"
+                style={{
+                  width: 22,
+                  filter:
+                    "drop-shadow(0 0 8px rgba(255,255,255,0.5)) drop-shadow(0 3px 8px rgba(10,108,255,0.5))",
+                }}
               />
               <span
                 style={{
@@ -284,7 +302,7 @@ export default async function HubPage({
                   fontSize: 11.5,
                   fontWeight: 800,
                   letterSpacing: "0.24em",
-                  color: "#0A6CFF",
+                  color: "#8FC2FF",
                 }}
               >
                 JMT DRIVE SOLUTIONS · WORKSPACES
@@ -297,8 +315,7 @@ export default async function HubPage({
             style={{ fontFamily: "var(--font-display), var(--font-sans), sans-serif", fontWeight: 800, fontSize: "clamp(38px, 4.6vw, 56px)", lineHeight: 1.0, letterSpacing: "-0.035em" }}
           >
             <span
-              className="text-ink-strong"
-              style={{ textShadow: "0 1px 0 rgba(255,255,255,0.7), 0 8px 26px rgba(15,23,42,0.14)" }}
+              style={{ color: "#ffffff", textShadow: "0 1px 0 rgba(0,0,0,0.25), 0 10px 30px rgba(0,0,0,0.35)" }}
             >
               {hello},{" "}
             </span>
@@ -319,7 +336,7 @@ export default async function HubPage({
 
           <p
             className="mt-4 mx-auto font-semibold"
-            style={{ fontSize: 17, lineHeight: 1.5, letterSpacing: "-0.005em", color: "#475569", maxWidth: 560, textShadow: "0 1px 0 rgba(255,255,255,0.6)" }}
+            style={{ fontSize: 17, lineHeight: 1.5, letterSpacing: "-0.005em", color: "rgba(255,255,255,0.72)", maxWidth: 560 }}
           >
             {line}
           </p>
@@ -374,23 +391,31 @@ export default async function HubPage({
                       : 420,
           }}
         >
-          {tiles.map((m) => {
+          {tiles.map((m, i) => {
             const s = STYLES[m.key as ModuleId | "admin" | "forms"];
             const Icon = s.Icon;
             return (
               <Link
                 key={m.key}
                 href={m.href as Route}
-                className="group relative flex flex-col overflow-hidden rounded-[24px] p-6 transition-transform duration-300 ease-out hover:-translate-y-2"
+                className="hub-tile-shine metal-edge group relative flex flex-col overflow-hidden rounded-[24px] p-6 transition-transform duration-300 ease-out hover:-translate-y-2"
                 style={{
-                  background: s.bg,
-                  border: "1px solid rgba(255,255,255,0.7)",
+                  // The tile IS the module's colour now — the pale wash (s.bg)
+                  // read as nine near-white cards, so the palette only showed
+                  // up in the Enter buttons. Everything on top flips to white
+                  // ink; the Enter button inverts to a white chip so it still
+                  // separates from the card it sits on.
+                  background: s.btn,
+                  // Staggered so the row catches the light in sequence rather
+                  // than every tile flashing at once — see .hub-tile-shine.
+                  ["--tile-shine-delay" as string]: `${i * 0.35}s`,
+                  border: "1px solid transparent",
                   boxShadow: `0 40px 70px -26px ${s.glow}, 0 22px 40px -22px rgba(15,23,42,0.22), 0 8px 16px -10px rgba(15,23,42,0.14), 0 1px 2px rgba(15,23,42,0.06), inset 0 2px 0 rgba(255,255,255,0.95), inset 0 -10px 24px -12px rgba(15,23,42,0.10)`,
                   minHeight: 178,
                 }}
               >
                 {/* glass sheen across the top */}
-                <span aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-1/2" style={{ background: "linear-gradient(180deg, rgba(255,255,255,0.55), rgba(255,255,255,0) 100%)" }} />
+                <span aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-1/2" style={{ background: "linear-gradient(180deg, rgba(255,255,255,0.22), rgba(255,255,255,0) 100%)" }} />
                 {/* hover glow ring — fades in on hover (kept off the base card so
                     the resting state stays clean). */}
                 <span
@@ -403,8 +428,8 @@ export default async function HubPage({
                   aria-hidden
                   size={158}
                   strokeWidth={1.5}
-                  className="pointer-events-none absolute -right-7 -bottom-7 opacity-[0.10] transition-transform duration-500 group-hover:scale-110 group-hover:rotate-3"
-                  style={{ color: s.ink }}
+                  className="pointer-events-none absolute -right-7 -bottom-7 opacity-[0.16] transition-transform duration-500 group-hover:scale-110 group-hover:rotate-3"
+                  style={{ color: "#ffffff" }}
                 />
                 {/* icon chip — frosted glass */}
                 <span
@@ -424,22 +449,23 @@ export default async function HubPage({
 
                 <h2
                   className="relative mt-4"
-                  style={{ fontFamily: "var(--font-display), var(--font-sans), sans-serif", fontWeight: 800, fontSize: 28, letterSpacing: "-0.02em", color: s.title, textShadow: "0 1px 0 rgba(255,255,255,0.6)" }}
+                  style={{ fontFamily: "var(--font-display), var(--font-sans), sans-serif", fontWeight: 800, fontSize: 28, letterSpacing: "-0.02em", color: "#ffffff", textShadow: "0 1px 2px rgba(6,20,44,0.28)" }}
                 >
                   {m.label}
                 </h2>
-                <p className="relative mt-2 font-semibold" style={{ fontSize: 15, lineHeight: 1.5, letterSpacing: "-0.003em", color: s.ink, maxWidth: 260 }}>
+                <p className="relative mt-2 font-semibold" style={{ fontSize: 15, lineHeight: 1.5, letterSpacing: "-0.003em", color: "rgba(255,255,255,0.88)", maxWidth: 260 }}>
                   {m.tagline}
                 </p>
 
                 <div className="relative mt-auto pt-4">
                   <span
-                    className="inline-flex items-center gap-2 rounded-xl px-5 py-3 text-white transition-[filter,box-shadow,transform] duration-300 group-hover:brightness-105 group-hover:-translate-y-0.5"
+                    className="inline-flex items-center gap-2 rounded-xl px-5 py-3 transition-[filter,box-shadow,transform] duration-300 group-hover:brightness-105 group-hover:-translate-y-0.5"
                     style={{
-                      background: s.btn,
+                      background: "#ffffff",
+                      color: s.title,
                       fontSize: 14.5,
                       fontWeight: 700,
-                      boxShadow: `0 3px 0 rgba(6,20,44,0.28), 0 14px 24px -8px ${s.glow}, 0 6px 12px -6px rgba(15,23,42,0.28), inset 0 1px 0 rgba(255,255,255,0.4), inset 0 -2px 6px -2px rgba(6,20,44,0.3)`,
+                      boxShadow: `0 3px 0 rgba(6,20,44,0.22), 0 14px 24px -8px rgba(6,20,44,0.35), inset 0 -2px 6px -2px rgba(6,20,44,0.10)`,
                       lineHeight: 1,
                     }}
                   >
@@ -450,6 +476,7 @@ export default async function HubPage({
               </Link>
             );
           })}
+
         </div>
 
         {tiles.length === 0 && (

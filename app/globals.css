@@ -121,11 +121,11 @@
  * showing through under the sticky bar. Overridden below Tailwind's `md`
  * breakpoint so callers don't need their own responsive variant. */
 :root {
-  --app-header-h: 46px;
+  --app-header-h: 50px;
 }
 @media (max-width: 767px) {
   :root {
-    --app-header-h: 42px;
+    --app-header-h: 46px;
   }
 }
 
@@ -2453,11 +2453,295 @@ select.nt-input {
   background: linear-gradient(
     180deg,
     transparent 0%,
-    #0a6cff 30%,
-    #17b6a0 70%,
+    var(--module-accent-from, #0a6cff) 30%,
+    var(--module-accent-to, #17b6a0) 70%,
     transparent 100%
   );
   opacity: 0.85;
+}
+
+/* ────────────────────────────────────────────────────────────────────
+   .brand-plate — the mark at the top of every rail.
+
+   No plate any more: the mark sits straight on the rail's own navy, lit
+   the way the login backdrop lights it, with a shining line underneath
+   in place of the card's bottom edge. A white card here punched a bright
+   hole in the panel, and even a navy card drew a box around something
+   that reads better unframed.
+
+   The line is two layers on one element — a soft accent bar (::before)
+   with a bright glint travelling along it (::after), timed to the same
+   9s rhythm as .module-chip so the rail head pulses once, together,
+   rather than twice out of step. Colours come from the module's
+   --module-accent-from/to, so the line matches the chip below it.
+
+   Consumed by every rail's logo block — app, Forms, Masters, Admin and
+   Master Setup — so the treatment stays in one place.
+   ──────────────────────────────────────────────────────────────────── */
+.brand-plate {
+  position: relative;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+
+/* The glow belongs to the mark, not a box — a box-shadow would halo a
+   rectangle instead of the letterforms. */
+.brand-plate img {
+  filter:
+    drop-shadow(0 0 14px rgba(255, 255, 255, 0.55))
+    drop-shadow(0 6px 18px rgba(10, 108, 255, 0.45));
+}
+
+.brand-plate::before,
+.brand-plate::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  border-radius: 2px;
+  pointer-events: none;
+}
+
+/* Base bar — accent at the shoulders, white at the centre, fading out at
+   both ends so it reads as a highlight rather than a rule. */
+.brand-plate::before {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--module-accent-from, #0a6cff) 22%,
+    rgba(255, 255, 255, 0.85) 50%,
+    var(--module-accent-to, #17b6a0) 78%,
+    transparent 100%
+  );
+  opacity: 0.8;
+  box-shadow: 0 0 12px color-mix(in srgb, var(--module-accent-from, #0a6cff) 55%, transparent);
+}
+
+/* Travelling glint. Spans the same box as the bar, so it stays inside it. */
+.brand-plate::after {
+  overflow: hidden;
+  background: linear-gradient(
+    90deg,
+    transparent 40%,
+    rgba(255, 255, 255, 0.95) 50%,
+    transparent 60%
+  );
+  animation: brandLineGlint 9s ease-in-out infinite;
+}
+
+/* The header's bottom accent line, carrying the same glint that crosses the
+   line under the rail's mark. The gradient itself is set inline in
+   components/layout/header.tsx (it changes with the active module); this
+   class only adds the travelling highlight, on the same 9s cycle as
+   .brand-plate and .module-chip so the whole chrome flashes together.
+   `overflow: hidden` keeps the glint from painting past the bar — it is
+   full-viewport-width, so an unclipped transform would reach the page edge. */
+.header-shine-line {
+  overflow: hidden;
+}
+
+.header-shine-line::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    transparent 44%,
+    rgba(255, 255, 255, 0.95) 50%,
+    transparent 56%
+  );
+  animation: brandLineGlint 9s ease-in-out infinite;
+}
+
+@keyframes brandLineGlint {
+  0%,
+  72% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+/* ────────────────────────────────────────────────────────────────────
+   .hub-tile-shine — the same highlight the rail carries, crossing the hub
+   tiles. Reuses moduleChipShine so the whole app sweeps on one 9s cycle.
+
+   The tiles are pale, so this is a glass sheen rather than the rail's bright
+   band: white at low opacity, which reads as light moving across the card
+   without washing the title out. `--tile-shine-delay` staggers the row so
+   nine tiles catch the light in sequence instead of flashing as a block.
+
+   The tile itself is already `relative` + `overflow-hidden`, so nothing has
+   to change on the element beyond the class.
+   ──────────────────────────────────────────────────────────────────── */
+.hub-tile-shine::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    105deg,
+    transparent 38%,
+    rgba(255, 255, 255, 0.28) 46%,
+    rgba(255, 255, 255, 0.62) 50%,
+    rgba(255, 255, 255, 0.28) 54%,
+    transparent 62%
+  );
+  transform: translateX(-130%);
+  animation: moduleChipShine 9s ease-in-out infinite;
+  animation-delay: var(--tile-shine-delay, 0s);
+}
+
+/* .metal-edge — a brushed-grey rim around a card, with the highlight
+   travelling along it.
+
+   Drawn as a masked ring rather than a border-image: the ::before is inset
+   to the card's own bounds, filled with the grey gradient, then masked so
+   only a 1px band survives (content-box XOR the whole box). That keeps the
+   rim on the card's real corner radius — `border-radius: inherit` — where a
+   gradient border would either square the corners or need a second wrapper
+   element around every tile.
+
+   ::after on these cards is already the surface sweep, so this uses ::before
+   and shares --tile-shine-delay with it: rim and face catch the light in the
+   same pass instead of two crossings a moment apart.
+   ──────────────────────────────────────────────────────────────────── */
+.metal-edge::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1.5px;
+  pointer-events: none;
+  /* Above the card's own overlays (the top sheen, the surface sweep), which
+     otherwise wash the rim out along the top edge where they are strongest. */
+  z-index: 2;
+  /* Grey at rest all the way round — the earlier build faded to near-nothing
+     between passes, so for most of the cycle there was no border to see. The
+     white stop is the travelling glint on top of that constant grey. */
+  background: linear-gradient(
+    105deg,
+    rgba(148, 163, 184, 0.72) 0%,
+    rgba(203, 213, 225, 0.85) 26%,
+    rgba(255, 255, 255, 1) 34%,
+    rgba(203, 213, 225, 0.85) 42%,
+    rgba(148, 163, 184, 0.72) 66%,
+    rgba(148, 163, 184, 0.72) 100%
+  );
+  background-size: 240% 100%;
+  background-position: 100% 0;
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  animation: metalEdgeShine 9s ease-in-out infinite;
+  animation-delay: var(--tile-shine-delay, 0s);
+}
+
+@keyframes metalEdgeShine {
+  0%,
+  72% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: 0% 0;
+  }
+}
+
+/* The hub's canvas highlight — the same sweep the tiles and the rail carry,
+   scaled up to cross the whole launcher. Faint, because it runs under live
+   content rather than across a single card; it reads as light moving over a
+   dark surface, not as a flare. Lives inside the aurora backdrop, so it sits
+   behind everything and needs no z-index of its own. */
+.hub-canvas-shine {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    105deg,
+    transparent 38%,
+    rgba(255, 255, 255, 0.05) 46%,
+    rgba(255, 255, 255, 0.14) 50%,
+    rgba(255, 255, 255, 0.05) 54%,
+    transparent 62%
+  );
+  transform: translateX(-130%);
+  animation: moduleChipShine 9s ease-in-out infinite;
+}
+
+/* The rail's collapse button, centred in the header band that now sits above
+   the mark. Absolute, so it never takes width off the mark's block — and a
+   class rather than a Tailwind arbitrary value because the offset depends on
+   --app-header-h, which changes at the phone breakpoint. size-8 = 2rem. */
+.rail-toggle-in-band {
+  top: calc((var(--app-header-h) - 2rem) / 2);
+}
+
+/* ────────────────────────────────────────────────────────────────────
+   .module-chip — the module's name in the rail, on its own accent.
+
+   Replaces the little uppercase pill that used to sit inside the white
+   logo plate: one coloured block per module, carrying the name the rail
+   already showed underneath. The colour comes from the module's own
+   accent (lib/nav-modules.ts), handed in as --module-accent-from/to, so
+   Targets reads violet, Employees teal, WMS blue — the same gradient
+   their hub tile and active nav row use.
+
+   The sweep is a highlight travelling across the block every few
+   seconds, not a permanent gloss: it catches the eye on arrival and
+   then gets out of the way. `overflow: hidden` keeps it inside the
+   rounded corners; the global prefers-reduced-motion rule above stops
+   it for anyone who asked for stillness.
+   ──────────────────────────────────────────────────────────────────── */
+.module-chip {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  text-align: center;
+  background-image: linear-gradient(
+    135deg,
+    var(--module-accent-from, #0a6cff) 0%,
+    var(--module-accent-to, #17b6a0) 100%
+  );
+  box-shadow:
+    0 6px 16px -6px color-mix(in srgb, var(--module-accent-from, #0a6cff) 65%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.28);
+}
+
+.module-chip::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    105deg,
+    transparent 38%,
+    rgba(255, 255, 255, 0.35) 46%,
+    rgba(255, 255, 255, 0.85) 50%,
+    rgba(255, 255, 255, 0.35) 54%,
+    transparent 62%
+  );
+  transform: translateX(-130%);
+  animation: moduleChipShine 9s ease-in-out infinite;
+}
+
+@keyframes moduleChipShine {
+  0%,
+  72% {
+    transform: translateX(-130%);
+  }
+  100% {
+    transform: translateX(130%);
+  }
 }
 
 /* Phone counterpart: the rail collapses to a horizontal strip, so the

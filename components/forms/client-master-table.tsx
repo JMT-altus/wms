@@ -17,7 +17,8 @@ import {
   type SortDef,
 } from "@/components/admin/master/data-table";
 import { CodeCell, StatusCell } from "@/components/masters/row-menu";
-import { BulkUpload } from "@/components/masters/bulk-upload";
+import { ClientBulkImport } from "./client-bulk-import";
+import type { ClientBulkOptions } from "@/lib/forms/client-bulk-columns";
 import { FileSpreadsheet, FileText } from "lucide-react";
 import { KYC_ACCENT, KYC_ACCENT_SOFT } from "./kyc/fields";
 
@@ -204,10 +205,13 @@ function fromEditValues(v: EditValues) {
 export function ClientMasterTable({
   clients,
   salesPeople,
+  bulkOptions,
 }: {
   clients: ClientMasterRow[];
   /** Fills the edit dialog's Sales Co-ordinator picker. */
   salesPeople: EmployeeOption[];
+  /** The master lists behind Bulk Import's dropdown cells. */
+  bulkOptions: ClientBulkOptions;
 }) {
   const [editing, setEditing] = React.useState<ClientMasterRow | null>(null);
   const router = useRouter();
@@ -642,9 +646,13 @@ export function ClientMasterTable({
         // In the HEADER row, not the filter band. It creates rows, the same
         // family as New client — and it was the one control that pushed
         // Client Master's seven filters onto a second line.
-        headerActions={<BulkUpload target="customers" label="clients" size="header" />}
+        //
+        // A typeable sheet rather than the old file-only upload: a bad row
+        // used to mean reopening Excel and re-uploading everything, and now
+        // means fixing the cell that is flagged.
+        headerActions={<ClientBulkImport options={bulkOptions} />}
         emptyTitle="No clients yet."
-        emptySub="Onboard one with New client, or bring your existing list in with Bulk Upload."
+        emptySub="Onboard one with New client, or bring your existing list in with Bulk Import."
       />
 
       {editing && (

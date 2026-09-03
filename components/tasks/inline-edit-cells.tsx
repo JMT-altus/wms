@@ -29,6 +29,8 @@ const URGENCY_TERMINAL = new Set<TaskStatus>([
   "cancelled",
   "transferred",
 ]);
+import { pickEffectiveDue, isRevised } from "@/lib/tasks/effective-due";
+
 function dueColor(dueAt: Date | null, status: TaskStatus): { color: string; label: string; strong: boolean } {
   if (!dueAt || URGENCY_TERMINAL.has(status)) return { color: "var(--color-ink-muted)", label: "", strong: false };
   const d = dueAt instanceof Date ? dueAt : new Date(dueAt as unknown as string);
@@ -281,25 +283,53 @@ export function InlinePriorityCell({
 export function InlineDueCell({
   taskId,
   dueAt,
+  revisedTargetDate = null,
   status,
   editable,
 }: {
   taskId: string;
+  /** The ORIGINAL commitment. Kept for the "was" tooltip; never the thing the
+   *  urgency colour is computed from. */
   dueAt: Date | null;
+  /** The reschedule, when there is one. This — not `dueAt` — is what the task
+   *  is judged against; see lib/tasks/effective-due.ts. */
+  revisedTargetDate?: Date | null;
   status: TaskStatus;
   editable: boolean;
 }) {
   const router = useRouter();
   const [open, setOpen] = React.useState(false);
   const [pending, setPending] = React.useState(false);
-  const [shown, setShown] = React.useState<Date | null>(dueAt);
-  React.useEffect(() => setShown(dueAt), [dueAt]);
+  // Optimistic state tracks the EFFECTIVE date — what the cell renders — so a
+  // reschedule shows immediately without waiting for the refresh.
+  const effective = pickEffectiveDue({ dueAt, revisedTargetDate });
+  const [shown, setShown] = React.useState<Date | null>(effective);
+  React.useEffect(() => setShown(effective), [effective?.getTime()]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const revised = isRevised({ dueAt, revisedTargetDate });
   const u = dueColor(shown, status);
   const display = (
-    <span className="inline-flex flex-col items-center leading-tight">
-      <span className="text-body-lg tabular-nums" style={{ color: u.color, fontWeight: u.strong ? 700 : undefined }}>
+    <span
+      className="inline-flex flex-col items-center leading-tight"
+      title={
+        revised && dueAt
+          ? `Revised target. Originally committed ${safeDate(dueAt, "d MMM yyyy")}.`
+          : undefined
+      }
+    >
+      <span
+        className="text-body-lg tabular-nums"
+        style={{ color: u.color, fontWeight: u.strong ? 700 : undefined }}
+      >
         {safeDate(shown, "MMM d")}
+        {revised && (
+          <span
+            aria-label="Revised target date"
+            className="ml-1 align-middle text-[10px] font-black uppercase tracking-[0.08em] text-ink-subtle"
+          >
+            ·R
+          </span>
+        )}
       </span>
       {u.label && (
         <span className="text-[11px] font-bold tabular-nums" style={{ color: u.color }}>{u.label}</span>

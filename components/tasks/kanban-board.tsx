@@ -77,6 +77,70 @@ interface Props {
 // Cards rendered per column before "Show more"; each tap reveals 10 more.
 const COL_STEP = 10;
 
+/**
+ * Per-column card order, remembered in the browser.
+ *
+ * The board query orders by `created_at` and there is no per-task board
+ * position column, so without this the `router.refresh()` that follows every
+ * drop re-sorts the destination column and the card the user just dragged to
+ * the top snaps straight back down to its date slot. The map is
+ * `columnId -> ordered task ids`; ids it doesn't mention keep the server's
+ * order behind the ones it does.
+ *
+ * Deliberately client-side: this is one person's view of their own board, not
+ * shared state, and a stale id in the map costs nothing (it just never matches).
+ */
+const CARD_ORDER_KEY = "altus.tasks.kanban.cardOrder.v1";
+type CardOrder = Record<string, string[]>;
+
+function readCardOrder(): CardOrder {
+  try {
+    const raw = localStorage.getItem(CARD_ORDER_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as unknown;
+    return parsed && typeof parsed === "object" ? (parsed as CardOrder) : {};
+  } catch {
+    return {}; // malformed or storage unavailable (private mode)
+  }
+}
+
+/** Sort a column's tasks by the remembered order; unlisted ids keep their
+ *  server order at the back. Array.prototype.sort is stable, so equal ranks
+ *  preserve the incoming sequence. */
+function applyCardOrder<T extends { id: string }>(list: T[], saved?: string[]): T[] {
+  if (!saved || saved.length === 0) return list;
+  const rank = new Map(saved.map((id, i) => [id, i]));
+  return [...list].sort(
+    (a, b) =>
+      (rank.get(a.id) ?? Number.MAX_SAFE_INTEGER) -
+      (rank.get(b.id) ?? Number.MAX_SAFE_INTEGER),
+  );
+}
+
+/** Move `id` to `index` within `col`, dropping it from wherever it used to be
+ *  so a card never appears in two columns' orders at once. */
+function placeCard(
+  order: CardOrder,
+  col: string,
+  id: string,
+  index: number,
+  columnIdsNow: string[],
+): CardOrder {
+  const next: CardOrder = {};
+  for (const [key, ids] of Object.entries(order)) {
+    const cleaned = ids.filter((x) => x !== id);
+    if (cleaned.length > 0) next[key] = cleaned;
+  }
+  // Seed from what the column currently shows, so `index` means what the user
+  // saw rather than an index into a list that only holds previously-moved ids.
+  const existing = next[col] ?? [];
+  const base = existing.length > 0 ? existing : columnIdsNow;
+  const seeded = base.filter((x) => x !== id);
+  const at = Math.max(0, Math.min(index, seeded.length));
+  next[col] = [...seeded.slice(0, at), id, ...seeded.slice(at)];
+  return next;
+}
+
 function accentFor(col: ColId, tones: Record<TaskStatus, StatusColorToken>) {
   const isArchive = col === ARCHIVE_COL;
   const tone = isArchive ? null : tones[col as TaskStatus];
@@ -105,9 +169,30 @@ export function KanbanBoard({ tasks, labels, tones, isAdmin, columnOrder }: Prop
   // The active drag (card or column) — drives the DragOverlay + drop targeting.
   const [active, setActive] = React.useState<{ id: string; type: "card" | "column" } | null>(null);
   const [overCol, setOverCol] = React.useState<string | null>(null);
+  // Remembered per-column card order (see CARD_ORDER_KEY). Starts empty so the
+  // server render and the first client render agree, then hydrates on mount.
+  const [cardOrder, setCardOrder] = React.useState<CardOrder>({});
 
   React.useEffect(() => setItems(tasks), [tasks]);
   React.useEffect(() => setColumns(columnOrder), [columnOrder]);
+  React.useEffect(() => setCardOrder(readCardOrder()), []);
+
+  function saveCardOrder(next: CardOrder) {
+    setCardOrder(next);
+    try {
+      localStorage.setItem(CARD_ORDER_KEY, JSON.stringify(next));
+    } catch {
+      /* storage may be unavailable — the in-memory order still holds for the session */
+    }
+  }
+
+  // An Undo fired from a toast runs long after the render that created it, so
+  // it must not read `items` out of a stale closure — the row's optimistic-lock
+  // token will have moved on. These refs always hold the live values.
+  const itemsRef = React.useRef(items);
+  itemsRef.current = items;
+  const orderRef = React.useRef(cardOrder);
+  orderRef.current = cardOrder;
 
   const sensors = useSensors(
     // Mouse: a 6px move starts a drag, so clicking a card's link still works.
@@ -136,9 +221,81 @@ export function KanbanBoard({ tasks, labels, tones, isAdmin, columnOrder }: Prop
     }
   }
 
+  /** A column's cards in the order they are actually rendered - server order
+   *  with the remembered per-column order applied on top. The single source of
+   *  truth for the render below and for every "which slot was it in?" lookup. */
+  function columnTasks(col: ColId): BoardTask[] {
+    const list =
+      col === ARCHIVE_COL
+        ? filtered.filter((t) => t.archived)
+        : filtered.filter((t) => !t.archived && t.status === col && t.doerId != null);
+    return applyCardOrder(list, cardOrder[col]);
+  }
+
+  /** Drop the card into `col` at `index`, and remember it there. */
+  function rememberSlot(col: ColId, taskId: string, index: number, idsBefore: string[]) {
+    saveCardOrder(placeCard(orderRef.current, col, taskId, index, idsBefore));
+  }
+
+  /**
+   * How long the post-drop toast stays actionable. Ten seconds because Undo
+   * here is a real "wrong column, put it back" affordance - long enough to
+   * notice the card landed somewhere unintended and reach the button.
+   */
+  const UNDO_MS = 10_000;
+
+  /** Put a card back exactly where it came from - same column AND same slot,
+   *  neighbours included. Reads live state through the refs because the toast
+   *  fires long after the render that created the handler. */
+  async function undoDrop(
+    taskId: string,
+    back: { kind: "status"; status: TaskStatus } | { kind: "archive" } | { kind: "restore" },
+    sourceCol: ColId,
+    sourceIndex: number,
+    sourceIdsBefore: string[],
+  ) {
+    const cur = itemsRef.current.find((t) => t.id === taskId);
+    if (!cur) return;
+    setSavingId(taskId);
+    const res =
+      back.kind === "status"
+        ? await setTaskStatus(taskId, back.status, cur.updatedAt.toISOString())
+        : back.kind === "archive"
+          ? await archiveTask(taskId)
+          : await unarchiveTask(taskId);
+    setSavingId(null);
+    if (!res.ok) {
+      fireToast({ message: "Couldn't undo that move." });
+      router.refresh();
+      return;
+    }
+    const freshToken =
+      "updatedAt" in res && typeof res.updatedAt === "string" ? res.updatedAt : null;
+    setItems((list) =>
+      list.map((t) =>
+        t.id === taskId
+          ? {
+              ...t,
+              ...(back.kind === "status" ? { status: back.status } : {}),
+              ...(back.kind === "archive" ? { archived: true } : {}),
+              ...(back.kind === "restore" ? { archived: false } : {}),
+              ...(freshToken ? { updatedAt: new Date(freshToken) } : {}),
+            }
+          : t,
+      ),
+    );
+    rememberSlot(sourceCol, taskId, sourceIndex, sourceIdsBefore);
+    fireToast({ message: "Move undone." });
+    router.refresh();
+  }
+
   async function archiveCard(taskId: string) {
     const task = items.find((t) => t.id === taskId);
     if (!task || task.archived) return;
+    const sourceCol = task.status as ColId;
+    const sourceIds = columnTasks(sourceCol).map((t) => t.id);
+    const sourceIndex = sourceIds.indexOf(taskId);
+    const destIdsBefore = columnTasks(ARCHIVE_COL).map((t) => t.id);
     const prev = items;
     setItems((cur) => cur.map((t) => (t.id === taskId ? { ...t, archived: true } : t)));
     setSavingId(taskId);
@@ -148,7 +305,13 @@ export function KanbanBoard({ tasks, labels, tones, isAdmin, columnOrder }: Prop
       setItems(prev);
       fireToast({ message: res.error || "Couldn't archive the task." });
     } else {
-      fireToast({ message: "Archived." });
+      rememberSlot(ARCHIVE_COL, taskId, 0, destIdsBefore);
+      fireToast({
+        message: "Archived.",
+        actionLabel: "Undo",
+        duration: UNDO_MS,
+        action: () => undoDrop(taskId, { kind: "restore" }, sourceCol, sourceIndex, sourceIds),
+      });
     }
     router.refresh();
   }
@@ -156,6 +319,10 @@ export function KanbanBoard({ tasks, labels, tones, isAdmin, columnOrder }: Prop
   async function restoreCard(taskId: string) {
     const task = items.find((t) => t.id === taskId);
     if (!task || !task.archived) return;
+    const sourceIds = columnTasks(ARCHIVE_COL).map((t) => t.id);
+    const sourceIndex = sourceIds.indexOf(taskId);
+    const destCol = task.status as ColId;
+    const destIdsBefore = columnTasks(destCol).map((t) => t.id);
     const prev = items;
     setItems((cur) => cur.map((t) => (t.id === taskId ? { ...t, archived: false } : t)));
     setSavingId(taskId);
@@ -165,7 +332,13 @@ export function KanbanBoard({ tasks, labels, tones, isAdmin, columnOrder }: Prop
       setItems(prev);
       fireToast({ message: res.error || "Couldn't restore the task." });
     } else {
-      fireToast({ message: "Restored." });
+      rememberSlot(destCol, taskId, 0, destIdsBefore);
+      fireToast({
+        message: "Restored.",
+        actionLabel: "Undo",
+        duration: UNDO_MS,
+        action: () => undoDrop(taskId, { kind: "archive" }, ARCHIVE_COL, sourceIndex, sourceIds),
+      });
     }
     router.refresh();
   }
@@ -173,6 +346,13 @@ export function KanbanBoard({ tasks, labels, tones, isAdmin, columnOrder }: Prop
   async function moveTo(taskId: string, status: TaskStatus) {
     const task = items.find((t) => t.id === taskId);
     if (!task || task.status === status) return;
+    // Capture the exact origin BEFORE the optimistic mutation - this is what
+    // Undo restores: same column, same slot, neighbours included.
+    const sourceCol = task.status as ColId;
+    const sourceIds = columnTasks(sourceCol).map((t) => t.id);
+    const sourceIndex = sourceIds.indexOf(taskId);
+    const destIdsBefore = columnTasks(status as ColId).map((t) => t.id);
+    const prevStatus = task.status;
     const prev = items;
     setItems((cur) => cur.map((t) => (t.id === taskId ? { ...t, status } : t)));
     setSavingId(taskId);
@@ -187,11 +367,31 @@ export function KanbanBoard({ tasks, labels, tones, isAdmin, columnOrder }: Prop
             : res.error === "invalid"
               ? res.message ?? "That move isn't allowed from here."
               : res.error === "stale"
-                ? "Task changed elsewhere — refreshing."
+                ? "Someone else changed this first - refreshing."
                 : "Couldn't update the task.",
       });
     } else {
-      fireToast({ message: `Moved to ${labels[status]}.` });
+      // Land it at the TOP of the destination and remember that, so the
+      // refresh below cannot re-sort it back down to its created_at slot.
+      rememberSlot(status as ColId, taskId, 0, destIdsBefore);
+      // Carry the new optimistic-lock token forward, or an immediate Undo is
+      // rejected as stale for shipping the pre-move value.
+      setItems((cur) =>
+        cur.map((t) => (t.id === taskId ? { ...t, updatedAt: new Date(res.updatedAt) } : t)),
+      );
+      fireToast({
+        message: `Moved to ${labels[status]}.`,
+        actionLabel: "Undo",
+        duration: UNDO_MS,
+        action: () =>
+          undoDrop(
+            taskId,
+            { kind: "status", status: prevStatus },
+            sourceCol,
+            sourceIndex,
+            sourceIds,
+          ),
+      });
     }
     router.refresh();
   }
@@ -273,9 +473,7 @@ export function KanbanBoard({ tasks, labels, tones, isAdmin, columnOrder }: Prop
             <SortableContext items={columns} strategy={horizontalListSortingStrategy}>
               {columns.map((col) => {
                 const { isArchive, accent, accentDeep, accentBgLight } = accentFor(col, tones);
-                const colTasks = isArchive
-                  ? filtered.filter((t) => t.archived)
-                  : filtered.filter((t) => !t.archived && t.status === col && t.doerId != null);
+                const colTasks = columnTasks(col);
                 const limit = visibleByCol[col] ?? COL_STEP;
                 const shownTasks = colTasks.slice(0, limit);
                 const hiddenCount = colTasks.length - shownTasks.length;

@@ -9,8 +9,10 @@ import { CACHE_TAGS } from "@/lib/cache-tags";
 import {
   TASK_STATUSES,
   TASK_PRIORITIES,
+  APPROVAL_STATUSES,
   type TaskStatus,
   type TaskPriority,
+  type ApprovalStatus,
   type Visibility,
 } from "@/db/enums";
 import {
@@ -238,7 +240,11 @@ export async function setTaskStatus(
   expectedUpdatedAt: string,
   note?: string,
 ): Promise<
-  | { ok: true }
+  // `updatedAt` is the row's NEW optimistic-lock token. Returning it lets a
+  // client chain a second write (the kanban's Undo, say) without waiting for
+  // the router refresh to hand back a fresh row — otherwise the follow-up
+  // ships the pre-move token and is correctly rejected as stale.
+  | { ok: true; updatedAt: string }
   | {
       ok: false;
       error: "invalid" | "not-found" | "forbidden" | "stale";
@@ -262,7 +268,7 @@ export async function setTaskStatus(
 
   revalidateTaskRoutes();
   revalidatePath(`/tasks/${taskId}`);
-  return { ok: true };
+  return { ok: true, updatedAt: result.updatedAt };
 }
 
 export async function setTaskPriority(
@@ -669,6 +675,75 @@ export async function bulkSetClient(
   } catch (err) {
     return { ok: false, error: `Could not update: ${(err as Error).message}` };
   }
+  revalidateTaskRoutes();
+  return { ok: true, updated: changed.length, skipped: ids.length - changed.length };
+}
+
+/**
+ * The manager's verdict over a selection — the second half of the bulk bar's
+ * "Manager Status" menu.
+ *
+ * Deliberately a SEPARATE action from `bulkSetStatus`: the two write two
+ * different columns. `status` is the doer's progress report; `approval_status`
+ * is the manager's ruling on finished work, and collapsing them is the classic
+ * mistake this module is built to avoid. The bar routes "Mark Hold On" and
+ * "Mark Done" to bulkSetStatus and the three verdicts here.
+ *
+ * Admin-only, mirroring the single-task `setTaskApprovalStatus`. Rows already
+ * carrying the verdict are counted as skipped rather than rewritten, so the
+ * toast's number matches what actually changed.
+ */
+export async function bulkSetApprovalStatus(
+  taskIds: string[],
+  approvalStatus: ApprovalStatus,
+): Promise<BulkResult> {
+  const ids = parseBulkIds(taskIds);
+  if (!ids) return { ok: false, error: "Invalid selection." };
+  if (!APPROVAL_STATUSES.includes(approvalStatus))
+    return { ok: false, error: "Invalid approval status." };
+  const me = await requireUser();
+  if (!me.isAdmin)
+    return { ok: false, error: "Only admins can set an approval status." };
+  const limited = rateLimitOrError(me.id, "write");
+  if (limited) return limited;
+
+  const rows = await db
+    .select({ id: tasks.id, approvalStatus: tasks.approvalStatus })
+    .from(tasks)
+    .where(inArray(tasks.id, ids));
+  const prev = new Map(rows.map((r) => [r.id, r.approvalStatus]));
+  const changed = rows
+    .filter((r) => r.approvalStatus !== approvalStatus)
+    .map((r) => r.id);
+  if (changed.length === 0) return { ok: true, updated: 0, skipped: ids.length };
+
+  const now = new Date();
+  try {
+    await db.transaction(async (tx) => {
+      await tx
+        .update(tasks)
+        .set({ approvalStatus, updatedAt: now })
+        .where(inArray(tasks.id, changed));
+      await tx.insert(taskEvents).values(
+        changed.map((id) => ({
+          taskId: id,
+          actorId: me.id,
+          eventType: "field_updated" as const,
+          fromValue: { field: "approvalStatus", value: prev.get(id) ?? null },
+          toValue: { field: "approvalStatus", value: approvalStatus },
+        })),
+      );
+    });
+  } catch (err) {
+    return { ok: false, error: `Could not update: ${(err as Error).message}` };
+  }
+
+  // Same rule as the single-task path: approving archives immediately. Run
+  // outside the transaction so a slow follow-up never holds the row locks.
+  if (approvalStatus === "approved") {
+    for (const id of changed) await archiveIfApproved(id);
+  }
+
   revalidateTaskRoutes();
   return { ok: true, updated: changed.length, skipped: ids.length - changed.length };
 }

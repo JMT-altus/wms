@@ -41,6 +41,24 @@ export const USER_TASK_STATUSES = [
   "done",
 ] as const satisfies readonly TaskStatus[];
 
+/** What the DOER's own status picker offers — the worker's progress report,
+ *  nothing more.
+ *
+ *  `on_hold` is deliberately absent: putting a task on hold is a MANAGER's
+ *  ruling, not a worker's progress report, so it lives in the bulk bar's
+ *  "Manager Status" menu as "Mark Hold On". The approval verdicts were never
+ *  doer statuses at all — they are `approval_status`, a separate column.
+ *  USER_TASK_STATUSES (which keeps on_hold) still drives kanban columns,
+ *  filter dropdowns and the importer. */
+export const DOER_TASK_STATUSES = [
+  "dont_know",
+  "not_started",
+  "initiated",
+  "follow_up",
+  "need_info",
+  "done",
+] as const satisfies readonly TaskStatus[];
+
 export const PENDING_STATUSES = [
   "dont_know",
   "not_started",
@@ -573,7 +591,7 @@ export const LOOKUP_LISTS = [
   {
     key: "customer_type",
     label: "Client KYC — Customer Types",
-    hint: "End User, Traders, OEMs and so on. Multi-select on the Create New Client KYC form.",
+    hint: "The sales channel — OEM (L), OEM (NL), User, Dealer, Sub dealer, Panel Builder/Electrician. Multi-select on the Create New Client KYC form and the Client Master bulk sheet.",
   },
   {
     key: "industry_type",

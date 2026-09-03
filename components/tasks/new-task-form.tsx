@@ -334,6 +334,8 @@ export function NewTaskForm({ employees, clients, subjects, projectNodes = [], d
       className="flex flex-col gap-6"
       noValidate
     >
+      {/* ── 01 BASICS ─────────────────────────────────────────────────── */}
+      <FormSection number="01" title="Basics" hint="Who this is for">
       {/* Title — editable task title (complete mode only), seeded from the
           quick-dump text. Separate from the Client Name below. */}
       {isComplete && (
@@ -382,6 +384,10 @@ export function NewTaskForm({ employees, clients, subjects, projectNodes = [], d
         </Field>
       </div>
 
+      </FormSection>
+
+      {/* ── 02 ASSIGNMENT ─────────────────────────────────────────────── */}
+      <FormSection number="02" title="Assignment" hint="Owners, priority & deadline">
       {/* Metadata — two balanced rows (Initiator · Doer / Priority · Due
           Date). The old 4-across row squeezed each field to ~170px: the
           multi-doer chips grew an inner scrollbox and the date input
@@ -447,6 +453,10 @@ export function NewTaskForm({ employees, clients, subjects, projectNodes = [], d
         </Field>
       </div>
 
+      </FormSection>
+
+      {/* ── 03 DETAILS ────────────────────────────────────────────────── */}
+      <FormSection number="03" title="Details" hint="The work itself">
       {/* Task Description · Initiator Notes — full-width, stacked. */}
       <Field id="nt-desc" label="Task Description">
         <div className="relative">
@@ -480,6 +490,14 @@ export function NewTaskForm({ employees, clients, subjects, projectNodes = [], d
         </div>
       </Field>
 
+      </FormSection>
+
+      {/* ── 04 ORGANIZE ───────────────────────────────────────────────── */}
+      <FormSection
+        number="04"
+        title="Organize"
+        hint="Optional — tags, project & schedule"
+      >
       {/* Tags — free-form chips. Type a tag, hit Enter or comma to commit.
           Stored as text[] on the task; each chip is searchable later. */}
       <Field id="nt-tags" label={`Tags${tagsCount > 0 ? ` · ${tagsCount}` : ""}`}>
@@ -533,21 +551,30 @@ export function NewTaskForm({ employees, clients, subjects, projectNodes = [], d
           only; not synced to any actual calendar API. */}
       <ScheduleSection value={schedule} onChange={setSchedule} />
 
-      {/* Media + Links — side by side on desktop */}
-      <div className="grid grid-cols-2 gap-5 max-md:grid-cols-1">
-        <MediaSection
-          media={media}
-          onAdd={addFiles}
-          onRemove={removeMedia}
-        />
-        <LinksSection
-          links={links}
-          input={linkInput}
-          onInputChange={setLinkInput}
-          onAdd={addLink}
-          onRemove={removeLink}
-        />
-      </div>
+      </FormSection>
+
+      {/* ── 05 ATTACHMENTS ────────────────────────────────────────────── */}
+      <FormSection
+        number="05"
+        title="Attachments"
+        hint="Optional — media & reference links"
+      >
+        {/* Media + Links — side by side on desktop */}
+        <div className="grid grid-cols-2 gap-5 max-md:grid-cols-1">
+          <MediaSection
+            media={media}
+            onAdd={addFiles}
+            onRemove={removeMedia}
+          />
+          <LinksSection
+            links={links}
+            input={linkInput}
+            onInputChange={setLinkInput}
+            onAdd={addLink}
+            onRemove={removeLink}
+          />
+        </div>
+      </FormSection>
 
       {(error || Object.values(errors)[0]?.message) && (
         <p
@@ -596,6 +623,51 @@ export function NewTaskForm({ employees, clients, subjects, projectNodes = [], d
         </button>
       </div>
     </form>
+  );
+}
+
+/**
+ * One numbered band of the create form.
+ *
+ * The form is five sections, and they are NUMBERED on purpose: a task is a
+ * commitment between two people, and the order the questions are asked in is
+ * the order the decisions get made — who it is for, who owns it and by when,
+ * what the work actually is, then the two optional groups. The number, the
+ * uppercase micro-label and the one-line hint together tell someone landing
+ * mid-form where they are without reading a single field label.
+ *
+ * Purely presentational: it wraps existing fields and owns no state, so the
+ * validated fields keep going through the form library exactly as before.
+ */
+function FormSection({
+  number,
+  title,
+  hint,
+  children,
+}: {
+  number: string;
+  title: string;
+  hint: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="flex flex-col gap-4">
+      <div className="flex items-baseline gap-2.5 border-b border-hairline pb-2">
+        <span
+          className="tabular-nums text-[12px] font-black leading-none text-altus-red"
+          aria-hidden
+        >
+          {number}
+        </span>
+        <h3 className="text-[12px] font-black uppercase leading-none tracking-[0.14em] text-ink-strong">
+          {title}
+        </h3>
+        <span className="ml-auto truncate text-[12px] font-medium leading-none text-ink-subtle">
+          {hint}
+        </span>
+      </div>
+      <div className="flex flex-col gap-5">{children}</div>
+    </section>
   );
 }
 

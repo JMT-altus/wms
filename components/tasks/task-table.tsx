@@ -16,7 +16,12 @@ import {
   type Updater,
   type Table as TableInstance,
 } from "@tanstack/react-table";
-import { format, differenceInCalendarDays } from "date-fns";
+import { format } from "date-fns";
+import {
+  pickEffectiveDue,
+  daysUntilEffectiveDue,
+  type DueDateFields,
+} from "@/lib/tasks/effective-due";
 
 // Classic numbered pagination: a rows-per-page selector (default 25) with
 // First « · Prev · 1 2 3 … N · Next · Last » controls.
@@ -59,11 +64,13 @@ const URGENCY_TERMINAL = new Set<TaskStatus>([
   "transferred",
 ]);
 type Urgency = { level: "overdue" | "today" | "soon" | "none"; label: string };
-function taskUrgency(dueAt: Date | null, status: TaskStatus): Urgency {
-  if (!dueAt || URGENCY_TERMINAL.has(status)) return { level: "none", label: "" };
-  const d = dueAt instanceof Date ? dueAt : new Date(dueAt as unknown as string);
-  if (Number.isNaN(d.getTime())) return { level: "none", label: "" };
-  const days = differenceInCalendarDays(d, new Date()); // <0 past, 0 today, >0 future
+// Takes the whole row, not a bare date: urgency is always measured against the
+// EFFECTIVE due date (COALESCE(revised, due)). Passing `dueAt` alone is the bug
+// where a rescheduled task keeps reading as overdue forever.
+function taskUrgency(task: DueDateFields, status: TaskStatus): Urgency {
+  if (URGENCY_TERMINAL.has(status)) return { level: "none", label: "" };
+  const days = daysUntilEffectiveDue(task); // <0 past, 0 today, >0 future
+  if (days == null) return { level: "none", label: "" };
   if (days < 0) return { level: "overdue", label: `${Math.abs(days)}d overdue` };
   if (days === 0) return { level: "today", label: "Due today" };
   if (days <= 2) return { level: "soon", label: `in ${days}d` };
@@ -172,15 +179,29 @@ const COLUMN_LABELS: Record<string, string> = {
   taskNo: "ID No.",
   client: "Client",
   doerName: "Doer",
+  initiatorName: "Initiator",
   priority: "Priority",
-  status: "Status",
+  status: "Doer Status",
   subject: "Subject",
   createdAt: "Created",
   dueAt: "Due",
   ageDays: "Age",
 };
 
-const COLUMN_VIS_STORAGE_KEY = "altus.tasks.columnVisibility.v1";
+// VERSIONED on purpose. The saved blob is a full snapshot, so an existing
+// "everything visible" value from a previous release would overwrite any new
+// default forever. Bump the suffix whenever DEFAULT_COLUMN_VISIBILITY changes
+// — v2 introduced the hidden-by-default ID No. / Created columns and the
+// Initiator column.
+const COLUMN_VIS_STORAGE_KEY = "altus.tasks.columnVisibility.v2";
+
+// Off by default, still in the Columns menu — a default, not a removal.
+//   taskNo    — an internal handle nobody quotes in conversation.
+//   createdAt — the one date on the row that never drives a decision.
+const DEFAULT_COLUMN_VISIBILITY: VisibilityState = {
+  taskNo: false,
+  createdAt: false,
+};
 
 type StatusLabels = Record<TaskStatus, string>;
 type StatusTones = Record<TaskStatus, StatusColorToken>;
@@ -306,6 +327,31 @@ function buildColumns(
       ),
     },
     {
+      accessorKey: "initiatorName",
+      header: "Initiator",
+      // Who raised the task. Read-only — the initiator is set at creation and
+      // only changes via an explicit transfer, never by an inline table edit.
+      sortingFn: (a, b) =>
+        (a.original.initiatorName ?? "￿").localeCompare(
+          b.original.initiatorName ?? "￿",
+          undefined,
+          { sensitivity: "base" },
+        ),
+      cell: ({ row }) => {
+        const name = row.original.initiatorName;
+        return name ? (
+          <span className="inline-flex items-center gap-2.5">
+            <EmployeeAvatar name={name} size="sm" />
+            <span className="text-ink-soft font-semibold" style={{ fontSize: 15 }}>
+              {name}
+            </span>
+          </span>
+        ) : (
+          <span className="text-ink-subtle">—</span>
+        );
+      },
+    },
+    {
       accessorKey: "priority",
       header: "Priority",
       meta: { mobileHide: true },
@@ -321,7 +367,7 @@ function buildColumns(
     },
     {
       accessorKey: "status",
-      header: "Status",
+      header: "Doer Status",
       sortingFn: (a, b) =>
         (STATUS_ORDER[a.original.status] ?? 99) - (STATUS_ORDER[b.original.status] ?? 99),
       cell: (info) => {
@@ -336,7 +382,11 @@ function buildColumns(
               tones={statusTones}
               isAdmin={me.isAdmin}
             />
-            {isDoneLate({ status: row.status, completedAt: row.completedAt, dueAt: row.dueAt }) && (
+            {isDoneLate({
+              status: row.status,
+              completedAt: row.completedAt,
+              dueAt: pickEffectiveDue(row),
+            }) && (
               <LateBadge />
             )}
           </span>
@@ -356,10 +406,19 @@ function buildColumns(
     {
       accessorKey: "dueAt",
       header: "Due",
+      // The accessor is `dueAt` (the original commitment) but the column shows
+      // and must therefore SORT BY the effective date — otherwise a
+      // rescheduled task sorts into a slot that doesn't match what it renders.
+      sortingFn: (a, b) => {
+        const x = pickEffectiveDue(a.original)?.getTime() ?? Number.POSITIVE_INFINITY;
+        const y = pickEffectiveDue(b.original)?.getTime() ?? Number.POSITIVE_INFINITY;
+        return x - y;
+      },
       cell: ({ row }) => (
         <InlineDueCell
           taskId={row.original.id}
           dueAt={row.original.dueAt}
+          revisedTargetDate={row.original.revisedTargetDate}
           status={row.original.status}
           editable={me.isAdmin}
         />
@@ -429,15 +488,23 @@ export function TaskTable({
     [employees, me, resolvedLabels, resolvedTones],
   );
 
-  // #11 — per-user column visibility, persisted in localStorage. Start
-  // empty (all visible) on both server + first client render to avoid a
-  // hydration mismatch, then hydrate the saved choice after mount.
-  const [columnVisibility, setColumnVisibility] =
-    React.useState<VisibilityState>({});
+  // #11 — per-user column visibility, persisted in localStorage. Both the
+  // server render and the first client render use the DEFAULTS (not storage)
+  // so hydration matches; the saved choice is applied straight after mount.
+  const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>(
+    DEFAULT_COLUMN_VISIBILITY,
+  );
   React.useEffect(() => {
     try {
       const raw = localStorage.getItem(COLUMN_VIS_STORAGE_KEY);
-      if (raw) setColumnVisibility(JSON.parse(raw) as VisibilityState);
+      if (raw) {
+        // Defaults first, saved choice on top: a column added after the user
+        // last touched this menu inherits its default instead of disappearing.
+        setColumnVisibility({
+          ...DEFAULT_COLUMN_VISIBILITY,
+          ...(JSON.parse(raw) as VisibilityState),
+        });
+      }
     } catch {
       /* ignore malformed storage */
     }
@@ -773,7 +840,7 @@ export function TaskTable({
           const visibleCols = table.getVisibleLeafColumns().length;
           // Left accent stripe for at-risk rows so overdue/today work is
           // impossible to miss without reading the date column.
-          const rowUrgency = taskUrgency(row.original.dueAt, row.original.status);
+          const rowUrgency = taskUrgency(row.original, row.original.status);
           const rowAccent =
             rowUrgency.level === "overdue"
               ? "inset 3px 0 0 0 var(--color-red)"
@@ -1372,7 +1439,11 @@ function TaskCard({
           </div>
         </div>
         <div className="flex items-center gap-1 shrink-0">
-          {isDoneLate({ status: row.status, completedAt: row.completedAt, dueAt: row.dueAt }) && (
+          {isDoneLate({
+              status: row.status,
+              completedAt: row.completedAt,
+              dueAt: pickEffectiveDue(row),
+            }) && (
             <LateBadge />
           )}
           <InlineStatusCell
@@ -1406,6 +1477,11 @@ function TaskCard({
         ) : (
           <span className="text-ink-subtle">Unassigned</span>
         )}
+        {row.initiatorName && (
+          <span className="text-ink-muted" style={{ fontSize: 13 }}>
+            · by {row.initiatorName}
+          </span>
+        )}
       </div>
 
       <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-ink-muted" style={{ fontSize: 13 }}>
@@ -1414,7 +1490,7 @@ function TaskCard({
         {p === "imp_urgent" ? <CriticalBadge /> : <span>{PRIORITY_LABELS[p]}</span>}
         <span aria-hidden>·</span>
         {(() => {
-          const u = taskUrgency(row.dueAt, row.status);
+          const u = taskUrgency(row, row.status);
           const color = URGENCY_COLOR[u.level];
           const strong = u.level === "overdue" || u.level === "today";
           return (
@@ -1422,7 +1498,7 @@ function TaskCard({
               className="tabular-nums"
               style={{ color, fontWeight: strong ? 700 : undefined }}
             >
-              Due {safeFormat(row.dueAt, "MMM d")}
+              Due {safeFormat(pickEffectiveDue(row), "MMM d")}
               {u.label ? ` · ${u.label}` : ""}
             </span>
           );

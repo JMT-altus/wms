@@ -8,7 +8,7 @@ import { NewTaskTrigger } from "@/components/header/new-task-trigger";
 import { AdminPill } from "@/components/header/admin-pill";
 import { GlobalSearch } from "@/components/header/global-search";
 import { getCurrentEmployee } from "@/lib/auth/current";
-import { moduleIdForPath } from "@/lib/nav-modules";
+import { MODULES, moduleIdForPath } from "@/lib/nav-modules";
 
 /**
  * Deep-navy glassy application header — single row, `--app-header-h` tall
@@ -51,6 +51,25 @@ export async function DashboardHeader({
     pathname?.startsWith("/master-setup") === true;
   const showNewTask = !isAdminArea && (moduleId === null || moduleId === "wms");
 
+  // The hairline under the bar carries the ACTIVE MODULE's accent, so the
+  // header, the rail's right edge and the module chip in the rail all read as
+  // one colour: violet on Targets, teal on Employees, blue on WMS. Routes
+  // that belong to no module (the hub, admin, master setup) keep the original
+  // blue → teal, which is the app's own accent rather than any module's.
+  //
+  // Two areas own a rail accent without owning a module: Forms (rose, from
+  // its hub tile) sits inside WMS's routes, and Master Setup (amber) sits
+  // outside every module. Both render this header directly under their rail,
+  // so without the override the corner where the two lines meet would change
+  // colour mid-turn.
+  const mod = moduleId ? (MODULES.find((m) => m.id === moduleId) ?? null) : null;
+  const areaAccent =
+    pathname?.startsWith("/forms") === true ? { from: "#FB7185", to: "#BE123C" }
+    : pathname?.startsWith("/master-setup") === true ? { from: "#F59E0B", to: "#B45309" }
+    : null;
+  const lineFrom = areaAccent?.from ?? mod?.accent.from ?? "#0A6CFF";
+  const lineTo = areaAccent?.to ?? mod?.accent.to ?? "#17B6A0";
+
   return (
     <header className="sticky top-0 z-50 header-navy">
       <div
@@ -63,14 +82,15 @@ export async function DashboardHeader({
           borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
         }}
       >
-        {/* Blue → teal accent hairline along the very bottom edge — draws the
-            logo's teal into the navy bar so the palette reads as intentional. */}
+        {/* Accent hairline along the very bottom edge, in the current
+            module's colours — see `lineFrom` / `lineTo` above. The glint
+            travelling along it comes from .header-shine-line (globals.css),
+            in step with the line under the rail's mark. */}
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-x-0 bottom-0 h-[2px]"
+          className="header-shine-line pointer-events-none absolute inset-x-0 bottom-0 h-[2px]"
           style={{
-            background:
-              "linear-gradient(90deg, transparent 0%, #0A6CFF 30%, #17B6A0 70%, transparent 100%)",
+            background: `linear-gradient(90deg, transparent 0%, ${lineFrom} 30%, ${lineTo} 70%, transparent 100%)`,
             opacity: 0.85,
           }}
         />

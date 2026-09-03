@@ -28,17 +28,26 @@ export function fireToast(opts: {
   actionLabel?: string;
   action?: () => void | Promise<void>;
   type?: "success" | "error" | "info";
+  /** Milliseconds the toast stays up. Omit for sonner's default. Raise it when
+   *  the toast carries an action the user has to notice and reach — an Undo
+   *  that vanishes in 4s is an Undo nobody gets to use. */
+  duration?: number;
 }): void {
   const kind = opts.type ?? (ERROR_RE.test(opts.message) ? "error" : "success");
   const options =
-    opts.action !== undefined
+    opts.action !== undefined || opts.duration !== undefined
       ? {
-          action: {
-            label: opts.actionLabel ?? "Undo",
-            onClick: () => {
-              void opts.action?.();
-            },
-          },
+          ...(opts.duration !== undefined ? { duration: opts.duration } : {}),
+          ...(opts.action !== undefined
+            ? {
+                action: {
+                  label: opts.actionLabel ?? "Undo",
+                  onClick: () => {
+                    void opts.action?.();
+                  },
+                },
+              }
+            : {}),
         }
       : undefined;
   if (kind === "error") sonnerToast.error(opts.message, options);
