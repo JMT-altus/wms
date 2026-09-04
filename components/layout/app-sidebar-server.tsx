@@ -1,6 +1,7 @@
 import { getNavCounts } from "@/lib/queries/nav-counts";
 import { getCurrentEmployee } from "@/lib/auth/current";
 import { AppSidebar } from "./app-sidebar";
+import { UserMenuServer } from "@/components/header/user-menu-server";
 
 /**
  * Feeds the left rail. Same two reads the pill row used — the task total comes
@@ -16,6 +17,7 @@ export async function AppSidebarServer() {
       activeTasks={activeTasks}
       archivedTasks={archivedTasks}
       isAdmin={Boolean(me?.isAdmin)}
+      userMenu={<UserMenuServer variant="rail" />}
     />
   );
 }

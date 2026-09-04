@@ -15,6 +15,7 @@ import {
   Ban,
   MessageSquare,
   AlarmClock,
+  BellRing,
   ArrowRight,
   Bell,
   Target,
@@ -55,6 +56,9 @@ const KIND_META: Record<NotificationKind, { icon: LucideIcon; tone: string }> = 
   attendance_half_day: { icon: AlarmClock, tone: "amber" },
   attendance_device: { icon: Smartphone, tone: "blue" },
   attendance_late_deduction: { icon: AlarmClock, tone: "rose" },
+  // 0102 — a chaser from the initiator. Amber like the other "your attention
+  // is wanted" kinds, with its own icon so it doesn't read as a status change.
+  nudge: { icon: BellRing, tone: "amber" },
 };
 
 /**

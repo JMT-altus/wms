@@ -15,6 +15,7 @@ import {
   MasterProductSchema,
 } from "@/lib/validators/master-data";
 import { splitUsableRows, type BulkTarget, type MappedRow } from "@/lib/masters/bulk-parse";
+import { setCustomerDormancy, type DormancyResult } from "@/lib/masters/dormancy-store";
 import {
   computeSalesLineAmounts,
   parseCustomerWorkbook,
@@ -199,6 +200,37 @@ export async function saveMasterCustomer(id: string | null, input: unknown): Pro
   } finally {
     revalidateMasters();
   }
+}
+
+/* ── Dormant ─────────────────────────────────────────────────────────────── */
+
+/**
+ * Park customers as dormant, or bring them back.
+ *
+ * The same write the Client KYC module's `setClientsDormant` makes, through
+ * the same helper — one column, one UPDATE, two guards. This screen is gated
+ * on the Masters module grant; Client KYC is admin-only. That is the whole
+ * reason there are two actions rather than one shared export: the permission
+ * differs, the effect does not.
+ *
+ * See lib/masters/dormancy.ts, and the schema comment on
+ * `customer_masters.dormant_at` for why dormancy is neither `is_active` nor a
+ * `kyc_stage`.
+ */
+export async function setCustomersDormant(ids: string[]): Promise<DormancyResult> {
+  const g = await guard();
+  if ("error" in g) return g.error;
+  const res = await setCustomerDormancy(ids, true);
+  if (res.ok) revalidateMasters();
+  return res;
+}
+
+export async function reactivateCustomers(ids: string[]): Promise<DormancyResult> {
+  const g = await guard();
+  if ("error" in g) return g.error;
+  const res = await setCustomerDormancy(ids, false);
+  if (res.ok) revalidateMasters();
+  return res;
 }
 
 export async function deleteMasterCustomer(id: string): Promise<Result> {

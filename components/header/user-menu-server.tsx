@@ -6,11 +6,14 @@ import { UserMenu } from "./user-menu";
 export async function UserMenuServer({
   tone = "dark",
   showUnreadDot = true,
+  variant = "avatar",
 }: {
   /** "light" on the hub, whose header sits on a pale gradient. */
   tone?: "dark" | "light";
   /** False on the hub, which shows a dedicated bell with the count. */
   showUnreadDot?: boolean;
+  /** "rail" renders the named row at the foot of the left rail. */
+  variant?: "avatar" | "rail";
 } = {}) {
   const me = await getCurrentEmployee();
   if (!me) return null;
@@ -37,6 +40,7 @@ export async function UserMenuServer({
       canAccessWms={canAccessWms}
       tone={tone}
       showUnreadDot={showUnreadDot}
+      variant={variant}
     />
   );
 }

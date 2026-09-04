@@ -25,6 +25,7 @@ import {
   EMPLOYEE_ROLES,
   TASK_PRIORITIES,
   APPROVAL_STATUSES,
+  APPROVAL_LEVELS,
 } from "./enums";
 import type {
   AudienceKind,
@@ -38,6 +39,7 @@ import type {
   PurchasePattern,
   SelfLearningKind,
   TallyMapsTo,
+  TimeEventKind,
   TrainingMaterialKind,
   Visibility,
   VolumeClass,
@@ -48,6 +50,9 @@ export const taskStatusEnum = pgEnum("task_status", TASK_STATUSES);
 export const employeeRoleEnum = pgEnum("employee_role", EMPLOYEE_ROLES);
 export const taskPriorityEnum = pgEnum("task_priority", TASK_PRIORITIES);
 export const approvalStatusEnum = pgEnum("approval_status", APPROVAL_STATUSES);
+// 0102 — how far a verdict has travelled through two-stage sign-off. A third
+// axis, independent of both `status` and `approval_status`. See db/enums.ts.
+export const approvalLevelEnum = pgEnum("approval_level", APPROVAL_LEVELS);
 
 // Salary module (migration 0062) — admin-managed rosters referenced by the
 // employees FKs below. Declared first so the FK callbacks resolve cleanly.
@@ -699,6 +704,37 @@ export const tasks = pgTable(
     projectNodeId: uuid("project_node_id").references(() => projectNodes.id, {
       onDelete: "set null",
     }),
+    // ── 0102 — two-stage sign-off ────────────────────────────────────────
+    // `approvalStatus` above is the VERDICT; this is how far that verdict has
+    // travelled. The legacy approvedBy/At/Note trio is untouched and still
+    // written on every decision — it records who pressed the button
+    // regardless of stage. Only a founder (isSuperAdmin) can reach 'admin'.
+    approvalLevel: approvalLevelEnum("approval_level").notNull().default("none"),
+    managerApprovedById: uuid("manager_approved_by_id").references(
+      () => employees.id,
+      { onDelete: "set null" },
+    ),
+    managerApprovedAt: timestamp("manager_approved_at", { withTimezone: true }),
+    managerApprovalNote: text("manager_approval_note"),
+    adminApprovedById: uuid("admin_approved_by_id").references(
+      () => employees.id,
+      { onDelete: "set null" },
+    ),
+    adminApprovedAt: timestamp("admin_approved_at", { withTimezone: true }),
+    adminApprovalNote: text("admin_approval_note"),
+    // 0102 — the planned half of the Estimated-vs-Actual panel. Actual is
+    // summed from taskWorkSessions via taskTimeRollup.
+    estimatedMinutes: integer("estimated_minutes"),
+    // 0102 — Recycle Bin. Archive stays the normal end of life; abandoning is
+    // the soft alternative to DELETE, so history survives a mistake.
+    abandonedAt: timestamp("abandoned_at", { withTimezone: true }),
+    abandonedById: uuid("abandoned_by_id").references(() => employees.id, {
+      onDelete: "set null",
+    }),
+    // 0102 — set when a task was spawned out of a weekly goal. Deliberately
+    // NOT a FK: goals get hard-deleted on re-planning and taking the task with
+    // them would be wrong. A soft pointer the reader resolves, or doesn't.
+    originGoalId: uuid("origin_goal_id"),
     // Search infra (migration 0061). DB-generated STORED columns — never
     // written by app code. `searchText` backs the trigram GIN (indexed ILIKE +
     // fuzzy). Declared here only so drizzle-kit generate stays consistent with
@@ -727,6 +763,21 @@ export const tasks = pgTable(
     index("tasks_approved_by_idx").on(t.approvedById),
     index("tasks_transferred_from_idx").on(t.transferredFromId),
     index("tasks_project_node_idx").on(t.projectNodeId),
+    // 0102 — "this person's open work": the single most-run query in the
+    // module (My Day, every doer filter, every nav count).
+    index("tasks_doer_status_idx").on(t.doerId, t.status),
+    // 0102 — partial: "still open" is most of the table and never what a
+    // completion query wants.
+    index("tasks_completed_at_idx")
+      .on(t.completedAt)
+      .where(sql`${t.completedAt} IS NOT NULL`),
+    index("tasks_approval_level_idx").on(t.approvalLevel),
+    index("tasks_abandoned_at_idx")
+      .on(t.abandonedAt)
+      .where(sql`${t.abandonedAt} IS NOT NULL`),
+    index("tasks_origin_goal_idx")
+      .on(t.originGoalId)
+      .where(sql`${t.originGoalId} IS NOT NULL`),
     // Search infra (migration 0061) — trigram GIN backing indexed ILIKE +
     // fuzzy over the generated `search_text` column.
     index("tasks_search_trgm_idx").using("gin", t.searchText.asc().op("gin_trgm_ops")),
@@ -759,6 +810,144 @@ export const taskEvents = pgTable(
 );
 
 /**
+ * One sub-step inside a task (migration 0102).
+ *
+ * Deliberately NOT a sub-task: no doer, no due date, no status lifecycle.
+ * The moment a step needs its own owner it IS a task and belongs in `tasks` —
+ * a checklist that grows those fields is just a second, worse task table.
+ */
+export const taskChecklistItems = pgTable(
+  "task_checklist_items",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    taskId: uuid("task_id")
+      .notNull()
+      .references(() => tasks.id, { onDelete: "cascade" }),
+    content: text("content").notNull(),
+    done: boolean("done").notNull().default(false),
+    // Both null while the item is open, and cleared again when it is
+    // un-ticked, so the pair never describes a stale person.
+    doneById: uuid("done_by_id").references(() => employees.id, {
+      onDelete: "set null",
+    }),
+    doneAt: timestamp("done_at", { withTimezone: true }),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdById: uuid("created_by_id").references(() => employees.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [index("task_checklist_task_order_idx").on(t.taskId, t.sortOrder)],
+);
+
+/**
+ * The RAW append-only log of timer presses (migration 0102).
+ *
+ * Never updated, never deleted — this is the evidence. `taskWorkSessions`
+ * below is the resolved view of the same facts; when the two disagree, this
+ * table wins and the sessions get rebuilt from it.
+ */
+export const taskTimeEvents = pgTable(
+  "task_time_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    taskId: uuid("task_id")
+      .notNull()
+      .references(() => tasks.id, { onDelete: "cascade" }),
+    employeeId: uuid("employee_id")
+      .notNull()
+      .references(() => employees.id, { onDelete: "cascade" }),
+    /** "start" | "stop" — see TIME_EVENT_KINDS in db/enums.ts. */
+    kind: text("kind").$type<TimeEventKind>().notNull(),
+    at: timestamp("at", { withTimezone: true }).notNull().defaultNow(),
+    /** "web" | "mobile" | "auto" — "auto" marks a reconciler-written stop. */
+    source: text("source"),
+    note: text("note"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("task_time_events_task_emp_at_idx").on(t.taskId, t.employeeId, t.at.desc()),
+    index("task_time_events_emp_at_idx").on(t.employeeId, t.at.desc()),
+  ],
+);
+
+/**
+ * A RESOLVED work span (migration 0102) — one start paired with its stop.
+ *
+ * Derived from `taskTimeEvents`, but stored, because re-pairing events into
+ * spans on every read is both slow and ambiguous when a stop went missing.
+ * `endedAt IS NULL` means the timer is still running; at most one such row can
+ * exist per (task, employee), enforced by the partial unique index.
+ */
+export const taskWorkSessions = pgTable(
+  "task_work_sessions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    taskId: uuid("task_id")
+      .notNull()
+      .references(() => tasks.id, { onDelete: "cascade" }),
+    employeeId: uuid("employee_id")
+      .notNull()
+      .references(() => employees.id, { onDelete: "cascade" }),
+    startedAt: timestamp("started_at", { withTimezone: true }).notNull(),
+    endedAt: timestamp("ended_at", { withTimezone: true }),
+    // Denormalised on close so the rollup is a plain SUM and reports never
+    // re-derive a duration per row.
+    durationSeconds: integer("duration_seconds"),
+    // True when no stop was ever pressed and the reconciler closed it for us.
+    // Surfaced in reports so an 11-hour span reads as a forgotten timer
+    // rather than a heroic day.
+    autoClosed: boolean("auto_closed").notNull().default(false),
+    source: text("source"),
+    note: text("note"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("task_work_sessions_open_uq")
+      .on(t.taskId, t.employeeId)
+      .where(sql`${t.endedAt} IS NULL`),
+    index("task_work_sessions_task_idx").on(t.taskId, t.startedAt.desc()),
+    index("task_work_sessions_emp_started_idx").on(t.employeeId, t.startedAt.desc()),
+    index("task_work_sessions_open_idx")
+      .on(t.employeeId)
+      .where(sql`${t.endedAt} IS NULL`),
+  ],
+);
+
+/**
+ * One cached time total PER TASK (migration 0102).
+ *
+ * Exists so a list of 500 rows does not aggregate raw events 500 times. It is
+ * a CACHE, not a source of truth: always rebuildable from `taskWorkSessions`,
+ * and lib/tasks/time.ts is the only writer.
+ */
+export const taskTimeRollup = pgTable("task_time_rollup", {
+  taskId: uuid("task_id")
+    .primaryKey()
+    .references(() => tasks.id, { onDelete: "cascade" }),
+  totalSeconds: integer("total_seconds").notNull().default(0),
+  sessionCount: integer("session_count").notNull().default(0),
+  firstStartedAt: timestamp("first_started_at", { withTimezone: true }),
+  lastEndedAt: timestamp("last_ended_at", { withTimezone: true }),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+
+/**
  * M2.3 — frozen contract for the `kind` column on notifications.
  *
  * Add a new kind here AND in lib/notifications/dispatch.ts.  The DB
@@ -788,6 +977,11 @@ export const NOTIFICATION_KINDS = [
   "weekly_goals_assigned",
   "weekly_goals_fill_reminder",
   "weekly_goals_incomplete",
+  // 0102 — a chaser sent by the initiator or an admin. The `kind` column is
+  // `text`, so this needs no migration. It has no row in the per-user
+  // notification matrix yet, which means it follows the same "no personal
+  // override" path as overdue_digest and always reaches the inbox.
+  "nudge",
 ] as const;
 
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
@@ -2657,6 +2851,26 @@ export const customerMasters = pgTable(
     draftSince: timestamp("draft_since", { withTimezone: true }),
     /** When the sweep (or a person) moved this to the Recycle Bin. */
     recycledAt: timestamp("recycled_at", { withTimezone: true }),
+    /**
+     * 0101 — when this customer was parked as dormant. NULL means it is not.
+     *
+     * A timestamp rather than a boolean, matching `recycledAt` above: "since
+     * when" is the question anyone asks about a dormant account, and a
+     * boolean cannot answer it.
+     *
+     * Deliberately NOT a third value of `isActive`. Inactive is a switch on a
+     * customer you still work with — it stays in the list and reads as
+     * Inactive. Dormant is a customer you have stopped trading with: it drops
+     * out of the Client Master, the Customer Master and the three
+     * directories, and only the Status filter's Dormant option brings it
+     * back. Two different facts, so two columns; collapsing them would make
+     * every existing Inactive customer vanish from the lists on deploy.
+     *
+     * Also not a fourth `kycStage`: dormancy says nothing about whether the
+     * KYC is finished, and a dormant client reactivated a year later is still
+     * `complete`.
+     */
+    dormantAt: timestamp("dormant_at", { withTimezone: true }),
     linkedCustomerId: uuid("linked_customer_id").references((): AnyPgColumn => customers.id, {
       onDelete: "set null",
     }),
@@ -2671,6 +2885,9 @@ export const customerMasters = pgTable(
     index("customer_masters_class_idx").on(t.volumeClass),
     index("customer_masters_focused_view_idx").on(t.focusedView),
     index("customer_masters_kyc_stage_idx").on(t.kycStage, t.draftSince),
+    // Every list on top of this table now asks "and not dormant", so the
+    // stage index alone stops covering the common read.
+    index("customer_masters_dormant_idx").on(t.dormantAt),
   ],
 );
 

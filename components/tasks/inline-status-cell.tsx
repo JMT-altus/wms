@@ -103,7 +103,7 @@ export function InlineStatusCell({
           // a hard width silently truncates a renamed status. A minimum keeps
           // the column reading as one uniform stack of chips while still
           // letting a long custom label grow the pill.
-          className="inline-flex min-w-[118px] items-center justify-center gap-1.5 rounded-pill px-3 py-1.5 text-[13px] font-bold tabular-nums transition-colors max-md:min-w-[104px]"
+          className="inline-flex min-w-[104px] items-center justify-center gap-1.5 rounded-pill px-2.5 py-1.5 text-[13px] font-bold tabular-nums transition-colors max-md:min-w-[96px]"
           style={{
             background: `color-mix(in srgb, var(--color-${tone}) 12%, transparent)`,
             color: `var(--color-${tone}-deep)`,

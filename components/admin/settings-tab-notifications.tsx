@@ -30,6 +30,7 @@ const KIND_LABEL: Record<NotificationKind, string> = {
   attendance_half_day:    "Attendance: half day",
   attendance_device:      "Attendance: new device",
   attendance_late_deduction: "Attendance: late deduction",
+  nudge:          "Nudged about a task",
 };
 
 const CHANNEL_LABEL: Record<NotificationChannel, string> = {

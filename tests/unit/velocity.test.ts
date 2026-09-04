@@ -42,6 +42,19 @@ function task(p: Partial<Task>): Task {
     recurrenceParentId: null,
     recurrenceOccurrenceDate: null,
     projectNodeId: null,
+    // 0102 additions — defaults mirror the DB so this factory keeps
+    // satisfying the full row type.
+    approvalLevel: "none",
+    managerApprovedById: null,
+    managerApprovedAt: null,
+    managerApprovalNote: null,
+    adminApprovedById: null,
+    adminApprovedAt: null,
+    adminApprovalNote: null,
+    estimatedMinutes: null,
+    abandonedAt: null,
+    abandonedById: null,
+    originGoalId: null,
     searchText: null,
     ...p,
   };

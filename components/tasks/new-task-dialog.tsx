@@ -128,16 +128,25 @@ export function NewTaskDialog({ employees, clients, subjects, projectNodes, depa
           <Tooltip.Root>
             <Tooltip.Trigger asChild>
               <Dialog.Trigger asChild>
+                {/* Icon only. The label and the ⌨ N badge moved into the
+                    tooltip: this button never changes what it does, so the
+                    word "New Task" was costing header width to restate an
+                    icon everyone already reads. `aria-label` keeps it named
+                    for screen readers.
+
+                    Carries the app's brand gradient (the same blue → teal as
+                    the header hairline and .audit-filter-chip-active), not the
+                    alert red it used to wear — creating a task is the header's
+                    primary action, not a warning. */}
                 <button
                   type="button"
-                  className="group relative inline-flex items-center gap-2 rounded-full text-white font-semibold outline-none focus-visible:ring-2 focus-visible:ring-white/60 py-2 pr-3.5 pl-3 max-md:gap-0 max-md:size-10 max-md:p-0 max-md:justify-center"
+                  aria-label="New task"
+                  className="group relative inline-flex size-8 items-center justify-center rounded-lg text-white outline-none focus-visible:ring-2 focus-visible:ring-white/60"
                   style={{
-                    fontSize: 14,
-                    letterSpacing: "0.005em",
                     background:
                       "linear-gradient(135deg, #0A6CFF 0%, #0A6CFF 42%, #17B6A0 100%)",
                     boxShadow:
-                      "0 4px 14px rgba(10, 108, 255, 0.45), inset 0 0 0 1px rgba(255,255,255,0.22)",
+                      "0 4px 12px rgba(10, 108, 255, 0.40), inset 0 0 0 1px rgba(255,255,255,0.20)",
                     transition:
                       "transform 180ms ease, box-shadow 220ms ease, filter 180ms ease",
                     animation:
@@ -145,38 +154,19 @@ export function NewTaskDialog({ employees, clients, subjects, projectNodes, depa
                     willChange: "transform",
                   }}
                   onMouseEnter={(e) => {
-                    e.currentTarget.style.transform = "scale(1.04)";
+                    e.currentTarget.style.transform = "scale(1.06)";
                     e.currentTarget.style.boxShadow =
-                      "0 10px 28px rgba(10, 108, 255, 0.6), 0 0 0 6px rgba(10, 108, 255, 0.14), inset 0 0 0 1px rgba(255,255,255,0.32)";
-                    e.currentTarget.style.filter = "brightness(1.05)";
+                      "0 8px 22px rgba(10, 108, 255, 0.55), 0 0 0 5px rgba(10, 108, 255, 0.14), inset 0 0 0 1px rgba(255,255,255,0.30)";
+                    e.currentTarget.style.filter = "brightness(1.06)";
                   }}
                   onMouseLeave={(e) => {
                     e.currentTarget.style.transform = "";
                     e.currentTarget.style.boxShadow =
-                      "0 4px 14px rgba(10, 108, 255, 0.45), inset 0 0 0 1px rgba(255,255,255,0.22)";
+                      "0 4px 12px rgba(10, 108, 255, 0.40), inset 0 0 0 1px rgba(255,255,255,0.20)";
                     e.currentTarget.style.filter = "";
                   }}
                 >
-                  <Plus size={15} strokeWidth={2.6} />
-                  <span className="max-md:sr-only">New Task</span>
-                  <kbd
-                    aria-hidden
-                    className="ml-1 inline-flex items-center justify-center font-mono max-md:hidden"
-                    style={{
-                      minWidth: 18,
-                      height: 18,
-                      padding: "0 5px",
-                      fontSize: 10.5,
-                      fontWeight: 700,
-                      borderRadius: 5,
-                      color: "rgba(255,255,255,0.95)",
-                      background: "rgba(255,255,255,0.18)",
-                      boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.25)",
-                      letterSpacing: 0,
-                    }}
-                  >
-                    N
-                  </kbd>
+                  <Plus size={17} strokeWidth={2.8} />
                 </button>
               </Dialog.Trigger>
             </Tooltip.Trigger>

@@ -14,9 +14,18 @@
  *                 Master already follow.
  *   Created       the moment the row is inserted.
  *
- * Contacts, addresses and bank accounts are absent for the reason the table
- * gives for not carrying them: each has a master of its own, and that is the
- * one place to add or correct them.
+ * Contacts, addresses and bank accounts ARE here, unlike the table, which
+ * shows none of them. The table can send you to the Contact Master to read
+ * one; an import has nowhere to send you, and a client whose contact, billing
+ * address and bank account have to be re-entered one screen at a time after
+ * the import is not bulk-imported in any useful sense.
+ *
+ * They arrive as three blocks — Contact Details, Address Details and Bank
+ * Details — carrying the columns the Client Contact Master, Client Address
+ * Book and Client Bank Master themselves show, Contact Type and Address Type
+ * included. One row is one client, so one row carries at most one of each;
+ * the masters stay the place to add a second contact or a second delivery
+ * address. A block whose cells are all blank creates no row at all.
  *
  * `standard: true` mirrors the table exactly as well — the columns it shows
  * before you touch the Columns menu. Everything else sits behind "Add column",
@@ -28,7 +37,15 @@
  * exist on screen with nowhere to land.
  */
 
-import { VOLUME_CLASSES } from "@/db/enums";
+import {
+  CLIENT_ADDRESS_TYPES,
+  CLIENT_ADDRESS_TYPE_LABELS,
+  CLIENT_CONTACT_TYPES,
+  CLIENT_CONTACT_TYPE_LABELS,
+  VOLUME_CLASSES,
+  type ClientAddressType,
+  type ClientContactType,
+} from "@/db/enums";
 
 /** Which option list feeds a `select` / `multi` cell. */
 export type OptionKey =
@@ -44,6 +61,10 @@ export type OptionKey =
   | "freightCharges"
   | "transporters"
   | "quantityDeviations"
+  | "designations"
+  | "departments"
+  | "contactTypes"
+  | "addressTypes"
   | "grades"
   | "yesNo"
   | "activeStatus";
@@ -81,6 +102,8 @@ export interface ClientBulkColumn {
    * rows. An unmatched name there is silent data loss, so it is flagged.
    */
   freeText?: boolean;
+  /** A shape the value has to have on top of its kind. */
+  format?: "email";
   maxLength?: number;
   required?: boolean;
   /** Pixel width of the column in the sheet. */
@@ -97,6 +120,44 @@ export const YES_NO = ["Yes", "No"] as const;
 export const ACTIVE_STATUS = ["Active", "Inactive"] as const;
 
 /**
+ * The Contact Type and Address Type cells offer the labels, not the stored
+ * values — "Purchase Contact", not `purchase`. The masters show the labels
+ * and so does the KYC form, and a sheet that asked for the database's word
+ * for it would be the only screen in the app that does.
+ */
+export const CONTACT_TYPE_OPTIONS: readonly string[] = CLIENT_CONTACT_TYPES.map(
+  (t) => CLIENT_CONTACT_TYPE_LABELS[t],
+);
+export const ADDRESS_TYPE_OPTIONS: readonly string[] = CLIENT_ADDRESS_TYPES.map(
+  (t) => CLIENT_ADDRESS_TYPE_LABELS[t],
+);
+
+/**
+ * A typed Contact Type back to the value the column stores.
+ *
+ * Falls back to `other`, which is both the column's own default and the
+ * honest reading of a blank cell: a contact whose group nobody recorded.
+ */
+export function resolveContactType(value: string): ClientContactType {
+  const match = matchOption(value, CONTACT_TYPE_OPTIONS);
+  const index = match ? CONTACT_TYPE_OPTIONS.indexOf(match) : -1;
+  return index >= 0 ? CLIENT_CONTACT_TYPES[index]! : "other";
+}
+
+/**
+ * A typed Address Type back to the value the column stores.
+ *
+ * Falls back to `billing`, because `address_type` is NOT NULL and billing is
+ * what an address with nothing else said about it means — it is the client's
+ * own location, the one `customer_masters.city` is read from.
+ */
+export function resolveAddressType(value: string): ClientAddressType {
+  const match = matchOption(value, ADDRESS_TYPE_OPTIONS);
+  const index = match ? ADDRESS_TYPE_OPTIONS.indexOf(match) : -1;
+  return index >= 0 ? CLIENT_ADDRESS_TYPES[index]! : "billing";
+}
+
+/**
  * The catalogue, in the Client Master table's own order.
  *
  * That order is itself the KYC form's, section by section, so reading across
@@ -104,7 +165,7 @@ export const ACTIVE_STATUS = ["Active", "Inactive"] as const;
  * from the picker lands where the table would put it rather than on the far
  * right where you would have to scroll to reach it.
  */
-export const CLIENT_BULK_COLUMNS: readonly ClientBulkColumn[] = [
+const CLIENT_OWN_COLUMNS: readonly ClientBulkColumn[] = [
   /* ── Record identity ──────────────────────────────────────────────────── */
   {
     key: "name",
@@ -427,7 +488,323 @@ export const CLIENT_BULK_COLUMNS: readonly ClientBulkColumn[] = [
     width: 150,
   },
 
-  /* ── The record's own, not the form's ─────────────────────────────────── */
+];
+
+/* ── The three directories ──────────────────────────────────────────────── */
+
+/**
+ * A group of columns that fills one child row rather than the client row.
+ *
+ * The sheet is one row per client and the three directories are one-to-many,
+ * so a block is the compromise that keeps both true: each block is a fixed
+ * slot on the row, and filling it creates exactly one `customer_contacts` /
+ * `customer_addresses` / `customer_bank_accounts` row. Leave every cell in a
+ * block blank and nothing is created — importing a bare list of company names
+ * must not leave an empty contact beside each one.
+ *
+ * Which contact and which address is a column, not three copies of the block:
+ * Contact Type and Address Type are exactly the columns the Client Contact
+ * Master and the Client Address Book show, so the sheet reads the way those
+ * screens read. A client's second contact or second delivery address is added
+ * in that master afterwards — one sheet row is one client.
+ *
+ * `fields` is the whole contract between the sheet and the import: the KYC
+ * payload field on the left, the column key that fills it on the right. The
+ * import walks this map, so a column can no more exist here with nowhere to
+ * land than one in the catalogue above.
+ */
+export interface ChildBlock {
+  /** The Add-column picker's heading for this block. */
+  group: string;
+  /** KYC payload field → sheet column key. */
+  fields: Readonly<Record<string, string>>;
+}
+
+/* Contact Details — the Client Contact Master's own columns. */
+
+const CONTACT_GROUP = "Contact Details";
+
+const CONTACT_COLUMNS: readonly ClientBulkColumn[] = [
+  {
+    key: "contactType",
+    label: "Contact Type",
+    kind: "select",
+    group: CONTACT_GROUP,
+    optionKey: "contactTypes",
+    width: 190,
+    aliases: ["typeofcontact", "contactgroup"],
+    hint: "Blank imports as Other Contact",
+  },
+  {
+    key: "contactFirstName",
+    label: "First Name",
+    kind: "text",
+    group: CONTACT_GROUP,
+    maxLength: 80,
+    width: 175,
+    aliases: ["contactfirstname", "contactperson", "contactname"],
+  },
+  {
+    key: "contactLastName",
+    label: "Last Name",
+    kind: "text",
+    group: CONTACT_GROUP,
+    maxLength: 80,
+    width: 175,
+    aliases: ["contactlastname", "surname"],
+  },
+  {
+    key: "contactNo",
+    label: "Contact No",
+    kind: "text",
+    group: CONTACT_GROUP,
+    maxLength: 40,
+    width: 175,
+    aliases: ["contactnumber", "phone", "phoneno", "mobile", "mobileno", "telephone"],
+  },
+  {
+    key: "contactEmail",
+    label: "Contact Email",
+    kind: "text",
+    group: CONTACT_GROUP,
+    format: "email",
+    maxLength: 200,
+    width: 215,
+    aliases: ["email", "emailid", "emailaddress"],
+  },
+  {
+    key: "contactDesignation",
+    label: "Designation",
+    kind: "select",
+    group: CONTACT_GROUP,
+    optionKey: "designations",
+    width: 185,
+    aliases: ["contactdesignation", "jobtitle", "title"],
+    hint: "Must match the Designation master",
+  },
+  {
+    key: "contactDepartment",
+    label: "Department",
+    kind: "select",
+    group: CONTACT_GROUP,
+    optionKey: "departments",
+    width: 185,
+    aliases: ["contactdepartment", "dept"],
+    hint: "Must match the Department master",
+  },
+  {
+    key: "contactNotes",
+    label: "Contact Notes",
+    kind: "text",
+    group: CONTACT_GROUP,
+    maxLength: 1000,
+    width: 215,
+    aliases: ["contactnote", "contactremarks"],
+  },
+];
+
+export const CONTACT_BLOCK: ChildBlock = {
+  group: CONTACT_GROUP,
+  fields: {
+    contactType: "contactType",
+    firstName: "contactFirstName",
+    lastName: "contactLastName",
+    contactNo: "contactNo",
+    email: "contactEmail",
+    // The two that resolve to a row. The cell holds the name; the import
+    // turns it into the id, which is why the field keeps the `Id` suffix.
+    designationId: "contactDesignation",
+    departmentId: "contactDepartment",
+    notes: "contactNotes",
+  },
+};
+
+/* Address Details — the Client Address Book's own columns. */
+
+const ADDRESS_GROUP = "Address Details";
+
+/**
+ * One Street Address, not the four lines `customer_addresses` stores.
+ *
+ * The table keeps line1–line4 because the KYC form collects four boxes, but a
+ * spreadsheet column of "Address Line 3" is a column nobody fills. The sheet
+ * offers the one column people actually paste into and it lands in `line1`;
+ * the other three stay null and the Address Book's edit drawer splits them out
+ * later if anyone wants to.
+ */
+const ADDRESS_COLUMNS: readonly ClientBulkColumn[] = [
+  {
+    key: "addressType",
+    label: "Address Type",
+    kind: "select",
+    group: ADDRESS_GROUP,
+    optionKey: "addressTypes",
+    width: 205,
+    aliases: ["typeofaddress", "addresskind"],
+    hint: "Blank imports as Billing Address",
+  },
+  {
+    key: "addressStreet",
+    label: "Street Address",
+    kind: "text",
+    group: ADDRESS_GROUP,
+    maxLength: 200,
+    width: 260,
+    aliases: ["street", "address", "addressline1", "addressline", "line1", "premises"],
+  },
+  {
+    key: "addressCity",
+    label: "City",
+    kind: "text",
+    group: ADDRESS_GROUP,
+    maxLength: 120,
+    width: 165,
+    aliases: ["town", "addresscity"],
+  },
+  {
+    // "Address State", not "State": the client row already has a State of its
+    // own (Registration & Tax), and two columns headed the same would make an
+    // uploaded file's "State" heading a coin toss.
+    key: "addressState",
+    label: "Address State",
+    kind: "select",
+    group: ADDRESS_GROUP,
+    optionKey: "states",
+    freeText: true,
+    maxLength: 120,
+    width: 180,
+  },
+  {
+    key: "addressCountry",
+    label: "Address Country",
+    kind: "select",
+    group: ADDRESS_GROUP,
+    optionKey: "countries",
+    freeText: true,
+    maxLength: 120,
+    width: 180,
+  },
+  {
+    key: "addressPinCode",
+    label: "Pin Code",
+    kind: "text",
+    group: ADDRESS_GROUP,
+    maxLength: 20,
+    width: 150,
+    aliases: ["pincode", "postalcode", "postcode", "zip", "zipcode"],
+  },
+  {
+    key: "addressEmail",
+    label: "Address Email",
+    kind: "text",
+    group: ADDRESS_GROUP,
+    format: "email",
+    maxLength: 200,
+    width: 215,
+    aliases: ["invoiceemail", "invoicemailingemail"],
+  },
+];
+
+export const ADDRESS_BLOCK: ChildBlock = {
+  group: ADDRESS_GROUP,
+  fields: {
+    addressType: "addressType",
+    line1: "addressStreet",
+    city: "addressCity",
+    state: "addressState",
+    country: "addressCountry",
+    pinCode: "addressPinCode",
+    email: "addressEmail",
+  },
+};
+
+/* Bank Details — the Client Bank Master's own columns. */
+
+const BANK_GROUP = "Bank Details";
+
+const BANK_COLUMNS: readonly ClientBulkColumn[] = [
+  {
+    key: "bankAccountName",
+    label: "Account Name",
+    kind: "text",
+    group: BANK_GROUP,
+    maxLength: 160,
+    width: 205,
+    aliases: ["accountholder", "accountholdername", "bankaccountname"],
+  },
+  {
+    key: "bankName",
+    label: "Bank Name",
+    kind: "text",
+    group: BANK_GROUP,
+    maxLength: 160,
+    width: 195,
+    aliases: ["bank"],
+  },
+  {
+    key: "bankAccountNo",
+    label: "Account No",
+    kind: "text",
+    group: BANK_GROUP,
+    maxLength: 60,
+    width: 185,
+    aliases: ["accountnumber", "acno", "accno", "bankaccountno", "bankaccountnumber"],
+  },
+  {
+    key: "bankIfscSwift",
+    label: "IFSC / SWIFT",
+    kind: "text",
+    group: BANK_GROUP,
+    maxLength: 30,
+    width: 175,
+    aliases: ["ifsc", "ifsccode", "swift", "swiftcode", "ifscswift"],
+  },
+  {
+    key: "bankBranch",
+    label: "Branch",
+    kind: "text",
+    group: BANK_GROUP,
+    maxLength: 160,
+    width: 175,
+    aliases: ["bankbranch", "branchname"],
+  },
+  {
+    key: "bankAccountType",
+    label: "Account Type",
+    kind: "text",
+    group: BANK_GROUP,
+    maxLength: 40,
+    width: 170,
+    aliases: ["bankaccounttype"],
+    hint: "Current, Savings, CC — free text",
+  },
+];
+
+/**
+ * The one bank block, marked primary.
+ *
+ * A client can have several accounts and the Bank Master is where the rest
+ * go; the one the sheet carries is the one you pay against, so it lands as
+ * `is_primary` rather than as an unranked account nobody can tell apart.
+ */
+export const BANK_BLOCK: ChildBlock = {
+  group: BANK_GROUP,
+  fields: {
+    accountName: "bankAccountName",
+    bankName: "bankName",
+    accountNo: "bankAccountNo",
+    ifscSwift: "bankIfscSwift",
+    branch: "bankBranch",
+    accountType: "bankAccountType",
+  },
+};
+
+/** Every block the sheet carries, for the readers that treat them alike. */
+export const CHILD_BLOCKS: readonly ChildBlock[] = [CONTACT_BLOCK, ADDRESS_BLOCK, BANK_BLOCK];
+
+/* ── The record's own, not the form's ───────────────────────────────────── */
+
+const RECORD_COLUMNS: readonly ClientBulkColumn[] = [
   {
     key: "focusedView",
     label: "Focused View",
@@ -450,6 +827,24 @@ export const CLIENT_BULK_COLUMNS: readonly ClientBulkColumn[] = [
     aliases: ["active", "status"],
     hint: "Blank imports as Active",
   },
+];
+
+/**
+ * The catalogue: the client's own fields, then its three directories, then
+ * the two flags that belong to the record rather than to the form.
+ *
+ * The directories sit between the two on purpose. Everything before them
+ * writes `customer_masters`; everything in them writes a child table; the two
+ * after are the Client Master's own view of the row. Reading across the sheet
+ * is reading the record outwards, and an added column lands where the table
+ * would put it rather than on the far right.
+ */
+export const CLIENT_BULK_COLUMNS: readonly ClientBulkColumn[] = [
+  ...CLIENT_OWN_COLUMNS,
+  ...CONTACT_COLUMNS,
+  ...ADDRESS_COLUMNS,
+  ...BANK_COLUMNS,
+  ...RECORD_COLUMNS,
 ];
 
 /** Catalogue order, so an added column lands where the table would put it. */
@@ -493,6 +888,29 @@ export function splitMulti(value: string): string[] {
     .filter(Boolean);
 }
 
+/**
+ * One block's cells, keyed by the KYC field they fill — or null if it is empty.
+ *
+ * Null rather than an object of empty strings because "empty" is the answer
+ * the import acts on: no contact row, no address row, no bank row. Both the
+ * sheet (to grey a block's header) and the server (to decide what to insert)
+ * ask this one question of one function, so they cannot disagree about what
+ * counts as a filled-in block.
+ */
+export function blockValues(
+  row: SheetRow,
+  block: ChildBlock,
+): Record<string, string> | null {
+  const out: Record<string, string> = {};
+  let filled = false;
+  for (const [field, key] of Object.entries(block.fields)) {
+    const value = (row[key] ?? "").trim();
+    out[field] = value;
+    if (value) filled = true;
+  }
+  return filled ? out : null;
+}
+
 /** A row nobody has typed into. Blank rows are ignored on import. */
 export function isBlankRow(row: SheetRow): boolean {
   return Object.values(row).every((v) => !v || !v.trim());
@@ -517,6 +935,8 @@ export function optionsFor(
   options: ClientBulkOptions,
 ): readonly string[] {
   if (column.optionKey === "grades") return VOLUME_CLASSES;
+  if (column.optionKey === "contactTypes") return CONTACT_TYPE_OPTIONS;
+  if (column.optionKey === "addressTypes") return ADDRESS_TYPE_OPTIONS;
   if (column.optionKey === "yesNo") return YES_NO;
   if (column.optionKey === "activeStatus") return ACTIVE_STATUS;
   return column.optionKey ? (options[column.optionKey] ?? []) : [];
@@ -571,6 +991,10 @@ export function validateCell(
 
   if (column.kind === "select" && list && !column.freeText && !matchOption(value, list)) {
     return `${value} — not in ${column.label}.`;
+  }
+
+  if (column.format === "email" && !/^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/.test(value)) {
+    return `${column.label} does not look like an email address.`;
   }
 
   if (column.key === "gstin" && !/^[0-9A-Z]{15}$/i.test(value)) {

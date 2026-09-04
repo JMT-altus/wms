@@ -17,14 +17,13 @@ export function PriorityFilter({
 }) {
   return (
     <div className="filter-chip">
-      <Flag size={16} className="text-ink-subtle" strokeWidth={2} />
+      <Flag size={14} className="text-ink-subtle" strokeWidth={2} />
       <MultiSelect
         options={OPTIONS}
         selected={selected}
         onChange={onChange}
         placeholder="All Priorities"
-        className="min-w-[6.5rem] !text-[14px]"
-        openOnHover
+        className="min-w-[6.5rem] !text-[12px] !font-medium"
       />
     </div>
   );

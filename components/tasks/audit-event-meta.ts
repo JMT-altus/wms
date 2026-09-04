@@ -20,6 +20,17 @@ export function dotColorFor(e: TaskEventType): string {
       return "var(--color-rose)";
     case "commented":
       return "var(--color-green)";
+    // A manager's ruling reads as decisive, not as another edit.
+    case "approval_decided":
+      return "var(--color-green)";
+    case "time_logged":
+      return "var(--color-blue)";
+    case "checklist_updated":
+      return "var(--color-ink-subtle)";
+    case "abandoned":
+      return "var(--color-rose)";
+    case "nudged":
+      return "var(--color-amber)";
   }
 }
 
@@ -39,6 +50,15 @@ export function eventFilterBucket(
     case "field_updated":
     case "priority_changed":
     case "due_changed":
+      return "edits";
+    // Sign-off, abandonment and a nudge are all "what happened to this task",
+    // which is what the status filter means — not content edits.
+    case "approval_decided":
+    case "abandoned":
+    case "nudged":
+      return "status";
+    case "time_logged":
+    case "checklist_updated":
       return "edits";
   }
 }

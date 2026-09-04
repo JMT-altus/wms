@@ -27,6 +27,25 @@ describe("computeStatCounts", () => {
     expect(computeStatCounts(rows).done).toBe(2);
   });
 
+  it("counts approved from the verdict column or a legacy imported status", () => {
+    const rows = [
+      row({ approvalStatus: "approved" }),
+      row({ status: "approved" }),
+      // Both at once must not count twice.
+      row({ status: "approved", approvalStatus: "approved" }),
+      row({ approvalStatus: "not_approved" }),
+      row({ status: "done" }),
+    ];
+    expect(computeStatCounts(rows).approved).toBe(3);
+  });
+
+  it("lets a task be both Done and Approved — they answer different questions", () => {
+    const rows = [row({ status: "approved", approvalStatus: "approved" })];
+    const c = computeStatCounts(rows);
+    expect(c.done).toBe(1);
+    expect(c.approved).toBe(1);
+  });
+
   it("counts pending statuses", () => {
     const rows = [row({ status: "not_started" }), row({ status: "follow_up" }), row({ status: "done" })];
     expect(computeStatCounts(rows).pending).toBe(2);

@@ -18,6 +18,7 @@ import { ReassignedEmail } from "@/emails/notifications/Reassigned";
 import { TransferredEmail } from "@/emails/notifications/Transferred";
 import { CancelledEmail } from "@/emails/notifications/Cancelled";
 import { CommentedEmail } from "@/emails/notifications/Commented";
+import { NudgeEmail } from "@/emails/notifications/Nudge";
 import { DailyDigestEmail } from "@/emails/notifications/DailyDigest";
 import {
   WeeklyGoalsMondayEmail,
@@ -636,6 +637,17 @@ function renderNotificationTemplate(ctx: RenderContext): ReactElement | null {
       // overdue_digest belongs in `sendDigestEmail`; attendance_device is kept
       // in-app only. Skip the per-row email.
       return null;
+
+    case "nudge":
+      return NudgeEmail({
+        recipientName:  ctx.recipient.name,
+        actorName:      actor,
+        taskSubject:    subject,
+        taskId,
+        message:        meta.note,
+        dueLabel:       meta.dueLabel,
+        siteUrl:        ctx.siteUrl,
+      });
 
     case "weekly_goals_assigned":
     case "weekly_goals_fill_reminder":

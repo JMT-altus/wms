@@ -35,6 +35,7 @@ const TITLES: Record<NotificationKind, (actor: string) => string> = {
   attendance_half_day: () => `Half day recorded`,
   attendance_device: () => `New device used for attendance`,
   attendance_late_deduction: () => `Late deduction applied`,
+  nudge: (a) => `${a} nudged you about a task`,
 };
 
 export interface PushCtx {

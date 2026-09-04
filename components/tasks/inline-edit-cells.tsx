@@ -77,7 +77,7 @@ export function InlineDoerCell({
   const display = name ? (
     <span className="inline-flex items-center gap-2.5">
       <EmployeeAvatar name={name} size="sm" />
-      <span className="text-ink-strong font-bold" style={{ fontSize: 15 }}>
+      <span className="text-ink-strong font-normal" style={{ fontSize: 15 }}>
         {name}
       </span>
     </span>

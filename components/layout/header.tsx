@@ -1,13 +1,10 @@
 import { headers } from "next/headers";
 import { LiveIndicator } from "./live-indicator";
-import { NavHistoryButtons } from "./nav-history-buttons";
 import { FullscreenToggle } from "@/components/masters/fullscreen-toggle";
 import { MobileMenuServer } from "./mobile-menu-server";
 import { UserMenuServer } from "@/components/header/user-menu-server";
 import { NewTaskTrigger } from "@/components/header/new-task-trigger";
-import { AdminPill } from "@/components/header/admin-pill";
 import { GlobalSearch } from "@/components/header/global-search";
-import { getCurrentEmployee } from "@/lib/auth/current";
 import { MODULES, moduleIdForPath } from "@/lib/nav-modules";
 
 /**
@@ -26,9 +23,6 @@ import { MODULES, moduleIdForPath } from "@/lib/nav-modules";
 export async function DashboardHeader({
   generatedAt: _generatedAt,
 }: { generatedAt: Date }) {
-  const me = await getCurrentEmployee();
-  const isAdmin = me?.isAdmin ?? false;
-
   // "New Task" belongs to WMS. Employees, Incentive Tracker and Training have
   // nothing to do with tasks, so the button (and the `N` hotkey, which lives
   // inside the dialog it mounts) is scoped to that module.
@@ -95,10 +89,12 @@ export async function DashboardHeader({
           }}
         />
         <div className="relative w-full h-[var(--app-header-h)] px-6 max-md:px-4 flex items-center gap-4 2xl:gap-6 max-md:gap-3">
-          {/* LEFT-MOST: Back / Forward history pills (md+ only).
-              On mobile, replaced by the hamburger menu (same slot). */}
-          <NavHistoryButtons />
-          <MobileMenuServer isAdmin={isAdmin} />
+          {/* LEFT: the phone hamburger, then the global search field. Search
+              reads as the header's primary job now that nav lives in the rail,
+              so it sits where the eye starts rather than tucked against the
+              avatar on the right. */}
+          <MobileMenuServer />
+          <GlobalSearch />
 
           {/* CENTER: intentionally empty. The primary nav moved out of this bar
               and into the left rail (components/layout/app-sidebar.tsx), which
@@ -108,26 +104,21 @@ export async function DashboardHeader({
               same items below md, where the rail is hidden. */}
           <div className="flex-1 min-w-0" />
 
-          {/* RIGHT: search + live indicator + actions + avatar. Every item is
-              shrink-0; secondary chrome (Live / Admin pill) hides below 2xl and
-              the search collapses to an icon there too, so the nav always has
-              room and nothing ever overlaps. */}
+          {/* RIGHT: live indicator + actions + avatar. Every item is shrink-0;
+              secondary chrome (Live) hides below 2xl and the search collapses
+              to an icon there too, so the nav always has room and nothing ever
+              overlaps. The admin shortcut lives in the avatar menu — a standing
+              ADMIN badge restated a fact the user already knows about
+              themselves on every screen. */}
           <div className="flex items-center gap-2.5 2xl:gap-3 shrink-0 max-xl:ml-auto max-md:gap-1.5">
-            <GlobalSearch />
             <span className="max-2xl:hidden">
               <LiveIndicator />
             </span>
             {showNewTask && <NewTaskTrigger />}
-            {isAdmin && (
-              <span className="max-2xl:hidden">
-                <AdminPill />
-              </span>
-            )}
             {/* Full screen — folds away the browser chrome AND the app's own
                 left rail (globals.css keys off data-app-fullscreen). Hidden on
                 phones, where the rail is already gone and the API is flaky. */}
             <FullscreenToggle variant="header" />
-            <UserMenuServer />
           </div>
         </div>
       </div>

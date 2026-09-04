@@ -1,16 +1,7 @@
 import Link from "next/link";
 import type { Route } from "next";
-import {
-  LayoutGrid,
-  CheckCircle2,
-  Loader,
-  Flame,
-  AlarmClock,
-  XCircle,
-  EyeOff,
-  type LucideIcon,
-} from "lucide-react";
 import { TaskTable } from "./task-table";
+import { FullscreenToggle } from "@/components/masters/fullscreen-toggle";
 import type { TaskListRow, TaskListFilters } from "@/lib/types";
 import { taskFiltersToSearchString } from "@/lib/task-filters";
 import {
@@ -25,6 +16,7 @@ const PENDING_STATUSES = new Set<TaskStatus>(CANONICAL_PENDING_STATUSES);
 
 export type KpiKey =
   | "notApproved"
+  | "approved"
   | "done"
   | "pending"
   | "critical"
@@ -34,21 +26,26 @@ export type KpiKey =
 interface KpiSpec {
   key: KpiKey;
   label: string;
+  /** Long form, used as the pill's tooltip — the strip itself stays terse. */
   sublabel: string;
-  tone: "green" | "amber" | "red" | "orange" | "rose" | "slate";
+  tone: "green" | "amber" | "red" | "orange" | "rose" | "slate" | "purple";
 }
 
-// Six summary cards. The four middle ones (done/pending/critical/urgent) link
-// to the Tasks list with the matching status/priority filter applied; the two
-// new ones (notApproved/notRead) are display-only — they don't map to the
-// existing status/priority filter dimensions.
+// Seven summary pills, in the order they read across the header band. The
+// five that map onto a status/priority filter (approved/done/pending/critical/
+// urgent) are links; notApproved and notRead stay display-only because they
+// cut across those dimensions rather than sitting inside one.
+//
+// Sentence case, not caps: at this size a row of shouting labels is harder to
+// scan than the counts they sit next to, and the count is the point.
 const KPI_SPECS: KpiSpec[] = [
-  { key: "notApproved", label: "NOT APPROVED", sublabel: "Declined or awaiting sign-off", tone: "rose"   },
-  { key: "done",        label: "DONE",         sublabel: "Done + Approved",               tone: "green"  },
-  { key: "pending",     label: "PENDING",      sublabel: "Open work",                     tone: "amber"  },
-  { key: "critical",    label: "CRITICAL",     sublabel: "Important & urgent",            tone: "red"    },
-  { key: "urgent",      label: "URGENT",       sublabel: "Urgent priority",               tone: "orange" },
-  { key: "notRead",     label: "NOT READ",     sublabel: "Unopened pending tasks",        tone: "slate"  },
+  { key: "notApproved", label: "Not approved", sublabel: "Declined or awaiting sign-off", tone: "rose"   },
+  { key: "approved",    label: "Approved",     sublabel: "Signed off",                    tone: "purple" },
+  { key: "done",        label: "Done",         sublabel: "Done + Approved",               tone: "green"  },
+  { key: "pending",     label: "Pending",      sublabel: "Open work",                     tone: "amber"  },
+  { key: "critical",    label: "Critical",     sublabel: "Important & urgent",            tone: "red"    },
+  { key: "urgent",      label: "Urgent",       sublabel: "Urgent priority",               tone: "orange" },
+  { key: "notRead",     label: "Not read",     sublabel: "Unopened pending tasks",        tone: "slate"  },
 ];
 
 /** Pure, testable count logic for the six summary cards. Operates on the
@@ -60,6 +57,13 @@ export function computeStatCounts(rows: TaskListRow[]): Record<KpiKey, number> {
         r.approvalStatus === "not_approved" ||
         r.status === "not_approved" ||
         (r.status === "done" && r.approvalStatus == null),
+    ).length,
+    // The manager's verdict, from either the column or a legacy imported row
+    // that still carries it as a status. Overlaps `done` on purpose — Done
+    // answers "is the work finished", Approved answers "has it been signed
+    // off", and a task can be both.
+    approved: rows.filter(
+      (r) => r.approvalStatus === "approved" || r.status === "approved",
     ).length,
     done: rows.filter((r) => DONE_STATUSES.has(r.status)).length,
     pending: rows.filter((r) => PENDING_STATUSES.has(r.status)).length,
@@ -109,10 +113,14 @@ export function TaskListPage({
   // Build each card's destination by overriding the relevant filter dimension
   // on top of the current filters — so date/employee/department scope carries
   // over, and the other status/priority filter is cleared for a clean view.
-  function cardHref(key: "done" | "pending" | "critical" | "urgent"): Route {
+  type LinkedKey = "approved" | "done" | "pending" | "critical" | "urgent";
+
+  function cardHref(key: LinkedKey): Route {
     const base = { ...filters };
     let next: TaskListFilters;
-    if (key === "done") {
+    if (key === "approved") {
+      next = { ...base, statuses: ["approved"], priorities: [] };
+    } else if (key === "done") {
       next = { ...base, statuses: ["done", "approved"], priorities: [] };
     } else if (key === "pending") {
       next = { ...base, statuses: [...CANONICAL_PENDING_STATUSES], priorities: [] };
@@ -126,9 +134,10 @@ export function TaskListPage({
   }
 
   // Highlight a card when the list is already filtered to exactly its view.
-  function cardActive(key: "done" | "pending" | "critical" | "urgent"): boolean {
+  function cardActive(key: LinkedKey): boolean {
     const s = new Set(filters.statuses);
     const p = new Set(filters.priorities);
+    if (key === "approved") return p.size === 0 && s.size === 1 && s.has("approved");
     if (key === "done") return p.size === 0 && s.size === 2 && s.has("done") && s.has("approved");
     if (key === "pending")
       return p.size === 0 && s.size === PENDING_STATUSES.size && [...s].every((x) => PENDING_STATUSES.has(x));
@@ -137,67 +146,69 @@ export function TaskListPage({
   }
 
   return (
-    <main className="mx-auto max-w-[1600px] px-12 max-md:px-4 pt-8 pb-16">
-      <header className="mb-4 flex items-center justify-between gap-4 flex-wrap">
-        <div>
-          <h1
-            className="text-ink-strong"
-            style={{
-              fontFamily: "var(--font-display), system-ui, sans-serif",
-              fontWeight: 900,
-              fontSize: "clamp(34px, 3.4vw, 46px)",
-              letterSpacing: "-0.025em",
-              lineHeight: 1,
-            }}
-          >
-            {title}
-          </h1>
-        </div>
-        {me.isAdmin && (
-          <Link
-            href={"/tasks/kanban" as Route}
-            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-[14.5px] font-bold text-white transition-all hover:brightness-110 active:scale-[0.98]"
-            style={{
-              background:
-                "linear-gradient(135deg, #0A6CFF 0%, #0A6CFF 42%, #17B6A0 100%)",
-              boxShadow: "0 6px 18px -6px rgba(10, 108, 255, 0.55)",
-            }}
-          >
-            <LayoutGrid size={16} strokeWidth={2.4} />
-            Kanban View
-          </Link>
-        )}
-      </header>
+    <main className="mx-auto max-w-[1600px] px-12 max-md:px-4 pb-16">
+      {/* Title row — the module name, its counts and the screen control on
+          ONE line. The counts sit beside the title rather than in a grid of
+          cards below it because they are a readout, not six destinations: at
+          a glance you want "3 not approved, 64 pending", and the table
+          underneath is what you actually came to read.
 
-      {/* KPI summary — 4 stat cards in the same visual language as the
-          main dashboard tiles. Each card has a top channel-color bar,
-          font-black label, big count, sublabel. */}
-      {showStats && (
-      <div className="mb-4 grid grid-cols-6 gap-3 max-xl:grid-cols-3 max-md:grid-cols-2 max-sm:grid-cols-1">
-        {KPI_SPECS.map((spec) => {
-          // notApproved + notRead don't map to the status/priority filter
-          // dimensions, so they're display-only (not click-to-filter).
-          if (spec.key === "notApproved" || spec.key === "notRead") {
-            return (
-              <div key={spec.key} className="block rounded-section">
-                <StatCard spec={spec} value={counts[spec.key]} active={false} />
-              </div>
-            );
-          }
-          const filterKey = spec.key;
-          return (
-            <Link
-              key={spec.key}
-              href={cardHref(filterKey)}
-              aria-label={`View ${spec.label.toLowerCase()} tasks`}
-              className="block rounded-section focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-altus-red/40"
-            >
-              <StatCard spec={spec} value={counts[spec.key]} active={cardActive(filterKey)} />
-            </Link>
-          );
-        })}
-      </div>
-      )}
+          No frame and no fill: the page's own background runs straight through
+          the row. The pills are the only thing here carrying meaning through
+          colour, and both a border and a ground behind them would compete
+          with that. */}
+      <header className="mt-2 mb-2 flex min-h-[40px] flex-wrap items-center gap-x-2.5 gap-y-1.5">
+        <h1
+          className="shrink-0 text-ink-strong"
+          style={{
+            fontFamily: "var(--font-display), system-ui, sans-serif",
+            fontWeight: 800,
+            fontSize: 10,
+            letterSpacing: "-0.03em",
+            lineHeight: 1,
+          }}
+        >
+          {title}
+        </h1>
+
+        {showStats && (
+          <ul className="flex flex-wrap items-center gap-1">
+            {KPI_SPECS.map((spec) => {
+              const value = counts[spec.key];
+              // notApproved and notRead cut ACROSS the status/priority
+              // dimensions rather than sitting inside one, so there is no
+              // filter to send you to — they stay readouts.
+              if (spec.key === "notApproved" || spec.key === "notRead") {
+                return (
+                  <li key={spec.key}>
+                    <StatPill spec={spec} value={value} active={false} />
+                  </li>
+                );
+              }
+              const filterKey = spec.key;
+              return (
+                <li key={spec.key}>
+                  <Link
+                    href={cardHref(filterKey)}
+                    aria-label={`View ${spec.label.toLowerCase()} tasks`}
+                    className="block rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-altus-red/40"
+                  >
+                    <StatPill
+                      spec={spec}
+                      value={value}
+                      active={cardActive(filterKey)}
+                    />
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+
+        <div className="ml-auto shrink-0">
+          <FullscreenToggle size="sm" />
+        </div>
+      </header>
 
       {rows.length === 0 ? (
         <div
@@ -232,16 +243,21 @@ export function TaskListPage({
   );
 }
 
-const KPI_ICONS: Record<KpiKey, LucideIcon> = {
-  notApproved: XCircle,
-  done: CheckCircle2,
-  pending: Loader,
-  critical: Flame,
-  urgent: AlarmClock,
-  notRead: EyeOff,
-};
-
-function StatCard({
+/**
+ * One count in the header band: a tinted lozenge with a solid dot, the figure,
+ * and its label.
+ *
+ * The dot carries the hue at full strength while the fill stays at ~10% of it,
+ * so seven of these in a row read as one strip rather than seven warning
+ * banners — the colour is an index, not an alarm. Both figure and label take
+ * the deep tone, which clears contrast on the pale fill in a way the base hue
+ * does not.
+ *
+ * A zero is dimmed rather than hidden: "0 Critical" is information, and a pill
+ * that disappears when it hits zero makes the row jump every time the filters
+ * change.
+ */
+function StatPill({
   spec,
   value,
   active,
@@ -250,66 +266,42 @@ function StatCard({
   value: number;
   active: boolean;
 }) {
-  const Icon = KPI_ICONS[spec.key];
+  const hue = `var(--color-${spec.tone})`;
+  const deep = `var(--color-${spec.tone}-deep)`;
+  const empty = value === 0;
+
   return (
-    <div
-      className="group relative bg-surface-card rounded-section overflow-hidden transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md cursor-pointer"
+    <span
+      title={spec.sublabel}
+      className="inline-flex h-7 items-center gap-1.5 rounded-[9px] px-2.5 transition-all duration-150"
       style={{
-        border: active
-          ? `1.5px solid var(--color-${spec.tone}-deep)`
-          : "1px solid var(--color-hairline)",
+        background: `color-mix(in srgb, ${hue} ${active ? 20 : 11}%, #fff)`,
+        // No border, measured — the tinted fill alone separates the pill from
+        // the page. The filtered-by state gets a ring instead, so it reads as
+        // pressed without adding an outline the other six don't have.
         boxShadow: active
-          ? `0 0 0 3px color-mix(in srgb, var(--color-${spec.tone}) 16%, transparent)`
-          : "0 14px 32px -20px rgba(10, 108, 255, 0.16), 0 2px 6px -2px rgba(15, 23, 42, 0.06)",
-        padding: "10px 14px 10px",
+          ? `0 0 0 2px color-mix(in srgb, ${hue} 55%, transparent)`
+          : "none",
+        opacity: empty && !active ? 0.72 : 1,
       }}
     >
       <span
         aria-hidden
-        className="absolute inset-x-0 top-0"
-        style={{
-          height: 4,
-          background: `linear-gradient(90deg, var(--color-${spec.tone}), var(--color-${spec.tone}-deep))`,
-        }}
+        className="inline-block size-2 shrink-0 rounded-full"
+        style={{ background: hue }}
       />
-      {/* Tinted icon chip — adds colour + visual anchor without hurting
-          the white card's readability. */}
       <span
-        aria-hidden
-        className="absolute right-2.5 top-2.5 inline-flex size-7 items-center justify-center rounded-lg transition-transform duration-200 group-hover:scale-110"
-        style={{
-          background: `color-mix(in srgb, var(--color-${spec.tone}) 14%, transparent)`,
-          color: `var(--color-${spec.tone}-deep)`,
-        }}
-      >
-        <Icon size={15} strokeWidth={2.3} />
-      </span>
-      <span
-        className="uppercase font-black tracking-[0.08em] leading-none"
-        style={{
-          fontFamily: "var(--font-display), system-ui, sans-serif",
-          fontSize: 11.5,
-          color: `var(--color-${spec.tone}-deep)`,
-        }}
-      >
-        {spec.label}
-      </span>
-      <span
-        className="block mt-1 leading-[0.85] tracking-[-0.035em] tabular-nums text-ink-strong"
-        style={{
-          fontFamily: "var(--font-display), system-ui, sans-serif",
-          fontWeight: 900,
-          fontSize: "clamp(25px, 1.9vw, 33px)",
-        }}
+        className="font-bold tabular-nums leading-none"
+        style={{ fontSize: 14, color: deep }}
       >
         {value}
       </span>
       <span
-        className="block mt-1 font-bold leading-tight"
-        style={{ fontSize: 11.5, color: "var(--color-ink-soft)" }}
+        className="whitespace-nowrap font-medium leading-none"
+        style={{ fontSize: 12.5, color: deep }}
       >
-        {spec.sublabel}
+        {spec.label}
       </span>
-    </div>
+    </span>
   );
 }

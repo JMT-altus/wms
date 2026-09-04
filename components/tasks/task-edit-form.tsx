@@ -49,6 +49,8 @@ interface Props {
     recurrence: TaskRecurrence | null;
     recurrenceRule: string | null;
     projectNodeId: string | null;
+    // 0102 — the planned half of Estimated vs Actual on the detail panel.
+    estimatedMinutes: number | null;
   };
   /** Used for the optimistic-lock — must be the row's current updated_at. */
   expectedUpdatedAt: string;
@@ -135,6 +137,12 @@ export function TaskEditForm({
   const [projectNodeId, setProjectNodeId] = useState(initial.projectNodeId ?? "");
   const [notes, setNotes] = useState(initial.notes ?? "");
   const [priority, setPriority] = useState<TaskPriority>(initial.priority);
+  // Held as the raw string so the field can be cleared back to "no estimate"
+  // rather than snapping to 0 — an estimate of zero and no estimate at all are
+  // different answers, and only one of them is honest.
+  const [estimate, setEstimate] = useState(
+    initial.estimatedMinutes == null ? "" : String(initial.estimatedMinutes),
+  );
   const [dueAt, setDueAt] = useState(
     initial.dueAt.toISOString().slice(0, 10),
   );
@@ -170,6 +178,7 @@ export function TaskEditForm({
   const [fTags, setFTags] = useState(false);
   const [fApproval, setFApproval] = useState(false);
   const [fRevised, setFRevised] = useState(false);
+  const [fEstimate, setFEstimate] = useState(false);
 
   function commitTag() {
     const t = tagInput.trim();
@@ -218,6 +227,9 @@ export function TaskEditForm({
           recurrence: schedule.recurrence,
           recurrenceRule: schedule.recurrenceRule,
           projectNodeId: projectNodeId || null,
+          // Empty means "no estimate" (null), not zero.
+          estimatedMinutes:
+            estimate.trim() === "" ? null : Number(estimate.trim()),
         },
         expectedUpdatedAt,
       );
@@ -340,6 +352,29 @@ export function TaskEditForm({
           )}
         </FieldShell>
       </div>
+
+      <FieldShell
+        label="Estimated effort (minutes)"
+        htmlFor="te-estimate"
+        focused={fEstimate}
+        setFocused={setFEstimate}
+      >
+        {(p) => (
+          <input
+            id="te-estimate"
+            type="number"
+            min={0}
+            max={6000}
+            step={5}
+            inputMode="numeric"
+            value={estimate}
+            onChange={(e) => setEstimate(e.target.value)}
+            placeholder="Leave blank if you'd rather not guess"
+            className={inputClass}
+            {...p}
+          />
+        )}
+      </FieldShell>
 
       <FieldShell
         label="Subject"

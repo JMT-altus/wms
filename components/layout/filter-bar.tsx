@@ -17,6 +17,8 @@ import {
   Upload,
   MoreHorizontal,
   CopyMinus,
+  Timer,
+  Trash2,
 } from "lucide-react";
 import Link from "next/link";
 import type { Route } from "next";
@@ -114,7 +116,8 @@ export function FilterBar({
   const pathname = usePathname();
 
   // The date range is a bare Popover rather than a MultiSelect, so it wires up
-  // hover-to-open itself. Same behaviour as the other chips.
+  // its own open state. Hover-to-open is off: menus open on click only, so a
+  // cursor crossing the bar can't pop one open. Same behaviour as the chips.
   const {
     open: dateOpen,
     setOpen: setDateOpen,
@@ -122,7 +125,7 @@ export function FilterBar({
     setContent: setDateContent,
     hoverProps: dateHoverProps,
     contentDismissProps: dateDismissProps,
-  } = useHoverOpen(true);
+  } = useHoverOpen(false);
 
   const range: DateRange | undefined = React.useMemo(() => {
     try {
@@ -228,6 +231,47 @@ export function FilterBar({
     (status.length > 0 ? 1 : 0) +
     (client.length > 0 ? 1 : 0); // start/end have defaults so don't count
 
+  // Edge fades on the chip scroller. The scrollbar is hidden (globals.css,
+  // .nav-scroll) to keep the strip short, so a fade is the only thing left
+  // telling you there are more chips past the edge.
+  //
+  // MEASURED rather than always-on: a fade that stays lit at the end of the
+  // scroll is a permanent lie about there being more, which is worse than no
+  // hint at all. Both edges are tracked so scrolling right also reveals a
+  // fade on the left.
+  const scrollerRef = React.useRef<HTMLDivElement>(null);
+  const [edges, setEdges] = React.useState({ left: false, right: false });
+
+  React.useEffect(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+
+    function measure() {
+      const node = scrollerRef.current;
+      if (!node) return;
+      const max = node.scrollWidth - node.clientWidth;
+      // 1px of slack: sub-pixel layout means scrollLeft rarely lands exactly
+      // on `max`, which would leave the right fade lit at the very end.
+      setEdges({
+        left: node.scrollLeft > 1,
+        right: max > 1 && node.scrollLeft < max - 1,
+      });
+    }
+
+    measure();
+    el.addEventListener("scroll", measure, { passive: true });
+    // The chip set changes with the filters (Subjects/Clients appear only
+    // when there is something to offer), so width changes without a scroll.
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    for (const child of Array.from(el.children)) ro.observe(child);
+
+    return () => {
+      el.removeEventListener("scroll", measure);
+      ro.disconnect();
+    };
+  }, []);
+
   return (
     <div
       // Tight against the bottom of the sticky header. No gap → no strip of
@@ -239,6 +283,10 @@ export function FilterBar({
         WebkitBackdropFilter: "blur(20px) saturate(150%)",
       }}
     >
+      {/* py-1.5, matching components/outstanding/dashboard/filter-bar.tsx —
+          the two bars sit on sibling pages and a band that changes height
+          between them reads as a layout bug. At py-0 the 26px chips ran edge
+          to edge and the strip lost its footing against the header above it. */}
       <div className="mx-auto max-w-[1600px] px-12 py-1.5 max-md:px-4">
         {/* Mobile-only header (Filters label + show/hide). On desktop the label
             is dropped entirely so all the chips fit on a single line. */}
@@ -280,8 +328,32 @@ export function FilterBar({
           {/* Filter chips — one horizontally-scrollable line on desktop; stack
               vertically on mobile. The dropdowns portal out, so the scroll
               container never clips them. */}
-          <div className="flex-1 min-w-0 overflow-x-auto nav-scroll max-sm:flex-none max-sm:overflow-visible">
-            <div className="flex items-center gap-2 w-max max-sm:w-full max-sm:flex-col max-sm:items-stretch max-sm:gap-3">
+          <div className="relative flex-1 min-w-0 max-sm:flex-none">
+          {/* Edge fades. Sit OUTSIDE the scroller so they stay pinned to its
+              edges instead of scrolling away with the chips, and are
+              pointer-events-none so they never eat a click on the chip
+              underneath. Hidden below sm, where the chips stack vertically
+              and nothing overflows. */}
+          <span
+            aria-hidden
+            className="pointer-events-none absolute inset-y-0 left-0 z-10 w-8 transition-opacity duration-200 max-sm:hidden"
+            style={{
+              opacity: edges.left ? 1 : 0,
+              background:
+                "linear-gradient(to right, rgba(250, 251, 252, 0.95), rgba(250, 251, 252, 0))",
+            }}
+          />
+          <span
+            aria-hidden
+            className="pointer-events-none absolute inset-y-0 right-0 z-10 w-8 transition-opacity duration-200 max-sm:hidden"
+            style={{
+              opacity: edges.right ? 1 : 0,
+              background:
+                "linear-gradient(to left, rgba(250, 251, 252, 0.95), rgba(250, 251, 252, 0))",
+            }}
+          />
+          <div ref={scrollerRef} className="overflow-x-auto nav-scroll max-sm:overflow-visible">
+            <div className="flex items-center gap-1.5 w-max max-sm:w-full max-sm:flex-col max-sm:items-stretch max-sm:gap-3">
           {/* Date range */}
           <Popover.Root open={dateOpen} onOpenChange={setDateOpen}>
             <Popover.Trigger asChild>
@@ -293,8 +365,8 @@ export function FilterBar({
                 className="filter-chip max-sm:w-full max-sm:justify-between"
                 {...dateHoverProps}
               >
-                <Calendar size={16} className="text-ink-subtle" strokeWidth={2} />
-                <span className="text-[14px] font-medium text-ink-strong tabular-nums">
+                <Calendar size={14} className="text-ink-subtle" strokeWidth={2} />
+                <span className="text-[12px] font-medium text-ink-strong tabular-nums">
                   {formattedRange}
                 </span>
               </button>
@@ -323,10 +395,12 @@ export function FilterBar({
             </Popover.Portal>
           </Popover.Root>
 
-          {/* Scope chip: My tasks / All tasks (non-admins only) */}
+          {/* Scope chip: My tasks / All tasks (non-admins only). The wide
+              left margin is measured — the segmented groups are a different
+              KIND of control from the chips, and the gap is what says so. */}
           {showScopeChip && (
             <div
-              className="inline-flex items-center bg-surface-card border border-hairline rounded-chip relative"
+              className="ml-[26px] inline-flex items-center bg-surface-card border border-hairline rounded-[8px] relative"
               style={{
                 padding: 4,
                 boxShadow: "0 12px 28px -18px rgba(10, 108, 255, 0.15), 0 1px 4px -1px rgba(15, 23, 42, 0.06)",
@@ -342,7 +416,7 @@ export function FilterBar({
                 }}
               >
                 <span className="inline-flex items-center gap-1.5">
-                  <User size={13} strokeWidth={2.2} />
+                  <User size={12} strokeWidth={2.2} />
                   My tasks
                 </span>
               </SegButton>
@@ -361,7 +435,7 @@ export function FilterBar({
 
           {/* Employees */}
           <div className="filter-chip max-sm:w-full">
-            <Users size={16} className="text-ink-subtle" strokeWidth={2} />
+            <Users size={14} className="text-ink-subtle" strokeWidth={2} />
             <MultiSelect
               options={employees}
               selected={emp}
@@ -371,8 +445,7 @@ export function FilterBar({
                   ? "+ Add Teammate"
                   : "All Employees"
               }
-              className="min-w-[6.5rem] !text-[14px]"
-              openOnHover
+              className="min-w-[6.5rem] !text-[12px] !font-medium"
             />
           </div>
 
@@ -396,7 +469,7 @@ export function FilterBar({
 
           {/* View segmented toggle */}
           <div
-            className="inline-flex items-center bg-surface-card border border-hairline rounded-chip relative"
+            className="ml-[22px] inline-flex items-center bg-surface-card border border-hairline rounded-[8px] relative"
             style={{
               padding: 4,
               boxShadow: "0 12px 28px -18px rgba(10, 108, 255, 0.15), 0 1px 4px -1px rgba(15, 23, 42, 0.06)",
@@ -414,6 +487,7 @@ export function FilterBar({
           </div>
 
             </div>
+          </div>
           </div>
           {/* Pinned actions — stay put on the right while the filters scroll. */}
           <div className="flex items-center gap-2 shrink-0 max-sm:w-full max-sm:flex-wrap max-sm:mt-1">
@@ -437,10 +511,10 @@ export function FilterBar({
                         type="button"
                         aria-label="Import and export"
                         title="Import / export"
-                        className="inline-flex items-center justify-center h-9 w-9 rounded-chip border border-hairline bg-surface-card text-ink-soft hover:text-ink-strong hover:border-altus-red transition-colors"
+                        className="inline-flex items-center justify-center h-[26px] w-[26px] rounded-[8px] border border-[#f1f0f0] bg-white text-ink-soft hover:text-ink-strong hover:border-altus-red transition-colors"
                         style={{ boxShadow: "0 12px 28px -18px rgba(10, 108, 255, 0.15), 0 1px 4px -1px rgba(15, 23, 42, 0.06)" }}
                       >
-                        <MoreHorizontal size={16} strokeWidth={2.4} />
+                        <MoreHorizontal size={13} strokeWidth={2.4} />
                       </button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
@@ -454,6 +528,18 @@ export function FilterBar({
                         <Link href={"/tasks/duplicates" as Route}>
                           <CopyMinus size={14} strokeWidth={2} style={{ color: "var(--color-amber-deep, #b45309)" }} />
                           Find duplicates
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
+                        <Link href={"/tasks/time" as Route}>
+                          <Timer size={14} strokeWidth={2} style={{ color: "var(--color-blue-deep, #1d4ed8)" }} />
+                          Time report
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
+                        <Link href={"/tasks/recycle-bin" as Route}>
+                          <Trash2 size={14} strokeWidth={2} style={{ color: "var(--color-ink-subtle)" }} />
+                          Recycle Bin
                         </Link>
                       </DropdownMenuItem>
                       <DropdownMenuItem asChild>
@@ -488,10 +574,10 @@ export function FilterBar({
                 }
                 reset();
               }}
-              className="inline-flex items-center gap-1.5 text-chip text-ink-subtle hover:text-ink-strong transition-colors px-3 py-2 rounded-chip"
+              className="inline-flex items-center gap-1.5 text-chip text-ink-subtle hover:text-ink-strong transition-colors px-2 py-1 rounded-[8px] text-[12px]"
               aria-label="Reset filters"
             >
-              <RotateCcw size={14} strokeWidth={2.2} />
+              <RotateCcw size={13} strokeWidth={2.2} />
               Reset
             </button>
             {/* Filters auto-apply as you change them — no Apply button. This
@@ -527,7 +613,7 @@ function SegButton({
     <button
       type="button"
       onClick={onClick}
-      className="relative text-[14px] px-2.5 py-1.5 rounded-pill transition-colors"
+      className="relative text-[12px] px-1.5 py-0.5 rounded-pill transition-colors"
       style={{
         color: active ? "var(--color-ink-strong)" : "var(--color-ink-subtle)",
         fontWeight: active ? 600 : 500,

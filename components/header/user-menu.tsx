@@ -16,6 +16,7 @@ import {
   FileText,
   Archive,
   LayoutGrid,
+  ChevronUp,
 } from "lucide-react";
 
 type Props = {
@@ -34,6 +35,14 @@ type Props = {
   /** The hub shows a real notifications bell next to the avatar, so the dot
    *  would just be the same fact twice. */
   showUnreadDot?: boolean;
+  /**
+   * Where the trigger lives.
+   *   "avatar" — the bare circle in the app header (default).
+   *   "rail"   — a full-width row at the foot of the left rail: avatar, name,
+   *              what they are, and a chevron. The rail has the width to say
+   *              who is signed in, and the header no longer has to.
+   */
+  variant?: "avatar" | "rail";
 };
 
 export function UserMenu({
@@ -46,6 +55,7 @@ export function UserMenu({
   canAccessWms = true,
   tone = "dark",
   showUnreadDot = true,
+  variant = "avatar",
 }: Props) {
   const router = useRouter();
 
@@ -80,6 +90,300 @@ export function UserMenu({
           tone === "light" ? "rgba(15, 23, 42, 0.14)" : "rgba(255, 255, 255, 0.18)",
         padding: 1.5,
       };
+
+  // The menu itself is identical for both triggers — only the handle and
+  // which way it opens differ. Declared once so the two can never drift.
+  const menuContent = (
+    <DropdownMenu.Portal>
+      <DropdownMenu.Content
+        // The rail trigger sits at the BOTTOM of the viewport, so its menu has
+        // to open upward and left-aligned; the header avatar keeps the
+        // downward, right-aligned placement it has always had.
+        side={variant === "rail" ? "top" : "bottom"}
+        align={variant === "rail" ? "start" : "end"}
+        sideOffset={10}
+        collisionPadding={12}
+        className="z-[100] min-w-[240px] rounded-xl border border-[#E2E8F0] bg-white shadow-2xl p-1.5 text-sm max-h-[var(--radix-dropdown-menu-content-available-height)] overflow-y-auto"
+        style={{
+          transformOrigin: "var(--radix-dropdown-menu-content-transform-origin)",
+          animation: "userMenuIn 180ms cubic-bezier(0.16, 1, 0.3, 1)",
+          boxShadow:
+            "0 24px 48px -16px rgba(15, 23, 42, 0.18), 0 4px 12px rgba(15, 23, 42, 0.06)",
+        }}
+      >
+        {/* Identity header */}
+        <div className="px-3 py-3 border-b border-[#E2E8F0]">
+          <div className="flex items-center gap-3">
+            <span
+              className="inline-flex rounded-full shrink-0"
+              style={
+                isAdmin
+                  ? {
+                      background:
+                        "linear-gradient(135deg, var(--color-altus-red), var(--color-rose))",
+                      padding: 2,
+                    }
+                  : { background: "rgba(15, 23, 42, 0.08)", padding: 1.5 }
+              }
+            >
+              {avatarUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={avatarUrl}
+                  alt={name}
+                  className="h-9 w-9 rounded-full object-cover block"
+                />
+              ) : (
+                <span
+                  className="h-9 w-9 rounded-full flex items-center justify-center text-[13px] font-semibold text-white"
+                  style={{
+                    background:
+                      "linear-gradient(135deg, #475569, #1f2937)",
+                  }}
+                >
+                  {initials}
+                </span>
+              )}
+            </span>
+            <div className="min-w-0">
+              <div className="font-semibold text-[#0F172A] truncate">
+                {name}
+              </div>
+              <div className="text-[13px] text-[#64748B] truncate">{email}</div>
+            </div>
+          </div>
+          <div className="mt-2.5">
+            {isAdmin ? (
+              <span
+                className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-semibold tracking-wide text-white"
+                style={{
+                  background:
+                    "linear-gradient(135deg, #0A6CFF 0%, #0A6CFF 42%, #17B6A0 100%)",
+                  boxShadow: "0 1px 4px rgba(10, 108, 255, 0.35)",
+                }}
+              >
+                <Crown size={11} strokeWidth={2.4} />
+                Administrator
+              </span>
+            ) : (
+              <span
+                className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-semibold tracking-wide"
+                style={{
+                  background: "rgba(15, 23, 42, 0.06)",
+                  color: "#334155",
+                }}
+              >
+                <UserIcon size={11} strokeWidth={2.4} />
+                Team member
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Admin entry — only for admins, with chevron + subtle highlight */}
+        {isAdmin && (
+          <DropdownMenu.Item asChild>
+            <Link
+              href={"/admin" as Route}
+              className="mt-1 flex items-center justify-between gap-2.5 px-3.5 py-2.5 text-[15px] rounded-lg cursor-pointer outline-none"
+              style={{
+                background:
+                  "linear-gradient(135deg, rgba(10, 108, 255, 0.06), rgba(244, 63, 94, 0.04))",
+                color: "#0F172A",
+              }}
+            >
+              <span className="inline-flex items-center gap-2">
+                <Crown
+                  size={14}
+                  strokeWidth={2.2}
+                  style={{ color: "var(--color-altus-red)" }}
+                />
+                <span className="font-medium">Admin panel</span>
+              </span>
+              <ChevronRight
+                size={14}
+                strokeWidth={2.2}
+                style={{ color: "#64748B" }}
+              />
+            </Link>
+          </DropdownMenu.Item>
+        )}
+
+        {/* Section: account */}
+        <DropdownMenu.Label className="px-3 pt-2 pb-1 text-[11px] uppercase tracking-wide text-[#94A3B8] font-bold">
+          Account
+        </DropdownMenu.Label>
+
+        <DropdownMenu.Item asChild>
+          <Link
+            href={"/profile" as Route}
+            className="flex items-center justify-between gap-2.5 px-3.5 py-2.5 text-[15px] rounded-lg cursor-pointer outline-none text-[#0F172A] data-[highlighted]:bg-[#F1F5F9]"
+          >
+            <span className="inline-flex items-center gap-2">
+              <UserCog size={14} strokeWidth={2.2} style={{ color: "#475569" }} />
+              <span className="font-medium">Profile &amp; preferences</span>
+            </span>
+            <ChevronRight
+              size={14}
+              strokeWidth={2.2}
+              style={{ color: "#94A3B8" }}
+            />
+          </Link>
+        </DropdownMenu.Item>
+
+        {/* Section: workspace — Documents / Inbox / Archived moved off the
+            top nav into here. Inbox + Archived carry their live counts. */}
+        <DropdownMenu.Label className="px-3 pt-2 pb-1 text-[11px] uppercase tracking-wide text-[#94A3B8] font-bold">
+          Workspace
+        </DropdownMenu.Label>
+
+        {/* Index — the Ecosystem Index of every sheet / folder / tool. */}
+        <DropdownMenu.Item asChild>
+          <Link
+            href={"/directory" as Route}
+            className="flex items-center justify-between gap-2.5 px-3.5 py-2.5 text-[15px] rounded-lg cursor-pointer outline-none text-[#0F172A] data-[highlighted]:bg-[#F1F5F9]"
+          >
+            <span className="inline-flex items-center gap-2">
+              <LayoutGrid size={14} strokeWidth={2.2} style={{ color: "#475569" }} />
+              <span className="font-medium">Index</span>
+            </span>
+            <ChevronRight size={14} strokeWidth={2.2} style={{ color: "#94A3B8" }} />
+          </Link>
+        </DropdownMenu.Item>
+
+        {/* Documents / Inbox / Archived live in the WMS module — hidden for
+            anyone whose access to it is switched off, since the layout guard
+            would only bounce them back to the hub. Index (/directory) belongs
+            to no module and stays. */}
+        {canAccessWms && (
+        <DropdownMenu.Item asChild>
+          <Link
+            href={"/documents" as Route}
+            className="flex items-center justify-between gap-2.5 px-3.5 py-2.5 text-[15px] rounded-lg cursor-pointer outline-none text-[#0F172A] data-[highlighted]:bg-[#F1F5F9]"
+          >
+            <span className="inline-flex items-center gap-2">
+              <FileText size={14} strokeWidth={2.2} style={{ color: "#475569" }} />
+              <span className="font-medium">Documents</span>
+            </span>
+            <ChevronRight size={14} strokeWidth={2.2} style={{ color: "#94A3B8" }} />
+          </Link>
+        </DropdownMenu.Item>
+        )}
+
+        {canAccessWms && (
+        <DropdownMenu.Item asChild>
+          <Link
+            href={"/inbox" as Route}
+            className="flex items-center justify-between gap-2.5 px-3.5 py-2.5 text-[15px] rounded-lg cursor-pointer outline-none text-[#0F172A] data-[highlighted]:bg-[#F1F5F9]"
+          >
+            <span className="inline-flex items-center gap-2">
+              <Inbox size={14} strokeWidth={2.2} style={{ color: "#475569" }} />
+              <span className="font-medium">Inbox</span>
+            </span>
+            <span className="inline-flex items-center gap-2">
+              {inboxUnread > 0 && <MenuCount n={inboxUnread} tone="red" />}
+              <ChevronRight size={14} strokeWidth={2.2} style={{ color: "#94A3B8" }} />
+            </span>
+          </Link>
+        </DropdownMenu.Item>
+        )}
+
+        {/* Archiving is admin-only, so the Archived view is too. */}
+        {isAdmin && canAccessWms && (
+          <DropdownMenu.Item asChild>
+            <Link
+              href={"/archived" as Route}
+              className="flex items-center justify-between gap-2.5 px-3.5 py-2.5 text-[15px] rounded-lg cursor-pointer outline-none text-[#0F172A] data-[highlighted]:bg-[#F1F5F9]"
+            >
+              <span className="inline-flex items-center gap-2">
+                <Archive size={14} strokeWidth={2.2} style={{ color: "#475569" }} />
+                <span className="font-medium">Archived</span>
+              </span>
+              <span className="inline-flex items-center gap-2">
+                {archivedTasks > 0 && <MenuCount n={archivedTasks} tone="neutral" />}
+                <ChevronRight size={14} strokeWidth={2.2} style={{ color: "#94A3B8" }} />
+              </span>
+            </Link>
+          </DropdownMenu.Item>
+        )}
+
+        <DropdownMenu.Separator className="my-1 h-px bg-[#E2E8F0]" />
+
+        <DropdownMenu.Item
+          onSelect={handleSignOut}
+          className="flex items-center gap-2.5 px-3.5 py-2.5 text-[15px] rounded-lg cursor-pointer outline-none text-[#0751BE] data-[highlighted]:bg-[#EFF6FF]"
+        >
+          <LogOut size={14} strokeWidth={2.2} style={{ color: "#0751BE" }} />
+          <span className="font-medium">Sign out</span>
+        </DropdownMenu.Item>
+      </DropdownMenu.Content>
+    </DropdownMenu.Portal>
+  );
+
+  const showDot = inboxUnread > 0 && canAccessWms && showUnreadDot;
+
+  // The rail trigger. Same menu, a different handle: at the foot of a 216px
+  // rail there is room to name the person, so it says who is signed in instead
+  // of making you hover a circle to find out.
+  if (variant === "rail") {
+    return (
+      <DropdownMenu.Root>
+        <DropdownMenu.Trigger asChild>
+          <button
+            aria-label={
+              inboxUnread > 0 ? `User menu — ${inboxUnread} unread` : "User menu"
+            }
+            className="group flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-left transition-colors hover:bg-white/[0.06] focus:outline-none focus:ring-2 focus:ring-white/40"
+          >
+            <span className="relative shrink-0">
+              {showDot && (
+                <span
+                  aria-hidden
+                  className="absolute -top-0.5 -right-0.5 z-10 h-2.5 w-2.5 rounded-full ring-2"
+                  style={{
+                    background: "var(--color-red)",
+                    // Rings against the rail's navy, not a white header.
+                    "--tw-ring-color": "#012a58",
+                  } as React.CSSProperties}
+                />
+              )}
+              <span className="inline-flex rounded-full" style={ringStyle}>
+                {avatarUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={avatarUrl}
+                    alt={name}
+                    className="block h-8 w-8 rounded-full object-cover"
+                  />
+                ) : (
+                  <span
+                    className="flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold text-white"
+                    style={{ background: "linear-gradient(135deg, #7c3aed, #a855f7)" }}
+                  >
+                    {initials}
+                  </span>
+                )}
+              </span>
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-[13.5px] font-semibold text-white">
+                {name}
+              </span>
+              <span className="block truncate text-[11.5px] text-white/55">
+                {isAdmin ? "Administrator" : "Team Member"}
+              </span>
+            </span>
+            <ChevronUp
+              size={15}
+              strokeWidth={2.4}
+              className="shrink-0 text-white/55 transition-colors group-hover:text-white/85"
+            />
+          </button>
+        </DropdownMenu.Trigger>
+        {menuContent}
+      </DropdownMenu.Root>
+    );
+  }
 
   return (
     <DropdownMenu.Root>
@@ -130,226 +434,7 @@ export function UserMenu({
           </span>
         </button>
       </DropdownMenu.Trigger>
-      <DropdownMenu.Portal>
-        <DropdownMenu.Content
-          align="end"
-          sideOffset={10}
-          collisionPadding={12}
-          className="z-[100] min-w-[240px] rounded-xl border border-[#E2E8F0] bg-white shadow-2xl p-1.5 text-sm max-h-[var(--radix-dropdown-menu-content-available-height)] overflow-y-auto"
-          style={{
-            transformOrigin: "var(--radix-dropdown-menu-content-transform-origin)",
-            animation: "userMenuIn 180ms cubic-bezier(0.16, 1, 0.3, 1)",
-            boxShadow:
-              "0 24px 48px -16px rgba(15, 23, 42, 0.18), 0 4px 12px rgba(15, 23, 42, 0.06)",
-          }}
-        >
-          {/* Identity header */}
-          <div className="px-3 py-3 border-b border-[#E2E8F0]">
-            <div className="flex items-center gap-3">
-              <span
-                className="inline-flex rounded-full shrink-0"
-                style={
-                  isAdmin
-                    ? {
-                        background:
-                          "linear-gradient(135deg, var(--color-altus-red), var(--color-rose))",
-                        padding: 2,
-                      }
-                    : { background: "rgba(15, 23, 42, 0.08)", padding: 1.5 }
-                }
-              >
-                {avatarUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={avatarUrl}
-                    alt={name}
-                    className="h-9 w-9 rounded-full object-cover block"
-                  />
-                ) : (
-                  <span
-                    className="h-9 w-9 rounded-full flex items-center justify-center text-[13px] font-semibold text-white"
-                    style={{
-                      background:
-                        "linear-gradient(135deg, #475569, #1f2937)",
-                    }}
-                  >
-                    {initials}
-                  </span>
-                )}
-              </span>
-              <div className="min-w-0">
-                <div className="font-semibold text-[#0F172A] truncate">
-                  {name}
-                </div>
-                <div className="text-[13px] text-[#64748B] truncate">{email}</div>
-              </div>
-            </div>
-            <div className="mt-2.5">
-              {isAdmin ? (
-                <span
-                  className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-semibold tracking-wide text-white"
-                  style={{
-                    background:
-                      "linear-gradient(135deg, #0A6CFF 0%, #0A6CFF 42%, #17B6A0 100%)",
-                    boxShadow: "0 1px 4px rgba(10, 108, 255, 0.35)",
-                  }}
-                >
-                  <Crown size={11} strokeWidth={2.4} />
-                  Administrator
-                </span>
-              ) : (
-                <span
-                  className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-semibold tracking-wide"
-                  style={{
-                    background: "rgba(15, 23, 42, 0.06)",
-                    color: "#334155",
-                  }}
-                >
-                  <UserIcon size={11} strokeWidth={2.4} />
-                  Team member
-                </span>
-              )}
-            </div>
-          </div>
-
-          {/* Admin entry — only for admins, with chevron + subtle highlight */}
-          {isAdmin && (
-            <DropdownMenu.Item asChild>
-              <Link
-                href={"/admin" as Route}
-                className="mt-1 flex items-center justify-between gap-2.5 px-3.5 py-2.5 text-[15px] rounded-lg cursor-pointer outline-none"
-                style={{
-                  background:
-                    "linear-gradient(135deg, rgba(10, 108, 255, 0.06), rgba(244, 63, 94, 0.04))",
-                  color: "#0F172A",
-                }}
-              >
-                <span className="inline-flex items-center gap-2">
-                  <Crown
-                    size={14}
-                    strokeWidth={2.2}
-                    style={{ color: "var(--color-altus-red)" }}
-                  />
-                  <span className="font-medium">Admin panel</span>
-                </span>
-                <ChevronRight
-                  size={14}
-                  strokeWidth={2.2}
-                  style={{ color: "#64748B" }}
-                />
-              </Link>
-            </DropdownMenu.Item>
-          )}
-
-          {/* Section: account */}
-          <DropdownMenu.Label className="px-3 pt-2 pb-1 text-[11px] uppercase tracking-wide text-[#94A3B8] font-bold">
-            Account
-          </DropdownMenu.Label>
-
-          <DropdownMenu.Item asChild>
-            <Link
-              href={"/profile" as Route}
-              className="flex items-center justify-between gap-2.5 px-3.5 py-2.5 text-[15px] rounded-lg cursor-pointer outline-none text-[#0F172A] data-[highlighted]:bg-[#F1F5F9]"
-            >
-              <span className="inline-flex items-center gap-2">
-                <UserCog size={14} strokeWidth={2.2} style={{ color: "#475569" }} />
-                <span className="font-medium">Profile &amp; preferences</span>
-              </span>
-              <ChevronRight
-                size={14}
-                strokeWidth={2.2}
-                style={{ color: "#94A3B8" }}
-              />
-            </Link>
-          </DropdownMenu.Item>
-
-          {/* Section: workspace — Documents / Inbox / Archived moved off the
-              top nav into here. Inbox + Archived carry their live counts. */}
-          <DropdownMenu.Label className="px-3 pt-2 pb-1 text-[11px] uppercase tracking-wide text-[#94A3B8] font-bold">
-            Workspace
-          </DropdownMenu.Label>
-
-          {/* Index — the Ecosystem Index of every sheet / folder / tool. */}
-          <DropdownMenu.Item asChild>
-            <Link
-              href={"/directory" as Route}
-              className="flex items-center justify-between gap-2.5 px-3.5 py-2.5 text-[15px] rounded-lg cursor-pointer outline-none text-[#0F172A] data-[highlighted]:bg-[#F1F5F9]"
-            >
-              <span className="inline-flex items-center gap-2">
-                <LayoutGrid size={14} strokeWidth={2.2} style={{ color: "#475569" }} />
-                <span className="font-medium">Index</span>
-              </span>
-              <ChevronRight size={14} strokeWidth={2.2} style={{ color: "#94A3B8" }} />
-            </Link>
-          </DropdownMenu.Item>
-
-          {/* Documents / Inbox / Archived live in the WMS module — hidden for
-              anyone whose access to it is switched off, since the layout guard
-              would only bounce them back to the hub. Index (/directory) belongs
-              to no module and stays. */}
-          {canAccessWms && (
-          <DropdownMenu.Item asChild>
-            <Link
-              href={"/documents" as Route}
-              className="flex items-center justify-between gap-2.5 px-3.5 py-2.5 text-[15px] rounded-lg cursor-pointer outline-none text-[#0F172A] data-[highlighted]:bg-[#F1F5F9]"
-            >
-              <span className="inline-flex items-center gap-2">
-                <FileText size={14} strokeWidth={2.2} style={{ color: "#475569" }} />
-                <span className="font-medium">Documents</span>
-              </span>
-              <ChevronRight size={14} strokeWidth={2.2} style={{ color: "#94A3B8" }} />
-            </Link>
-          </DropdownMenu.Item>
-          )}
-
-          {canAccessWms && (
-          <DropdownMenu.Item asChild>
-            <Link
-              href={"/inbox" as Route}
-              className="flex items-center justify-between gap-2.5 px-3.5 py-2.5 text-[15px] rounded-lg cursor-pointer outline-none text-[#0F172A] data-[highlighted]:bg-[#F1F5F9]"
-            >
-              <span className="inline-flex items-center gap-2">
-                <Inbox size={14} strokeWidth={2.2} style={{ color: "#475569" }} />
-                <span className="font-medium">Inbox</span>
-              </span>
-              <span className="inline-flex items-center gap-2">
-                {inboxUnread > 0 && <MenuCount n={inboxUnread} tone="red" />}
-                <ChevronRight size={14} strokeWidth={2.2} style={{ color: "#94A3B8" }} />
-              </span>
-            </Link>
-          </DropdownMenu.Item>
-          )}
-
-          {/* Archiving is admin-only, so the Archived view is too. */}
-          {isAdmin && canAccessWms && (
-            <DropdownMenu.Item asChild>
-              <Link
-                href={"/archived" as Route}
-                className="flex items-center justify-between gap-2.5 px-3.5 py-2.5 text-[15px] rounded-lg cursor-pointer outline-none text-[#0F172A] data-[highlighted]:bg-[#F1F5F9]"
-              >
-                <span className="inline-flex items-center gap-2">
-                  <Archive size={14} strokeWidth={2.2} style={{ color: "#475569" }} />
-                  <span className="font-medium">Archived</span>
-                </span>
-                <span className="inline-flex items-center gap-2">
-                  {archivedTasks > 0 && <MenuCount n={archivedTasks} tone="neutral" />}
-                  <ChevronRight size={14} strokeWidth={2.2} style={{ color: "#94A3B8" }} />
-                </span>
-              </Link>
-            </DropdownMenu.Item>
-          )}
-
-          <DropdownMenu.Separator className="my-1 h-px bg-[#E2E8F0]" />
-
-          <DropdownMenu.Item
-            onSelect={handleSignOut}
-            className="flex items-center gap-2.5 px-3.5 py-2.5 text-[15px] rounded-lg cursor-pointer outline-none text-[#0751BE] data-[highlighted]:bg-[#EFF6FF]"
-          >
-            <LogOut size={14} strokeWidth={2.2} style={{ color: "#0751BE" }} />
-            <span className="font-medium">Sign out</span>
-          </DropdownMenu.Item>
-        </DropdownMenu.Content>
-      </DropdownMenu.Portal>
+      {menuContent}
     </DropdownMenu.Root>
   );
 }

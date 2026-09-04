@@ -14,14 +14,13 @@ export function SubjectFilter({
   const opts = options.map((s) => ({ value: s, label: s }));
   return (
     <div className="filter-chip">
-      <Tag size={16} className="text-ink-subtle" strokeWidth={2} />
+      <Tag size={14} className="text-ink-subtle" strokeWidth={2} />
       <MultiSelect
         options={opts}
         selected={selected}
         onChange={onChange}
         placeholder="All Subjects"
-        className="min-w-[6.5rem] !text-[14px]"
-        openOnHover
+        className="min-w-[6.5rem] !text-[12px] !font-medium"
       />
     </div>
   );

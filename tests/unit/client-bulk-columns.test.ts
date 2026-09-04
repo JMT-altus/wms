@@ -1,8 +1,17 @@
 import { describe, expect, it } from "vitest";
 import {
+  ADDRESS_BLOCK,
+  ADDRESS_TYPE_OPTIONS,
+  BANK_BLOCK,
+  CHILD_BLOCKS,
   CLIENT_BULK_COLUMNS,
   COLUMN_BY_KEY,
+  CONTACT_BLOCK,
+  CONTACT_TYPE_OPTIONS,
   STANDARD_COLUMN_KEYS,
+  blockValues,
+  resolveAddressType,
+  resolveContactType,
   groupedColumns,
   isBlankRow,
   matchHeader,
@@ -27,12 +36,28 @@ const options: ClientBulkOptions = {
   freightCharges: ["To Pay"],
   transporters: ["VRL"],
   quantityDeviations: ["+/- 5%"],
+  designations: ["Purchase Manager", "Accountant"],
+  departments: ["Purchase", "Accounts"],
+  contactTypes: [],
+  addressTypes: [],
   grades: [],
   yesNo: [],
   activeStatus: [],
 };
 
 const column = (key: string) => COLUMN_BY_KEY.get(key)!;
+
+/**
+ * The groups that write a child table rather than the client row.
+ *
+ * Named here so the test below can still assert the Client Master's own
+ * column list exactly — the blocks were added beside those columns, not in
+ * among them, and that separation is the thing worth pinning down.
+ */
+const DIRECTORY_GROUPS = new Set(CHILD_BLOCKS.map((b) => b.group));
+
+const clientOwnKeys = () =>
+  CLIENT_BULK_COLUMNS.filter((c) => !DIRECTORY_GROUPS.has(c.group)).map((c) => c.key);
 
 describe("the catalogue", () => {
   /**
@@ -43,8 +68,8 @@ describe("the catalogue", () => {
    * this list the contract: change either side without the other and this
    * fails, which is the point.
    */
-  it("is exactly the Client Master's columns, in its order", () => {
-    expect(CLIENT_BULK_COLUMNS.map((c) => c.key)).toEqual([
+  it("still carries the Client Master's columns, in its order", () => {
+    expect(clientOwnKeys()).toEqual([
       "name",
       "gstin",
       "reference",
@@ -79,10 +104,86 @@ describe("the catalogue", () => {
     ]);
   });
 
-  it("carries no contact, address or bank column — each has a master of its own", () => {
-    const keys = CLIENT_BULK_COLUMNS.map((c) => c.key);
-    for (const absent of ["contactFirstName", "contactNo", "contactEmail", "addressLine1", "city", "pinCode"]) {
-      expect(keys).not.toContain(absent);
+  /**
+   * The three directories.
+   *
+   * Asserted through the block maps rather than through a list of column
+   * keys, because the maps are what the import walks: a field missing here is
+   * a field the sheet cannot carry, whatever columns happen to exist.
+   */
+  it("carries the Client Contact Master's columns, Contact Type included", () => {
+    expect(Object.keys(CONTACT_BLOCK.fields)).toEqual([
+      "contactType",
+      "firstName",
+      "lastName",
+      "contactNo",
+      "email",
+      "designationId",
+      "departmentId",
+      "notes",
+    ]);
+    expect(column(CONTACT_BLOCK.fields.contactType!).label).toBe("Contact Type");
+    expect(column(CONTACT_BLOCK.fields.email!).label).toBe("Contact Email");
+    expect(optionsFor(column(CONTACT_BLOCK.fields.contactType!), options)).toEqual([
+      "Purchase Contact",
+      "Accounts Contact",
+      "Other Contact",
+    ]);
+  });
+
+  it("carries the Client Address Book's columns, Address Type included", () => {
+    expect(Object.keys(ADDRESS_BLOCK.fields)).toEqual([
+      "addressType",
+      "line1",
+      "city",
+      "state",
+      "country",
+      "pinCode",
+      "email",
+    ]);
+    // One Street Address column, landing in line1 — nobody fills "Line 3".
+    expect(column(ADDRESS_BLOCK.fields.line1!).label).toBe("Street Address");
+    expect(optionsFor(column(ADDRESS_BLOCK.fields.addressType!), options)).toEqual([
+      "Billing Address",
+      "Delivery Address",
+      "Invoice Mailing Address",
+    ]);
+  });
+
+  it("carries the Client Bank Master's columns", () => {
+    expect(Object.keys(BANK_BLOCK.fields)).toEqual([
+      "accountName",
+      "bankName",
+      "accountNo",
+      "ifscSwift",
+      "branch",
+      "accountType",
+    ]);
+    expect(column(BANK_BLOCK.fields.ifscSwift!).label).toBe("IFSC / SWIFT");
+  });
+
+  it("gives every block column somewhere to land", () => {
+    for (const block of CHILD_BLOCKS) {
+      for (const key of Object.values(block.fields)) {
+        expect(COLUMN_BY_KEY.get(key), `${key} is in a block but not the catalogue`).toBeTruthy();
+        expect(COLUMN_BY_KEY.get(key)!.group).toBe(block.group);
+      }
+    }
+  });
+
+  it("leaves every block column out of the sheet until it is asked for", () => {
+    const blockKeys = new Set(CHILD_BLOCKS.flatMap((b) => Object.values(b.fields)));
+    expect(STANDARD_COLUMN_KEYS.filter((k) => blockKeys.has(k))).toEqual([]);
+  });
+
+  it("never lets one heading mean two columns", () => {
+    const owner = new Map<string, string>();
+    for (const c of CLIENT_BULK_COLUMNS) {
+      for (const spelling of [c.key, c.label, ...(c.aliases ?? [])]) {
+        const n = spelling.toLowerCase().replace(/[^a-z0-9]/g, "");
+        expect(owner.get(n) ?? c.key, `"${spelling}" is claimed twice`).toBe(c.key);
+        owner.set(n, c.key);
+      }
     }
   });
 
@@ -167,10 +268,31 @@ describe("matchHeader", () => {
     expect(matchHeader("credit period days")?.key).toBe("creditDays");
   });
 
+  it("matches a block heading, however it is spelled", () => {
+    expect(matchHeader("Contact Type")?.key).toBe(CONTACT_BLOCK.fields.contactType);
+    expect(matchHeader("First Name")?.key).toBe(CONTACT_BLOCK.fields.firstName);
+    expect(matchHeader("Mobile No.")?.key).toBe(CONTACT_BLOCK.fields.contactNo);
+    expect(matchHeader("Email")?.key).toBe(CONTACT_BLOCK.fields.email);
+    expect(matchHeader("Address Line 1")?.key).toBe(ADDRESS_BLOCK.fields.line1);
+    expect(matchHeader("pincode")?.key).toBe(ADDRESS_BLOCK.fields.pinCode);
+    expect(matchHeader("IFSC")?.key).toBe(BANK_BLOCK.fields.ifscSwift);
+    expect(matchHeader("A/c No")?.key).toBe(BANK_BLOCK.fields.accountNo);
+  });
+
+  /**
+   * The client row's own State wins a bare "State" heading, because it is the
+   * older column and the one the Client Master shows. The address block's is
+   * headed "Address State" for exactly that reason.
+   */
+  it("keeps the client's own State and Country ahead of the address block's", () => {
+    expect(matchHeader("State")?.key).toBe("state");
+    expect(matchHeader("Country")?.key).toBe("country");
+    expect(matchHeader("Address State")?.key).toBe(ADDRESS_BLOCK.fields.state);
+    expect(matchHeader("Address Country")?.key).toBe(ADDRESS_BLOCK.fields.country);
+  });
+
   it("returns null for a heading nothing owns", () => {
     expect(matchHeader("Ledger Balance")).toBeNull();
-    // Contacts and addresses are not this sheet's business.
-    expect(matchHeader("Mobile No.")).toBeNull();
     expect(matchHeader("   ")).toBeNull();
   });
 });
@@ -240,6 +362,34 @@ describe("validateCell", () => {
     expect(validateCell(column("panNo"), "NOTAPAN", options)).toMatch(/5 letters/);
   });
 
+  it("checks a block's email and holds its two rosters to the master", () => {
+    const email = column(CONTACT_BLOCK.fields.email!);
+    expect(validateCell(email, "ravi@abceng.co.in", options)).toBeNull();
+    expect(validateCell(email, "", options)).toBeNull();
+    expect(validateCell(email, "ravi at abceng", options)).toMatch(/email address/);
+
+    const designation = column(CONTACT_BLOCK.fields.designationId!);
+    expect(validateCell(designation, "purchase manager", options)).toBeNull();
+    expect(validateCell(designation, "Chief Vibes Officer", options)).toMatch(
+      /not in Designation/,
+    );
+  });
+
+  it("holds the two type columns to their fixed lists", () => {
+    const contactType = column(CONTACT_BLOCK.fields.contactType!);
+    expect(validateCell(contactType, "accounts contact", options)).toBeNull();
+    expect(validateCell(contactType, "Sales Contact", options)).toMatch(/not in Contact Type/);
+
+    const addressType = column(ADDRESS_BLOCK.fields.addressType!);
+    expect(validateCell(addressType, "Delivery Address", options)).toBeNull();
+    expect(validateCell(addressType, "Warehouse", options)).toMatch(/not in Address Type/);
+  });
+
+  it("lets an address State off the list, like the client's own State", () => {
+    expect(validateCell(column(ADDRESS_BLOCK.fields.state!), "Tamil Nadu", options)).toBeNull();
+    expect(validateCell(column(ADDRESS_BLOCK.fields.pinCode!), "382445", options)).toBeNull();
+  });
+
   it("enforces the column's own length limit", () => {
     expect(validateCell(column("name"), "x".repeat(201), options)).toMatch(/200 characters/);
     expect(validateCell(column("tags"), `${"y".repeat(31)}, ok`, options)).toMatch(/30 characters/);
@@ -255,6 +405,79 @@ describe("optionsFor", () => {
 
   it("serves a master-backed column from its list", () => {
     expect(optionsFor(column("customerTypes"), options)).toEqual(options.customerTypes);
+  });
+});
+
+describe("blockValues", () => {
+  it("reads a block's cells back by the field they fill", () => {
+    expect(
+      blockValues(
+        {
+          name: "ABC Ltd",
+          [ADDRESS_BLOCK.fields.line1!]: " 12 Phase II, GIDC Vatva ",
+          [ADDRESS_BLOCK.fields.city!]: "Ahmedabad",
+        },
+        ADDRESS_BLOCK,
+      ),
+    ).toEqual({
+      addressType: "",
+      line1: "12 Phase II, GIDC Vatva",
+      city: "Ahmedabad",
+      state: "",
+      country: "",
+      pinCode: "",
+      email: "",
+    });
+  });
+
+  it("is null when the block was left alone — an empty block makes no row", () => {
+    expect(blockValues({ name: "ABC Ltd" }, ADDRESS_BLOCK)).toBeNull();
+    expect(blockValues({ [ADDRESS_BLOCK.fields.line1!]: "   " }, ADDRESS_BLOCK)).toBeNull();
+  });
+
+  it("reads only its own block, not the one beside it", () => {
+    const row = { [ADDRESS_BLOCK.fields.city!]: "Ahmedabad" };
+    expect(blockValues(row, ADDRESS_BLOCK)?.city).toBe("Ahmedabad");
+    expect(blockValues(row, CONTACT_BLOCK)).toBeNull();
+    expect(blockValues(row, BANK_BLOCK)).toBeNull();
+  });
+
+  it("reads the bank block the same way", () => {
+    expect(blockValues({ [BANK_BLOCK.fields.bankName!]: "HDFC" }, BANK_BLOCK)).toMatchObject({
+      bankName: "HDFC",
+      accountNo: "",
+    });
+  });
+});
+
+describe("the two type columns", () => {
+  it("offers the labels the masters show, not the values they store", () => {
+    expect(CONTACT_TYPE_OPTIONS).toEqual([
+      "Purchase Contact",
+      "Accounts Contact",
+      "Other Contact",
+    ]);
+    expect(ADDRESS_TYPE_OPTIONS).toEqual([
+      "Billing Address",
+      "Delivery Address",
+      "Invoice Mailing Address",
+    ]);
+  });
+
+  it("resolves a label back to the stored value, case and punctuation blind", () => {
+    expect(resolveContactType("Purchase Contact")).toBe("purchase");
+    expect(resolveContactType("accounts contact")).toBe("accounts");
+    expect(resolveAddressType("Delivery Address")).toBe("delivery");
+    expect(resolveAddressType("invoice-mailing address")).toBe("invoice_mailing");
+  });
+
+  it("reads a blank as the default each column documents", () => {
+    // `contact_type` defaults to other; `address_type` is NOT NULL and an
+    // unqualified address is the client's own, which is billing.
+    expect(resolveContactType("")).toBe("other");
+    expect(resolveContactType("Sales Contact")).toBe("other");
+    expect(resolveAddressType("")).toBe("billing");
+    expect(resolveAddressType("Warehouse")).toBe("billing");
   });
 });
 

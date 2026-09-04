@@ -1,5 +1,7 @@
 import { listEmployeeOptions } from "@/lib/queries/employees";
 import {
+  listActiveDepartmentOptions,
+  listActiveDesignationOptions,
   listActiveProductOptions,
   listClientKycLookups,
   listKycDropdownOptions,
@@ -29,18 +31,28 @@ export interface ClientBulkRosters {
   salesByName: Map<string, string>;
   /** Product name (normalised) → product id, for the import. */
   productsByName: Map<string, string>;
+  /** Designation name (normalised) → id, for the contact blocks. */
+  designationsByName: Map<string, string>;
+  /** Department name (normalised) → id, for the contact blocks. */
+  departmentsByName: Map<string, string>;
 }
 
 /** Normalised the same way `matchOption` compares — case and punctuation blind. */
 const keyOf = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]/g, "");
 
 export async function listClientBulkOptions(): Promise<ClientBulkRosters> {
-  const [lookups, dropdowns, productRows, salesRows] = await Promise.all([
-    listClientKycLookups(),
-    listKycDropdownOptions(),
-    listActiveProductOptions(),
-    listEmployeeOptions(),
-  ]);
+  const [lookups, dropdowns, productRows, salesRows, designationRows, departmentRows] =
+    await Promise.all([
+      listClientKycLookups(),
+      listKycDropdownOptions(),
+      listActiveProductOptions(),
+      listEmployeeOptions(),
+      // The Contact Person block's two pickers, from the loaders the KYC form
+      // itself uses — a contact imported here must be one the form can show
+      // back, which means the same two rosters and no others.
+      listActiveDesignationOptions(),
+      listActiveDepartmentOptions(),
+    ]);
 
   const byName = (rows: { id: string; name: string }[]): Map<string, string> =>
     new Map(rows.map((r) => [keyOf(r.name), r.id]));
@@ -59,12 +71,18 @@ export async function listClientBulkOptions(): Promise<ClientBulkRosters> {
       freightCharges: dropdowns.freight_charges,
       transporters: dropdowns.transporter,
       quantityDeviations: dropdowns.quantity_deviation,
+      designations: designationRows.map((r) => r.name),
+      departments: departmentRows.map((r) => r.name),
       // Fixed sets — `optionsFor` serves these from the enum, not a list.
+      contactTypes: [],
+      addressTypes: [],
       grades: [],
       yesNo: [],
       activeStatus: [],
     },
     salesByName: byName(salesRows),
     productsByName: byName(productRows),
+    designationsByName: byName(designationRows),
+    departmentsByName: byName(departmentRows),
   };
 }

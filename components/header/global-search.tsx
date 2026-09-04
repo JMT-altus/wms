@@ -69,15 +69,27 @@ export function GlobalSearch() {
   return (
     <Dialog.Root open={open} onOpenChange={setOpen}>
       <Dialog.Trigger asChild>
+        {/* A real search FIELD, not a pill: it sits at the left of the header
+            where a search box is expected, and its width and placeholder say
+            what it reaches — everything, not just this screen. The ⌘K badge
+            is pushed to the far right of the field, the way a command
+            palette's own input reads.
+
+            Tinted navy rather than white — a white slab in a dark bar reads as
+            a hole punched through it. Styling lives in .global-search-field
+            (globals.css) so the hover state can be a real :hover rather than
+            two more inline handlers. */}
         <button
           type="button"
-          aria-label="Search"
-          className="inline-flex items-center gap-2 rounded-pill border border-hairline bg-surface-soft px-2.5 h-8 text-ink-subtle transition-colors hover:bg-surface-card hover:border-hairline-strong max-md:h-7 max-md:px-2"
+          aria-label="Global search"
+          className="global-search-field inline-flex h-9 w-full max-w-[420px] items-center gap-2.5 rounded-[10px] border px-3 text-left transition-colors max-2xl:max-w-[300px] max-md:h-8 max-md:w-9 max-md:justify-center max-md:px-0"
         >
           <Search size={16} strokeWidth={2.2} className="shrink-0" />
-          <span className="text-[14px] font-medium max-2xl:hidden">Search everything…</span>
+          <span className="flex-1 truncate text-[13.5px] font-semibold max-md:hidden">
+            Search everything…
+          </span>
           <kbd
-            className="ml-2 hidden 2xl:inline-flex items-center gap-0.5 rounded border border-hairline bg-surface-card px-1.5 py-0.5 text-[11px] font-bold text-ink-subtle"
+            className="ml-auto hidden shrink-0 items-center gap-0.5 rounded border px-1.5 py-0.5 text-[11px] font-bold lg:inline-flex max-md:hidden"
             aria-hidden
           >
             ⌘K

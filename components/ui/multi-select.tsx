@@ -135,7 +135,7 @@ export function MultiSelect({
               <X size={14} />
             </span>
           )}
-          <ChevronDown size={14} className="text-ink-subtle" />
+          <ChevronDown size={12} className="text-ink-subtle" />
         </button>
       </PopoverTrigger>
       <PopoverContent

@@ -37,6 +37,8 @@ export type NotificationMeta = {
   note?: string;
   /** For commented — the comment body. */
   comment?: string;
+  /** For nudge — the effective due date, ALREADY formatted for display. */
+  dueLabel?: string;
   /** Attendance (Task A8) — YYYY-MM-DD of the affected log day. */
   logDate?: string;
   /** Attendance — "HH:mm" check-in time. */

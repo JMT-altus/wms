@@ -176,6 +176,7 @@ import {
 
 // Friendly labels for the column show/hide menu (#11).
 const COLUMN_LABELS: Record<string, string> = {
+  action: "Action",
   taskNo: "ID No.",
   client: "Client",
   doerName: "Doer",
@@ -209,8 +210,12 @@ type StatusTones = Record<TaskStatus, StatusColorToken>;
 // Per-column display hints. `mobileHide` collapses low-priority columns at
 // ≤768px; `align` centers the date/age columns; `narrow` caps the Subject
 // width so it stays compact.
+/** Columns eligible for the left freeze, in table order. Must stay a prefix of
+ *  buildColumns() — see the frozenIds loop for why. */
+const FREEZABLE = new Set(["select", "taskNo", "client", "subject", "title"]);
+
 type TaskCol = ColumnDef<TaskListRow> & {
-  meta?: { mobileHide?: boolean; align?: "center" | "right"; narrow?: boolean; wide?: boolean };
+  meta?: { mobileHide?: boolean; align?: "center" | "right"; narrow?: boolean; wide?: boolean; maxCh?: number; minCh?: number };
 };
 
 function buildColumns(
@@ -256,7 +261,7 @@ function buildColumns(
             {n == null ? (
               <span className="text-ink-subtle">—</span>
             ) : (
-              <span className="font-bold tabular-nums text-ink-soft" style={{ fontSize: 14 }}>
+              <span className="font-normal tabular-nums text-ink-soft" style={{ fontSize: 14 }}>
                 #{n}
               </span>
             )}
@@ -280,7 +285,11 @@ function buildColumns(
     {
       accessorKey: "client",
       header: "Client",
-      meta: { narrow: true },
+      // 22ch: fits "JMT Drive Solutions" and most other names outright, while
+      // the default 32ch let one long client set the column width and leave a
+      // gap in front of Subject on every other row. Anything longer ellipsises
+      // and the `title` below shows it in full.
+      meta: { maxCh: 22 },
       // Sort nulls last and case-insensitively so "altus" and "Altus" cluster.
       sortingFn: (a, b) =>
         (a.original.client ?? "￿").localeCompare(b.original.client ?? "￿", undefined, {
@@ -289,7 +298,7 @@ function buildColumns(
       cell: (info) => {
         const v = info.getValue<string | null>();
         return v ? (
-          <span className="text-ink-strong font-semibold" style={{ fontSize: 15 }}>
+          <span className="text-ink-strong font-normal" title={v} style={{ fontSize: 15 }}>
             {v}
           </span>
         ) : (
@@ -300,9 +309,13 @@ function buildColumns(
     {
       accessorKey: "subject",
       header: "Subject",
-      meta: { narrow: true },
+      // Same shape as Task: clip the text at 16ch (what `narrow` used to give
+      // it), floor the column at 20ch. The 4ch difference is the gap before
+      // Task — "Miscellaneous" is the longest value here and all but filled
+      // the column on its own.
+      meta: { maxCh: 16, minCh: 20 },
       cell: (info) => (
-        <span className="text-body-lg text-ink-muted">
+        <span className="text-body-lg font-normal text-ink-muted">
           {info.getValue<string>() ?? "—"}
         </span>
       ),
@@ -310,12 +323,19 @@ function buildColumns(
     {
       accessorKey: "title",
       header: "Task",
-      meta: { wide: true },
+      // wide: takes whatever width the other columns don't claim.
+      // minCh 40: the title itself clips at 32ch, so the extra 8ch lands as
+      // clear space before Doer rather than as more title.
+      meta: { wide: true, minCh: 40 },
       cell: ({ row }) => <TaskTitleCell row={row.original} />,
     },
     {
       accessorKey: "doerName",
       header: "Doer",
+      // Both this and Initiator render as initials, so each column collapses
+      // to its content and the two sit flush against each other. A width floor
+      // on Doer opens the gap without touching the shared gutter.
+      meta: { minCh: 14 },
       cell: ({ row }) => (
         <InlineDoerCell
           taskId={row.original.id}
@@ -342,7 +362,7 @@ function buildColumns(
         return name ? (
           <span className="inline-flex items-center gap-2.5">
             <EmployeeAvatar name={name} size="sm" />
-            <span className="text-ink-soft font-semibold" style={{ fontSize: 15 }}>
+            <span className="text-ink-soft font-normal" style={{ fontSize: 15 }}>
               {name}
             </span>
           </span>
@@ -398,7 +418,7 @@ function buildColumns(
       header: "Created",
       meta: { mobileHide: true },
       cell: (info) => (
-        <span className="text-body-lg text-ink-muted tabular-nums">
+        <span className="text-body-lg font-normal text-ink-muted tabular-nums">
           {safeFormat(info.getValue<Date>(), "MMM d")}
         </span>
       ),
@@ -429,7 +449,7 @@ function buildColumns(
       header: "Age",
       meta: { mobileHide: true },
       cell: (info) => (
-        <span className="text-body-lg text-ink tabular-nums">
+        <span className="text-body-lg font-normal text-ink tabular-nums">
           {info.getValue<number>()}d
         </span>
       ),
@@ -595,6 +615,69 @@ export function TaskTable({
     autoResetPageIndex: false,
   });
 
+  // Left-frozen columns: the block that says WHICH row you are on, kept in
+  // place while the attribute columns (Priority, Status, Due, Age…) scroll
+  // past. Sticky needs a real `left` for each one, so these carry explicit
+  // pixel widths — a `ch` width would move with each cell's own font size and
+  // the offsets would drift apart.
+  // The left-frozen block: the columns that say WHICH row you are on, held in
+  // place while the attribute columns scroll past.
+  //
+  // Taken as a contiguous PREFIX of the visible columns, never as a set. A
+  // frozen column with an unfrozen one in front of it has no correct offset —
+  // that was the bug this replaced, where `taskNo` sat between `select` and
+  // `client` and every frozen cell after it parked one column-width too far
+  // left, straight on top of the scrolling data.
+  const frozenIds: string[] = [];
+  for (const c of table.getVisibleLeafColumns()) {
+    if (!FREEZABLE.has(c.id)) break;
+    frozenIds.push(c.id);
+  }
+
+  // Offsets are MEASURED, not declared. The table is auto-layout, so a `width`
+  // on a cell is only a hint — the browser sizes columns from their content,
+  // and any offset we hardcode drifts from where the column actually is. The
+  // header cells are the source of truth for that geometry.
+  const headCells = React.useRef(new Map<string, HTMLTableCellElement>());
+  const [frozenLefts, setFrozenLefts] = React.useState<Record<string, number>>({});
+  const frozenKey = frozenIds.join("|");
+
+  React.useLayoutEffect(() => {
+    const ids = frozenKey ? frozenKey.split("|") : [];
+    function measure() {
+      let left = 0;
+      const next: Record<string, number> = {};
+      for (const id of ids) {
+        next[id] = left;
+        // offsetWidth, not a rect position: a cell that is already stuck
+        // reports its stuck x, which would feed its own offset back in.
+        left += headCells.current.get(id)?.offsetWidth ?? 0;
+      }
+      setFrozenLefts((prev) =>
+        ids.length === Object.keys(prev).length && ids.every((id) => prev[id] === next[id])
+          ? prev
+          : next,
+      );
+    }
+    measure();
+    // Column widths move with the viewport, the font, and the data on the
+    // current page — re-measure rather than trusting the first pass.
+    const ro = new ResizeObserver(measure);
+    for (const id of ids) {
+      const el = headCells.current.get(id);
+      if (el) ro.observe(el);
+    }
+    return () => ro.disconnect();
+  }, [frozenKey, rows]);
+
+  const frozen = new Map<string, { left: number; last: boolean }>();
+  frozenIds.forEach((id, i) => {
+    frozen.set(id, {
+      left: frozenLefts[id] ?? 0,
+      last: i === frozenIds.length - 1,
+    });
+  });
+
   // Apply the chosen rows-per-page and jump back to the first page so the
   // user lands at the top of the re-sliced list rather than a now-stale page.
   React.useEffect(() => {
@@ -718,8 +801,15 @@ export function TaskTable({
     <div ref={listTopRef} className="scroll-mt-6">
       {/* Toolbar — one line: Group-by ▾ · Search · pager (1 … N · Next · Last)
           · Rows/page · page readout · Columns. Everything pagination-related
-          lives up here so the table gets the vertical space below. */}
-      <div className="mb-3 flex items-center gap-3 flex-wrap">
+          lives up here so the table gets the vertical space below.
+
+          One box, matching the table below it: the controls act ON the table,
+          so drawing them on the same kind of surface says they belong to it
+          rather than floating loose above the page. */}
+      <div
+        className="mb-2 flex items-center gap-2 flex-wrap rounded-section border border-hairline bg-surface-card px-2.5 py-1.5"
+        style={{ boxShadow: "0 14px 32px -20px rgba(10, 108, 255, 0.16), 0 2px 6px -2px rgba(15, 23, 42, 0.06)" }}
+      >
         <div className="flex items-center gap-3 flex-wrap min-w-0">
           <GroupByControl value={groupBy} onChange={setGroupBy} />
           <div className="w-full sm:w-[340px] md:w-[400px] min-w-[200px]">
@@ -769,11 +859,16 @@ export function TaskTable({
                 const hide = col.meta?.mobileHide;
                 const isActions = h.column.id === "actions";
                 const canSort = h.column.getCanSort();
+                const frz = frozen.get(h.column.id);
                 const sorted = h.column.getIsSorted(); // false | "asc" | "desc"
                 const headerNode = flexRender(h.column.columnDef.header, h.getContext());
                 return (
                   <th
                     key={h.id}
+                    ref={(el) => {
+                      if (el) headCells.current.set(h.column.id, el);
+                      else headCells.current.delete(h.column.id);
+                    }}
                     aria-sort={
                       sorted === "asc"
                         ? "ascending"
@@ -781,13 +876,14 @@ export function TaskTable({
                           ? "descending"
                           : undefined
                     }
-                    className={`sticky top-0 px-5 py-4 text-table-head whitespace-nowrap max-md:px-3 max-md:py-3 ${alignClass(col)} ${hide ? "max-md:hidden" : ""} ${isActions ? "right-0 z-30" : "z-20"}`}
+                    className={`sticky top-0 px-1.5 py-2 text-table-head whitespace-nowrap max-md:px-1.5 max-md:py-2 ${alignClass(col)} ${hide ? "max-md:hidden" : ""} ${col.meta?.wide && !frz ? "w-full" : ""} ${isActions || frz ? "z-30" : "z-20"} ${frz ? "sticky" : ""} ${isActions ? "right-0" : ""}`}
                     style={{
                       // Highlighted header bar — a tinted strip with darker
                       // label text that sets the column row apart from the
                       // white body rows below.
                       background: "var(--color-surface-track)",
                       color: "var(--color-ink-soft)",
+                      ...(frz ? frozenStyle(frz) : null),
                       ...(isActions
                         ? { boxShadow: "-10px 0 14px -10px rgba(15,23,42,0.14)" }
                         : {}),
@@ -838,22 +934,13 @@ export function TaskTable({
             groupBy === "none" || !prev ? null : groupValue(prev.original, groupBy, resolvedLabels);
           const showHeader = label !== null && (i === 0 || label !== prevLabel);
           const visibleCols = table.getVisibleLeafColumns().length;
-          // Left accent stripe for at-risk rows so overdue/today work is
-          // impossible to miss without reading the date column.
-          const rowUrgency = taskUrgency(row.original, row.original.status);
-          const rowAccent =
-            rowUrgency.level === "overdue"
-              ? "inset 3px 0 0 0 var(--color-red)"
-              : rowUrgency.level === "today"
-                ? "inset 3px 0 0 0 var(--color-orange)"
-                : undefined;
           return (
             <React.Fragment key={row.id}>
               {showHeader && (
                 <tr className="bg-surface-subtle/60">
                   <td
                     colSpan={visibleCols}
-                    className="px-5 py-2.5 max-md:px-3 border-b border-hairline"
+                    className="px-2 py-2 max-md:px-2 border-b border-hairline"
                   >
                     <span className="inline-flex items-center gap-2">
                       <span
@@ -875,39 +962,51 @@ export function TaskTable({
             <tr
               data-task-row={row.original.id}
               className={`task-row border-b border-hairline last:border-b-0 transition-colors ${
-                row.original.id === focusedId ? "bg-altus-red/[0.06]" : ""
+                row.original.id === focusedId ? "task-row-focused" : ""
               }`}
               style={{
                 boxShadow:
-                  [
-                    rowAccent,
-                    row.original.id === focusedId
-                      ? "inset 0 0 0 2px var(--color-altus-red)"
-                      : null,
-                  ]
-                    .filter(Boolean)
-                    .join(", ") || undefined,
+                  row.original.id === focusedId
+                    ? "inset 0 0 0 2px var(--color-altus-red)"
+                    : undefined,
               }}
             >
               {row.getVisibleCells().map((cell) => {
                 const col = cell.column.columnDef as TaskCol;
                 const hide = col.meta?.mobileHide;
                 const isActions = cell.column.id === "actions";
-                // max-w + ellipsis caps long values (title, names) so they
-                // don't push the actions kebab off-screen. Subject is capped
-                // tighter (narrow). Centered columns get text-center. The
-                // actions cell pins to the right edge (#6) so the ⋯ menu is
-                // always reachable during horizontal scroll.
-                const maxW = isActions
-                  ? ""
-                  : col.meta?.narrow
-                    ? "max-w-[16ch]"
-                    : "max-w-[32ch] max-md:max-w-[20ch]";
+                // Every cell clips to one line: max-w + ellipsis keeps long
+                // values (title, names) from pushing the actions kebab
+                // off-screen, with `narrow` columns capped tighter. Anything
+                // that can be cut carries a `title` so the full value is one
+                // hover away. Centered columns get text-center; the actions
+                // cell pins to the right edge so the ⋯ menu stays reachable
+                // during horizontal scroll.
+                const clamp = `whitespace-nowrap overflow-hidden text-ellipsis ${
+                  isActions || col.meta?.maxCh
+                    ? ""
+                    : col.meta?.narrow
+                      ? "max-w-[16ch]"
+                      : "max-w-[32ch] max-md:max-w-[20ch]"
+                }`;
+                // Inline, not a Tailwind class: the value is per-column data,
+                // and JIT can't generate a class from a runtime number.
+                const capStyle = {
+                  ...(col.meta?.maxCh ? { maxWidth: `${col.meta.maxCh}ch` } : null),
+                  ...(col.meta?.minCh ? { minWidth: `${col.meta.minCh}ch` } : null),
+                };
+                const frz = frozen.get(cell.column.id);
                 return (
                   <td
                     key={cell.id}
-                    className={`px-3 py-4 whitespace-nowrap overflow-hidden text-ellipsis max-md:px-3 max-md:py-3 ${maxW} ${alignClass(col)} ${hide ? "max-md:hidden" : ""} ${col.meta?.wide ? "min-w-[280px]" : ""} ${isActions ? "sticky right-0 z-10 bg-surface-card" : ""}`}
-                    style={isActions ? { boxShadow: "-10px 0 14px -10px rgba(15,23,42,0.14)" } : undefined}
+                    className={`px-1.5 py-1 max-md:px-1.5 max-md:py-1 ${clamp} ${alignClass(col)} ${hide ? "max-md:hidden" : ""} ${col.meta?.wide && !frz ? "w-full" : ""} ${frz || isActions ? "task-cell-pinned sticky z-20" : ""} ${isActions ? "right-0" : ""}`}
+                    style={{
+                      ...capStyle,
+                      ...(frz ? frozenStyle(frz) : null),
+                      ...(isActions
+                        ? { boxShadow: "-10px 0 14px -10px rgba(15,23,42,0.14)" }
+                        : null),
+                    }}
                   >
                     {flexRender(
                       cell.column.columnDef.cell ?? ((c) => c.getValue()),
@@ -1017,7 +1116,7 @@ function CompactPager({
             type="button"
             onClick={() => onGoto(p - 1)}
             aria-current={p - 1 === pageIndex ? "page" : undefined}
-            className={`inline-flex items-center justify-center min-w-9 h-9 px-2.5 rounded-lg text-[13.5px] font-bold tabular-nums border transition-all ${
+            className={`inline-flex items-center justify-center min-w-8 h-8 px-2 rounded-lg text-[12.5px] font-bold tabular-nums border transition-all ${
               p - 1 === pageIndex
                 ? "bg-altus-red text-white border-altus-red"
                 : "bg-surface-card text-ink-strong border-hairline hover:border-altus-red hover:text-altus-red"
@@ -1032,7 +1131,7 @@ function CompactPager({
         onClick={() => onGoto(pageIndex + 1)}
         disabled={!canNext}
         aria-label="Next page"
-        className="inline-flex items-center gap-1 h-9 px-3 rounded-lg text-[13.5px] font-bold border border-hairline bg-surface-card text-ink-strong transition-all enabled:hover:border-altus-red enabled:hover:text-altus-red disabled:opacity-40 disabled:cursor-not-allowed"
+        className="inline-flex items-center gap-1 h-8 px-2.5 rounded-lg text-[12.5px] font-bold border border-hairline bg-surface-card text-ink-strong transition-all enabled:hover:border-altus-red enabled:hover:text-altus-red disabled:opacity-40 disabled:cursor-not-allowed"
       >
         Next
         <ChevronRight size={15} strokeWidth={2.4} />
@@ -1042,7 +1141,7 @@ function CompactPager({
         onClick={() => onGoto(pageCount - 1)}
         disabled={!canNext}
         aria-label="Last page"
-        className="inline-flex items-center gap-1 h-9 px-3 rounded-lg text-[13.5px] font-bold border border-hairline bg-surface-card text-ink-strong transition-all enabled:hover:border-altus-red enabled:hover:text-altus-red disabled:opacity-40 disabled:cursor-not-allowed"
+        className="inline-flex items-center gap-1 h-8 px-2.5 rounded-lg text-[12.5px] font-bold border border-hairline bg-surface-card text-ink-strong transition-all enabled:hover:border-altus-red enabled:hover:text-altus-red disabled:opacity-40 disabled:cursor-not-allowed"
       >
         Last
         <ChevronsRight size={15} strokeWidth={2.4} />
@@ -1077,7 +1176,7 @@ function SearchBox({
           onChange={(e) => onChange(e.target.value)}
           placeholder="Search by task no. (#1042), title, subject, client, doer…"
           aria-label="Search tasks"
-          className="w-full h-11 pl-10 pr-9 rounded-pill border border-hairline bg-surface-card text-[15px] text-ink-strong placeholder:text-ink-subtle outline-none transition-all focus:border-altus-red focus:ring-2 focus:ring-altus-red/25"
+          className="w-full h-8 pl-9 pr-8 rounded-pill border border-hairline bg-surface-card text-[12.5px] text-ink-strong placeholder:text-ink-subtle outline-none transition-all focus:border-altus-red focus:ring-2 focus:ring-altus-red/25"
         />
         {value && (
           <button
@@ -1091,7 +1190,7 @@ function SearchBox({
         )}
       </div>
       {value.trim() && (
-        <span className="text-[13px] font-semibold text-ink-subtle tabular-nums">
+        <span className="text-[12px] font-semibold text-ink-subtle tabular-nums">
           {resultCount} {resultCount === 1 ? "match" : "matches"}
         </span>
       )}
@@ -1111,12 +1210,12 @@ function RowsPerPageSelect({
 }) {
   return (
     <div className="inline-flex items-center gap-2">
-      <span className="text-[13px] font-semibold text-ink-subtle">Rows</span>
+      <span className="text-[12px] font-semibold text-ink-subtle">Rows</span>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <button
             type="button"
-            className="inline-flex items-center gap-1.5 h-9 px-3 rounded-pill text-[13px] font-bold tabular-nums border border-hairline bg-surface-card text-ink-strong hover:border-altus-red hover:text-altus-red transition-all"
+            className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-pill text-[12.5px] font-bold tabular-nums border border-hairline bg-surface-card text-ink-strong hover:border-altus-red hover:text-altus-red transition-all"
           >
             {value}
             <ChevronsUpDown size={13} strokeWidth={2.4} className="opacity-60" />
@@ -1161,7 +1260,7 @@ function GroupByControl({
         <button
           type="button"
           aria-label="Group tasks by"
-          className={`inline-flex items-center gap-2 h-9 px-3.5 rounded-pill text-[13px] font-bold border transition-all ${
+          className={`inline-flex items-center gap-2 h-8 px-3 rounded-pill text-[12.5px] font-bold border transition-all ${
             grouped
               ? "border-altus-red bg-altus-red/10 text-altus-red"
               : "border-hairline bg-surface-card text-ink-soft hover:border-hairline-strong hover:text-ink-strong"
@@ -1220,6 +1319,16 @@ function taskCellLabel(row: TaskListRow): string {
   return desc && desc.length > 0 ? desc : row.title;
 }
 
+/** Sticky offset for one frozen column. Position only — forcing a width here
+ *  would fight the auto-layout column sizing the offsets are measured from.
+ *  The trailing column carries the seam shadow. */
+function frozenStyle(f: { left: number; last: boolean }) {
+  return {
+    left: f.left,
+    ...(f.last ? { boxShadow: "10px 0 14px -10px rgba(15,23,42,0.18)" } : null),
+  };
+}
+
 function TaskTitleCell({ row }: { row: TaskListRow }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -1234,8 +1343,8 @@ function TaskTitleCell({ row }: { row: TaskListRow }) {
   const link = (
     <Link
       href={href as Route}
-      className="task-title-link text-body text-ink-strong underline-offset-2 transition-colors"
-      style={{ fontWeight: 700 }}
+      className="task-title-link block max-w-[32ch] truncate text-body text-ink-strong underline-offset-2 transition-colors max-md:max-w-[20ch]"
+      style={{ fontWeight: 400 }}
     >
       {taskCellLabel(row)}
     </Link>
@@ -1321,7 +1430,7 @@ function MobileSortControl({
         <DropdownMenuTrigger asChild>
           <button
             type="button"
-            className="inline-flex items-center gap-1.5 px-3.5 h-9 rounded-pill text-[13px] font-bold border border-hairline bg-surface-card text-ink-soft"
+            className="inline-flex items-center gap-1.5 px-3 h-8 rounded-pill text-[12.5px] font-bold border border-hairline bg-surface-card text-ink-soft"
           >
             <ChevronsUpDown size={14} strokeWidth={2.2} />
             Sort
@@ -1368,7 +1477,7 @@ function ColumnsMenu({ table }: { table: TableInstance<TaskListRow> }) {
       <DropdownMenuTrigger asChild>
         <button
           type="button"
-          className="inline-flex items-center gap-1.5 px-3.5 h-9 rounded-pill text-[13px] font-bold border border-hairline bg-surface-card text-ink-soft hover:border-hairline-strong transition-all"
+          className="inline-flex items-center gap-1.5 px-3 h-8 rounded-pill text-[12.5px] font-bold border border-hairline bg-surface-card text-ink-soft hover:border-hairline-strong transition-all"
         >
           <SlidersHorizontal size={14} strokeWidth={2.2} />
           Columns

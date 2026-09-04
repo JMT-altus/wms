@@ -13,8 +13,10 @@ import { COLUMN_BY_KEY, STANDARD_COLUMN_KEYS } from "@/lib/forms/client-bulk-col
  * types, products and admin-managed lists already in it.
  *
  * `cols` is the sheet's current columns, so the template matches what the
- * user is looking at rather than all 31 every time. Anything unrecognised is
- * dropped; an empty or absent list falls back to the standard columns.
+ * user is looking at rather than all fifty-odd every time — nobody wants a
+ * workbook carrying a Bank Details block they never asked for. Anything
+ * unrecognised is dropped; an empty or absent list falls back to the standard
+ * columns.
  *
  * The guard is explicit even though `(forms-module)/forms/layout.tsx` already
  * calls `requireAdmin`: a route handler is not wrapped by the layout, so

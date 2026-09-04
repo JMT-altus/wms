@@ -12,10 +12,11 @@
  *
  * Two strengths of dropdown, deliberately:
  *
- *   reject   Sales Co-ordinator, Grade, Status, Focused View and the Yes/No
- *            columns. These resolve to a row or an enum, so a value off the
- *            list is not a preference, it is a broken row. Sheets and Excel
- *            refuse it at the cell.
+ *   reject   Sales Co-ordinator, Contact Type, Address Type, Designation,
+ *            Department, Grade, Status, Focused View and the Yes/No columns.
+ *            These resolve to a row or an enum, so a value off the list is
+ *            not a preference, it is a broken row. Sheets and Excel refuse it
+ *            at the cell.
  *   suggest  State, Payment Terms, Currency, Country and friends, plus every
  *            multi-value column. The dropdown is there, but typing your own
  *            is allowed — these are stored as free text, and a multi-value
@@ -86,9 +87,11 @@ function excelWidth(column: ClientBulkColumn): number {
 /**
  * Build the template for exactly the columns the sheet is showing.
  *
- * Not all 31 every time: the button sits above a sheet the user has already
- * added and removed columns on, and handing back a file with columns they
- * removed would make the round trip lossy in the one direction that matters.
+ * Not all fifty-odd every time: the button sits above a sheet the user has
+ * already added and removed columns on, and handing back a file with columns
+ * they removed would make the round trip lossy in the one direction that
+ * matters — nor would anyone want a workbook carrying a whole bank block they
+ * never asked for.
  */
 export async function buildClientTemplateWorkbook(
   columnKeys: readonly string[],
@@ -189,8 +192,15 @@ export async function buildClientTemplateWorkbook(
       ? `  These take more than one value — pick one from the dropdown, then type a comma and add the next: ${multiValue.join(", ")}.`
       : "",
     "",
+    "Contact Details, Address Details and Bank Details",
+    "  Each of these three is one row in its own master: the Client Contact Master, the Client Address Book and the Client Bank Master.",
+    "  Contact Type says which contact it is (Purchase / Accounts / Other); Address Type says which address (Billing / Delivery / Invoice Mailing).",
+    "  Leave a block's columns all blank and nothing is created there — an empty Bank Details does not make an empty account.",
+    "  One sheet row is one client, so it carries one contact, one address and one bank account. Add the second of any of them in that master afterwards.",
+    "",
     "Blank cells",
     "  Focused View blank = No.   Status blank = Active.",
+    "  Contact Type blank = Other Contact.   Address Type blank = Billing Address.",
     "  Test Certificate Needed and TCS Applicable blank = No.   Export blank = Domestic.",
     "",
     "Rules",

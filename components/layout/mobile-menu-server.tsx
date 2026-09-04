@@ -1,15 +1,14 @@
 import { MobileMenu } from "./mobile-menu";
 import { MainNavServer } from "./main-nav-server";
 import { LiveIndicator } from "./live-indicator";
-import { AdminPill } from "@/components/header/admin-pill";
 
 /**
  * Server wrapper for the mobile drawer. Pulls in the same nav children
  * the desktop header renders (MainNavServer fetches counts) plus the
- * mobile-hidden secondary controls (LiveIndicator, AdminPill) so they
- * remain reachable from mobile.
+ * mobile-hidden secondary controls (LiveIndicator) so they remain
+ * reachable from mobile. Admin is reached from the avatar menu.
  */
-export async function MobileMenuServer({ isAdmin }: { isAdmin: boolean }) {
+export async function MobileMenuServer() {
   return (
     <MobileMenu>
       <div className="flex flex-col gap-6">
@@ -20,11 +19,6 @@ export async function MobileMenuServer({ isAdmin }: { isAdmin: boolean }) {
           <div className="px-2">
             <LiveIndicator />
           </div>
-          {isAdmin && (
-            <div className="px-2">
-              <AdminPill />
-            </div>
-          )}
         </div>
       </div>
     </MobileMenu>

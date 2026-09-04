@@ -33,8 +33,16 @@ import { Maximize2, Minimize2 } from "lucide-react";
  */
 export function FullscreenToggle({
   variant = "labelled",
+  size = "md",
 }: {
   variant?: "labelled" | "header";
+  /**
+   * Height of the "labelled" skin. "md" matches a master screen's search bar;
+   * "sm" matches a filter chip, for headers where this button sits in a row of
+   * them rather than next to a full-height input. Ignored by "header", which
+   * is a fixed-size circle in the app bar.
+   */
+  size?: "sm" | "md";
 } = {}) {
   const [isFullscreen, setIsFullscreen] = React.useState(false);
 
@@ -119,9 +127,11 @@ export function FullscreenToggle({
       title={label}
       aria-label={label}
       aria-pressed={isFullscreen}
-      className="shrink-0 inline-flex items-center gap-1.5 rounded-chip px-3.5 h-10 text-[14px] font-semibold text-ink-soft bg-surface-card border border-hairline whitespace-nowrap"
+      className={`shrink-0 inline-flex items-center gap-1.5 rounded-chip font-semibold text-ink-soft bg-surface-card border border-hairline whitespace-nowrap ${
+        size === "sm" ? "px-2.5 h-[26px] text-[12px] !rounded-[8px]" : "px-3.5 h-10 text-[14px]"
+      }`}
     >
-      <Icon size={15} strokeWidth={2.3} className="shrink-0" />
+      <Icon size={size === "sm" ? 12 : 15} strokeWidth={2.3} className="shrink-0" />
       {isFullscreen ? "Exit" : "Full screen"}
     </button>
   );

@@ -174,6 +174,20 @@ export function task(partial: Partial<Task>): Task {
     recurrenceParentId: partial.recurrenceParentId ?? null,
     recurrenceOccurrenceDate: partial.recurrenceOccurrenceDate ?? null,
     projectNodeId: partial.projectNodeId ?? null,
+    // 0102 — two-stage sign-off, effort estimate, recycle bin, goal origin.
+    // Defaults mirror the DB defaults so existing fixtures keep working
+    // without per-task overrides.
+    approvalLevel: partial.approvalLevel ?? "none",
+    managerApprovedById: partial.managerApprovedById ?? null,
+    managerApprovedAt: partial.managerApprovedAt ?? null,
+    managerApprovalNote: partial.managerApprovalNote ?? null,
+    adminApprovedById: partial.adminApprovedById ?? null,
+    adminApprovedAt: partial.adminApprovedAt ?? null,
+    adminApprovalNote: partial.adminApprovalNote ?? null,
+    estimatedMinutes: partial.estimatedMinutes ?? null,
+    abandonedAt: partial.abandonedAt ?? null,
+    abandonedById: partial.abandonedById ?? null,
+    originGoalId: partial.originGoalId ?? null,
     // Search infra (migration 0061) — DB-generated STORED column. Test
     // fixtures never exercise it; default null keeps the select shape valid.
     searchText: partial.searchText ?? null,

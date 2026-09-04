@@ -27,6 +27,7 @@ const NAMES: Record<NotificationKind, string> = {
   attendance_half_day: "vp_attendance_half_day",
   attendance_device: "vp_attendance_device",
   attendance_late_deduction: "vp_attendance_late_deduction",
+  nudge: "vp_nudge",
 };
 
 export function templateNameForKind(kind: NotificationKind): string {
@@ -119,6 +120,8 @@ const VARS: Record<NotificationKind, (ctx: TemplateCtx) => Param[]> = {
   attendance_half_day: (c) => [t(c.body ?? "")],
   attendance_device: (c) => [t(c.body ?? "")],
   attendance_late_deduction: (c) => [t(c.body ?? "")],
+  // Same shape as `commented`: who chased, about what, and the short id.
+  nudge: (c) => [t(c.actorName), t(c.taskSubject), t(c.shortId)],
 };
 
 /**

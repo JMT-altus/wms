@@ -132,6 +132,16 @@ export const EditTaskFieldsSchema = z
     recurrence: z.enum(TASK_RECURRENCES).nullable().optional(),
     recurrenceRule: z.string().trim().max(200).nullable().optional(),
     projectNodeId: z.string().uuid().nullable().optional(),
+    // 0102 — the planned half of Estimated vs Actual. Capped at 100 hours:
+    // anything longer is a project, not a task, and a stray extra digit
+    // shouldn't quietly become a 40-day estimate.
+    estimatedMinutes: z
+      .number()
+      .int()
+      .min(0)
+      .max(6000)
+      .nullable()
+      .optional(),
   })
   .strict() // reject unknown keys
   .refine(

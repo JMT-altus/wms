@@ -11,6 +11,7 @@
     { "path": "/api/cron/weekly-goals?job=incomplete", "schedule": "15 4 * * 0" },
     { "path": "/api/cron/weekly-goals?job=incomplete", "schedule": "15 4 * * 1" },
     { "path": "/api/cron/backup",                      "schedule": "30 20 * * *" },
-    { "path": "/api/cron/incentive-recompute",         "schedule": "0 5 * * *" }
+    { "path": "/api/cron/incentive-recompute",         "schedule": "0 5 * * *" },
+    { "path": "/api/cron/task-reminders",              "schedule": "30 12 * * *" }
   ]
 }

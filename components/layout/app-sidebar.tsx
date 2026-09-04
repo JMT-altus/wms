@@ -13,6 +13,7 @@ import {
 import { moduleForPath, type ModuleNavItem } from "@/lib/nav-modules";
 import { RAIL_WIDTH, RAIL_WIDTH_COLLAPSED, useRailCollapsed } from "./rail-collapse";
 import { RailToggle } from "./rail-toggle";
+import { NavHistoryButtons } from "./nav-history-buttons";
 
 /**
  * The workspace's left rail — the module nav that used to be a pill row in the
@@ -45,10 +46,14 @@ export function AppSidebar({
   activeTasks,
   archivedTasks,
   isAdmin,
+  userMenu,
 }: {
   activeTasks: number;
   archivedTasks: number;
   isAdmin: boolean;
+  /** The signed-in user's menu, rendered into the rail's foot. Passed as a
+   *  slot because this is a client component and the menu is a server one. */
+  userMenu?: React.ReactNode;
 }) {
   const pathname = usePathname();
   const collapsed = useRailCollapsed();
@@ -97,6 +102,12 @@ export function AppSidebar({
                 twice, and the long names ("Targets & Forecasts") had to wrap
                 inside the plate to fit. Now the plate carries the mark and
                 the name gets its own accent block underneath. */}
+            {/* Back / Forward, immediately before the mark. Expanded only:
+                collapsed the rail is 64px of icons, which two circles and a
+                logo cannot share — the toggle beside them is the way out of
+                that state. */}
+            {!collapsed && <NavHistoryButtons compact />}
+
             {/* The mark is the way back to the hub — the same destination as the
                 "Back to Hub" footer, on the thing people reach for first. */}
             <Link
@@ -112,6 +123,15 @@ export function AppSidebar({
                 style={{ height: collapsed ? 22 : 30, width: "auto", display: "block" }}
               />
             </Link>
+
+            {/* Counterweight. The pills take 52px off the left, so without a
+                matching gap on the right the plate — and the mark centred
+                inside it — would sit off-centre in the rail. The collapse
+                toggle is absolutely positioned into this same space, so the
+                spacer costs no width it wasn't already giving up. */}
+            {!collapsed && (
+              <span aria-hidden className="shrink-0" style={{ width: 52 }} />
+            )}
             <RailToggle className={collapsed ? "mt-2" : "rail-toggle-in-band absolute right-3.5 z-10"} />
           </div>
           {!collapsed && (
@@ -194,17 +214,26 @@ export function AppSidebar({
           })}
         </nav>
 
-        <div className="px-3 pb-4 pt-2.5 shrink-0" style={{ borderTop: "1px solid rgba(255,255,255,0.10)" }}>
-          <Link
-            href={"/hub" as Route}
-            title={collapsed ? "Back to Hub" : undefined}
-            className={`group flex items-center gap-2.5 py-2.5 rounded-lg text-[14px] text-white/75 hover:text-white hover:bg-white/[0.06] transition-colors ${
-              collapsed ? "px-0 justify-center" : "px-3.5"
-            }`}
-          >
-            <ArrowLeft size={16} strokeWidth={2.2} className="transition-transform group-hover:-translate-x-0.5" />
-            {!collapsed && "Back to Hub"}
-          </Link>
+        {/* Foot of the rail — who is signed in. This replaced a "Back to Hub"
+            link, which was a second door to the destination the mark at the
+            top of the rail already opens; the identity had nowhere to live
+            except a bare circle in the header. Collapsed, the rail is too
+            narrow for a name, so it falls back to that link. */}
+        <div className="px-2.5 pb-3 pt-2 shrink-0" style={{ borderTop: "1px solid rgba(255,255,255,0.10)" }}>
+          {collapsed || !userMenu ? (
+            <Link
+              href={"/hub" as Route}
+              title="Back to Hub"
+              className={`group flex items-center gap-2.5 py-2.5 rounded-lg text-[14px] text-white/75 hover:text-white hover:bg-white/[0.06] transition-colors ${
+                collapsed ? "px-0 justify-center" : "px-3.5"
+              }`}
+            >
+              <ArrowLeft size={16} strokeWidth={2.2} className="transition-transform group-hover:-translate-x-0.5" />
+              {!collapsed && "Back to Hub"}
+            </Link>
+          ) : (
+            userMenu
+          )}
         </div>
       </div>
     </aside>

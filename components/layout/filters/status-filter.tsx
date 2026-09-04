@@ -16,14 +16,13 @@ export function StatusFilter({
 }) {
   return (
     <div className="filter-chip">
-      <CircleDot size={16} className="text-ink-subtle" strokeWidth={2} />
+      <CircleDot size={14} className="text-ink-subtle" strokeWidth={2} />
       <MultiSelect
         options={options}
         selected={selected}
         onChange={onChange}
         placeholder="All Status"
-        className="min-w-[6.5rem] !text-[14px]"
-        openOnHover
+        className="min-w-[6.5rem] !text-[12px] !font-medium"
       />
     </div>
   );

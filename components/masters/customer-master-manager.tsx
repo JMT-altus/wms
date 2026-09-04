@@ -6,7 +6,9 @@ import type { CustomerRow } from "@/lib/queries/master-data";
 import { formatInr } from "@/lib/format";
 import {
   deleteMasterCustomer,
+  reactivateCustomers,
   saveMasterCustomer,
+  setCustomersDormant,
 } from "@/app/(masters-module)/masters/actions";
 import {
   DataTable,
@@ -27,6 +29,13 @@ import { CodeCell, RowMenu, StatusCell } from "./row-menu";
 import { MastersDialog } from "./masters-dialog";
 import { MASTERS_GRADIENT } from "./theme";
 import { BulkUpload } from "./bulk-upload";
+import {
+  STATUS_FILTER_DEFAULT,
+  STATUS_FILTER_OPTIONS,
+  isDormant,
+  matchesStatusFilter,
+  statusLabel,
+} from "@/lib/masters/dormancy";
 
 const ACCENT = MASTERS_GRADIENT;
 const FORM_ID = "masters-customer-form";
@@ -145,8 +154,10 @@ export function CustomerMasterManager({
     {
       key: "isActive",
       header: "Status",
-      render: (r) => <StatusCell active={r.isActive} />,
-      value: (r) => (r.isActive ? "Active" : "Inactive"),
+      render: (r) => <StatusCell active={r.isActive} dormant={isDormant(r)} />,
+      // Matches what the cell renders, so a search for "dormant" finds the
+      // rows the Dormant filter shows and the export says the same thing.
+      value: statusLabel,
       width: 110,
     },
   ];
@@ -161,6 +172,40 @@ export function CustomerMasterManager({
   // Derived live from the rows on every render — never a stored/hardcoded
   // count, so it moves the instant a customer's Focused View flag changes.
   const focusedCount = customers.filter((c) => c.focusedView).length;
+
+  /**
+   * Park one customer as dormant, or bring it back.
+   *
+   * Per row rather than per selection, because this table has no selection —
+   * it acts through the "⋯" menu. The Client Master, which does have ticks,
+   * offers the same thing in its selection bar.
+   *
+   * No confirmation: dormancy is reversible from the same menu, and the
+   * Status filter's Dormant option is one click away. Delete asks; this does
+   * not.
+   */
+  function toggleDormant(row: CustomerRow) {
+    const reactivating = isDormant(row);
+    start(async () => {
+      try {
+        const res = reactivating
+          ? await reactivateCustomers([row.id])
+          : await setCustomersDormant([row.id]);
+        if (!res.ok) {
+          toast.error(res.error);
+          return;
+        }
+        toast.success(
+          reactivating
+            ? `${row.name} is back on the register.`
+            : `${row.name} set dormant — hidden until Status is set to Dormant.`,
+        );
+        router.refresh();
+      } catch {
+        toast.error("Couldn't reach the server. Try again in a moment.");
+      }
+    });
+  }
 
   function remove(row: CustomerRow) {
     if (!confirm(`Delete "${row.name}"? This can't be undone.`)) return;
@@ -213,6 +258,20 @@ export function CustomerMasterManager({
         }
         filters={[
           {
+            /*
+             * Status, with dormancy folded into it (0101) — literally the
+             * same chip the Client Master carries, read from
+             * lib/masters/dormancy.ts. These are two screens over one
+             * `customer_masters` row, so a customer parked on one is parked
+             * on the other.
+             */
+            key: "status",
+            label: "Status",
+            defaultValue: STATUS_FILTER_DEFAULT,
+            options: STATUS_FILTER_OPTIONS,
+            matches: matchesStatusFilter,
+          },
+          {
             key: "category",
             label: "Customer Category",
             options: categoryOptions.map((c) => ({ value: c, label: c })),
@@ -236,6 +295,8 @@ export function CustomerMasterManager({
             disabled={pending}
             onEdit={() => setEditing(row)}
             onDelete={() => remove(row)}
+            dormant={isDormant(row)}
+            onToggleDormant={() => toggleDormant(row)}
           />
         )}
       />

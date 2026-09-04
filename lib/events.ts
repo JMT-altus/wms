@@ -26,6 +26,15 @@ export const TASK_EVENT_TYPES = [
   "archived",
   "restored",
   "commented",
+  // 0102 — two-stage sign-off, time tracking, checklists and the recycle bin.
+  // Each writes its own type rather than reusing `field_updated`, so the
+  // timeline's filters can tell "a manager ruled on this" apart from "someone
+  // edited a field".
+  "approval_decided",
+  "time_logged",
+  "checklist_updated",
+  "abandoned",
+  "nudged",
 ] as const;
 
 export type TaskEventType = (typeof TASK_EVENT_TYPES)[number];
@@ -49,6 +58,8 @@ export const EDITABLE_TASK_FIELDS = [
   "recurrence",
   "recurrenceRule",
   "projectNodeId",
+  // 0102 — tracked in field_updated events the same way as the others.
+  "estimatedMinutes",
 ] as const;
 
 export type EditableTaskField = (typeof EDITABLE_TASK_FIELDS)[number];

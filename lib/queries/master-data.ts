@@ -190,6 +190,15 @@ export interface CustomerRow {
   creditLimit: string | null;
   creditPeriodDays: number | null;
   focusedView: boolean;
+  /**
+   * 0101 — when this customer was parked as dormant, or null.
+   *
+   * Carried into the row rather than filtered out in SQL, because the Status
+   * filter's Dormant option has to be able to bring them back and the table
+   * filters client-side. The DEFAULT value of that filter is what keeps them
+   * off screen — see the Status filter in the table component.
+   */
+  dormantAt: string | null;
   contactPerson: string | null;
   phone: string | null;
   email: string | null;
@@ -248,6 +257,7 @@ export async function listCustomers(): Promise<CustomerRow[]> {
       gstin: customerMasters.gstin,
       tallyGroup: customerMasters.tallyGroup,
       isActive: customerMasters.isActive,
+      dormantAt: customerMasters.dormantAt,
       createdAt: customerMasters.createdAt,
       // Everything Create New Client KYC writes to this same row. The two
       // screens are two views of `customer_masters`, so a field the KYC form
@@ -283,6 +293,7 @@ export async function listCustomers(): Promise<CustomerRow[]> {
   return rows.map((r) => ({
     ...r,
     salesRepName: r.salesRepName ?? null,
+    dormantAt: r.dormantAt ? r.dormantAt.toISOString() : null,
     createdAt: r.createdAt.toISOString(),
     customerTypes: r.customerTypes ?? [],
     industryTypes: r.industryTypes ?? [],

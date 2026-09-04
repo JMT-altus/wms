@@ -3,7 +3,7 @@ import { alias } from "drizzle-orm/pg-core";
 import { unstable_cache } from "next/cache";
 import { db, employees, tasks } from "@/lib/db";
 import { TASK_STATUSES, TASK_PRIORITIES, PENDING_STATUSES } from "@/db/enums";
-import type { TaskStatus, ApprovalStatus, Visibility } from "@/db/enums";
+import type { ApprovalLevel, TaskStatus, ApprovalStatus, Visibility } from "@/db/enums";
 import { employeeIdsInDepartments } from "@/lib/queries/departments";
 import { visibleTaskCondition } from "@/lib/auth/task-visibility";
 import { CACHE_TAGS } from "@/lib/cache-tags";
@@ -27,7 +27,13 @@ function statusFilterCondition(statuses: TaskStatus[]) {
 }
 
 export async function listTasks(filters: TaskListFilters): Promise<TaskListRow[]> {
-  const conditions = [eq(tasks.archived, filters.archived)];
+  const conditions = [
+    eq(tasks.archived, filters.archived),
+    // 0102 — abandoned tasks live only in the Recycle Bin. They are not
+    // deleted (the row and its whole timeline survive), they just stop
+    // appearing in every list until someone restores them.
+    isNull(tasks.abandonedAt),
+  ];
 
   if (filters.startDate) conditions.push(gte(tasks.createdAt, filters.startDate));
   if (filters.endDate)
@@ -204,7 +210,13 @@ export async function listTasksPage(
   const pageSize = Math.max(1, Math.min(MAX_PAGE_SIZE, opts.pageSize ?? 50));
   const cursor = opts.cursor ? decodeCursor(opts.cursor) : null;
 
-  const conditions = [eq(tasks.archived, filters.archived)];
+  const conditions = [
+    eq(tasks.archived, filters.archived),
+    // 0102 — abandoned tasks live only in the Recycle Bin. They are not
+    // deleted (the row and its whole timeline survive), they just stop
+    // appearing in every list until someone restores them.
+    isNull(tasks.abandonedAt),
+  ];
   if (filters.startDate) conditions.push(gte(tasks.createdAt, filters.startDate));
   if (filters.endDate)
     conditions.push(lt(tasks.createdAt, new Date(filters.endDate.getTime() + MS_PER_DAY)));
@@ -335,7 +347,14 @@ export async function countUnassignedTasks(): Promise<number> {
   const [row] = await db
     .select({ n: sql<number>`count(*)::int` })
     .from(tasks)
-    .where(and(isNull(tasks.doerId), eq(tasks.archived, false), visible));
+    .where(
+      and(
+        isNull(tasks.doerId),
+        eq(tasks.archived, false),
+        isNull(tasks.abandonedAt),
+        visible,
+      ),
+    );
   return row?.n ?? 0;
 }
 
@@ -367,7 +386,9 @@ export interface BoardTask {
  * narrows the board.
  */
 export async function listBoardTasks(filters?: TaskListFilters): Promise<BoardTask[]> {
-  const conditions = [];
+  // 0102 — same rule as the list: the board never shows a binned task, not
+  // even in its Archived column.
+  const conditions = [isNull(tasks.abandonedAt)];
   const visible = await visibleTaskCondition();
   if (visible) conditions.push(visible);
   if (filters) {
@@ -440,6 +461,7 @@ export async function listAgendaTasks(employeeId: string): Promise<BoardTask[]> 
     .where(
       and(
         eq(tasks.archived, false),
+        isNull(tasks.abandonedAt),
         eq(tasks.doerId, employeeId),
         inArray(tasks.status, [...PENDING_STATUSES]),
         // Redundant when you're viewing your own agenda (you're the doer, so
@@ -491,7 +513,13 @@ export async function listTasksForExport(
   opts: { limit?: number } = {},
 ): Promise<TaskExportRow[]> {
   const limit = opts.limit ?? 10_000;
-  const conditions = [eq(tasks.archived, filters.archived)];
+  const conditions = [
+    eq(tasks.archived, filters.archived),
+    // 0102 — abandoned tasks live only in the Recycle Bin. They are not
+    // deleted (the row and its whole timeline survive), they just stop
+    // appearing in every list until someone restores them.
+    isNull(tasks.abandonedAt),
+  ];
 
   if (filters.startDate) conditions.push(gte(tasks.createdAt, filters.startDate));
   if (filters.endDate)
@@ -657,12 +685,28 @@ export type TaskDetail = {
   recurrenceOccurrenceDate: string | null;
   projectNodeId: string | null;
   visibility: Visibility;
+  // 0102 — two-stage sign-off. `approvalStatus` above is the verdict; this is
+  // how far it has travelled, plus who granted each stage (resolved to names
+  // so the panel doesn't need a second round of employee lookups).
+  approvalLevel: ApprovalLevel;
+  managerApprovedByName: string | null;
+  managerApprovedAt: Date | null;
+  managerApprovalNote: string | null;
+  adminApprovedByName: string | null;
+  adminApprovedAt: Date | null;
+  adminApprovalNote: string | null;
+  // 0102 — the planned half of Estimated vs Actual.
+  estimatedMinutes: number | null;
+  // 0102 — Recycle Bin.
+  abandonedAt: Date | null;
 };
 
 export async function getTaskById(taskId: string): Promise<TaskDetail | null> {
   const doerEmp      = alias(employees, "doer_emp");
   const initEmp      = alias(employees, "init_emp");
   const creatorEmp   = alias(employees, "creator_emp");
+  const mgrEmp       = alias(employees, "mgr_approve_emp");
+  const adminEmp     = alias(employees, "admin_approve_emp");
 
   const [row] = await db
     .select({
@@ -701,11 +745,24 @@ export async function getTaskById(taskId: string): Promise<TaskDetail | null> {
       // 0085 — the detail screen now lets you change who can see the task, so
       // it has to know what the answer currently is.
       visibility: tasks.visibility,
+      // 0102 — two-stage sign-off, joined to names so the panel renders
+      // "Approved by Priya" without a second query per stage.
+      approvalLevel: tasks.approvalLevel,
+      managerApprovedByName: mgrEmp.name,
+      managerApprovedAt: tasks.managerApprovedAt,
+      managerApprovalNote: tasks.managerApprovalNote,
+      adminApprovedByName: adminEmp.name,
+      adminApprovedAt: tasks.adminApprovedAt,
+      adminApprovalNote: tasks.adminApprovalNote,
+      estimatedMinutes: tasks.estimatedMinutes,
+      abandonedAt: tasks.abandonedAt,
     })
     .from(tasks)
     .leftJoin(doerEmp,    eq(tasks.doerId,      doerEmp.id))
     .leftJoin(initEmp,    eq(tasks.initiatorId, initEmp.id))
     .leftJoin(creatorEmp, eq(tasks.createdById, creatorEmp.id))
+    .leftJoin(mgrEmp,     eq(tasks.managerApprovedById, mgrEmp.id))
+    .leftJoin(adminEmp,   eq(tasks.adminApprovedById,   adminEmp.id))
     // Visibility is enforced in the QUERY, not after it: a caller that forgets
     // to check gets null rather than a populated object it might render.
     .where(and(eq(tasks.id, taskId), await visibleTaskCondition()))

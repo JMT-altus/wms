@@ -34,7 +34,12 @@ export async function GET(): Promise<Response> {
     return new Response("Forbidden", { status: 403 });
   }
 
-  const rows = await listClientMasterRows();
+  // 0101 — dormant customers are off the register, so they are off the
+  // register's exports too. Filtered here rather than in the query, because
+  // the Client Master needs them loaded for its Status → Dormant filter; this
+  // file is the register you hand to someone, and a parked customer in it
+  // reads as a client you still trade with.
+  const rows = (await listClientMasterRows()).filter((r) => r.dormantAt === null);
 
   if (rows.length > MAX_EXPORT_ROWS) {
     return Response.json(

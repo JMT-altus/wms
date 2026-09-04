@@ -15,14 +15,13 @@ export function ClientFilter({
 }) {
   return (
     <div className="filter-chip">
-      <Building2 size={16} className="text-ink-subtle" strokeWidth={2} />
+      <Building2 size={14} className="text-ink-subtle" strokeWidth={2} />
       <MultiSelect
         options={options}
         selected={selected}
         onChange={onChange}
         placeholder="All Clients"
-        className="min-w-[6.5rem] !text-[14px]"
-        openOnHover
+        className="min-w-[6.5rem] !text-[12px] !font-medium"
       />
     </div>
   );

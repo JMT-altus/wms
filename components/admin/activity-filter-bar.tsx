@@ -19,6 +19,11 @@ const EVENT_TYPE_LABELS: Record<TaskEventType, string> = {
   archived: "Archived",
   restored: "Restored",
   commented: "Commented",
+  approval_decided: "Approval decided",
+  time_logged: "Time logged",
+  checklist_updated: "Checklist",
+  abandoned: "Abandoned",
+  nudged: "Nudged",
 };
 
 const SOURCE_OPTIONS = [

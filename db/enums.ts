@@ -109,6 +109,38 @@ export const APPROVAL_STATUSES = [
 ] as const;
 export type ApprovalStatus = (typeof APPROVAL_STATUSES)[number];
 
+/**
+ * How far a verdict has travelled through two-stage sign-off (migration 0102).
+ *
+ * A THIRD axis, independent of both `status` (the doer's progress report) and
+ * `approval_status` (the manager's verdict). The verdict says *what* was
+ * decided; the level says *who has signed it off so far*:
+ *
+ *   none    → nobody has ruled yet
+ *   manager → the doer's manager accepted it
+ *   admin   → final sign-off, which only a founder (super-admin) can give
+ *
+ * Collapsing this into `approval_status` is the classic mistake: it would make
+ * "approved" mean two different things depending on who pressed it.
+ */
+export const APPROVAL_LEVELS = ["none", "manager", "admin"] as const;
+export type ApprovalLevel = (typeof APPROVAL_LEVELS)[number];
+
+/** Human labels for the sign-off stages. As with statuses, never inline a
+ *  string in a component — read it from here. */
+export const APPROVAL_LEVEL_LABELS: Record<ApprovalLevel, string> = {
+  none: "Awaiting review",
+  manager: "Manager approved",
+  admin: "Final sign-off",
+};
+
+/**
+ * Raw timer presses (migration 0102). `text` in the DB rather than a pgEnum so
+ * a future 'pause' doesn't need an `ALTER TYPE` outside a transaction.
+ */
+export const TIME_EVENT_KINDS = ["start", "stop"] as const;
+export type TimeEventKind = (typeof TIME_EVENT_KINDS)[number];
+
 // 28 canonical subject categories the New Task form constrains to. Free
 // text remains valid in the DB (the column is `text`) — older tasks may
 // hold values outside this list; the dropdown adds "Other…" as an escape

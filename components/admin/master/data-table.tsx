@@ -57,6 +57,20 @@ export interface FilterDef<T> {
   label: string;
   options: { value: string; label: string }[];
   matches: (row: T, value: string) => boolean;
+  /**
+   * The option this filter starts on, instead of "All".
+   *
+   * Added for dormancy: a dormant customer must be off the list before anyone
+   * touches a control, and must still be reachable by picking Dormant on the
+   * same chip. Neither a hard SQL exclusion (nothing to pick) nor an
+   * unfiltered "All" (dormant customers on screen) can express that; a filter
+   * that starts somewhere other than All can.
+   *
+   * Must name one of `options`, or the chip renders blank. Only the FIRST
+   * render is seeded — this is a starting point, not a value the table keeps
+   * forcing back, so clearing it stays the user's to do.
+   */
+  defaultValue?: string;
 }
 
 /**
@@ -794,7 +808,16 @@ export function DataTable<T extends { id: string }>({
   exportable?: boolean;
 }) {
   const [q, setQ] = React.useState("");
-  const [active, setActive] = React.useState<Record<string, string>>({});
+  /**
+   * Which filter chips are set. Seeded once from any `defaultValue` the
+   * caller declared — lazily, so the seed is read on the first render and
+   * never re-imposed afterwards (see FilterDef.defaultValue).
+   */
+  const [active, setActive] = React.useState<Record<string, string>>(() => {
+    const seed: Record<string, string> = {};
+    for (const f of filters ?? []) if (f.defaultValue) seed[f.key] = f.defaultValue;
+    return seed;
+  });
   const [page, setPage] = React.useState(0);
   const [pageSize, setPageSize] = React.useState(25);
   const [sortValue, setSortValue] = React.useState(sorts?.[0]?.value ?? "");

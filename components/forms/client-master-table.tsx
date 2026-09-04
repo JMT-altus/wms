@@ -6,7 +6,19 @@ import { toast } from "sonner";
 import type { ClientMasterRow } from "@/lib/queries/client-kyc";
 import { formatInr } from "@/lib/format";
 import { deleteMasterCustomer } from "@/app/(masters-module)/masters/actions";
-import { updateClientMasterRecord } from "@/app/(forms-module)/forms/client-kyc/actions";
+import {
+  reactivateClients,
+  setClientsDormant,
+  updateClientMasterRecord,
+} from "@/app/(forms-module)/forms/client-kyc/actions";
+import {
+  STATUS_FILTER_DEFAULT,
+  STATUS_FILTER_OPTIONS,
+  customerCountLabel,
+  isDormant,
+  matchesStatusFilter,
+  statusLabel,
+} from "@/lib/masters/dormancy";
 import { RecordEditDialog, type EditField, type EditValues } from "./kyc/record-edit-dialog";
 import type { EmployeeOption } from "@/lib/queries/employees";
 import {
@@ -19,7 +31,7 @@ import {
 import { CodeCell, StatusCell } from "@/components/masters/row-menu";
 import { ClientBulkImport } from "./client-bulk-import";
 import type { ClientBulkOptions } from "@/lib/forms/client-bulk-columns";
-import { FileSpreadsheet, FileText } from "lucide-react";
+import { FileSpreadsheet, FileText, MoonStar, Sunrise } from "lucide-react";
 import { KYC_ACCENT, KYC_ACCENT_SOFT } from "./kyc/fields";
 
 /**
@@ -215,6 +227,8 @@ export function ClientMasterTable({
 }) {
   const [editing, setEditing] = React.useState<ClientMasterRow | null>(null);
   const router = useRouter();
+  /** Keeps the Set Dormant button disabled while its write is in flight. */
+  const [pending, start] = React.useTransition();
 
   /**
    * Bulk delete from the selection bar.
@@ -224,6 +238,39 @@ export function ClientMasterTable({
    * gain on a list this size. Stops at the first failure and says how far it
    * got, so a partial delete is never reported as a clean one.
    */
+  /**
+   * Park the selection as dormant, or bring it back.
+   *
+   * One button that flips, decided by the selection itself: with anything
+   * still on the register it parks, and only when every picked row is already
+   * dormant does it offer Reactivate. A pair of buttons would put "Set
+   * Dormant" next to rows that already are.
+   */
+  function toggleDormant(selected: ClientMasterRow[], clear: () => void) {
+    if (selected.length === 0) return;
+    const reactivating = selected.every(isDormant);
+    start(async () => {
+      try {
+        const res = reactivating
+          ? await reactivateClients(selected.map((r) => r.id))
+          : await setClientsDormant(selected.map((r) => r.id));
+        if (!res.ok) {
+          toast.error(res.error);
+          return;
+        }
+        toast.success(
+          reactivating
+            ? `${customerCountLabel(res.count)} back on the register.`
+            : `${customerCountLabel(res.count)} set dormant — hidden until Status is set to Dormant.`,
+        );
+        clear();
+        router.refresh();
+      } catch {
+        toast.error("Couldn't reach the server. Try again in a moment.");
+      }
+    });
+  }
+
   async function removeSelected(selected: ClientMasterRow[]) {
     let done = 0;
     for (const row of selected) {
@@ -482,8 +529,10 @@ export function ClientMasterTable({
       key: "isActive",
       header: "Status",
       width: 100,
-      render: (r) => <StatusCell active={r.isActive} />,
-      value: (r) => (r.isActive ? "Active" : "Inactive"),
+      render: (r) => <StatusCell active={r.isActive} dormant={isDormant(r)} />,
+      // Matches what the cell renders, so a search for "dormant" finds the
+      // rows the Dormant filter shows and the CSV says the same thing.
+      value: statusLabel,
     },
     {
       key: "createdAt",
@@ -541,13 +590,17 @@ export function ClientMasterTable({
       matches: (r, v) => tradeOf(r) === v,
     },
     {
+      /*
+       * Status, with dormancy folded into it (0101). Options, default and
+       * matcher all come from lib/masters/dormancy.ts, which the Customer
+       * Master reads too — two views of one row cannot disagree about which
+       * customers are on the register.
+       */
       key: "status",
       label: "Status",
-      options: [
-        { value: "active", label: "Active" },
-        { value: "inactive", label: "Inactive" },
-      ],
-      matches: (r, v) => (v === "active" ? r.isActive : !r.isActive),
+      defaultValue: STATUS_FILTER_DEFAULT,
+      options: STATUS_FILTER_OPTIONS,
+      matches: matchesStatusFilter,
     },
     {
       key: "gstin",
@@ -612,6 +665,32 @@ export function ClientMasterTable({
         }
         selectable
         rowDetail
+        // Sits beside Export / View details / Delete in the selection bar.
+        // Parking a customer is a bulk job — you notice a dozen dead accounts
+        // at once, not one — so it belongs where the ticks already are.
+        selectionActions={({ rows: selected, clear }) => {
+          const reactivating = selected.every(isDormant);
+          return (
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() => toggleDormant(selected, clear)}
+              title={
+                reactivating
+                  ? "Put these customers back on the register"
+                  : "Park these customers — they leave this list, the Customer Master and the three directories"
+              }
+              className="inline-flex items-center gap-1.5 rounded-pill px-3 h-8 text-[13px] font-semibold text-ink-soft bg-surface-card border border-hairline disabled:opacity-50 whitespace-nowrap"
+            >
+              {reactivating ? (
+                <Sunrise size={14} strokeWidth={2.3} className="shrink-0" />
+              ) : (
+                <MoonStar size={14} strokeWidth={2.3} className="shrink-0" />
+              )}
+              {reactivating ? "Reactivate" : "Set Dormant"}
+            </button>
+          );
+        }}
         onBulkDelete={removeSelected}
         deleteNoun="client"
         // Edits the client where it sits. This used to push to

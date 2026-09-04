@@ -4,18 +4,23 @@ import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
 /**
- * Back / Forward navigation pills mounted at the leftmost end of the
- * header, just before the brand cluster. Browser history doesn't expose
- * a reliable "can go back/forward" signal across browsers, so we don't
- * try to gray-out — buttons always feel clickable; if there's nothing
- * to navigate to, router.back/forward simply no-ops.
+ * Back / Forward navigation pills, sitting immediately before the JMT mark at
+ * the top of the left rail. Browser history doesn't expose a reliable
+ * "can go back/forward" signal across browsers, so we don't try to gray-out —
+ * buttons always feel clickable; if there's nothing to navigate to,
+ * router.back/forward simply no-ops.
+ *
+ * `compact` is the rail skin: 24px circles and no trailing divider, because
+ * the rail is only 216px wide and the logo plate beside it needs the room. The
+ * default 30px skin is kept for any full-width bar that wants them back.
  */
-export function NavHistoryButtons() {
+export function NavHistoryButtons({ compact = false }: { compact?: boolean } = {}) {
   const router = useRouter();
 
+  const dim = compact ? 24 : 30;
   const baseStyle: React.CSSProperties = {
-    width: 30,
-    height: 30,
+    width: dim,
+    height: dim,
     display: "inline-flex",
     alignItems: "center",
     justifyContent: "center",
@@ -46,7 +51,10 @@ export function NavHistoryButtons() {
   };
 
   return (
-    <div className="flex items-center gap-1 max-xl:hidden shrink-0">
+    // The rail has a fixed width at every size it is visible, so the compact
+    // skin has no breakpoint to hide at — unlike the header, where these
+    // competed with the search box below xl.
+    <div className={`flex items-center gap-1 shrink-0 ${compact ? "" : "max-xl:hidden"}`}>
       <button
         type="button"
         aria-label="Back"
@@ -55,7 +63,7 @@ export function NavHistoryButtons() {
         onMouseLeave={onLeave}
         style={baseStyle}
       >
-        <ChevronLeft size={16} strokeWidth={2.4} />
+        <ChevronLeft size={compact ? 14 : 16} strokeWidth={2.4} />
       </button>
       <button
         type="button"
@@ -65,17 +73,19 @@ export function NavHistoryButtons() {
         onMouseLeave={onLeave}
         style={baseStyle}
       >
-        <ChevronRight size={16} strokeWidth={2.4} />
+        <ChevronRight size={compact ? 14 : 16} strokeWidth={2.4} />
       </button>
-      <span
-        aria-hidden
-        className="ml-2 mr-1 inline-block"
-        style={{
-          width: 1,
-          height: 20,
-          background: "rgba(255, 255, 255, 0.15)",
-        }}
-      />
+      {!compact && (
+        <span
+          aria-hidden
+          className="ml-2 mr-1 inline-block"
+          style={{
+            width: 1,
+            height: 20,
+            background: "rgba(255, 255, 255, 0.15)",
+          }}
+        />
+      )}
     </div>
   );
 }

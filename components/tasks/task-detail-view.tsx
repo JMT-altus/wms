@@ -29,6 +29,12 @@ import type { Route } from "next";
 import { TaskDetail } from "./task-detail";
 import { TaskEditForm } from "./task-edit-form";
 import { TaskAttachments } from "./task-attachments";
+import { SignOffPanel } from "./sign-off-panel";
+import { TaskChecklist } from "./task-checklist";
+import { TaskTimePanel } from "./task-time-panel";
+import type { ApprovalActor } from "@/lib/tasks/approval-levels";
+import type { ChecklistItemRow } from "@/app/(app)/tasks/checklist-actions";
+import type { TaskSessionRow } from "@/lib/tasks/time-store";
 import { VisibilityEditor } from "./visibility-editor";
 import type { TaskAttachment } from "@/lib/queries/task-attachments";
 import type { AudienceEntry } from "@/lib/access/visibility";
@@ -90,6 +96,26 @@ interface Props {
   /** Active statuses in the admin's display order — drives the picker options
    *  (hidden statuses are excluded, and reordering is reflected here). */
   pickerOrder?: TaskStatus[];
+  /**
+   * 0102 — data for the three rail panels added with the sign-off / time /
+   * checklist work.
+   *
+   * DATA, not pre-rendered nodes. An earlier cut passed the finished
+   * `<SignOffPanel/>` etc. down as ReactNode props to keep this prop list
+   * short; that hands React elements across the server→client boundary, where
+   * they stop being ordinary children and draw a missing-key warning.
+   * Everything below is plain serialisable values, rendered into panels here.
+   */
+  signOffActor?: ApprovalActor;
+  checklistItems?: ChecklistItemRow[];
+  time?: {
+    sessions: TaskSessionRow[];
+    totalSeconds: number;
+    /** The viewer's open session on THIS task, if the clock is running. */
+    runningSince: string | null;
+    initialElapsedSeconds: number;
+    canTrack: boolean;
+  };
 }
 
 /** Palette token → "r, g, b" for arbitrary status colours set by the admin. */
@@ -250,6 +276,9 @@ export function TaskDetailView({
   statusLabels,
   statusTones,
   pickerOrder,
+  signOffActor,
+  checklistItems,
+  time,
 }: Props) {
   const [editing, setEditing] = useState(false);
   const [approveOpen, setApproveOpen] = useState(false);
@@ -445,6 +474,7 @@ export function TaskDetailView({
                         : null,
                     recurrenceRule: task.recurrenceRule,
                     projectNodeId: task.projectNodeId,
+                    estimatedMinutes: task.estimatedMinutes,
                   }}
                   expectedUpdatedAt={expectedUpdatedAt}
                   isAdmin={me?.isAdmin ?? false}
@@ -605,7 +635,57 @@ export function TaskDetailView({
               </section>
             )}
 
-            {/* (3) Attachments — files and links. Sits in the rail rather than
+            {/* (3) Sign-off ladder — 0102. Sits directly under the action
+                rail because it answers the question the Approve button
+                raises: who has signed this, and who is it waiting on. */}
+            {signOffActor && (
+              <SignOffPanel
+                taskId={task.id}
+                expectedUpdatedAt={expectedUpdatedAt}
+                task={{
+                  doerId: task.doerId,
+                  initiatorId: task.initiatorId,
+                  status: task.status,
+                  approvalStatus: task.approvalStatus,
+                  approvalLevel: task.approvalLevel,
+                }}
+                actor={signOffActor}
+                manager={{
+                  byName: task.managerApprovedByName,
+                  at: task.managerApprovedAt?.toISOString() ?? null,
+                  note: task.managerApprovalNote,
+                }}
+                admin={{
+                  byName: task.adminApprovedByName,
+                  at: task.adminApprovedAt?.toISOString() ?? null,
+                  note: task.adminApprovalNote,
+                }}
+              />
+            )}
+
+            {/* (4) Checklist — the sub-steps inside this task. */}
+            {checklistItems && (
+              <TaskChecklist
+                taskId={task.id}
+                items={checklistItems}
+                canEdit={canCommentOnTask}
+              />
+            )}
+
+            {/* (5) Time — Estimated vs Actual, plus the timer. */}
+            {time && (
+              <TaskTimePanel
+                taskId={task.id}
+                sessions={time.sessions}
+                totalSeconds={time.totalSeconds}
+                estimatedMinutes={task.estimatedMinutes}
+                runningSince={time.runningSince}
+                initialElapsedSeconds={time.initialElapsedSeconds}
+                canTrack={time.canTrack}
+              />
+            )}
+
+            {/* (6) Attachments — files and links. Sits in the rail rather than
                 the body because it is reference material for the work, not
                 part of the brief itself. */}
             <TaskAttachments
@@ -616,7 +696,7 @@ export function TaskDetailView({
               canAttach={canCommentOnTask}
             />
 
-            {/* (4) Who can see this — editable after creation, which it
+            {/* (7) Who can see this — editable after creation, which it
                 previously was not. */}
             <VisibilityEditor
               taskId={task.id}

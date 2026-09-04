@@ -135,6 +135,15 @@ export interface ClientMasterRow {
   isActive: boolean;
   /** 0086's Focused View flag — the shortlist this client is on, or not. */
   focusedView: boolean;
+  /**
+   * 0101 — when this customer was parked as dormant, or null.
+   *
+   * Carried into the row rather than filtered out in SQL, because the Status
+   * filter's Dormant option has to be able to bring them back and the table
+   * filters client-side. The DEFAULT value of that filter is what keeps them
+   * off screen — see the Status filter in the table component.
+   */
+  dormantAt: string | null;
   createdAt: string;
   /* Registration & Tax */
   panNo: string | null;
@@ -200,6 +209,7 @@ export async function listClientMasterRows(): Promise<ClientMasterRow[]> {
       creditLimit: customerMasters.creditLimit,
       isActive: customerMasters.isActive,
       focusedView: customerMasters.focusedView,
+      dormantAt: customerMasters.dormantAt,
       createdAt: customerMasters.createdAt,
       panNo: customerMasters.panNo,
       gstRegistrationType: customerMasters.gstRegistrationType,
@@ -254,6 +264,7 @@ export async function listClientMasterRows(): Promise<ClientMasterRow[]> {
     creditLimit: r.creditLimit,
     isActive: r.isActive,
     focusedView: r.focusedView,
+    dormantAt: r.dormantAt ? r.dormantAt.toISOString() : null,
     createdAt: r.createdAt.toISOString(),
     products: r.products ?? [],
     panNo: r.panNo,
@@ -515,7 +526,12 @@ export async function listClientContactMaster(): Promise<ClientContactRow[]> {
     // work into the three directories before anyone had onboarded it — and
     // made "Onboarding moves this into its master section" untrue, since it
     // was already there. Drafts belong to the Draft screen until promoted.
-    .where(eq(customerMasters.kycStage, "complete"))
+    // 0101 — and not dormant. A parked customer leaves the Client Master and
+    // its three directories together: a contact you cannot reach because the
+    // company is dormant is not a contact anyone wants in this list. Hidden
+    // outright here rather than behind a filter, because the place to bring a
+    // dormant customer back is the Client Master, where it is parked from.
+    .where(and(eq(customerMasters.kycStage, "complete"), isNull(customerMasters.dormantAt)))
     .orderBy(asc(customerMasters.name), asc(customerContacts.sortOrder));
 
   return rows.map((r) => ({
@@ -593,7 +609,12 @@ export async function listClientAddressBook(): Promise<ClientAddressRow[]> {
     // work into the three directories before anyone had onboarded it — and
     // made "Onboarding moves this into its master section" untrue, since it
     // was already there. Drafts belong to the Draft screen until promoted.
-    .where(eq(customerMasters.kycStage, "complete"))
+    // 0101 — and not dormant. A parked customer leaves the Client Master and
+    // its three directories together: a contact you cannot reach because the
+    // company is dormant is not a contact anyone wants in this list. Hidden
+    // outright here rather than behind a filter, because the place to bring a
+    // dormant customer back is the Client Master, where it is parked from.
+    .where(and(eq(customerMasters.kycStage, "complete"), isNull(customerMasters.dormantAt)))
     .orderBy(asc(customerMasters.name), asc(customerAddresses.sortOrder));
 
   return rows.map((r) => ({
@@ -655,7 +676,12 @@ export async function listClientBankMaster(): Promise<ClientBankRow[]> {
     // work into the three directories before anyone had onboarded it — and
     // made "Onboarding moves this into its master section" untrue, since it
     // was already there. Drafts belong to the Draft screen until promoted.
-    .where(eq(customerMasters.kycStage, "complete"))
+    // 0101 — and not dormant. A parked customer leaves the Client Master and
+    // its three directories together: a contact you cannot reach because the
+    // company is dormant is not a contact anyone wants in this list. Hidden
+    // outright here rather than behind a filter, because the place to bring a
+    // dormant customer back is the Client Master, where it is parked from.
+    .where(and(eq(customerMasters.kycStage, "complete"), isNull(customerMasters.dormantAt)))
     .orderBy(asc(customerMasters.name), asc(customerBankAccounts.sortOrder));
 
   return rows;

@@ -47,9 +47,16 @@ import {
  * again. Here the file lands *in* the sheet, every flagged cell says what is
  * wrong with it, and you fix it where it sits.
  *
- * The sheet is columns-on-demand: eight to start, ~40 available. See
+ * The sheet is columns-on-demand: eight to start, ~50 available. See
  * lib/forms/client-bulk-columns.ts, which both this and the server action
  * read, so a column can never exist on screen with nowhere to land.
+ *
+ * Those ~50 include the three directories — Contact Details, Address Details
+ * and Bank Details — as fixed blocks on the row, carrying the columns the
+ * Client Contact Master, Client Address Book and Client Bank Master
+ * themselves show. Adding a whole block is one click on "Add all" in its
+ * section of the Add column menu, because eight columns picked one at a time
+ * is the tedium this sheet exists to remove.
  */
 
 /** Rows the sheet opens with — enough to paste into without pressing Add row. */
@@ -213,6 +220,25 @@ function BulkImportSheet({
           ? prev
           : { ...prev, columns: orderColumns([...prev.columns, key]) },
       );
+    },
+    [commit],
+  );
+
+  /**
+   * Every column of one group at once — one history entry, not eight.
+   *
+   * Separate from `addColumn` rather than a loop over it because each commit
+   * pushes an undo snapshot: adding Address Details a column at a time would
+   * take seven Ctrl+Z presses to take back.
+   */
+  const addColumns = React.useCallback(
+    (keys: string[]) => {
+      commit((prev) => {
+        const next = keys.filter((k) => !prev.columns.includes(k));
+        return next.length === 0
+          ? prev
+          : { ...prev, columns: orderColumns([...prev.columns, ...next]) };
+      });
     },
     [commit],
   );
@@ -528,7 +554,7 @@ function BulkImportSheet({
         <ToolbarButton onClick={() => addRows(1)} icon={<Plus size={15} strokeWidth={2.6} />}>
           Add row
         </ToolbarButton>
-        <AddColumnMenu shown={state.columns} onAdd={addColumn} />
+        <AddColumnMenu shown={state.columns} onAdd={addColumn} onAddMany={addColumns} />
 
         <span aria-hidden style={{ width: 1, height: 22, background: "var(--color-hairline)" }} />
 
@@ -619,8 +645,9 @@ function BulkImportSheet({
             {result.created} client{result.created === 1 ? "" : "s"} imported.
           </p>
           <p className="mt-1 text-[13px] text-ink-soft">
-            They are in the Client Master now. Contacts, addresses and bank accounts are added in
-            their own directories.
+            They are in the Client Master now. Any Contact, Address and Bank Details the sheet
+            carried are filed in the Client Contact Master, Client Address Book and Client Bank
+            Master. A second contact or address for the same client is added there.
           </p>
         </div>
       )}
@@ -793,9 +820,11 @@ function ToolbarButton({
 function AddColumnMenu({
   shown,
   onAdd,
+  onAddMany,
 }: {
   shown: string[];
   onAdd: (key: string) => void;
+  onAddMany: (keys: string[]) => void;
 }) {
   const [open, setOpen] = React.useState(false);
   const [query, setQuery] = React.useState("");
@@ -857,12 +886,30 @@ function AddColumnMenu({
             )}
             {groups.map((g) => (
               <div key={g.group}>
-                <p
-                  className="px-3 pt-2 pb-1 uppercase font-bold tracking-[0.08em] text-ink-subtle"
-                  style={{ fontSize: 10 }}
-                >
-                  {g.group}
-                </p>
+                <div className="px-3 pt-2 pb-1 flex items-center gap-2">
+                  <p
+                    className="uppercase font-bold tracking-[0.08em] text-ink-subtle"
+                    style={{ fontSize: 10 }}
+                  >
+                    {g.group}
+                  </p>
+                  {/* Contact Details is eight columns and Address Details
+                      seven. Picked one at a time, that is the tedium the
+                      sheet exists to remove. */}
+                  {g.columns.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onAddMany(g.columns.map((c) => c.key));
+                        setQuery("");
+                      }}
+                      className="ml-auto shrink-0 font-bold transition-opacity hover:opacity-70"
+                      style={{ fontSize: 10.5, color: KYC_ACCENT }}
+                    >
+                      ADD ALL {g.columns.length}
+                    </button>
+                  )}
+                </div>
                 {g.columns.map((c) => (
                   <button
                     key={c.key}

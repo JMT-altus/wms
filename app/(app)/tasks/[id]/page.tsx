@@ -52,6 +52,8 @@ export default async function TaskDetailPage({ params }: PageProps) {
               avatarUrl: me.avatarUrl,
               department: me.department,
               isAdmin: me.isAdmin,
+              // Founder check for the second rung of the sign-off ladder.
+              email: me.email,
             }}
           />
         </Suspense>

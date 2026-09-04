@@ -3,7 +3,7 @@ import * as React from "react";
 import Link from "next/link";
 import type { Route } from "next";
 import { useRouter } from "next/navigation";
-import { MoreHorizontal, Archive, ArchiveRestore, Trash2 } from "lucide-react";
+import { MoreHorizontal, Archive, ArchiveRestore, BellRing, Trash2 } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -15,6 +15,7 @@ import {
   DropdownMenuSubContent,
   DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
+import { abandonTask, nudgeTask, restoreAbandonedTask } from "@/app/(app)/tasks/lifecycle-actions";
 import {
   archiveTask,
   unarchiveTask,
@@ -130,6 +131,39 @@ export function TaskRowActions({ row, employees, me }: Props) {
     });
   }
 
+  /** Chase the doer. Server-side this is refused for anyone without standing
+   *  to chase, so the item can stay visible and say why rather than vanish. */
+  function handleNudge() {
+    startTransition(async () => {
+      const res = await nudgeTask(row.id);
+      if (!res.ok) {
+        fireToast({ message: res.error });
+        return;
+      }
+      fireToast({ message: "Nudge sent." });
+    });
+  }
+
+  /** Bin it. Undoable straight from the toast, because that is the whole
+   *  difference between abandoning and deleting. */
+  function handleAbandon() {
+    startTransition(async () => {
+      const res = await abandonTask(row.id);
+      if (!res.ok) {
+        fireToast({ message: res.error });
+        return;
+      }
+      router.refresh();
+      fireToast({
+        message: "Moved to the Recycle Bin.",
+        actionLabel: "Undo",
+        action: () => {
+          void restoreAbandonedTask(row.id);
+        },
+      });
+    });
+  }
+
   function handleDelete() {
     if (
       !confirm(
@@ -177,6 +211,28 @@ export function TaskRowActions({ row, employees, me }: Props) {
               </DropdownMenuItem>
             )}
 
+            {/* Recycle Bin — the soft alternative to Delete. Sits next to
+                Archive because both are "get this off my list", and one line
+                apart from Delete because only one of them is reversible. */}
+            {!row.archived && (
+              <DropdownMenuItem onClick={handleAbandon}>
+                <Trash2 size={14} />
+                Move to Recycle Bin
+              </DropdownMenuItem>
+            )}
+
+            <DropdownMenuSeparator />
+          </>
+        )}
+
+        {/* Nudge — available to anyone; the server decides whether this
+            particular person has standing to chase this particular task. */}
+        {!row.archived && row.doerId !== me.id && (
+          <>
+            <DropdownMenuItem onClick={handleNudge}>
+              <BellRing size={14} />
+              Nudge doer
+            </DropdownMenuItem>
             <DropdownMenuSeparator />
           </>
         )}

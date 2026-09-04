@@ -28,20 +28,20 @@ import {
   ClientMasterEditSchema,
 } from "@/lib/validators/client-kyc";
 import { nextCustomerCodes } from "@/app/(masters-module)/masters/actions";
-import { CLIENT_ADDRESS_TYPES, CLIENT_CONTACT_TYPES, VOLUME_CLASSES } from "@/db/enums";
+import { CLIENT_ADDRESS_TYPES, CLIENT_CONTACT_TYPES } from "@/db/enums";
 import {
   listClientBulkOptions,
   type ClientBulkRosters,
 } from "@/lib/queries/client-bulk-options";
 import { missingKycFields } from "@/lib/masters/kyc-completeness";
+import { setCustomerDormancy, type DormancyResult } from "@/lib/masters/dormancy-store";
 import {
   COLUMN_BY_KEY,
   isBlankRow,
-  matchOption,
-  splitMulti,
   validateCell,
   type SheetRow,
 } from "@/lib/forms/client-bulk-columns";
+import { rowToKycInput } from "@/lib/forms/client-bulk-row";
 import { isPlausibleGstin } from "@/lib/masters/gstin";
 import { lookupGstin, type GstinDetails } from "@/lib/gst";
 import type { LookupListKey } from "@/db/enums";
@@ -768,6 +768,39 @@ export async function updateClientBankAccount(id: string, values: unknown): Prom
   return { ok: true };
 }
 
+/* ── Dormant ─────────────────────────────────────────────────────────────── */
+
+/**
+ * Park clients as dormant, or bring them back.
+ *
+ * Dormant is not deleted and not a draft: the record keeps its code, its
+ * contacts, its addresses and its bank accounts, and it stops appearing in
+ * the Client Master, the Customer Master and the three directories. The
+ * Client Master's Status filter set to Dormant is where it can be found and
+ * reactivated — see lib/masters/dormancy.ts and the schema comment on
+ * `customer_masters.dormant_at`.
+ *
+ * No completeness or stage check either way. A client is parked because you
+ * stopped trading with it, which has nothing to do with whether its KYC is
+ * finished, and a dormant client reactivated later is exactly the record it
+ * was before.
+ */
+export async function setClientsDormant(ids: string[]): Promise<DormancyResult> {
+  const g = await guard();
+  if ("error" in g) return g.error;
+  const res = await setCustomerDormancy(ids, true);
+  if (res.ok) revalidateKyc();
+  return res;
+}
+
+export async function reactivateClients(ids: string[]): Promise<DormancyResult> {
+  const g = await guard();
+  if ("error" in g) return g.error;
+  const res = await setCustomerDormancy(ids, false);
+  if (res.ok) revalidateKyc();
+  return res;
+}
+
 /* ── Draft / Recycle Bin, in bulk ────────────────────────────────────────── */
 
 /**
@@ -1280,91 +1313,20 @@ const BULK_IMPORT_MAX_ROWS = 500;
 const keyOf = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]/g, "");
 
 /**
- * Turn one sheet row into the payload `ClientKycSchema` already validates.
- *
- * The sheet carries the Client Master's columns and only those, so there are
- * no contacts, addresses or bank accounts to fan back out — each of those has
- * a master of its own, which is where they get added. Building the same
- * payload the KYC form builds is still what lets this reuse
- * `kycColumnValues` rather than growing a second, drifting write path into
- * `customer_masters`.
- */
-function rowToKycInput(
-  row: SheetRow,
-  ctx: ClientBulkRosters,
-): Record<string, unknown> {
-  const cell = (k: string): string => (row[k] ?? "").trim();
-  const orNull = (k: string): string | null => cell(k) || null;
-
-  const multi = (k: string): string[] => {
-    const column = COLUMN_BY_KEY.get(k);
-    const parts = splitMulti(cell(k));
-    if (!column?.optionKey) return parts;
-    const list = ctx.options[column.optionKey] ?? [];
-    // Store the master's own spelling, not the typist's — see `matchOption`.
-    return parts.map((p) => matchOption(p, list) ?? p);
-  };
-
-  const productIds = splitMulti(cell("products"))
-    .map((p) => ctx.productsByName.get(keyOf(p)))
-    .filter((id): id is string => Boolean(id));
-
-  return {
-    name: cell("name"),
-    salesRepId: ctx.salesByName.get(keyOf(cell("salesRep"))) ?? null,
-    customerTypes: multi("customerTypes"),
-    industryTypes: multi("industryTypes"),
-    tags: multi("tags"),
-    gstin: orNull("gstin"),
-    state: orNull("state"),
-    website: orNull("website"),
-    // `matchOption`, not a hardcoded A/B/C: it is the same case- and
-    // punctuation-blind match the sheet flagged the cell with, and it hands
-    // back the enum's own spelling rather than the typist's.
-    grade: matchOption(cell("grade"), VOLUME_CLASSES),
-    exportClient: orNull("exportClient"),
-    reference: orNull("reference"),
-
-    gstRegistrationType: orNull("gstRegistrationType"),
-    panNo: orNull("panNo"),
-    tinNumber: orNull("tinNumber"),
-    msmeUdyamNo: orNull("msmeUdyamNo"),
-    iecNumber: orNull("iecNumber"),
-    currency: orNull("currency"),
-    country: orNull("country"),
-    testCertificateNeeded: orNull("testCertificateNeeded"),
-    tcsApplicable: orNull("tcsApplicable"),
-
-    contacts: [],
-    addresses: [],
-    bankAccounts: [],
-
-    creditLimit: cell("creditLimit").replace(/,/g, ""),
-    creditDays: cell("creditDays").replace(/,/g, ""),
-    paymentTerms: orNull("paymentTerms"),
-    freightCharges: orNull("freightCharges"),
-    transporter: orNull("transporter"),
-    quantityDeviation: orNull("quantityDeviation"),
-    productIds,
-
-    otherReferences: orNull("otherReferences"),
-    notes: orNull("notes"),
-  };
-}
-
-/**
  * Create many clients from the Client Master bulk-import sheet.
  *
  * Rows land in the Client Master, not in Drafts.
  *
  * That is a deliberate departure from `saveClientKyc`, which sends anything
- * short of `missingKycFields` to Drafts. The rule cannot apply here: it wants
- * a contact and a billing address, and this sheet offers the Client Master's
- * own columns, which by that table's own design carry neither — contacts and
- * addresses have masters of their own. Running the rule anyway would send
- * every single imported row to Drafts and leave the Client Master empty,
- * which is the opposite of what importing into it means. A client onboarded
- * one at a time still goes through the form and still gets judged by it.
+ * short of `missingKycFields` to Drafts. The sheet can now carry a contact
+ * and a billing address, so the rule could be run — but it still is not, and
+ * on purpose: a hundred-row list of companies with nothing but names and GST
+ * numbers is a perfectly ordinary thing to import, and judging it would send
+ * the lot to Drafts and leave the Client Master empty, which is the opposite
+ * of what importing into it means. Fill the contact and address blocks and
+ * the record is complete anyway; leave them blank and you get the client you
+ * asked for. A client onboarded one at a time still goes through the form and
+ * still gets judged by it.
  *
  * A row with a real problem (no name, a salesperson nobody is called, a
  * company already on record) is skipped and returned by row number. The good

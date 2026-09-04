@@ -17,6 +17,9 @@ import {
   canReassign,
   canComment,
 } from "@/lib/auth/task-permissions";
+import { isSuperAdmin } from "@/lib/auth/super-admin";
+import { getRunningTimer, getTimeTotals, listTaskSessions } from "@/lib/tasks/time-store";
+import { listChecklistItems } from "@/app/(app)/tasks/checklist-actions";
 
 interface Props {
   taskId: string;
@@ -26,6 +29,8 @@ interface Props {
     avatarUrl: string | null;
     department: string | null;
     isAdmin: boolean;
+    /** Needed for the founder-only rung of the sign-off ladder. */
+    email?: string | null;
   };
 }
 
@@ -67,6 +72,15 @@ export async function TaskDetailLoader({ taskId, me }: Props) {
     // that branching on visibility here would cost more than it saves.
     getTaskAudience(taskId),
     listActiveDepartments(),
+  ]);
+
+  // 0102 — the three new rail panels. Fetched together with everything else so
+  // they stream in the same Suspense flush rather than adding a second wait.
+  const [sessions, totals, running, checklist] = await Promise.all([
+    listTaskSessions(taskId),
+    getTimeTotals([taskId]),
+    getRunningTimer(me.id),
+    listChecklistItems(taskId),
   ]);
   // Active statuses in the admin's display order — drives the picker's options
   // (hidden ones drop out, reordering reflects here too).
@@ -128,6 +142,33 @@ export async function TaskDetailLoader({ taskId, me }: Props) {
       statusLabels={statusLabels}
       statusTones={statusTones}
       pickerOrder={pickerOrder}
+      // 0102 — DATA for the three new rail panels, not rendered elements.
+      // The view builds the panels itself; handing finished JSX across the
+      // server→client boundary makes React treat them as something other than
+      // ordinary children and warn about missing keys.
+      signOffActor={{
+        id: me.id,
+        isAdmin: me.isAdmin,
+        isSuperAdmin: isSuperAdmin(me.email),
+        isDoersManager,
+      }}
+      checklistItems={checklist}
+      time={{
+        sessions,
+        totalSeconds: totals.get(task.id) ?? 0,
+        // Only counts as "running here" when the open session is on THIS
+        // task — a timer running elsewhere must not light this panel up.
+        runningSince:
+          running && running.taskId === task.id ? running.startedAt : null,
+        initialElapsedSeconds:
+          running && running.taskId === task.id ? running.elapsedSeconds : 0,
+        canTrack:
+          !task.archived &&
+          (me.isAdmin ||
+            task.doerId === me.id ||
+            task.initiatorId === me.id ||
+            task.createdById === me.id),
+      }}
     />
   );
 }
