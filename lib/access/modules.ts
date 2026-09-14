@@ -34,6 +34,11 @@ export const MODULE_CODE_DEFAULTS: Record<ModuleId, boolean> = {
   // Turnover targets and everyone's forecast against them. Off by default:
   // this is the commercial plan, not general team information.
   targets: false,
+  // The Project Plan tree. ON by default, matching WMS: the plan is the
+  // team's own work broken down, the same work the task list already shows
+  // everyone, and the module's single permission rule is about who may RULE
+  // on a row's status — not who may look at one.
+  project: true,
 };
 
 /** Where a resolved yes/no came from — surfaced in the admin matrix. */

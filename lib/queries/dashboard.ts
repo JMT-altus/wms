@@ -277,7 +277,10 @@ async function loadDashboardDataUncached(
   const topPerformers =
     focusEmployeeIds.length > 0
       ? pickPerformersForEmployees(globalRanking, focusEmployeeIds, allEmployees, 10)
-      : globalRanking.slice(0, 6);
+      // Twelve, not six: the leaderboard renders three on the podium and the
+      // rest as a ranked list beside it, which needs more than three rows to
+      // be worth reading.
+      : globalRanking.slice(0, 12);
 
   // Aging heatmap shows EVERY pending task (any non-terminal status),
   // sourced from the canonical enum list so Tier-3 statuses appear.

@@ -22,6 +22,13 @@
   --color-hairline:        rgba(37, 71, 178, 0.13);
   --color-hairline-strong: rgba(37, 71, 178, 0.24);
 
+  /* The outer edge of a table or sheet. The app's own navy — the same family
+     as the header and the nav rails (#001b3d → #013a6b) — rather than a pale
+     hairline, so a register reads as a defined object on the canvas instead
+     of dissolving into it. Only the OUTER edge: the rules between rows and
+     columns stay hairlines, or the table turns into a grid of boxes. */
+  --color-table-edge:      #013a6b;
+
   /* JMT brand accent (teal) — token name kept (--color-altus-red) for
      back-compat with ~50 component refs; value matches the JMT Drive Solutions logo. */
   --color-altus-red:       #0A6CFF;
@@ -122,6 +129,10 @@
  * breakpoint so callers don't need their own responsive variant. */
 :root {
   --app-header-h: 50px;
+  /* The filter bar's own height (26px chips + py-1.5 + its hairline), so a
+     second sticky row — the dashboard's section rail — can park directly
+     beneath it without a strip of page showing through between them. */
+  --filter-bar-h: 39px;
 }
 @media (max-width: 767px) {
   :root {
@@ -984,6 +995,8 @@ html[data-density="compact"] body {
   --color-ink-subtle: rgba(255, 255, 255, 0.55);
   --color-hairline: rgba(255, 255, 255, 0.10);
   --color-hairline-strong: rgba(255, 255, 255, 0.18);
+  /* Navy on navy is no edge at all. */
+  --color-table-edge: rgba(255, 255, 255, 0.28);
   color-scheme: dark;
 }
 
@@ -1009,6 +1022,31 @@ html[data-density="compact"] body {
   &:hover {
     border-color: rgba(10, 108, 255, 0.40);
     background: #fbfcff;
+  }
+}
+
+/* Filter row spanning the full bar. The chips used to sit at their natural
+   widths and left a dead stretch of empty bar to their right; here the chips
+   share the slack between them instead, so the row runs edge to edge. Only
+   the chips grow — the segmented Scope/View groups and the search box keep
+   their measured widths. When the chips outgrow the bar there is no slack to
+   share and the row falls back to scrolling at its max-content width. */
+.filter-row-fill > .filter-chip {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+/* Inside a chip, the control (not the leading icon) takes the extra width, so
+   the caret stays pinned to the chip's right edge. */
+.filter-row-fill .filter-chip > :last-child {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+@media (max-width: 639px) {
+  /* Stacked on mobile: chips are already full-width, and growing them along
+     the column axis would stretch their height. */
+  .filter-row-fill > .filter-chip,
+  .filter-row-fill .filter-chip > :last-child {
+    flex: 0 1 auto;
   }
 }
 
@@ -1728,6 +1766,25 @@ html[data-density="compact"] body {
   color: rgb(var(--vp-cyan-deep));
 }
 
+/* Status by Doer — the whole row is a link into that person's task list, so
+   it lights up as one: a red wash across the row and a red edge at the left.
+   The name cell is sticky (it keeps its own white ground while the row scrolls
+   sideways), so it has to be tinted explicitly or the hover would stop dead at
+   the frozen column. */
+.status-doer-row {
+  transition: background-color 160ms ease-out, box-shadow 160ms ease-out;
+}
+.status-doer-row:hover,
+.status-doer-row:focus-visible {
+  outline: none;
+  background: color-mix(in srgb, var(--color-altus-red) 6%, #ffffff);
+  box-shadow: inset 3px 0 0 var(--color-altus-red);
+}
+.status-doer-row:hover .status-doer-name,
+.status-doer-row:focus-visible .status-doer-name {
+  background: color-mix(in srgb, var(--color-altus-red) 6%, #ffffff);
+}
+
 /* Aging Heatmap — click-anywhere lanes. Each lane lifts on hover with
    a heat-tinted shadow + the chevron slides forward. */
 .aging-lane {
@@ -2323,6 +2380,38 @@ select.nt-input {
   display: none;
 }
 
+/* Task table scrollbar — a slim brand-blue pill on a faint track, both axes.
+   The native grey bar is the widest, loudest thing on a screen that is
+   otherwise all hairlines; drawing it in the accent colour makes it read as
+   part of the table rather than as chrome bolted to the side of it. */
+.table-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(var(--vp-cyan)) color-mix(in srgb, var(--color-ink-subtle) 10%, transparent);
+}
+.table-scroll::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+.table-scroll::-webkit-scrollbar-track {
+  background: color-mix(in srgb, var(--color-ink-subtle) 8%, transparent);
+  border-radius: 9999px;
+}
+.table-scroll::-webkit-scrollbar-thumb {
+  background: rgb(var(--vp-cyan));
+  border-radius: 9999px;
+  /* Transparent border + padding-box clip is what slims the thumb without
+     narrowing the hit target — the whole 10px stays draggable. */
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+.table-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgb(var(--vp-cyan-deep));
+  background-clip: padding-box;
+}
+.table-scroll::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
 /* Premium, slim scrollbar for the kanban board — smooth horizontal scroll
    with a subtle pill thumb instead of the chunky native bar (sir's #1). */
 .kanban-scroll {
@@ -2787,4 +2876,304 @@ select.nt-input {
   backdrop-filter: blur(20px) saturate(160%);
   -webkit-backdrop-filter: blur(20px) saturate(160%);
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* ── Project Plan tables ───────────────────────────────────────────────────
+   The Name / identity block on these tables is `position: sticky`, and a
+   sticky cell only hides what scrolls beneath it while its own background is
+   OPAQUE. A translucent tint — `bg-black/3` and friends — does not layer over
+   the cell's colour, it REPLACES it, so the frozen column turns see-through on
+   hover and the columns sliding underneath read straight through the names.
+
+   So every state here is a solid colour mixed against the card, never an alpha
+   over it. Written as CSS rather than utilities because the rule has to reach
+   every cell in a hovered row, sticky ones included. */
+.plan-table td {
+  background: var(--color-surface-card);
+}
+
+.plan-table thead th {
+  background: color-mix(in srgb, var(--color-ink-strong) 4%, var(--color-surface-card));
+}
+
+.plan-table tbody tr:hover > td {
+  background: color-mix(in srgb, var(--color-ink-strong) 5%, var(--color-surface-card));
+}
+
+/* Ticked rows keep the module's own wash, and still stay opaque. */
+.plan-table tbody tr[data-selected="true"] > td {
+  background: color-mix(in srgb, #e10600 7%, var(--color-surface-card));
+}
+
+/* The row a "+" just created, so the answer to "did that work" is on screen
+   rather than somewhere down a branch that had been collapsed. Fades out on
+   its own — this marks a row, it does not select one. */
+.plan-table tbody tr[data-fresh="true"] > td {
+  background: color-mix(in srgb, #e10600 10%, var(--color-surface-card));
+  animation: plan-row-fresh 2.4s ease-out forwards;
+}
+
+@keyframes plan-row-fresh {
+  0%,
+  55% {
+    background: color-mix(in srgb, #e10600 10%, var(--color-surface-card));
+  }
+  100% {
+    background: var(--color-surface-card);
+  }
+}
+
+/* The tick itself, so a selected row reads as selected from the far edge of a
+   wide table and not only from its first column. */
+.plan-table input[type="checkbox"] {
+  accent-color: #e10600;
+  cursor: pointer;
+}
+
+/* ── The Project Plan create dialog ────────────────────────────────────────
+   The app-wide "+" form is a full-page-feeling dialog and its controls are
+   sized for that. The plan dialog carries the same fields PLUS a level and a
+   parent chain above them, so at that size the first section is all that fits
+   on screen and everything else is a scroll.
+
+   A scoped variant rather than a resize of `.nt-input` itself: the task dialog
+   is not asking to change, and one shared control with two sizes decided by an
+   ancestor is easier to reason about than two classes that must be kept in
+   step. Both selectors are single-class, so this wins on specificity without
+   reaching for `!important`. */
+.plan-form {
+  /* The module's own red. `--color-altus-red` is the app's brand token and is
+     BLUE (#0A6CFF) — re-pointing it here turns the section badges, the required
+     asterisks and every other accent inside this form red in one line, instead
+     of restyling each of them. */
+  --color-altus-red: #e10600;
+  --color-altus-red-deep: #a80400;
+  gap: 1.25rem;
+}
+
+.plan-form .nt-input {
+  padding: 10px 14px;
+  font-size: 14px;
+  border-radius: 10px;
+}
+
+.plan-form textarea.nt-input {
+  padding-top: 9px;
+  padding-bottom: 9px;
+}
+
+/* ── The Project Plan's small grey chip ────────────────────────────────────
+   One definition, two users: the reference badge on every plan row (P1, M2,
+   RA…) and the shortcut keycap in the corner of each create button. They are
+   the same object visually — a short, quiet, monospaced token sitting beside
+   something else — and having styled them separately is how the ref badge and
+   the keycap drifted apart in the first place. */
+/* The row-identity variant: a ref on a plan row is the label people quote to
+   each other, so it carries the module's colour rather than sitting quiet. */
+.plan-chip--red {
+  color: #a80400;
+  background: color-mix(in srgb, #e10600 11%, transparent);
+}
+
+.plan-chip {
+  display: inline-block;
+  flex-shrink: 0;
+  border-radius: 6px;
+  padding: 2px 6px;
+  font-weight: 700;
+  line-height: 1.35;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-ink-strong);
+  background: color-mix(in srgb, var(--color-ink-strong) 7%, transparent);
+}
+
+/* The edit dialog's fields. One rule rather than the same eight inline styles
+   on every input, select and textarea in that form. */
+.plan-edit-input {
+  width: 100%;
+  padding: 9px 12px;
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--color-ink-strong);
+  background: var(--color-surface-card);
+  border: 1px solid var(--color-hairline-strong);
+  border-radius: 9px;
+  outline: none;
+}
+
+.plan-edit-input::placeholder {
+  color: var(--color-ink-subtle);
+}
+
+.plan-edit-input:focus-visible {
+  border-color: #e10600;
+}
+
+/* The row's name — the field the dialog is about. Taller and heavier than the
+   rest, so the eye lands on it first. */
+.plan-edit-input--name {
+  padding: 11px 14px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+/* A project row in the hierarchy table — the top of each branch, washed so the
+   eye finds it without counting indents. Still opaque, for the same reason
+   every other row in these tables is: the first columns are sticky. */
+.plan-table tbody tr[data-root="true"] > td {
+  background: color-mix(in srgb, #e10600 4%, var(--color-surface-card));
+}
+
+/* ── The shared master table ───────────────────────────────────────────────
+   Every /master-setup, Masters and Client KYC screen renders through one
+   component (components/admin/master/data-table.tsx), so its chrome is one
+   rule set rather than the same dozen inline styles repeated down that file.
+
+   The look is the reference layout's: a defined outer edge, a tinted heading
+   band, and ruled cells — a table you can read ACROSS, which is the whole job
+   on a register twelve columns wide. Column rules rather than zebra striping:
+   stripes fight the row tints this table already uses for selection. */
+.data-grid {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+/* The band's own lower edge, in the table's own navy and as heavy as its
+   outer frame. The headings are not the first row of the data — they are the
+   lid on it, and the line that says so should be the same line that runs
+   round the outside. */
+.data-grid > thead > tr > th {
+  border-bottom: 2px solid var(--color-table-edge);
+}
+
+/* Column rules. The headings are drawn heavier than the cells under them:
+   a heading is the name of a column, so the eye needs to see where one column
+   ends and the next begins before it reads a single value. The body keeps the
+   lighter rule, or the data would be caged. */
+.data-grid > thead > tr > th:not(:last-child) {
+  border-right: 1px solid var(--color-hairline-strong);
+}
+.data-grid > tbody > tr > td:not(:last-child) {
+  border-right: 1px solid var(--color-hairline);
+}
+
+/* Hover on the ROW, not its cells: a selected row carries its own tint as an
+   inline style, and a cell-level hover would paint over it. */
+.data-grid > tbody > tr:hover {
+  background: color-mix(in srgb, var(--color-blue) 5%, transparent);
+}
+
+/* The heading's sort glyph: present on every column so the headings stay
+   aligned, but only legible on the one actually sorting. */
+.data-grid-sort {
+  opacity: 0;
+  transition: opacity 140ms ease;
+}
+.data-grid > thead > tr > th:hover .data-grid-sort {
+  opacity: 0.45;
+}
+.data-grid-sort[data-on="true"],
+.data-grid > thead > tr > th:hover .data-grid-sort[data-on="true"] {
+  opacity: 1;
+}
+
+/* The table's own horizontal scroller. Slim and always visible rather than an
+   overlay that fades: on a table this wide, whether there is more to the right
+   is the first thing you need to know. */
+.data-grid-scroll {
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-hairline-strong) transparent;
+}
+.data-grid-scroll::-webkit-scrollbar {
+  height: 11px;
+}
+.data-grid-scroll::-webkit-scrollbar-track {
+  background: var(--color-surface-soft);
+}
+.data-grid-scroll::-webkit-scrollbar-thumb {
+  background: var(--color-hairline-strong);
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+.data-grid-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--color-ink-subtle);
+  background-clip: content-box;
+}
+
+/* ── Grid View: the editable sheet ─────────────────────────────────────────
+   The same chrome as `.data-grid` above, for the sheets you type into
+   (components/admin/master/master-grid.tsx). A master's Table and Grid views
+   are the same register read two ways, so they get the same card, the same
+   heading band and the same rules — what differs between them is what a cell
+   DOES, not how the table is built.
+
+   The row tint travels as a custom property rather than a background, because
+   the first columns are sticky and have to be PAINTED — an inline background
+   on those cells would sit on top of any hover or error tint drawn on the row
+   behind them. Setting the variable on the row lets the pinned cells resolve
+   the same colour as the rest of it. */
+.data-grid-sheet > tbody > tr {
+  --grid-row-bg: var(--color-surface-card);
+  background: var(--grid-row-bg);
+}
+.data-grid-sheet > tbody > tr[data-state="error"] {
+  --grid-row-bg: color-mix(in srgb, var(--color-red) 7%, var(--color-surface-card));
+}
+.data-grid-sheet > tbody > tr:hover {
+  --grid-row-bg: color-mix(in srgb, var(--color-blue) 5%, var(--color-surface-card));
+}
+
+/* One editable cell, as a control rather than a bare patch of table.
+   A sheet where every cell is an invisible input reads as a wall of text and
+   gives you nothing to aim at; a bordered box per cell says where a value
+   begins and ends, and which cells are yours to change — the read-only ones
+   stay plain text on purpose. */
+.sheet-control {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: calc(100% - 12px);
+  height: 30px;
+  margin: 4px 6px;
+  padding: 0 8px;
+  border: 1px solid var(--color-hairline);
+  border-radius: 8px;
+  background: var(--color-surface-soft);
+  color: var(--color-ink-strong);
+  font-size: 13px;
+  text-align: left;
+  outline: none;
+  transition:
+    border-color 140ms ease,
+    background 140ms ease,
+    box-shadow 140ms ease;
+}
+.sheet-control:hover {
+  border-color: var(--color-hairline-strong);
+}
+.sheet-control:focus,
+.sheet-control:focus-visible,
+.sheet-control:focus-within {
+  border-color: var(--color-altus-red);
+  background: var(--color-surface-card);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-altus-red) 12%, transparent);
+}
+
+/* A value from a master list, inside a multi-value cell. Three of these
+   columns hold several values at once, and "OEMs, Traders" as prose hides
+   where one ends and the next starts. */
+.sheet-pill {
+  flex-shrink: 0;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-indigo) 13%, transparent);
+  color: var(--color-indigo-deep);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.5;
+  white-space: nowrap;
 }

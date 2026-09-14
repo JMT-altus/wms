@@ -1,6 +1,7 @@
 import { DashboardHeader } from "@/components/layout/header";
 import { DashboardFooter } from "@/components/layout/footer";
 import { FilterBar } from "@/components/layout/filter-bar";
+import { TaskSearchProvider } from "@/components/tasks/task-search-context";
 import { MyDayWorkspace } from "@/components/tasks/my-day-workspace";
 import type { AgendaTask } from "@/components/tasks/agenda-board";
 import { listEmployeeOptions } from "@/lib/queries/employees";
@@ -83,7 +84,7 @@ export default async function AgendaPage({ searchParams }: PageProps) {
     d ? d.toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10);
 
   return (
-    <>
+    <TaskSearchProvider>
       <DashboardHeader generatedAt={new Date()} />
       <FilterBar
         employees={employeeOptions}
@@ -118,6 +119,6 @@ export default async function AgendaPage({ searchParams }: PageProps) {
         statusTones={statusTones}
       />
       <DashboardFooter />
-    </>
+    </TaskSearchProvider>
   );
 }

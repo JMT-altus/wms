@@ -55,7 +55,10 @@ export function nextStatusesFor(
           if (peer !== current) out.push(peer);
         }
       }
-      if (role === "doer") out.push("done");
+      // The doer reports the two ways work leaves the pending lane: finished,
+      // or stopped for good. Abandoning is a REPORT about the work, which is
+      // why it sits here beside "done" and not with the initiator's rulings.
+      if (role === "doer") out.push("done", "abandoned");
       if (role === "initiator") {
         out.push("cancelled", "transferred");
       }
@@ -74,6 +77,15 @@ export function nextStatusesFor(
     case "not_approved": {
       // Rework path: doer can re-enter the pending lane.
       // Initiator can also cancel or transfer if work was abandoned.
+      if (role === "doer") return [...PENDING];
+      if (role === "initiator") return ["cancelled", "transferred"];
+      return [];
+    }
+
+    case "abandoned": {
+      // Not a dead end: the doer who stopped may pick the work back up, which
+      // is the whole difference between abandoning it and it being cancelled
+      // over their head.
       if (role === "doer") return [...PENDING];
       if (role === "initiator") return ["cancelled", "transferred"];
       return [];

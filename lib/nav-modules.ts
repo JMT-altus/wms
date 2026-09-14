@@ -7,7 +7,14 @@
  * them (kept as strings here so this file stays server/client neutral).
  */
 
-export type ModuleId = "wms" | "employees" | "sales" | "training" | "masters" | "targets";
+export type ModuleId =
+  | "wms"
+  | "employees"
+  | "sales"
+  | "training"
+  | "masters"
+  | "targets"
+  | "project";
 
 export interface ModuleNavItem {
   href: string;
@@ -36,6 +43,15 @@ export interface ModuleDef {
   /** Tile gradient (from, to) + accent used on the hub card. */
   accent: { from: string; to: string; ink: string };
   items: ModuleNavItem[];
+  /**
+   * Keep this module off the hub's tile grid.
+   *
+   * It is still a module in every other sense — access is still checked
+   * against it, the header and the sidebar still name it, and its routes
+   * still work. This only says "do not offer it as a front door", for a
+   * module people reach from inside another one rather than from the hub.
+   */
+  hiddenFromHub?: boolean;
 }
 
 export const MODULES: ModuleDef[] = [
@@ -52,7 +68,6 @@ export const MODULES: ModuleDef[] = [
       { href: "/tasks/agenda", label: "My Day", icon: "CalendarDays" },
       { href: "/tasks", label: "Tasks", icon: "ListTodo", taskCount: true, notMatch: ["/tasks/agenda", "/tasks/kanban"] },
       { href: "/tasks/kanban", label: "Kanban", icon: "SquareKanban" },
-      { href: "/projects", label: "Projects", icon: "FolderKanban" },
       { href: "/weekly-goals", label: "Weekly Goals", icon: "Target" },
       // Admin-only, matching the /archived page's own guard — it redirects
       // non-admins to /tasks, so a pill they can't use would be a dead end.
@@ -152,6 +167,12 @@ export const MODULES: ModuleDef[] = [
     // the top pill row, because the list of masters grows (grade, tolerance,
     // condition, size…) and pills stop working past about six.
     items: [],
+    // Off the hub: the masters are reference data reached while doing
+    // something else, and Admin & Master Setup already opens the same
+    // registers. A front door of its own put a tile on the landing page for
+    // a place nobody starts their day in. The module itself is untouched —
+    // /masters still works, and access is still governed by it.
+    hiddenFromHub: true,
   },
   {
     id: "targets",
@@ -163,6 +184,22 @@ export const MODULES: ModuleDef[] = [
     accent: { from: "#7C3AED", to: "#4F46E5", ink: "#5B21B6" },
     // Left rail, same reasoning as Masters — Annual / Quarterly / Monthly /
     // Weekly / Dashboard / Hygiene is already six entries.
+    items: [],
+  },
+  {
+    id: "project",
+    label: "Project Plan",
+    tagline: "Projects broken down to milestones, results and the actions that deliver them.",
+    icon: "Waypoints",
+    landing: "/project-plan",
+    routes: ["/project-plan"],
+    // The module's own red. Every other accent family is spoken for, and this
+    // one lands on the rail's active row, the create boxes, selection, and the
+    // "this row carries something" state on the attachment and link cells.
+    accent: { from: "#E10600", to: "#A80400", ink: "#A80400" },
+    // Left rail, same reasoning as Masters and Targets — Project Views /
+    // Projects / Milestones / Results / Actions / Sub-Actions / Kanban is
+    // seven entries, and a pill row stops being readable around six.
     items: [],
   },
 ];

@@ -839,6 +839,21 @@ const RECORD_COLUMNS: readonly ClientBulkColumn[] = [
  * is reading the record outwards, and an added column lands where the table
  * would put it rather than on the far right.
  */
+/**
+ * The client's own fields — everything that writes `customer_masters`, and
+ * nothing that writes a child table.
+ *
+ * This is the Client Master's Grid View, exactly: the grid edits one client
+ * per row through `updateClientMasterRecord`, which writes that one row, so a
+ * contact or bank column in it would have nowhere to land. The Bulk Import
+ * sheet carries those as well, because an import has no other screen to send
+ * you to.
+ */
+export const CLIENT_GRID_COLUMNS: readonly ClientBulkColumn[] = [
+  ...CLIENT_OWN_COLUMNS,
+  ...RECORD_COLUMNS,
+];
+
 export const CLIENT_BULK_COLUMNS: readonly ClientBulkColumn[] = [
   ...CLIENT_OWN_COLUMNS,
   ...CONTACT_COLUMNS,

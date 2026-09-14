@@ -19,6 +19,8 @@ import {
   CopyMinus,
   Timer,
   Trash2,
+  Search,
+  X,
 } from "lucide-react";
 import Link from "next/link";
 import type { Route } from "next";
@@ -36,6 +38,7 @@ import { PriorityFilter } from "./filters/priority-filter";
 import { StatusFilter } from "./filters/status-filter";
 import { SubjectFilter } from "./filters/subject-filter";
 import { ClientFilter } from "./filters/client-filter";
+import { useTaskSearch } from "@/components/tasks/task-search-context";
 
 type AssigneeMode = "default" | "all" | "specific" | "unassigned";
 
@@ -67,6 +70,10 @@ interface Props {
   /** How the assignee filter was resolved on the server. Controls the initial
    *  state of the scope chip. */
   assigneeMode?: AssigneeMode;
+  /** Placeholder for the free-text search box, which is drawn whenever the bar
+   *  sits inside a TaskSearchProvider. Names what is being searched, since the
+   *  same bar serves the list and the board. */
+  searchPlaceholder?: string;
   /** Extra classes for the sticky root. Callers that need to hide the bar
    *  responsively MUST pass them here rather than wrapping this component in a
    *  <div> — `position: sticky` can only travel inside its parent's box, and a
@@ -86,11 +93,15 @@ export function FilterBar({
   clients,
   me,
   assigneeMode: initialAssigneeMode = "all",
+  searchPlaceholder = "Search Tasks...",
   className,
 }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
+  // Null on pages that render the bar without a task list (dashboard,
+  // kanban) — there the search box is simply not drawn.
+  const search = useTaskSearch();
 
   // The "scope chip" is only meaningful for non-admins, who have a default
   // (assigned-to-me) view. Admins use the full employee MultiSelect.
@@ -353,7 +364,7 @@ export function FilterBar({
             }}
           />
           <div ref={scrollerRef} className="overflow-x-auto nav-scroll max-sm:overflow-visible">
-            <div className="flex items-center gap-1.5 w-max max-sm:w-full max-sm:flex-col max-sm:items-stretch max-sm:gap-3">
+            <div className="filter-row-fill flex items-center gap-1.5 w-max min-w-full max-sm:w-full max-sm:min-w-0 max-sm:flex-col max-sm:items-stretch max-sm:gap-3">
           {/* Date range */}
           <Popover.Root open={dateOpen} onOpenChange={setDateOpen}>
             <Popover.Trigger asChild>
@@ -395,44 +406,6 @@ export function FilterBar({
             </Popover.Portal>
           </Popover.Root>
 
-          {/* Scope chip: My tasks / All tasks (non-admins only). The wide
-              left margin is measured — the segmented groups are a different
-              KIND of control from the chips, and the gap is what says so. */}
-          {showScopeChip && (
-            <div
-              className="ml-[26px] inline-flex items-center bg-surface-card border border-hairline rounded-[8px] relative"
-              style={{
-                padding: 4,
-                boxShadow: "0 12px 28px -18px rgba(10, 108, 255, 0.15), 0 1px 4px -1px rgba(15, 23, 42, 0.06)",
-              }}
-              aria-label="Task scope"
-            >
-              <SegButton
-                layoutId="scope-seg-active"
-                active={assigneeMode === "default" && emp.length === 0}
-                onClick={() => {
-                  setAssigneeMode("default");
-                  setEmp([]);
-                }}
-              >
-                <span className="inline-flex items-center gap-1.5">
-                  <User size={12} strokeWidth={2.2} />
-                  My tasks
-                </span>
-              </SegButton>
-              <SegButton
-                layoutId="scope-seg-active"
-                active={assigneeMode === "all" && emp.length === 0}
-                onClick={() => {
-                  setAssigneeMode("all");
-                  setEmp([]);
-                }}
-              >
-                All tasks
-              </SegButton>
-            </div>
-          )}
-
           {/* Employees */}
           <div className="filter-chip max-sm:w-full">
             <Users size={14} className="text-ink-subtle" strokeWidth={2} />
@@ -467,24 +440,108 @@ export function FilterBar({
             <SubjectFilter options={subjects} selected={subj} onChange={setSubj} />
           )}
 
-          {/* View segmented toggle */}
+          {/* The two segmented groups, kept together at the end of the row and
+              each captioned with the axis it switches. Scope reads first
+              (WHOSE tasks), then View (which side of the task you're on) —
+              the order you'd narrow them in.
+
+              The wide left margin is measured: these are a different KIND of
+              control from the filter chips, and the gap is what says so. */}
+          {showScopeChip && (
+            <div className="ml-[26px] inline-flex items-center gap-2">
+              <SegLabel>Scope</SegLabel>
+              <div
+                className="inline-flex items-center bg-surface-card border border-hairline rounded-[8px] relative"
+                style={{
+                  padding: 4,
+                  boxShadow: "0 12px 28px -18px rgba(10, 108, 255, 0.15), 0 1px 4px -1px rgba(15, 23, 42, 0.06)",
+                }}
+                aria-label="Task scope"
+              >
+                <SegButton
+                  layoutId="scope-seg-active"
+                  active={assigneeMode === "default" && emp.length === 0}
+                  onClick={() => {
+                    setAssigneeMode("default");
+                    setEmp([]);
+                  }}
+                >
+                  <span className="inline-flex items-center gap-1.5">
+                    <User size={12} strokeWidth={2.2} />
+                    My Tasks
+                  </span>
+                </SegButton>
+                <SegButton
+                  layoutId="scope-seg-active"
+                  active={assigneeMode === "all" && emp.length === 0}
+                  onClick={() => {
+                    setAssigneeMode("all");
+                    setEmp([]);
+                  }}
+                >
+                  All Tasks
+                </SegButton>
+              </div>
+            </div>
+          )}
+
           <div
-            className="ml-[22px] inline-flex items-center bg-surface-card border border-hairline rounded-[8px] relative"
-            style={{
-              padding: 4,
-              boxShadow: "0 12px 28px -18px rgba(10, 108, 255, 0.15), 0 1px 4px -1px rgba(15, 23, 42, 0.06)",
-            }}
+            className={`inline-flex items-center gap-2 ${showScopeChip ? "ml-[18px]" : "ml-[26px]"}`}
           >
-            <SegButton active={view === "doer"} onClick={() => setView("doer")}>
-              Doer
-            </SegButton>
-            <SegButton
-              active={view === "initiator"}
-              onClick={() => setView("initiator")}
+            <SegLabel>View</SegLabel>
+            <div
+              className="inline-flex items-center bg-surface-card border border-hairline rounded-[8px] relative"
+              style={{
+                padding: 4,
+                boxShadow: "0 12px 28px -18px rgba(10, 108, 255, 0.15), 0 1px 4px -1px rgba(15, 23, 42, 0.06)",
+              }}
+              aria-label="View"
             >
-              Initiator
-            </SegButton>
+              <SegButton active={view === "doer"} onClick={() => setView("doer")}>
+                Doer
+              </SegButton>
+              <SegButton
+                active={view === "initiator"}
+                onClick={() => setView("initiator")}
+              >
+                Initiator
+              </SegButton>
+            </div>
           </div>
+
+          {/* Task search — last in the row, after the two segmented groups.
+              It narrows what the table shows rather than what the server
+              returns, so it sits at the end of the funnel, not among the
+              chips that shape the query. */}
+          {search && (
+            <div className="ml-[18px] relative max-sm:w-full max-sm:ml-0">
+              <Search
+                size={13}
+                strokeWidth={2.4}
+                aria-hidden
+                className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-subtle pointer-events-none"
+              />
+              <input
+                type="search"
+                value={search.query}
+                onChange={(e) => search.setQuery(e.target.value)}
+                placeholder={searchPlaceholder}
+                aria-label={searchPlaceholder.replace(/\.\.\.$/, "")}
+                className="h-[26px] w-[190px] max-sm:w-full pl-[26px] pr-7 rounded-pill border border-[#f1f0f0] bg-white text-[12px] font-medium text-ink-strong placeholder:text-ink-subtle outline-none transition-colors hover:border-altus-red/40 focus:border-altus-red focus:ring-2 focus:ring-altus-red/20 [&::-webkit-search-cancel-button]:hidden"
+                style={{ boxShadow: "0 12px 28px -18px rgba(10, 108, 255, 0.15), 0 1px 4px -1px rgba(15, 23, 42, 0.06)" }}
+              />
+              {search.query && (
+                <button
+                  type="button"
+                  onClick={() => search.setQuery("")}
+                  aria-label="Clear search"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-ink-subtle hover:text-ink-strong transition-colors"
+                >
+                  <X size={13} strokeWidth={2.6} />
+                </button>
+              )}
+            </div>
+          )}
 
             </div>
           </div>
@@ -594,6 +651,20 @@ export function FilterBar({
         </div>
       </div>
     </div>
+  );
+}
+
+/** The small-caps caption in front of a segmented group ("SCOPE", "VIEW").
+ *  A two-option pill is a guess until the axis it switches is spelled out;
+ *  hidden on phones, where the row is tight and the pills stand alone. */
+function SegLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <span
+      aria-hidden
+      className="text-[10px] font-semibold uppercase tracking-[0.09em] text-ink-subtle select-none whitespace-nowrap max-sm:hidden"
+    >
+      {children}
+    </span>
   );
 }
 

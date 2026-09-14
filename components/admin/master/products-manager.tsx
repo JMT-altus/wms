@@ -32,7 +32,7 @@ import {
 type Tab = "categories" | "products" | "skus";
 
 /** Depth-prefixed labels so the parent picker reads as a tree in a flat select. */
-function indentedCategories(categories: CategoryRow[]) {
+export function indentedCategories(categories: CategoryRow[]) {
   const byParent = new Map<string | null, CategoryRow[]>();
   for (const c of categories) {
     const k = c.parentId ?? null;
@@ -105,7 +105,7 @@ export function ProductsManager({
 
 /* ── Categories ──────────────────────────────────────────────────────────── */
 
-function CategoriesTab({
+export function CategoriesTab({
   categories,
   catOptions,
 }: {
@@ -461,7 +461,7 @@ function ProductForm({
 
 /* ── SKUs ────────────────────────────────────────────────────────────────── */
 
-function SkusTab({ skus, products }: { skus: SkuRow[]; products: ProductRow[] }) {
+export function SkusTab({ skus, products }: { skus: SkuRow[]; products: ProductRow[] }) {
   const [editing, setEditing] = React.useState<SkuRow | null | "new">(null);
   const [pending, start] = React.useTransition();
 

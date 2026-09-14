@@ -61,7 +61,7 @@ export async function withDbRetry<T>(
   /** Shows up in the log when a retry happens; name the read, not the table. */
   label: string,
   run: () => Promise<T>,
-  attempts = 3,
+  attempts = 4,
 ): Promise<T> {
   let lastError: unknown;
   for (let attempt = 1; attempt <= attempts; attempt++) {
@@ -72,7 +72,13 @@ export async function withDbRetry<T>(
       // A real error — a bad column, a type mismatch — must surface on the
       // first attempt. Retrying it just delays the report by half a second.
       if (!isTransient(err) || attempt === attempts) throw err;
-      const backoff = attempt * 150;
+      // Exponential, not linear. A dead socket is answered by the very next
+      // attempt, but a DNS blip (ENOTFOUND from a resolver that drops queries
+      // under load) lasts seconds — and 150/300ms retries all landed inside
+      // the same outage, so the page 500'd on a fault that had cleared by the
+      // time the user hit reload. 250/500/1000 spans it without making a
+      // genuine failure feel slow.
+      const backoff = 250 * 2 ** (attempt - 1);
       console.warn(
         `[withDbRetry] ${label} failed (attempt ${attempt}/${attempts}), retrying in ${backoff}ms`,
         (err as Error)?.message?.slice(0, 120),

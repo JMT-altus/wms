@@ -10,6 +10,7 @@ import {
   reactivateClients,
   setClientsDormant,
   updateClientMasterRecord,
+  updateClientProducts,
 } from "@/app/(forms-module)/forms/client-kyc/actions";
 import {
   STATUS_FILTER_DEFAULT,
@@ -19,7 +20,12 @@ import {
   matchesStatusFilter,
   statusLabel,
 } from "@/lib/masters/dormancy";
-import { RecordEditDialog, type EditField, type EditValues } from "./kyc/record-edit-dialog";
+import {
+  RecordEditDialog,
+  asOptions,
+  type EditField,
+  type EditValues,
+} from "./kyc/record-edit-dialog";
 import type { EmployeeOption } from "@/lib/queries/employees";
 import {
   DataTable,
@@ -32,6 +38,14 @@ import { CodeCell, StatusCell } from "@/components/masters/row-menu";
 import { ClientBulkImport } from "./client-bulk-import";
 import type { ClientBulkOptions } from "@/lib/forms/client-bulk-columns";
 import { FileSpreadsheet, FileText, MoonStar, Sunrise } from "lucide-react";
+import { ClientMasterGrid } from "./client-master-grid";
+import { ViewSwitch } from "@/components/admin/master/view-switch";
+import {
+  InlineMulti,
+  InlineNumber,
+  InlineSelect,
+  type SaveResult,
+} from "@/components/admin/master/inline-edit";
 import { KYC_ACCENT, KYC_ACCENT_SOFT } from "./kyc/fields";
 
 /**
@@ -71,13 +85,14 @@ function distinctFrom(rows: ClientMasterRow[], pick: (r: ClientMasterRow) => str
 }
 
 /**
- * Comma-separated text is how the dialog edits the three list fields.
+ * Comma-separated text is how the dialog CARRIES the three list fields.
  *
- * Customer Type, Industry Type and Tags are pill pickers on the KYC form,
- * fed from master lists. Rebuilding those pickers here would be a second
- * place for them to drift; a comma-separated box edits the same values, and
- * anyone adding a genuinely new option should be doing it in the form or the
- * library screen that owns the list.
+ * Customer Type, Industry Type and Tags are arrays on the row and chip
+ * pickers in the dialog; `EditValues` holds strings and booleans, so they
+ * travel through it joined and come back split. The options behind the
+ * pickers are the master lists themselves (`bulkOptions`) — the same ones the
+ * KYC form offers — so neither screen can drift from the other, and a
+ * genuinely new option is still added in the library screen that owns it.
  */
 const listToText = (v: string[]) => v.join(", ");
 const textToList = (v: string) =>
@@ -86,8 +101,25 @@ const textToList = (v: string) =>
     .map((x) => x.trim())
     .filter(Boolean);
 
-/** The dialog's field list, in the same order as the table's columns. */
-function editFields(salesPeople: EmployeeOption[]): EditField[] {
+/**
+ * The dialog's field list, in the same order as the table's columns.
+ *
+ * Every field that has a master list behind it is a picker rather than a text
+ * box, fed from `bulkOptions` — the same lists the KYC form's own pickers and
+ * the Bulk Import sheet's dropdown cells read. Three screens writing one
+ * `customer_masters` row must offer the same options, or a value typed here
+ * is one the form can't show back.
+ *
+ * Which control each list gets follows what the schema does with it:
+ *
+ *   multi   Customer Type, Industry Type, Tags — arrays on the row.
+ *   combo   State, Payment Terms, Transporter and the rest — free text on the
+ *           row, so the list is a suggestion and a value off it still saves.
+ *   select  Sales Co-ordinator, Grade, Export — a closed set; anything else
+ *           is either a broken foreign key or outside an enum.
+ *   number  Credit Limit and Credit Days, with −/+ steppers.
+ */
+function editFields(salesPeople: EmployeeOption[], o: ClientBulkOptions, tags: string[]): EditField[] {
   return [
     /* Identity */
     { key: "name", label: "Company Name", span: 2, maxLength: 200 },
@@ -105,17 +137,39 @@ function editFields(salesPeople: EmployeeOption[]): EditField[] {
       label: "Grade",
       type: "select",
       span: 1,
-      options: ["A", "B", "C"].map((g) => ({ value: g, label: g })),
+      options: asOptions(GRADES),
     },
-    { key: "customerTypes", label: "Customer Type", span: 3, placeholder: "Comma separated" },
-    { key: "industryTypes", label: "Industry Type", span: 2, placeholder: "Comma separated" },
-    { key: "tags", label: "Tags", span: 2, placeholder: "Comma separated" },
+    {
+      key: "customerTypes",
+      label: "Customer Type",
+      type: "multi",
+      span: 3,
+      options: asOptions(o.customerTypes),
+    },
+    {
+      key: "industryTypes",
+      label: "Industry Type",
+      type: "multi",
+      span: 2,
+      options: asOptions(o.industryTypes),
+    },
+    // Tags are the one list with no master behind it — they're coined per
+    // client — so the picker offers what other clients already use and still
+    // takes a new one.
+    { key: "tags", label: "Tags", type: "multi", span: 2, options: asOptions(tags), allowCustom: true },
 
     /* Registration & Tax */
     { key: "panNo", label: "PAN / IT No", span: 2, maxLength: 20 },
     { key: "msmeUdyamNo", label: "MSME / Udyam No", span: 2, maxLength: 40 },
-    { key: "gstRegistrationType", label: "GST Registration Type", span: 2, maxLength: 60 },
-    { key: "state", label: "State", span: 2, maxLength: 120 },
+    {
+      key: "gstRegistrationType",
+      label: "GST Registration Type",
+      type: "combo",
+      span: 2,
+      maxLength: 60,
+      options: asOptions(o.gstRegistrationTypes),
+    },
+    { key: "state", label: "State", type: "combo", span: 2, maxLength: 120, options: asOptions(o.states) },
     { key: "tinNumber", label: "TIN No", span: 2, maxLength: 40 },
     { key: "website", label: "Website", span: 2, maxLength: 200 },
     {
@@ -128,20 +182,72 @@ function editFields(salesPeople: EmployeeOption[]): EditField[] {
     { key: "tcsApplicable", label: "TCS Applicable", type: "checkbox", span: 2, placeholder: "Applies" },
 
     /* Commercial & Credit */
-    { key: "paymentTerms", label: "Payment Terms", span: 2, maxLength: 120 },
-    { key: "freightCharges", label: "Freight Charges", span: 2, maxLength: 120 },
-    { key: "creditDays", label: "Credit Days", span: 2, inputMode: "numeric" },
-    { key: "creditLimit", label: "Credit Limit", span: 2, inputMode: "numeric" },
-    { key: "transporter", label: "Transporter", span: 2, maxLength: 160 },
-    { key: "quantityDeviation", label: "Quantity Deviation", span: 2, maxLength: 60 },
+    {
+      key: "paymentTerms",
+      label: "Payment Terms",
+      type: "combo",
+      span: 2,
+      maxLength: 120,
+      options: asOptions(o.paymentTerms),
+    },
+    {
+      key: "freightCharges",
+      label: "Freight Charges",
+      type: "combo",
+      span: 2,
+      maxLength: 120,
+      options: asOptions(o.freightCharges),
+    },
+    { key: "creditDays", label: "Credit Days", type: "number", span: 2, step: 15, placeholder: "0" },
+    // Steps of a lakh — the unit credit limits are actually reviewed in, and
+    // the increment the Credit Limit master list itself is written in.
+    {
+      key: "creditLimit",
+      label: "Credit Limit",
+      type: "number",
+      span: 2,
+      step: 100000,
+      format: "inr",
+      placeholder: "0",
+    },
+    {
+      key: "transporter",
+      label: "Transporter",
+      type: "combo",
+      span: 2,
+      maxLength: 160,
+      options: asOptions(o.transporters),
+    },
+    {
+      key: "quantityDeviation",
+      label: "Quantity Deviation",
+      type: "combo",
+      span: 2,
+      maxLength: 60,
+      options: asOptions(o.quantityDeviations),
+    },
     { key: "otherReferences", label: "Other References", span: 4, maxLength: 400 },
     { key: "notes", label: "Client Notes", type: "textarea", span: 4, maxLength: 2000 },
 
     /* Export Details */
     { key: "exportClient", label: "Export", type: "select", span: 2, options: YES_NO_OPTIONS },
     { key: "iecNumber", label: "IEC Code", span: 2, maxLength: 40 },
-    { key: "currency", label: "Currency", span: 2, maxLength: 20 },
-    { key: "country", label: "Country", span: 2, maxLength: 80 },
+    {
+      key: "currency",
+      label: "Currency",
+      type: "combo",
+      span: 2,
+      maxLength: 20,
+      options: asOptions(o.currencies),
+    },
+    {
+      key: "country",
+      label: "Country",
+      type: "combo",
+      span: 2,
+      maxLength: 80,
+      options: asOptions(o.countries),
+    },
 
     /* The record's own two flags, last — see the dialog footer in the design */
     { key: "isActive", label: "Active", type: "checkbox", span: 2, placeholder: "Active" },
@@ -155,10 +261,12 @@ function editFields(salesPeople: EmployeeOption[]): EditField[] {
   ];
 }
 
-const YES_NO_OPTIONS = [
-  { value: "Yes", label: "Yes" },
-  { value: "No", label: "No" },
-];
+/** The Export field's two answers — a dropdown in the cell, a select in the dialog. */
+const YES_NO = ["Yes", "No"] as const;
+const YES_NO_OPTIONS = asOptions(YES_NO);
+
+/** Volume class, the KYC form's "Grade". */
+const GRADES = ["A", "B", "C"] as const;
 
 /** Every value the dialog edits, as the strings and booleans it works in. */
 function toEditValues(r: ClientMasterRow): EditValues {
@@ -218,17 +326,95 @@ export function ClientMasterTable({
   clients,
   salesPeople,
   bulkOptions,
+  title = "Client Master",
+  csvName = "client-master",
 }: {
   clients: ClientMasterRow[];
   /** Fills the edit dialog's Sales Co-ordinator picker. */
   salesPeople: EmployeeOption[];
   /** The master lists behind Bulk Import's dropdown cells. */
   bulkOptions: ClientBulkOptions;
+  /**
+   * The heading, for the OTHER route that renders this screen.
+   *
+   * The Masters module's Customer Master is this table: one
+   * `customer_masters` register, one set of columns, one way to edit it. It
+   * used to be a narrower screen of its own, which meant every column, filter
+   * and export added here had to be added there too — and never was. Only the
+   * name over it differs, because that is what the rail calls the route.
+   */
+  title?: string;
+  /** Names the CSV that screen downloads. */
+  csvName?: string;
 }) {
   const [editing, setEditing] = React.useState<ClientMasterRow | null>(null);
+  /**
+   * Table or Grid.
+   *
+   * Two readings of the same rows, not two screens: Table is for finding a
+   * client and correcting it, Grid is for the pass where a column needs
+   * filling in across the register. Both write through the same action, so
+   * neither is the "real" one.
+   */
+  const [view, setView] = React.useState<"table" | "grid">("table");
   const router = useRouter();
   /** Keeps the Set Dormant button disabled while its write is in flight. */
   const [pending, start] = React.useTransition();
+
+  /**
+   * Tags already in use, as the Tags picker's suggestions.
+   *
+   * Derived from the rows rather than a master list because there isn't one —
+   * tags are coined per client. Offering the ones already on the register is
+   * what stops "Repeat" and "repeat buyer" becoming two tags.
+   */
+  const tagSuggestions = React.useMemo(() => distinctFrom(clients, (r) => r.tags), [clients]);
+
+  /** The Sales Co-ordinator picker works in names; the row stores an id. */
+  const salesNames = React.useMemo(() => salesPeople.map((e) => e.name), [salesPeople]);
+  const salesIdByName = React.useMemo(
+    () => new Map(salesPeople.map((e) => [e.name, e.id])),
+    [salesPeople],
+  );
+
+  /**
+   * Set a client's Product Types.
+   *
+   * Its own action, not `patch`: products are `customer_product_map` rows,
+   * not a column on the client, and `updateClientMasterRecord` writes the
+   * client row only.
+   */
+  const saveProducts = React.useCallback(
+    async (row: ClientMasterRow, names: string[]): Promise<SaveResult> => {
+      const res = await updateClientProducts(row.id, names);
+      if (!res.ok) return { ok: false, error: res.error };
+      router.refresh();
+      return { ok: true };
+    },
+    [router],
+  );
+
+  /**
+   * Save one field of one row, from a cell that was edited in place.
+   *
+   * Sends the whole client each time, rebuilt from the row with the one
+   * change applied — `updateClientMasterRecord` takes a complete record, and
+   * a partial write path built just for these cells would be a second way to
+   * update a client that could drift from the dialog's. The row is what the
+   * server last told us, so nothing else on it moves.
+   */
+  const patch = React.useCallback(
+    async (row: ClientMasterRow, changes: EditValues): Promise<SaveResult> => {
+      const res = await updateClientMasterRecord(
+        row.id,
+        fromEditValues({ ...toEditValues(row), ...changes }),
+      );
+      if (!res.ok) return { ok: false, error: res.error };
+      router.refresh();
+      return { ok: true };
+    },
+    [router],
+  );
 
   /**
    * Bulk delete from the selection bar.
@@ -324,6 +510,46 @@ export function ClientMasterTable({
     value: (r) => pick(r) ?? "",
   });
 
+  /**
+   * A column whose value comes off a master list — a dropdown in the cell.
+   *
+   * Same shape as `text` above and used the same way; the only difference is
+   * that the cell can be changed where it sits. Every one of these is a field
+   * the KYC form itself picks from a list, so the options here are that list,
+   * read from `bulkOptions`.
+   */
+  const picker = (
+    key: string,
+    header: string,
+    width: number,
+    options: readonly string[],
+    pick: (r: ClientMasterRow) => string | null,
+  ): Column<ClientMasterRow> => ({
+    key,
+    header,
+    width,
+    defaultHidden: true,
+    render: (r) => (
+      <InlineSelect
+        value={pick(r)}
+        options={options}
+        field={header}
+        rowLabel={r.name}
+        accent={KYC_ACCENT}
+        accentSoft={KYC_ACCENT_SOFT}
+        onSave={(next) => patch(r, { [key]: next ?? "" })}
+      />
+    ),
+    value: (r) => pick(r) ?? "",
+  });
+
+  /**
+   * A Yes/No column, as a dropdown.
+   *
+   * Not clearable: the column is a NOT NULL boolean, so "neither" is not one
+   * of the answers — a blank one reads No because that is what the database
+   * holds.
+   */
   const yesNo = (
     key: string,
     header: string,
@@ -334,7 +560,18 @@ export function ClientMasterTable({
     header,
     width,
     defaultHidden: true,
-    render: (r) => (pick(r) ? "Yes" : "No"),
+    render: (r) => (
+      <InlineSelect
+        value={pick(r) ? "Yes" : "No"}
+        options={YES_NO}
+        clearable={false}
+        field={header}
+        rowLabel={r.name}
+        accent={KYC_ACCENT}
+        accentSoft={KYC_ACCENT_SOFT}
+        onSave={(next) => patch(r, { [key]: next === "Yes" })}
+      />
+    ),
     value: (r) => (pick(r) ? "Yes" : "No"),
   });
 
@@ -373,98 +610,176 @@ export function ClientMasterTable({
     {
       key: "salesRepName",
       header: "Sales Co-ordinator",
-      width: 130,
-      render: (r) => r.salesRepName ?? <Dash />,
+      width: 165,
+      // The cell shows a name but the row stores an id, so the picker works
+      // in names and hands back the id. A name no longer on the roster can
+      // still be read here; it just isn't one of the options.
+      render: (r) => (
+        <InlineSelect
+          value={r.salesRepName}
+          options={salesNames}
+          field="Sales Co-ordinator"
+          rowLabel={r.name}
+          accent={KYC_ACCENT}
+          accentSoft={KYC_ACCENT_SOFT}
+          onSave={(next) =>
+            patch(r, { salesRepId: next ? (salesIdByName.get(next) ?? "") : "" })
+          }
+        />
+      ),
       value: (r) => r.salesRepName ?? "",
     },
     {
       key: "grade",
       header: "Grade",
-      width: 70,
-      render: (r) =>
-        r.grade ? (
-          <span
-            className="inline-grid place-items-center rounded-full font-bold"
-            style={{ width: 22, height: 22, fontSize: 11, background: KYC_ACCENT_SOFT, color: KYC_ACCENT }}
-          >
-            {r.grade}
-          </span>
-        ) : (
-          <Dash />
-        ),
+      width: 95,
+      render: (r) => (
+        <InlineSelect
+          value={r.grade}
+          options={GRADES}
+          field="Grade"
+          rowLabel={r.name}
+          accent={KYC_ACCENT}
+          accentSoft={KYC_ACCENT_SOFT}
+          onSave={(next) => patch(r, { grade: next ?? "" })}
+        />
+      ),
       value: (r) => r.grade ?? "",
     },
     {
       key: "tags",
       header: "Tags",
-      width: 130,
-      render: (r) =>
-        r.tags.length ? (
-          <span className="flex flex-wrap gap-1">
-            {r.tags.map((t) => (
-              <span
-                key={t}
-                className="inline-flex rounded-pill px-1.5 py-0.5 font-semibold"
-                style={{ fontSize: 10.5, background: KYC_ACCENT_SOFT, color: KYC_ACCENT }}
-              >
-                {t}
-              </span>
-            ))}
-          </span>
-        ) : (
-          <Dash />
-        ),
+      width: 180,
+      // Tags have no master list — they are coined per client — so the menu
+      // offers the ones already in use across the register. A brand new tag
+      // is still added from the edit dialog, which takes typed ones.
+      render: (r) => (
+        <InlineMulti
+          value={r.tags}
+          options={tagSuggestions}
+          label="Tags"
+          field="Tags"
+          rowLabel={r.name}
+          accent={KYC_ACCENT}
+          accentSoft={KYC_ACCENT_SOFT}
+          onSave={(next) => patch(r, { tags: next.join(", ") })}
+        />
+      ),
       value: (r) => r.tags.join(", "),
     },
     {
       key: "customerTypes",
       header: "Customer Type",
-      width: 150,
-      render: (r) => (r.customerTypes.length ? r.customerTypes.join(", ") : <Dash />),
+      width: 200,
+      render: (r) => (
+        <InlineMulti
+          value={r.customerTypes}
+          options={bulkOptions.customerTypes}
+          label="Customer Types"
+          field="Customer Type"
+          rowLabel={r.name}
+          accent={KYC_ACCENT}
+          accentSoft={KYC_ACCENT_SOFT}
+          onSave={(next) => patch(r, { customerTypes: next.join(", ") })}
+        />
+      ),
       value: (r) => r.customerTypes.join(", "),
     },
     {
       key: "industryTypes",
       header: "Industry Type",
-      width: 150,
-      render: (r) => (r.industryTypes.length ? r.industryTypes.join(", ") : <Dash />),
+      width: 200,
+      render: (r) => (
+        <InlineMulti
+          value={r.industryTypes}
+          options={bulkOptions.industryTypes}
+          label="Industry Types"
+          field="Industry Type"
+          rowLabel={r.name}
+          accent={KYC_ACCENT}
+          accentSoft={KYC_ACCENT_SOFT}
+          onSave={(next) => patch(r, { industryTypes: next.join(", ") })}
+        />
+      ),
       value: (r) => r.industryTypes.join(", "),
     },
-    text("products", "Product Types", 180, (r) => r.products.join(", ")),
+    {
+      key: "products",
+      header: "Product Types",
+      width: 220,
+      defaultHidden: true,
+      // The one cell here that writes a child table rather than the client
+      // row, so it has an action of its own — see `updateClientProducts`.
+      render: (r) => (
+        <InlineMulti
+          value={r.products}
+          options={bulkOptions.products}
+          label="Product Types"
+          field="Product Types"
+          rowLabel={r.name}
+          accent={KYC_ACCENT}
+          accentSoft={KYC_ACCENT_SOFT}
+          onSave={(next) => saveProducts(r, next)}
+        />
+      ),
+      value: (r) => r.products.join(", "),
+    },
 
     /* ── 2. Registration & Tax ───────────────────────────────────────────── */
     text("panNo", "PAN / IT No", 130, (r) => r.panNo),
     text("msmeUdyamNo", "MSME / Udyam No", 160, (r) => r.msmeUdyamNo),
-    text("gstRegistrationType", "GST Registration Type", 160, (r) => r.gstRegistrationType),
-    text("state", "State", 130, (r) => r.state),
+    picker("gstRegistrationType", "GST Registration Type", 185, bulkOptions.gstRegistrationTypes, (r) => r.gstRegistrationType),
+    picker("state", "State", 160, bulkOptions.states, (r) => r.state),
     text("tinNumber", "TIN No", 120, (r) => r.tinNumber),
-    yesNo("testCertificateNeeded", "Test Certificate Needed", 165, (r) => r.testCertificateNeeded),
+    yesNo("testCertificateNeeded", "Test Certificate Needed", 185, (r) => r.testCertificateNeeded),
     text("website", "Website", 160, (r) => r.website),
-    yesNo("tcsApplicable", "TCS Applicable", 130, (r) => r.tcsApplicable),
+    yesNo("tcsApplicable", "TCS Applicable", 150, (r) => r.tcsApplicable),
 
 
     /* ── 5. Commercial & Credit ──────────────────────────────────────────── */
-    text("paymentTerms", "Payment Terms", 150, (r) => r.paymentTerms),
-    text("freightCharges", "Freight Charges", 140, (r) => r.freightCharges),
+    picker("paymentTerms", "Payment Terms", 175, bulkOptions.paymentTerms, (r) => r.paymentTerms),
+    picker("freightCharges", "Freight Charges", 165, bulkOptions.freightCharges, (r) => r.freightCharges),
     {
       key: "creditDays",
       header: "Credit Days",
-      width: 110,
+      width: 150,
       defaultHidden: true,
       // 0 is a real answer — cash on delivery — so it must not fall through
-      // to the dash an unanswered field gets.
-      render: (r) => (r.creditDays === null ? <Dash /> : `${r.creditDays} days`),
+      // to the dash an unanswered field gets. The stepper carries that: null
+      // reads as a dash, 0 reads as "0 days".
+      render: (r) => (
+        <InlineNumber
+          value={r.creditDays}
+          step={1}
+          format={(n) => `${n} days`}
+          field="Credit Days"
+          rowLabel={r.name}
+          onSave={(next) => patch(r, { creditDays: next === null ? "" : String(next) })}
+        />
+      ),
       value: (r) => (r.creditDays === null ? "" : String(r.creditDays)),
     },
     {
       key: "creditLimit",
       header: "Credit Limit",
-      width: 110,
-      render: (r) => (r.creditLimit ? formatInr(Number(r.creditLimit)) : <Dash />),
+      width: 175,
+      // Type any figure; the steppers move it one at a time from wherever it
+      // lands, so 10 goes 11, 12 and back 10, 9, 8. They are for the last
+      // adjustment, not for reaching a number from zero.
+      render: (r) => (
+        <InlineNumber
+          value={r.creditLimit === null ? null : Number(r.creditLimit)}
+          step={1}
+          format={formatInr}
+          field="Credit Limit"
+          rowLabel={r.name}
+          onSave={(next) => patch(r, { creditLimit: next === null ? "" : String(next) })}
+        />
+      ),
       value: (r) => r.creditLimit ?? "",
     },
-    text("transporter", "Transporter", 130, (r) => r.transporter),
-    text("quantityDeviation", "Quantity Deviation", 140, (r) => r.quantityDeviation),
+    picker("transporter", "Transporter", 160, bulkOptions.transporters, (r) => r.transporter),
+    picker("quantityDeviation", "Quantity Deviation", 165, bulkOptions.quantityDeviations, (r) => r.quantityDeviation),
     text("otherReferences", "Other References", 160, (r) => r.otherReferences),
     text("notes", "Client Notes", 220, (r) => r.notes),
 
@@ -475,54 +790,56 @@ export function ClientMasterTable({
     {
       key: "trade",
       header: "Export",
-      width: 100,
+      width: 120,
       defaultHidden: true,
-      render: (r) => {
-        const t = tradeOf(r);
-        return t === "Export" ? (
-          <span
-            className="inline-flex rounded-pill px-2 py-0.5 font-semibold"
-            style={{ fontSize: 11.5, background: KYC_ACCENT_SOFT, color: KYC_ACCENT }}
-          >
-            Export
-          </span>
-        ) : (
-          <span className="text-ink-muted" style={{ fontSize: 13 }}>
-            Domestic
-          </span>
-        );
-      },
+      // The column reads Export/Domestic but the field behind it is the KYC
+      // form's Export Yes/No, so the picker offers that and the Trade filter
+      // keeps reading the same answer through `tradeOf`.
+      render: (r) => (
+        <InlineSelect
+          value={r.exportClient?.trim() ? r.exportClient : null}
+          options={YES_NO}
+          placeholder="No"
+          field="Export"
+          rowLabel={r.name}
+          accent={KYC_ACCENT}
+          accentSoft={KYC_ACCENT_SOFT}
+          onSave={(next) => patch(r, { exportClient: next ?? "" })}
+        />
+      ),
       value: (r) => tradeOf(r),
     },
     text("iecNumber", "IEC Code", 120, (r) => r.iecNumber),
-    text("currency", "Currency", 90, (r) => r.currency),
-    text("country", "Country", 110, (r) => r.country),
+    picker("currency", "Currency", 125, bulkOptions.currencies, (r) => r.currency),
+    picker("country", "Country", 155, bulkOptions.countries, (r) => r.country),
 
     /* ── The record's own, not the form's ────────────────────────────────── */
     // 0086's Focused View flag: the shortlist of clients worth watching.
-    // Read-only here — it is set from the Edit dialog, alongside Active, so
-    // the two flags are changed the same way and a stray click on a table
-    // row can never silently move a client on or off the list.
+    //
+    // A dropdown rather than the read-only pill it used to be. The pill was
+    // deliberate once — a one-click toggle on a table row can move a client
+    // on or off the list by accident — but a two-step menu is not a stray
+    // click, and the flag was the one thing people came to this column to
+    // change.
     {
       key: "focusedView",
       header: "Focused View",
-      width: 120,
+      width: 150,
       // Yes / No, the same wording the Customer Master uses for this flag —
       // and a plain "No" rather than a dash, because not being on the list is
       // an answer, not a blank.
-      render: (r) =>
-        r.focusedView ? (
-          <span
-            className="inline-flex rounded-pill px-2 py-0.5 font-semibold"
-            style={{ fontSize: 11.5, background: KYC_ACCENT_SOFT, color: KYC_ACCENT }}
-          >
-            Yes
-          </span>
-        ) : (
-          <span className="text-ink-subtle" style={{ fontSize: 13 }}>
-            No
-          </span>
-        ),
+      render: (r) => (
+        <InlineSelect
+          value={r.focusedView ? "Yes" : "No"}
+          options={YES_NO}
+          clearable={false}
+          field="Focused View"
+          rowLabel={r.name}
+          accent={KYC_ACCENT}
+          accentSoft={KYC_ACCENT_SOFT}
+          onSave={(next) => patch(r, { focusedView: next === "Yes" })}
+        />
+      ),
       value: (r) => (r.focusedView ? "Yes" : "No"),
     },
     {
@@ -620,6 +937,19 @@ export function ClientMasterTable({
     { value: "oldest", label: "Oldest First", compare: (a, b) => a.createdAt.localeCompare(b.createdAt) },
   ];
 
+  const viewSwitch = <ViewSwitch view={view} onChange={setView} accent={KYC_ACCENT} />;
+
+  if (view === "grid") {
+    return (
+      <ClientMasterGrid
+        clients={clients}
+        salesPeople={salesPeople}
+        options={bulkOptions}
+        toolbar={viewSwitch}
+      />
+    );
+  }
+
   return (
     <>
       <DataTable
@@ -627,11 +957,11 @@ export function ClientMasterTable({
         columns={columns}
         filters={filters}
         sorts={sorts}
-        title="Client Master"
+        title={title}
         tintHeader
         countNoun="clients"
         searchPlaceholder="Search company, contact, code…"
-        csvName="client-master"
+        csvName={csvName}
         exportLabel="CSV"
         // PDF + Excel sit beside the table's own CSV button. Both are plain
         // links to admin-only route handlers rather than client-side
@@ -729,7 +1059,12 @@ export function ClientMasterTable({
         // A typeable sheet rather than the old file-only upload: a bad row
         // used to mean reopening Excel and re-uploading everything, and now
         // means fixing the cell that is flagged.
-        headerActions={<ClientBulkImport options={bulkOptions} />}
+        headerActions={
+          <>
+            {viewSwitch}
+            <ClientBulkImport options={bulkOptions} />
+          </>
+        }
         emptyTitle="No clients yet."
         emptySub="Onboard one with New client, or bring your existing list in with Bulk Import."
       />
@@ -737,7 +1072,7 @@ export function ClientMasterTable({
       {editing && (
         <RecordEditDialog
           title={`Edit ${editing.name}`}
-          fields={editFields(salesPeople)}
+          fields={editFields(salesPeople, bulkOptions, tagSuggestions)}
           initial={toEditValues(editing)}
           onSave={(values) => updateClientMasterRecord(editing.id, fromEditValues(values))}
           onClose={() => {

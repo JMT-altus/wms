@@ -16,6 +16,7 @@ import {
 } from "@/lib/validators/master-data";
 import { splitUsableRows, type BulkTarget, type MappedRow } from "@/lib/masters/bulk-parse";
 import { setCustomerDormancy, type DormancyResult } from "@/lib/masters/dormancy-store";
+import { recordCreditLimitChange } from "@/lib/masters/credit-limit";
 import {
   computeSalesLineAmounts,
   parseCustomerWorkbook,
@@ -36,6 +37,9 @@ const isUuid = (v: unknown): v is string => typeof v === "string" && UUID_RE.tes
 
 const PATHS = ["/masters", "/masters/products", "/masters/customers"];
 function revalidateMasters(): void {
+  // A credit limit changed here shows up in the Credit Limit section, which
+  // is a different module's route — it has to be told.
+  revalidatePath("/forms/client-kyc/credit-limit");
   for (const p of PATHS) revalidatePath(p);
   // /master-setup edits the same two tables — leaving its cache warm would show
   // an admin stale rows there right after saving here.
@@ -138,10 +142,15 @@ export async function deleteMasterProduct(id: string): Promise<Result> {
 /* ── Customer Master ─────────────────────────────────────────────────────── */
 
 /**
- * 0086 — Customer Code is system-generated on this screen: it draws from
- * `customer_masters_code_seq` (migration 0086) and is zero-padded to a
- * 3-digit "001, 002 …" format. One round trip regardless of `n` so a bulk
- * import doesn't pay N queries for N codes.
+ * The Client Number — system-generated, five digits, counting from 10001.
+ *
+ * Draws from `customer_masters_code_seq` (migration 0086, renumbered into the
+ * five-digit range by 0104). The padding is a floor, not a ceiling: once the
+ * sequence passes 99999 the number simply gets a sixth digit rather than
+ * wrapping or colliding.
+ *
+ * One round trip regardless of `n`, so a bulk import doesn't pay N queries
+ * for N codes.
  *
  * Deliberately app-layer, not a DB default/trigger, so /master-setup/customers
  * (which still lets an admin type a code by hand) is completely unaffected —
@@ -150,7 +159,7 @@ export async function deleteMasterProduct(id: string): Promise<Result> {
 export async function nextCustomerCodes(n: number): Promise<string[]> {
   if (n <= 0) return [];
   const rows = await db.execute<{ code: string }>(sql`
-    select lpad(nextval('customer_masters_code_seq')::text, 3, '0') as code
+    select lpad(nextval('customer_masters_code_seq')::text, 5, '0') as code
     from generate_series(1, ${n})
   `);
   return (rows as unknown as { code: string }[]).map((r) => r.code);
@@ -168,6 +177,14 @@ export async function saveMasterCustomer(id: string | null, input: unknown): Pro
   try {
     if (id) {
       if (!isUuid(id)) return { ok: false, error: "Invalid id." };
+      // The limit before this write, so a change to it lands in the Credit
+      // Limit history the same way one made from the Client Master does —
+      // both screens write the same column, so both have to log it.
+      const [before] = await db
+        .select({ creditLimit: customerMasters.creditLimit })
+        .from(customerMasters)
+        .where(eq(customerMasters.id, id));
+
       // Narrow write, same reasoning as saveMasterProduct: contact details,
       // GSTIN, volume class and notes belong to /master-setup's fuller form.
       // `code` is deliberately absent — it's system-generated and never
@@ -187,6 +204,8 @@ export async function saveMasterCustomer(id: string | null, input: unknown): Pro
           updatedAt: new Date(),
         })
         .where(eq(customerMasters.id, id));
+
+      await recordCreditLimitChange(id, before?.creditLimit ?? null, v.creditLimit, g.me.id);
       return { ok: true, id };
     }
     const [code] = await nextCustomerCodes(1);

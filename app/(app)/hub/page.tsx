@@ -8,16 +8,14 @@ import {
   DatabaseZap,
   Boxes,
   Target,
+  Waypoints,
   FileText,
   ArrowRight,
   Lock,
 } from "lucide-react";
 import { getCurrentEmployee } from "@/lib/auth/current";
 import { getMyModuleAccess } from "@/lib/auth/module-access";
-import { GlobalSearch } from "@/components/header/global-search";
 import { UserMenuServer } from "@/components/header/user-menu-server";
-import { HubStatus } from "@/components/dashboard/hub-status";
-import { HubBell } from "@/components/dashboard/hub-bell";
 import { MODULES, type ModuleId } from "@/lib/nav-modules";
 
 export const dynamic = "force-dynamic";
@@ -104,6 +102,17 @@ const STYLES: Record<ModuleId | "admin" | "forms", Style> = {
     glow: "rgba(124, 58, 237, 0.42)",
     ring: "rgba(124, 58, 237, 0.55)",
   },
+  // The Project Plan module's own red. Distinct from the rose Forms tile,
+  // which is admin-only and rarely on screen beside it.
+  project: {
+    Icon: Waypoints,
+    bg: "linear-gradient(150deg, #fff5f4 0%, #ffe4e1 55%, #f8c8c7 100%)",
+    ink: "#8e0a05",
+    title: "#A80400",
+    btn: "linear-gradient(135deg, #E10600, #A80400)",
+    glow: "rgba(225, 6, 0, 0.42)",
+    ring: "rgba(225, 6, 0, 0.55)",
+  },
   admin: {
     Icon: DatabaseZap,
     bg: "linear-gradient(150deg, #fff8f0 0%, #ffeede 55%, #ffe2c9 100%)",
@@ -159,7 +168,9 @@ export default async function HubPage({
   // Only the modules this person is allowed into get a tile. The guard in
   // app/(app)/layout.tsx enforces the same list on direct URL hits and sends
   // them back here with ?denied=<module>.
-  const visibleModules = MODULES.filter((m) => access[m.id]?.allowed);
+  const visibleModules = MODULES.filter(
+    (m) => access[m.id]?.allowed && !m.hiddenFromHub,
+  );
   const deniedModule = params.denied
     ? MODULES.find((m) => m.id === params.denied)
     : undefined;
@@ -245,33 +256,29 @@ export default async function HubPage({
       </div>
 
       <div className="relative z-10 flex min-h-[100svh] flex-col">
-        {/* Top bar — context on the left, actions + identity on the right.
-            The old "Hi, {name}" is gone: the hero greets by name two lines
-            below and the avatar carries the initials, so it was the third
-            printing of the same word. Its slot now holds the clock and
-            connection status, which the hub genuinely lacked (the navy brand
-            band that carries them elsewhere hides itself here). */}
+        {/* Top bar — the company on the left, actions + identity on the right.
+            The left slot used to hold a clock/connection pill, which said
+            nothing the OS clock doesn't; the mark and the company name earn it
+            instead. The hub is the one screen with no rail to carry them. */}
         <header className="mx-auto w-full max-w-[1440px] px-8 max-md:px-4 pt-5 flex items-center justify-between gap-4">
-          <HubStatus />
-          <div className="flex items-center gap-3">
-            <GlobalSearch />
-            <HubBell />
-            {/* The same avatar menu as the app header — Admin panel, Profile &
-                preferences, Index/Documents and Sign out, all reachable without
-                first entering a module. It carries Sign out, so the standalone
-                HubSignOut button it replaced would have been a second,
-                redundant affordance. The unread dot is suppressed here because
-                the bell beside it already shows the count. */}
-            <UserMenuServer tone="dark" showUnreadDot={false} />
-          </div>
-        </header>
-
-        {/* Hero greeting */}
-        <div className="mx-auto w-full max-w-[1440px] px-8 max-md:px-4 text-center mt-5 mb-5 max-md:mt-5 max-md:mb-6">
-          {/* Eyebrow — glassy pill with a glowing brand dot */}
-          <div className="flex justify-center">
+          <div className="flex flex-col items-start gap-1.5">
+            {/* The mark, glowing against the navy the same way the eyebrow's
+                copy of it does. Decorative — the name below says it in words. */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/logo-mark.png"
+              alt=""
+              className="block h-auto shrink-0"
+              style={{
+                width: 56,
+                filter:
+                  "drop-shadow(0 0 10px rgba(255,255,255,0.5)) drop-shadow(0 4px 10px rgba(10,108,255,0.5))",
+              }}
+            />
+            {/* Same glassy pill the hero eyebrow wears, minus the mark —
+                the mark already sits directly above it here. */}
             <div
-              className="inline-flex items-center gap-2.5 rounded-full px-4 py-1.5"
+              className="inline-flex items-center rounded-full px-4 py-1.5"
               style={{
                 background: "rgba(255,255,255,0.07)",
                 border: "1px solid rgba(255,255,255,0.16)",
@@ -281,27 +288,13 @@ export default async function HubPage({
                 WebkitBackdropFilter: "blur(8px)",
               }}
             >
-              {/* The mark itself, in the slot the brand dot used to hold —
-                  it says the same thing the dot only gestured at, and the
-                  hub is the one screen with no rail to carry it. Decorative
-                  beside the wordmark it sits against, so no alt text. */}
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src="/logo-mark.png"
-                alt=""
-                className="block h-auto shrink-0"
-                style={{
-                  width: 22,
-                  filter:
-                    "drop-shadow(0 0 8px rgba(255,255,255,0.5)) drop-shadow(0 3px 8px rgba(10,108,255,0.5))",
-                }}
-              />
               <span
+                className="whitespace-nowrap"
                 style={{
                   fontFamily: "var(--font-mono-display), ui-monospace, monospace",
-                  fontSize: 11.5,
+                  fontSize: 10.5,
                   fontWeight: 800,
-                  letterSpacing: "0.24em",
+                  letterSpacing: "0.18em",
                   color: "#8FC2FF",
                 }}
               >
@@ -309,9 +302,21 @@ export default async function HubPage({
               </span>
             </div>
           </div>
+          <div className="flex items-center gap-3">
+            {/* The same avatar menu as the app header — Admin panel, Profile &
+                preferences, Index/Documents and Sign out, all reachable without
+                first entering a module. It carries Sign out, so the standalone
+                HubSignOut button it replaced would have been a second,
+                redundant affordance. Search and the notification bell were
+                dropped from this bar; both live in the app header, one click
+                inside any module. The unread dot rides the avatar again. */}
+            <UserMenuServer tone="dark" />
+          </div>
+        </header>
 
+        {/* Hero greeting */}
+        <div className="mx-auto w-full max-w-[1440px] px-8 max-md:px-4 text-center mt-5 mb-5 max-md:mt-5 max-md:mb-6">
           <h1
-            className="mt-4"
             style={{ fontFamily: "var(--font-display), var(--font-sans), sans-serif", fontWeight: 800, fontSize: "clamp(38px, 4.6vw, 56px)", lineHeight: 1.0, letterSpacing: "-0.035em" }}
           >
             <span

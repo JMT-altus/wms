@@ -11,6 +11,7 @@ import {
   projectAudience,
 } from "@/db/schema";
 import type { TaskStatus, Visibility } from "@/db/enums";
+import { refFor, type PlanKind } from "@/lib/plan/levels";
 import { getViewer, visibleTaskCondition } from "@/lib/auth/task-visibility";
 import { canSee, type AudienceEntry } from "@/lib/access/visibility";
 import { CACHE_TAGS } from "@/lib/cache-tags";
@@ -23,7 +24,9 @@ export interface ProjectMemberRef {
 export interface ProjectTreeNode {
   id: string;
   name: string;
-  kind: "project" | "milestone" | "result" | "action" | "sub_action";
+  /** Widened by 0103 to the full six-level PlanKind. Read the level model
+   *  from lib/plan/levels.ts rather than re-spelling the union here. */
+  kind: PlanKind;
   parentId: string | null;
   sortOrder: number;
   actionCount: number;
@@ -145,6 +148,20 @@ export interface ProjectNodeOption {
   id: string;
   /** "Project / Milestone / Result" path label for the task picker. */
   label: string;
+  /** The row's own name, unprefixed — what a cascading picker shows once the
+   *  level above it has already been chosen. */
+  name: string;
+  /** The level, so a picker can offer one level at a time. */
+  kind: PlanKind;
+  /** The row above it, so a picker can narrow to one branch. */
+  parentId: string | null;
+  /** The derived short ref — "M2", "RD". Numbering is a display artefact of
+   *  the tree (see `lib/plan/levels.ts`), computed here so every consumer
+   *  shows the same one instead of inventing its own. */
+  ref: string;
+  /** What this row says it is, so the task form can show the brief for the
+   *  branch being filed into instead of asking people to remember it. */
+  description: string | null;
 }
 
 /** A node, its ancestor path labels, and the descendant ids (incl. itself). */
@@ -234,17 +251,42 @@ export async function listProjectNodeOptions(): Promise<ProjectNodeOption[]> {
     async (): Promise<ProjectNodeOption[]> => {
       const tree = await listProjectTree();
       const out: ProjectNodeOption[] = [];
-      function walk(node: ProjectTreeNode, prefix: string) {
+      /**
+       * The ref is derived from the row's 1-based position among its siblings
+       * OF THE SAME KIND — the same rule `refFor` applies everywhere else, so
+       * the "M2" a task's detail page prints is the "M2" the plan table shows.
+       * Nothing is read from a stored column; there isn't one.
+       */
+      function walk(node: ProjectTreeNode, prefix: string, index1: number, parentRef: string) {
         const label = prefix ? `${prefix} / ${node.name}` : node.name;
-        out.push({ id: node.id, label });
-        for (const c of node.children) walk(c, label);
+        const ref = refFor(node.kind, index1, parentRef);
+        out.push({
+          id: node.id,
+          label,
+          name: node.name,
+          kind: node.kind,
+          parentId: node.parentId,
+          ref,
+          description: node.description,
+        });
+        const seen = new Map<PlanKind, number>();
+        for (const c of node.children) {
+          const n = (seen.get(c.kind) ?? 0) + 1;
+          seen.set(c.kind, n);
+          walk(c, label, n, ref);
+        }
       }
-      for (const r of tree) walk(r, "");
+      const rootSeen = new Map<PlanKind, number>();
+      for (const r of tree) {
+        const n = (rootSeen.get(r.kind) ?? 0) + 1;
+        rootSeen.set(r.kind, n);
+        walk(r, "", n, "");
+      }
       return out.sort((a, b) =>
         a.label.localeCompare(b.label, undefined, { sensitivity: "base" }),
       );
     },
-    ["list-project-node-options:v2", viewerKey],
+    ["list-project-node-options:v4", viewerKey],
     { tags: [CACHE_TAGS.projectNodes], revalidate: 600 },
   )();
 }

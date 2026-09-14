@@ -2,6 +2,7 @@ import "server-only";
 import { notFound } from "next/navigation";
 import { TaskDetailView } from "@/components/tasks/task-detail-view";
 import { getTaskById } from "@/lib/queries/tasks";
+import { planTrail, type PlanTrailStep } from "@/lib/queries/plan";
 import { listTaskEvents } from "@/lib/queries/audit";
 import { listEmployees } from "@/lib/queries/employees";
 import { listActiveClientNames } from "@/lib/queries/clients";
@@ -76,6 +77,11 @@ export async function TaskDetailLoader({ taskId, me }: Props) {
 
   // 0102 — the three new rail panels. Fetched together with everything else so
   // they stream in the same Suspense flush rather than adding a second wait.
+  // Where this task sits in the plan, when it came from one. Fetched here so
+  // it streams in the same flush as everything else; one recursive query, and
+  // nothing at all for a task raised outside the Project Plan.
+  const planTrailSteps = task.projectNodeId ? await planTrail(task.projectNodeId) : [];
+
   const [sessions, totals, running, checklist] = await Promise.all([
     listTaskSessions(taskId),
     getTimeTotals([taskId]),
@@ -115,6 +121,7 @@ export async function TaskDetailLoader({ taskId, me }: Props) {
   return (
     <TaskDetailView
       task={task}
+      planTrail={planTrailSteps}
       canEdit={canEditTaskFields(permInput)}
       canApproveTask={showApproveCard}
       canReassignTask={canReassign(permInput)}

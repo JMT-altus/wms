@@ -98,6 +98,10 @@ export function computeEmployeeStatusTable(
         row.transferred += 1;
         break;
       case "cancelled":
+      // Work that was stopped rather than ruled on. It has no column of its
+      // own and it is NOT pending — counting it there would put abandoned work
+      // in everyone's open-work total forever.
+      case "abandoned":
         row.cancelled += 1;
         break;
       case "dont_know":           // "Not Seen" — the status EVERY new task

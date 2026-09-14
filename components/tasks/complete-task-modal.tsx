@@ -6,6 +6,7 @@ import * as Dialog from "@radix-ui/react-dialog";
 import { X, Inbox } from "lucide-react";
 import { NewTaskForm } from "./new-task-form";
 import type { TaskPriority } from "@/db/enums";
+import type { ProjectNodeOption } from "@/lib/queries/projects";
 
 /**
  * The "New Task-like panel" that opens when you click an UNASSIGNED (pool)
@@ -36,7 +37,7 @@ export function CompleteTaskModal({
   employees: { id: string; name: string }[];
   clients: string[];
   subjects: string[];
-  projectNodes?: { id: string; label: string }[];
+  projectNodes?: ProjectNodeOption[];
 }) {
   const router = useRouter();
   const pathname = usePathname();

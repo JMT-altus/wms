@@ -1,9 +1,13 @@
 import "server-only";
-import { and, asc, desc, eq, gte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { employees, weeklyGoals, tasks, attendanceLogs, incentiveLedger } from "@/db/schema";
 import type { TaskPriority } from "@/db/enums";
+import type { TaskListFilters } from "@/lib/types";
+import { employeeIdsInDepartments } from "@/lib/queries/departments";
+import { goalColumn } from "@/lib/kanban-columns";
 import {
+  istYmd,
   periodStart,
   recentWeekStarts,
   type PerformerPeriod,
@@ -341,4 +345,84 @@ export async function getEmployeeCriteria(
     .where(eq(employees.id, employeeId))
     .limit(1);
   return row ?? null;
+}
+
+/* ── Kanban board ─────────────────────────────────────────────────────────
+ * Weekly goals rendered as cards on /tasks/kanban, beside the tasks.
+ * ---------------------------------------------------------------------- */
+
+export interface BoardGoal {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  weekStart: string;
+  client: string | null;
+  subject: string | null;
+  priority: TaskPriority;
+  targetDone: string | null;
+  pctDone: number;
+  kpi: boolean;
+  incentive: boolean;
+}
+
+/**
+ * Goals for the Kanban board, narrowed by the same filter bar the tasks are.
+ *
+ * Every dimension the bar offers maps onto a goal column of the same name
+ * (employee, client, subject, priority, department via the employee), so a
+ * filtered board doesn't show goals the tasks beside them were filtered out
+ * by. The date range is matched on `week_start` — a goal's date IS its week.
+ * The status chip filters on the column the goal derives from `pct_done`
+ * (see `goalColumn`), which is resolved in JS because it isn't a column.
+ *
+ * `restrictToEmployeeId` is the non-admin lock: the weekly-goals planner only
+ * ever shows a non-admin their own goals, and the board keeps that rule.
+ */
+export async function listBoardGoals(
+  filters?: TaskListFilters,
+  restrictToEmployeeId?: string,
+): Promise<BoardGoal[]> {
+  const conditions = [];
+  if (restrictToEmployeeId) conditions.push(eq(weeklyGoals.employeeId, restrictToEmployeeId));
+  if (filters) {
+    if (filters.startDate) conditions.push(gte(weeklyGoals.weekStart, istYmd(filters.startDate)));
+    if (filters.endDate) conditions.push(lte(weeklyGoals.weekStart, istYmd(filters.endDate)));
+    if (filters.doerIds.length > 0)
+      conditions.push(inArray(weeklyGoals.employeeId, filters.doerIds));
+    if (filters.priorities.length > 0)
+      conditions.push(inArray(weeklyGoals.priority, filters.priorities));
+    if (filters.subjects.length > 0) conditions.push(inArray(weeklyGoals.subject, filters.subjects));
+    if (filters.clients.length > 0) conditions.push(inArray(weeklyGoals.client, filters.clients));
+    if (filters.departments.length > 0) {
+      const ids = await employeeIdsInDepartments(filters.departments);
+      if (ids.length === 0) return [];
+      conditions.push(inArray(weeklyGoals.employeeId, ids));
+    }
+    // The pool lens is about ownerless TASKS; a goal always has an owner.
+    if (filters.assigneeMode === "unassigned") return [];
+  }
+
+  const rows = await db
+    .select({
+      id: weeklyGoals.id,
+      employeeId: weeklyGoals.employeeId,
+      employeeName: employees.name,
+      weekStart: weeklyGoals.weekStart,
+      client: weeklyGoals.client,
+      subject: weeklyGoals.subject,
+      priority: weeklyGoals.priority,
+      targetDone: weeklyGoals.targetDone,
+      pctDone: weeklyGoals.pctDone,
+      kpi: weeklyGoals.kpi,
+      incentive: weeklyGoals.incentive,
+    })
+    .from(weeklyGoals)
+    .innerJoin(employees, eq(weeklyGoals.employeeId, employees.id))
+    .where(conditions.length > 0 ? and(...conditions) : undefined)
+    .orderBy(desc(weeklyGoals.weekStart), asc(employees.name), asc(weeklyGoals.position));
+
+  const wanted = filters?.statuses ?? [];
+  if (wanted.length === 0) return rows;
+  const allowed = new Set(wanted);
+  return rows.filter((g) => allowed.has(goalColumn(g.pctDone)));
 }

@@ -36,6 +36,8 @@ import type {
   ForecastPeriodKind,
   ImportSource,
   ImportTarget,
+  PlanRestrictedStatus,
+  PlanWorkingStatus,
   PurchasePattern,
   SelfLearningKind,
   TallyMapsTo,
@@ -456,8 +458,22 @@ export const projectNodes = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     name: text("name").notNull(),
+    /**
+     * 0103 — widened from five levels to six. Plain text with no check
+     * constraint, deliberately: an enum needs a lock plus a follow-up
+     * migration every time a level is added, and this is the second level
+     * added to the table already. `lib/plan/levels.ts` (PLAN_KINDS) is the
+     * zod enum every write validates against.
+     */
     kind: text("kind")
-      .$type<"project" | "milestone" | "result" | "action" | "sub_action">()
+      .$type<
+        | "project"
+        | "milestone"
+        | "result"
+        | "action"
+        | "sub_action"
+        | "sub_sub_action"
+      >()
       .notNull(),
     parentId: uuid("parent_id"),
     sortOrder: integer("sort_order").notNull().default(100),
@@ -466,6 +482,14 @@ export const projectNodes = pgTable(
     description: text("description"),
     notes: text("notes"),
     targetDate: timestamp("target_date", { withTimezone: true }),
+    /**
+     * Who will DO this node's work — the task's Doer.
+     *
+     * Named "owner" from before the plan seeded tasks; `seedTask` sets the
+     * task's `doerId` from it, which is what the column has always meant in
+     * practice. The screens say "Doer" for that reason. The person who RAISED
+     * the work is `initiatorId` below, the same split tasks use.
+     */
     ownerId: uuid("owner_id").references(() => employees.id, {
       onDelete: "set null",
     }),
@@ -482,13 +506,92 @@ export const projectNodes = pgTable(
       .$type<Visibility>()
       .notNull()
       .default("internal"),
+    // ── 0103, Project Plan: plan / schedule ──────────────────────────────
+    // On a row with a linked task these are mirrored ONTO that task on every
+    // write (syncNodeTask), so the task stays the single execution record.
+    // Project and Milestone never carry them — those two are dated by the
+    // work underneath them, and a stored pair here would disagree with that
+    // the moment anything below moves.
+    category: text("category"),
+    purpose: text("purpose"),
+    /** WHOLE MINUTES ("2h 30m" → 150) — same unit as tasks.estimatedMinutes. */
+    durationMinutes: integer("duration_minutes"),
+    startsAt: timestamp("starts_at", { withTimezone: true }),
+    endsAt: timestamp("ends_at", { withTimezone: true }),
+    // ── 0103: status, two flows never collapsed ──────────────────────────
+    /**
+     * The WORKING status, and it describes CONTAINER rows only. An executable
+     * row's status of record stays on its linked task; a second column here
+     * would be a copy free to disagree with it.
+     */
+    status: text("status").$type<PlanWorkingStatus>(),
+    /**
+     * The RESTRICTED verdict, on either kind of row. Layered on top of the
+     * working status, never overwriting it — "approved" must not erase the
+     * fact that the work was at Follow Up when the verdict landed.
+     */
+    approvalStatus: text("approval_status").$type<PlanRestrictedStatus>(),
+    /** 0-100 override. NULL means "derive it from the work underneath". */
+    progressPercent: integer("progress_percent"),
+    // ── 0103: intake fields ──────────────────────────────────────────────
+    // A CONTAINER row has no task to carry these and the create dialog
+    // collects them at every level. On an executable row the equivalents live
+    // on the task and these stay null.
+    clientName: text("client_name"),
+    subject: text("subject"),
+    priority: text("priority"),
+    initiatorId: uuid("initiator_id").references(() => employees.id, {
+      onDelete: "set null",
+    }),
+    tags: text("tags").array(),
+    /** Reference links. A column, not a marker in the notes prose — every
+     *  entry is validated `^https?://` server-side before it is stored. */
+    links: text("links").array(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     index("project_nodes_parent_idx").on(t.parentId),
     index("project_nodes_kind_idx").on(t.kind, t.isArchived),
+    // 0103 — the tree always loads a whole plan and orders siblings by
+    // (parent, sort_order); the Projects register filters kind + orders.
+    index("project_nodes_parent_sort_idx").on(t.parentId, t.sortOrder),
+    index("project_nodes_kind_sort_idx").on(t.kind, t.isArchived, t.sortOrder),
   ],
+);
+
+/**
+ * 0103 — files attached to a CONTAINER plan row (project / milestone /
+ * result).
+ *
+ * A separate table from the `documents` rows that back task attachments, on
+ * purpose: those hang off `tasks.id`, and a Milestone HAS NO TASK. Pointing
+ * container files at the task table would mean inventing a placeholder task
+ * per milestone, which then leaks into the task list and onto people's
+ * calendars as work nobody is meant to do. Same shape, same private bucket,
+ * same signed-URL path — a new table, not a new storage system. Executable
+ * rows keep using task attachments in the detail drawer; the two never
+ * describe the same file.
+ */
+export const projectNodeAttachments = pgTable(
+  "project_node_attachments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    nodeId: uuid("node_id")
+      .notNull()
+      .references(() => projectNodes.id, { onDelete: "cascade" }),
+    storagePath: text("storage_path").notNull(),
+    fileName: text("file_name").notNull(),
+    mime: text("mime"),
+    sizeBytes: integer("size_bytes"),
+    // SET NULL, not CASCADE: an employee leaving must not delete the evidence
+    // they attached to a live milestone.
+    uploadedById: uuid("uploaded_by_id").references(() => employees.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("project_node_attachments_node_idx").on(t.nodeId, t.createdAt)],
 );
 
 /**
@@ -1553,6 +1656,8 @@ export type ProjectNode = typeof projectNodes.$inferSelect;
 export type NewProjectNode = typeof projectNodes.$inferInsert;
 export type ProjectMember = typeof projectMembers.$inferSelect;
 export type NewProjectMember = typeof projectMembers.$inferInsert;
+export type ProjectNodeAttachment = typeof projectNodeAttachments.$inferSelect;
+export type NewProjectNodeAttachment = typeof projectNodeAttachments.$inferInsert;
 export type Document = typeof documents.$inferSelect;
 export type NewDocument = typeof documents.$inferInsert;
 export type PushSubscription = typeof pushSubscriptions.$inferSelect;
@@ -3054,6 +3159,35 @@ export const customerProductMap = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("customer_product_map_customer_idx").on(t.customerId)],
+);
+
+/**
+ * 0105 — every change to a client's credit limit, one row each.
+ *
+ * `customer_masters.credit_limit` is the current figure; this is how it got
+ * there. Written by the actions that change the column rather than by a
+ * trigger, because the app knows who made the change and a trigger does not.
+ */
+export const customerCreditLimitEvents = pgTable(
+  "customer_credit_limit_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    customerId: uuid("customer_id")
+      .notNull()
+      .references(() => customerMasters.id, { onDelete: "cascade" }),
+    /** Null when the limit is being set for the first time. */
+    previousLimit: numeric("previous_limit", { precision: 14, scale: 2 }),
+    /** Null when the limit is being cleared. */
+    newLimit: numeric("new_limit", { precision: 14, scale: 2 }),
+    changedById: uuid("changed_by_id").references(() => employees.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("customer_credit_limit_events_created_idx").on(t.createdAt),
+    index("customer_credit_limit_events_customer_idx").on(t.customerId, t.createdAt),
+  ],
 );
 
 /** One table for every editable dropdown, keyed by `listKey`. */

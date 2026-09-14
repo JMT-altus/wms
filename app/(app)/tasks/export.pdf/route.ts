@@ -91,6 +91,7 @@ const STATUS_PILL: Record<TaskStatus, { bg: string; fg: string; label: string }>
   follow_up_2:  { bg: "#FED7AA", fg: "#9A3412", label: "Follow-up 2" },
   follow_up_3:  { bg: "#BFDBFE", fg: "#B91C1C", label: "Follow-up 3" },
   done:         { bg: "#D1FAE5", fg: "#065F46", label: "Done" },
+  abandoned:    { bg: "#FEF2F2", fg: "#7F1D1D", label: "Abandoned" },
   approved:     { bg: "#D1FAE5", fg: "#065F46", label: "Approved" },
   not_approved: { bg: "#FEE2E2", fg: "#B91C1C", label: "Not Approved" },
   cancelled:    { bg: "#F1F5F9", fg: "#64748B", label: "Cancelled" },

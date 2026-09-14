@@ -29,7 +29,6 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
       { keys: ["G", "D"], description: "Go to Dashboard" },
       { keys: ["G", "T"], description: "Go to Tasks" },
       { keys: ["G", "M"], description: "Go to My Day" },
-      { keys: ["G", "P"], description: "Go to Projects" },
       { keys: ["G", "I"], description: "Go to Inbox" },
     ],
   },

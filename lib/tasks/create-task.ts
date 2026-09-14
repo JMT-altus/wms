@@ -54,7 +54,9 @@ export async function createTasksCore(
           .values({
             id: taskId,
             title: parsed.title,
-            client: parsed.title,
+            // Defaults to the title, which is what the new-task form means by
+            // "Client name". A plan task passes its project instead.
+            client: parsed.client ?? parsed.title,
             description: parsed.description,
             subject: parsed.subject,
             notes: parsed.notes,

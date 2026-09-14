@@ -16,6 +16,14 @@ import {
 import { createTask, completePooledTask } from "@/app/(app)/tasks/actions";
 import { EmployeeAvatar } from "@/components/ui/employee-avatar";
 import { ScheduleSection, type ScheduleValue } from "./schedule-section";
+import {
+  KIND_LABEL,
+  UNCLASSIFIED_MILESTONE,
+  UNCLASSIFIED_RESULT,
+  type PlanKind,
+} from "@/lib/plan/levels";
+import type { ProjectNodeOption } from "@/lib/queries/projects";
+import { resolvePlanPlacement } from "@/app/(project)/project-plan/actions";
 import { VisibilityPicker, type VisibilityValue } from "./visibility-picker";
 import { ClientSelect } from "./client-select";
 import { SubjectSelect } from "./subject-select";
@@ -31,14 +39,93 @@ interface Props {
   clients: string[];
   /** Subject roster for the "Subject" picker, alphabetical. */
   subjects: string[];
-  /** Project tree nodes (path-labelled) for the optional Project link. */
-  projectNodes?: { id: string; label: string }[];
+  /**
+   * Plan rows for the optional Project link, every level in one flat list.
+   *
+   * The picker cascades over `kind` and `parentId` rather than showing the
+   * path labels as one long dropdown — see the Project field below.
+   */
+  projectNodes?: ProjectNodeOption[];
   /** Audience options for the visibility picker. */
   departments?: { id: string; name: string }[];
   /** "Specific people" is admin-only; the create action rejects it otherwise. */
   isAdmin?: boolean;
   /** Called after a successful create. Default: navigate to /tasks/[id]. */
   onSuccess?: (taskId: string) => void;
+  /**
+   * Run before the task is created, and fold what it returns into the payload.
+   *
+   * Added for the Project Plan module: a plan row at a task level creates the
+   * `project_nodes` row FIRST and then hangs THE task off it, so the plan, the
+   * task list and the calendar share one record. Returning `false` aborts —
+   * the plan row failed, and a task with no row to belong to would be worse
+   * than nothing.
+   *
+   * Absent, the form behaves exactly as it always has.
+   */
+  beforeSubmit?: (values: {
+    title: string;
+    subject: string | null;
+    description: string | null;
+    dueAt: string | null;
+  }) => Promise<
+    | { ok: true; projectNodeId?: string; clientName?: string | null }
+    | { ok: false; error: string }
+  >;
+  /**
+   * Create something OTHER than a task with the same collected fields.
+   *
+   * The Project Plan module's container path (Project / Milestone) writes a
+   * plan row and no task. One gesture should not open two different dialogs
+   * depending on which button was pressed, so the same real form serves both
+   * and only the destination differs.
+   */
+  createOverride?: (payload: {
+    title: string;
+    /** The client this row is FOR, when the preset asked for one — a separate
+     *  question from the row's name. Null when the field wasn't offered. */
+    clientName: string | null;
+    subject: string | null;
+    description: string | null;
+    notes: string | null;
+    priority: TaskPriority;
+    initiatorId: string;
+    dueAt: string | null;
+    tags: string[] | null;
+    links: string[] | null;
+  }) => Promise<{ ok: true; id: string } | { ok: false; error: string }>;
+  /** Hide the Schedule block — Project and Milestone are dated by the work
+   *  underneath them, so clock times on one would be metadata nothing honours. */
+  hideSchedule?: boolean;
+  /**
+   * Present this form as one Project Plan level.
+   *
+   * Presentation only — the fields, the validation and the submit path are
+   * unchanged. A plan row is a Project or a Milestone rather than a task for
+   * a client, so it needs its own noun on the labels, a plain name box in
+   * place of the client picker, and the module's red on the button.
+   *
+   * Absent, every one of these falls back to what the app-wide "+" has always
+   * rendered.
+   */
+  preset?: {
+    /** "Project", "Milestone", "Result", … — the noun on every label. */
+    noun: string;
+    /** Containers have no subject; the name is the whole of Basics. */
+    hideSubject?: boolean;
+    /**
+     * Also ask WHO THIS IS FOR, beside the row's name.
+     *
+     * A Project is the one level with a client of its own — the engagement it
+     * belongs to — and the whole branch under it inherits that answer on the
+     * task list. Before this the row's name was quietly written into
+     * `client_name` as well, so every project was its own client and the Client
+     * column said the same thing twice.
+     */
+    clientField?: boolean;
+    basicsHint?: string;
+    submitLabel?: string;
+  };
   /** When set, the form runs in "complete a pool task" mode: it UPDATES this
    *  task (fills in details + optionally assigns) instead of creating a new one. */
   completeTaskId?: string;
@@ -76,11 +163,42 @@ const NewTaskSchema = z.object({
   priority: z.enum(TASK_PRIORITIES),
   dueAt: z.string().min(1, "Due date is required"),
   subject: z.string().trim().min(1, "Subject is required"),
-  description: z.string().trim(), // optional — a task can be created without a description
+  // REQUIRED. A task whose description is blank arrives on someone's list as
+  // a title and a due date, and the person who wrote it is the only one who
+  // knows what it means. The Project Plan already insisted on this; the task
+  // list was the inconsistent one.
+  description: z.string().trim().min(1, "Say what the task is — a description is required"),
   notes: z.string(),
   projectNodeId: z.string(),
 });
 type NewTaskFormValues = z.infer<typeof NewTaskSchema>;
+
+/**
+ * Project Plan mode.
+ *
+ * The description requirement now lives on `NewTaskSchema` itself — both
+ * surfaces insist on it, so this only re-words the message for a plan row,
+ * which is read by people who were not in the room when it was created.
+ */
+const PlanTaskSchema = NewTaskSchema.extend({
+  description: z.string().trim().min(1, "Say what this is — a description is required"),
+});
+
+/**
+ * Project Plan CONTAINER mode — a Project or a Milestone.
+ *
+ * Subject is not required, because it is not asked: a container has no subject
+ * of its own (`preset.hideSubject`), its name is the whole of Basics, and
+ * `syncNodeTask` never writes one for it either.
+ *
+ * It used to run on `PlanTaskSchema`, which requires a subject — so creating a
+ * Project failed validation with "Subject is required" pointing at a field
+ * that is not on the form. A required field you cannot see is a dead end, not
+ * a validation.
+ */
+const PlanContainerSchema = PlanTaskSchema.extend({
+  subject: z.string().trim(),
+});
 
 // "Complete a pool task" mode — same shape, relaxed rules: only the Title
 // (seeded from the quick-dump text) is required; Client, Doer, Subject, Due and
@@ -108,7 +226,7 @@ interface PreviewFile {
   url: string;
 }
 
-export function NewTaskForm({ employees, clients, subjects, projectNodes = [], departments = [], isAdmin = false, onSuccess, completeTaskId, onCompleted, defaults }: Props) {
+export function NewTaskForm({ employees, clients, subjects, projectNodes = [], departments = [], isAdmin = false, onSuccess, completeTaskId, onCompleted, defaults, beforeSubmit, createOverride, hideSchedule = false, preset }: Props) {
   // Defaults to "Everyone" — new tasks are team-visible unless someone
   // narrows them here.
   //
@@ -139,7 +257,15 @@ export function NewTaskForm({ employees, clients, subjects, projectNodes = [], d
     getValues,
     formState: { errors },
   } = useForm<NewTaskFormValues>({
-    resolver: zodResolver(isComplete ? CompleteTaskSchema : NewTaskSchema),
+    resolver: zodResolver(
+      isComplete
+        ? CompleteTaskSchema
+        : preset?.hideSubject
+          ? PlanContainerSchema
+          : preset
+            ? PlanTaskSchema
+            : NewTaskSchema,
+    ),
     defaultValues: {
       title: defaults?.title ?? "",
       taskTitle: defaults?.taskTitle ?? "",
@@ -156,6 +282,113 @@ export function NewTaskForm({ employees, clients, subjects, projectNodes = [], d
 
   // Auxiliary widgets — local state, folded into the payload at submit.
   const [tags, setTags] = React.useState<string[]>([]);
+  /**
+   * The three cascading answers to "where in the plan does this belong?".
+   *
+   * Held apart from the form's own `projectNodeId`: that field is the RESULT
+   * the task ends up hanging off, and it is not known until submit — a blank
+   * milestone or result has to be turned into a real row by the server first
+   * (see `resolvePlanPlacement`). Storing the half-answers in the form value
+   * would mean shipping a project id in a field that means a result id.
+   */
+  /** The preset's optional "who is this for" answer — see `preset.clientField`. */
+  const [planClient, setPlanClient] = React.useState("");
+
+  const [projectPick, setProjectPick] = React.useState("");
+  const [milestonePick, setMilestonePick] = React.useState("");
+  const [resultPick, setResultPick] = React.useState("");
+  /**
+   * The Action the person explicitly chose. `null` means they have not
+   * touched the field — which is NOT the same as choosing "create a new one",
+   * and keeping them apart is what lets the default below exist without
+   * overriding a deliberate answer.
+   */
+  const [actionPick, setActionPick] = React.useState<string | null>(null);
+
+  const projectChoices = React.useMemo(
+    () => projectNodes.filter((n) => n.kind === "project"),
+    [projectNodes],
+  );
+  const milestoneChoices = React.useMemo(
+    () =>
+      projectNodes.filter((n) => n.kind === "milestone" && n.parentId === projectPick),
+    [projectNodes, projectPick],
+  );
+  const resultChoices = React.useMemo(
+    () =>
+      milestonePick
+        ? projectNodes.filter((n) => n.kind === "result" && n.parentId === milestonePick)
+        : [],
+    [projectNodes, milestonePick],
+  );
+  /**
+   * The Actions already under the chosen Result.
+   *
+   * Their presence decides what this task BECOMES: file it under one and the
+   * task is a Sub-Action of it; leave it blank and the task is a new Action of
+   * the Result in its own right. Either way it lands on an executable row —
+   * a task pinned to a Result is work the Result's own "2 of 5" cannot see.
+   */
+  const actionChoices = React.useMemo(
+    () =>
+      resultPick
+        ? projectNodes.filter((n) => n.kind === "action" && n.parentId === resultPick)
+        : [],
+    [projectNodes, resultPick],
+  );
+
+  /**
+   * ONE existing Action is not a choice, it is the answer — default to it, so
+   * the common "this result is already being worked on" case files the task
+   * under that work without anyone touching the field.
+   *
+   * SEVERAL is a real choice and defaults to blank: picking the first of five
+   * would be arbitrary, and quietly filing work under the wrong action is the
+   * exact disconnection this whole chain exists to prevent.
+   *
+   * DERIVED, not an effect that writes state — an effect would re-render every
+   * time the branch moved, and would have to be careful not to stamp on the
+   * answer the person had already given.
+   */
+  const effectiveAction =
+    actionPick ?? (actionChoices.length === 1 ? actionChoices[0]!.id : "");
+
+  /**
+   * The name of the plan row this task will BECOME.
+   *
+   * Required once a project is chosen, and deliberately its own field: the
+   * form's `title` is the CLIENT NAME in this dialog, so naming the plan row
+   * from it filed every task in the tree under the client rather than under
+   * the work. A row in the Project Plan is read by people who were not in the
+   * room; "Altus Corp" three levels down says nothing about what to do.
+   */
+  const [leafName, setLeafName] = React.useState("");
+
+  /**
+   * What this task lands as — a Sub-Action when it is filed under an existing
+   * Action, otherwise a new Action of the Result. The same rule the server
+   * applies in `resolvePlanPlacement`, so the label cannot promise one thing
+   * and the plan show another.
+   */
+  const leafKind: PlanKind = effectiveAction ? "sub_action" : "action";
+
+  /** The chosen branch, outermost first — what the brief panel reads from. */
+  const planBrief = React.useMemo(
+    () =>
+      [
+        projectChoices.find((n) => n.id === projectPick),
+        milestoneChoices.find((n) => n.id === milestonePick),
+        resultChoices.find((n) => n.id === resultPick),
+        actionChoices.find((n) => n.id === effectiveAction),
+      ].filter(
+        (n): n is ProjectNodeOption => Boolean(n && n.description?.trim()),
+      ),
+    [
+      projectChoices, projectPick, milestoneChoices, milestonePick,
+      resultChoices, resultPick, actionChoices, effectiveAction,
+    ],
+  );
+
   const [tagInput, setTagInput] = React.useState("");
   const [schedule, setSchedule] = React.useState<ScheduleValue>({
     startsAt: null,
@@ -235,6 +468,7 @@ export function NewTaskForm({ employees, clients, subjects, projectNodes = [], d
     // creating one, then hand control back to the caller (closes the panel).
     if (completeTaskId) {
       startTransition(async () => {
+        try {
         const res = await completePooledTask(completeTaskId, {
           title: values.taskTitle, // the editable task title
           client: values.title || null, // Client Name (separate picker)
@@ -251,6 +485,14 @@ export function NewTaskForm({ employees, clients, subjects, projectNodes = [], d
         if (onCompleted) onCompleted();
         else router.push(`/tasks/${completeTaskId}` as Route);
         router.refresh();
+        } catch (err) {
+          console.error("[new-task] complete failed:", err);
+          setError(
+            err instanceof Error && err.message
+              ? err.message
+              : "Something went wrong saving this task. Please try again.",
+          );
+        }
       });
       return;
     }
@@ -269,8 +511,110 @@ export function NewTaskForm({ employees, clients, subjects, projectNodes = [], d
       pendingTag && !tags.includes(pendingTag) ? [...tags, pendingTag] : tags;
 
     startTransition(async () => {
+      /*
+       * EVERY THROW HAS TO LAND SOMEWHERE.
+       *
+       * `pending` drives the button's "Creating…", and an async transition
+       * whose body rejects never settles — so a server action that threw
+       * rather than returned `{ok:false}` left the button spinning forever
+       * with nothing on screen to say why. That is indistinguishable from a
+       * slow network, so people wait, then submit again.
+       *
+       * Every handled failure below still returns early with `setError`; this
+       * only catches what those cannot: a dropped connection, a rate-limit
+       * throw, or a stale client calling a server action whose shape has since
+       * changed on the server.
+       */
+      try {
+      // The Project Plan container path: same collected fields, different
+      // destination. No task is created at all.
+      if (createOverride) {
+        const res = await createOverride({
+          title: values.title,
+          clientName: planClient.trim() || null,
+          subject: values.subject || null,
+          description: values.description || null,
+          notes: values.notes.trim() || null,
+          priority: values.priority,
+          initiatorId: values.initiatorId,
+          dueAt: dueIso,
+          tags: finalTags.length > 0 ? finalTags : null,
+          links: links.length > 0 ? links : null,
+        });
+        if (!res.ok) {
+          setError(res.error);
+          return;
+        }
+        if (onSuccess) onSuccess(res.id);
+        return;
+      }
+
+      // The Project Plan task path: create the plan row FIRST, then hang THE
+      // task off it. Aborting here rather than creating an orphan task is the
+      // point — one row, one task, never two.
+      let linkedNodeId = values.projectNodeId || null;
+      /**
+       * The Client column for a task that belongs to a project.
+       *
+       * Left null, `createTasksCore` falls back to the task's TITLE — which is
+       * what the standalone form means by "Client name", but is nonsense for a
+       * plan task whose title is the name of an action. The project's own
+       * client is the answer, and only the server knows it, so both plan paths
+       * hand it back with the row they just created.
+       */
+      let planClientName: string | null = null;
+
+      // The cascading picker's answer, turned into ONE result id. A blank
+      // milestone or result becomes a real Unclassified row under the project
+      // — the server does it, because it is a write.
+      if (projectPick) {
+        if (!leafName.trim()) {
+          setError(
+            `Give this ${KIND_LABEL[leafKind].toLowerCase()} a name — it is what the Project Plan will show.`,
+          );
+          return;
+        }
+        const placed = await resolvePlanPlacement({
+          projectId: projectPick,
+          milestoneId: milestonePick || null,
+          resultId: resultPick || null,
+          actionId: effectiveAction || null,
+          // The leaf is named and described from the task it carries, so the
+          // plan reads as the work rather than as a tree of placeholders.
+          // Clamped to what NameSchema accepts. The row name is a label; the
+          // task keeps the full title, so trimming here loses nothing.
+          name: leafName.trim().slice(0, 160),
+          description: values.description || null,
+          subject: values.subject || null,
+        });
+        if (!placed.ok) {
+          setError(placed.error);
+          return;
+        }
+        linkedNodeId = placed.id;
+        planClientName = placed.clientName;
+      }
+
+      if (beforeSubmit) {
+        const pre = await beforeSubmit({
+          title: values.title,
+          subject: values.subject || null,
+          description: values.description || null,
+          dueAt: dueIso,
+        });
+        if (!pre.ok) {
+          setError(pre.error);
+          return;
+        }
+        if (pre.projectNodeId) linkedNodeId = pre.projectNodeId;
+        if (pre.clientName) planClientName = pre.clientName;
+      }
+
       const result = await createTask({
         title: values.title,
+        // The project's client when this task belongs to one; otherwise the
+        // form's own Client Name field, which IS `title` in this dialog.
+        client: planClientName ?? values.title ?? null,
         doerIds: values.doerIds,       // multi-doer fanout — N tasks if N doers
         initiatorId: values.initiatorId,
         priority: values.priority,
@@ -287,7 +631,7 @@ export function NewTaskForm({ employees, clients, subjects, projectNodes = [], d
         allDay: schedule.allDay,
         recurrence: schedule.recurrence,
         recurrenceRule: schedule.recurrenceRule,
-        projectNodeId: values.projectNodeId || null,
+        projectNodeId: linkedNodeId,
         visibility: visibility.visibility,
         audience: visibility.audience,
       });
@@ -302,6 +646,14 @@ export function NewTaskForm({ employees, clients, subjects, projectNodes = [], d
         router.push(`/tasks/${result.id}` as Route);
       } else {
         router.push("/tasks" as Route);
+      }
+      } catch (err) {
+        console.error("[new-task] create failed:", err);
+        setError(
+          err instanceof Error && err.message
+            ? err.message
+            : "Something went wrong creating this task. Please try again.",
+        );
       }
     });
   });
@@ -322,6 +674,7 @@ export function NewTaskForm({ employees, clients, subjects, projectNodes = [], d
   }
 
   return (
+    <CompactContext.Provider value={Boolean(preset)}>
     <form
       onSubmit={submit}
       onKeyDown={(e) => {
@@ -331,11 +684,21 @@ export function NewTaskForm({ employees, clients, subjects, projectNodes = [], d
           void submit();
         }
       }}
-      className="flex flex-col gap-6"
+      className={`flex flex-col ${preset ? "plan-form" : "gap-6"}`}
       noValidate
+      /*
+       * No browser autofill anywhere in this form.
+       *
+       * Chrome keys its saved-form-data dropdown off the field id, so the
+       * plan-row Name input was offering every throwaway name ever typed into
+       * it — "sss", "ggg", "bbbb" — over the dialog. None of these fields are
+       * ones a browser can usefully guess: a milestone name, a subject and a
+       * description are new text every time, not a remembered identity.
+       */
+      autoComplete="off"
     >
       {/* ── 01 BASICS ─────────────────────────────────────────────────── */}
-      <FormSection number="01" title="Basics" hint="Who this is for">
+      <FormSection number="01" title="Basics" hint={preset?.basicsHint ?? "Who this is for"}>
       {/* Title — editable task title (complete mode only), seeded from the
           quick-dump text. Separate from the Client Name below. */}
       {isComplete && (
@@ -343,6 +706,7 @@ export function NewTaskForm({ employees, clients, subjects, projectNodes = [], d
           <input
             id="nt-tasktitle"
             className="nt-input"
+            autoComplete="off"
             placeholder="What's the task?"
             {...register("taskTitle")}
           />
@@ -350,22 +714,61 @@ export function NewTaskForm({ employees, clients, subjects, projectNodes = [], d
       )}
 
       {/* Client Name + Subject — one line, above the people/dates. */}
-      <div className="grid grid-cols-2 gap-4 max-md:grid-cols-1 max-md:gap-3">
-        <Field id="nt-title" label="Client Name" required={!isComplete}>
+      <div
+        className={`grid gap-4 max-md:grid-cols-1 max-md:gap-3 ${
+          preset?.hideSubject && !preset?.clientField ? "grid-cols-1" : "grid-cols-2"
+        }`}
+      >
+        <Field
+          id="nt-title"
+          label={preset ? `${preset.noun} Name` : "Client Name"}
+          required={!isComplete}
+        >
           <Controller
             control={control}
             name="title"
-            render={({ field }) => (
-              <ClientSelect
-                id="nt-title"
-                value={field.value}
-                onChange={field.onChange}
-                clients={clients}
-                className="nt-input"
-              />
-            )}
+            render={({ field }) =>
+              // A plan row is named, not chosen from the client roster — the
+              // picker would offer a list that has nothing to do with it.
+              preset ? (
+                <input
+                  id="nt-title"
+                  className="nt-input"
+                  autoComplete="off"
+                  placeholder={`${preset.noun} Name…`}
+                  value={field.value}
+                  onChange={(e) => field.onChange(e.target.value)}
+                />
+              ) : (
+                <ClientSelect
+                  id="nt-title"
+                  value={field.value}
+                  onChange={field.onChange}
+                  clients={clients}
+                  className="nt-input"
+                />
+              )
+            }
           />
         </Field>
+        {/* WHO THIS IS FOR — asked only where a preset says to, which today
+            means the Project level. Separate from the name above: "AICL WMS"
+            is what the project is called and "Altus Corp" is who it is for,
+            and the task list needs both. Chosen from the client roster, the
+            same list an ordinary task's Client Name comes from, so the two
+            cannot drift into two spellings of one client. */}
+        {preset?.clientField && (
+          <Field id="nt-client" label="Client Name">
+            <ClientSelect
+              id="nt-client"
+              value={planClient}
+              onChange={setPlanClient}
+              clients={clients}
+              className="nt-input"
+            />
+          </Field>
+        )}
+        {!preset?.hideSubject && (
         <Field id="nt-subject" label="Subject" required={!isComplete}>
           <Controller
             control={control}
@@ -382,6 +785,7 @@ export function NewTaskForm({ employees, clients, subjects, projectNodes = [], d
             )}
           />
         </Field>
+        )}
       </div>
 
       </FormSection>
@@ -458,14 +862,22 @@ export function NewTaskForm({ employees, clients, subjects, projectNodes = [], d
       {/* ── 03 DETAILS ────────────────────────────────────────────────── */}
       <FormSection number="03" title="Details" hint="The work itself">
       {/* Task Description · Initiator Notes — full-width, stacked. */}
-      <Field id="nt-desc" label="Task Description">
+      <Field
+        id="nt-desc"
+        label={preset ? `${preset.noun} Description` : "Task Description"}
+        required={!isComplete}
+      >
         <div className="relative">
           <textarea
             id="nt-desc"
             rows={4}
             className="nt-input resize-y"
             style={{ fontWeight: 400, paddingRight: 52 }}
-            placeholder="What needs to happen, in detail… (optional — or tap the mic and speak)"
+            placeholder={
+              preset
+                ? "What needs to happen, in detail…"
+                : "What needs to happen, in detail… (or tap the mic and speak)"
+            }
             {...register("description")}
           />
           <div className="absolute top-2.5 right-2.5">
@@ -511,25 +923,189 @@ export function NewTaskForm({ employees, clients, subjects, projectNodes = [], d
         />
       </Field>
 
-      {/* Project link — optional connection to a Project / Milestone / Result. */}
+      {/* Project link — the plan's chain, asked one level at a time.
+          ONE flat dropdown of every row at every level used to answer this,
+          which meant scrolling a list of "Project / Milestone / Result / …"
+          paths to find one line. Three narrow questions is the same choice,
+          asked the way people actually hold it: which project, then which
+          milestone, then which result. */}
       {projectNodes.length > 0 && (
-        <Field id="nt-project" label="Project">
-          <Controller
-            control={control}
-            name="projectNodeId"
-            render={({ field }) => (
-              <Select
-                id="nt-project"
-                value={field.value ?? ""}
-                onValueChange={field.onChange}
-                options={[
-                  { value: "", label: "Not linked to a project" },
-                  ...projectNodes.map((n) => ({ value: n.id, label: n.label })),
-                ]}
-              />
-            )}
-          />
-        </Field>
+        <>
+          <Field id="nt-project" label="Project">
+            <Select
+              id="nt-project"
+              value={projectPick}
+              onValueChange={(v) => {
+                setProjectPick(v);
+                // Narrowing the branch invalidates what was chosen under it.
+                setMilestonePick("");
+                setResultPick("");
+                setActionPick(null);
+              }}
+              options={[
+                { value: "", label: "Not linked to a project" },
+                ...projectChoices.map((n) => ({ value: n.id, label: n.name })),
+              ]}
+            />
+          </Field>
+
+          {projectPick && (
+            <>
+              <Field id="nt-milestone" label="Milestone">
+                <Select
+                  id="nt-milestone"
+                  value={milestonePick}
+                  onValueChange={(v) => {
+                    setMilestonePick(v);
+                    setResultPick("");
+                    setActionPick(null);
+                  }}
+                  options={[
+                    { value: "", label: `Leave blank — ${UNCLASSIFIED_MILESTONE}` },
+                    ...milestoneChoices.map((n) => ({
+                      value: n.id,
+                      label: `${n.ref} · ${n.name}`,
+                    })),
+                  ]}
+                />
+              </Field>
+
+              <Field id="nt-result" label="Result">
+                <Select
+                  id="nt-result"
+                  value={resultPick}
+                  onValueChange={(v) => {
+                    setResultPick(v);
+                    setActionPick(null);
+                  }}
+                  options={[
+                    { value: "", label: `Leave blank — ${UNCLASSIFIED_RESULT}` },
+                    ...resultChoices.map((n) => ({
+                      value: n.id,
+                      label: `${n.ref} · ${n.name}`,
+                    })),
+                  ]}
+                />
+              </Field>
+
+              {/* The Action level — offered only once a Result is settled,
+                  because what it decides is whether this task is an Action of
+                  that Result or a Sub-Action of one already under it. */}
+              <Field id="nt-action" label="Action">
+                <Select
+                  id="nt-action"
+                  value={effectiveAction}
+                  onValueChange={setActionPick}
+                  options={[
+                    {
+                      value: "",
+                      label:
+                        actionChoices.length === 0
+                          ? "A new action will be created for this task"
+                          : "Leave blank — create a new action",
+                    },
+                    ...actionChoices.map((n) => ({
+                      value: n.id,
+                      label: `${n.ref} · ${n.name}`,
+                    })),
+                  ]}
+                />
+              </Field>
+
+              {/* Say what silence will do BEFORE it does it. A task that turns
+                  up under a milestone nobody remembers creating is worse than
+                  one that was never linked. */}
+              <p
+                className="-mt-1 text-[12.5px]"
+                style={{ color: "var(--color-ink-muted)" }}
+              >
+                {!milestonePick || !resultPick ? (
+                  <>
+                    Left blank, this files under{" "}
+                    <strong>
+                      {milestonePick
+                        ? UNCLASSIFIED_RESULT
+                        : `${UNCLASSIFIED_MILESTONE} / ${UNCLASSIFIED_RESULT}`}
+                    </strong>{" "}
+                    in this project — a real row you can rename or move work out
+                    of later.{" "}
+                  </>
+                ) : null}
+                {effectiveAction ? (
+                  <>
+                    This task becomes a <strong>Sub-Action</strong> of the action
+                    you picked.
+                  </>
+                ) : (
+                  <>
+                    This task becomes a new <strong>Action</strong> under that
+                    result.
+                  </>
+                )}
+              </p>
+
+              {/* The brief for the branch being filed into.
+                  Sits WITH the pickers rather than beside the description box:
+                  it is the thing being chosen, and a description written
+                  without it is written blind. Only levels that actually say
+                  something appear — an empty panel is noise. */}
+              {planBrief.length > 0 && (
+                <div
+                  className="rounded-lg px-4 py-3 grid gap-2.5"
+                  style={{
+                    background: "var(--color-surface-soft)",
+                    border: "1px solid var(--color-hairline)",
+                  }}
+                >
+                  {planBrief.map((node) => (
+                    <div key={node.id}>
+                      <span
+                        className="block mb-0.5 text-[11px] font-bold uppercase tracking-[0.1em]"
+                        style={{ color: "var(--color-ink-subtle)" }}
+                      >
+                        {KIND_LABEL[node.kind]} · {node.name}
+                      </span>
+                      <p
+                        className="text-[13px] whitespace-pre-wrap"
+                        style={{ color: "var(--color-ink-muted)" }}
+                      >
+                        {node.description}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* The name the Project Plan will show for this task.
+                  REQUIRED, and below the branch rather than above it, because
+                  what it names — an Action or a Sub-Action — is decided by the
+                  Action field directly above. Naming it first would be naming
+                  something whose level is not settled yet. */}
+              <Field id="nt-leaf-name" label={`${KIND_LABEL[leafKind]} Name`} required>
+                <input
+                  id="nt-leaf-name"
+                  className="nt-input"
+                  autoComplete="off"
+                  maxLength={160}
+                  value={leafName}
+                  onChange={(e) => setLeafName(e.target.value)}
+                  placeholder={`What this ${KIND_LABEL[leafKind].toLowerCase()} is called…`}
+                />
+              </Field>
+              <p
+                className="-mt-1 text-[12.5px]"
+                style={{ color: "var(--color-ink-muted)" }}
+              >
+                This is the row the Project Plan shows under{" "}
+                <strong>
+                  {resultChoices.find((r) => r.id === resultPick)?.name ??
+                    UNCLASSIFIED_RESULT}
+                </strong>
+                . The task keeps its own title in the task list.
+              </p>
+            </>
+          )}
+        </>
       )}
 
       {/* Who can see it. Sits with the other assignment decisions rather than
@@ -549,7 +1125,7 @@ export function NewTaskForm({ employees, clients, subjects, projectNodes = [], d
 
       {/* Schedule — GCal-style start/end + recurrence. Internal metadata
           only; not synced to any actual calendar API. */}
-      <ScheduleSection value={schedule} onChange={setSchedule} />
+      {!hideSchedule && <ScheduleSection value={schedule} onChange={setSchedule} />}
 
       </FormSection>
 
@@ -589,14 +1165,32 @@ export function NewTaskForm({ employees, clients, subjects, projectNodes = [], d
         className="flex items-center justify-end gap-3 pt-2"
         style={{ borderTop: "1px solid var(--color-hairline)" }}
       >
+        {/* Ctrl/⌘ + Enter already submits from anywhere in the form; saying so
+            is the only way anyone finds out. */}
+        <p
+          className="mr-auto flex items-center gap-1.5 text-[12px]"
+          style={{ color: "var(--color-ink-subtle)" }}
+        >
+          <kbd className="rounded border border-hairline px-1.5 py-0.5 text-[10px] font-bold">
+            Ctrl
+          </kbd>
+          +
+          <kbd className="rounded border border-hairline px-1.5 py-0.5 text-[10px] font-bold">
+            ↵
+          </kbd>
+          creates from anywhere in the form
+        </p>
         <button
           type="submit"
           disabled={pending}
           className="text-cta text-white px-8 py-4 rounded-chip transition-transform disabled:opacity-50"
           style={{
-            background:
-              "linear-gradient(135deg, rgb(2, 99, 204), rgb(0, 66, 138))",
-            boxShadow: "0 6px 16px rgba(10, 108, 255, 0.34)",
+            background: preset
+              ? "linear-gradient(135deg, #E10600, #A80400)"
+              : "linear-gradient(135deg, rgb(2, 99, 204), rgb(0, 66, 138))",
+            boxShadow: preset
+              ? "0 6px 16px rgba(225, 6, 0, 0.34)"
+              : "0 6px 16px rgba(10, 108, 255, 0.34)",
             fontWeight: 800,
             fontSize: 18,
             letterSpacing: "0.005em",
@@ -605,7 +1199,9 @@ export function NewTaskForm({ employees, clients, subjects, projectNodes = [], d
             if (pending) return;
             e.currentTarget.style.transform = "translateY(-1px)";
             e.currentTarget.style.boxShadow =
-              "0 10px 24px rgba(10, 108, 255, 0.45)";
+              preset
+                ? "0 10px 24px rgba(225, 6, 0, 0.45)"
+                : "0 10px 24px rgba(10, 108, 255, 0.45)";
           }}
           onMouseLeave={(e) => {
             e.currentTarget.style.transform = "translateY(0)";
@@ -619,10 +1215,11 @@ export function NewTaskForm({ employees, clients, subjects, projectNodes = [], d
               : "Creating…"
             : isComplete
               ? "Save details"
-              : "Create Task"}
+              : (preset?.submitLabel ?? "Create Task")}
         </button>
       </div>
     </form>
+    </CompactContext.Provider>
   );
 }
 
@@ -650,11 +1247,17 @@ function FormSection({
   hint: string;
   children: React.ReactNode;
 }) {
+  const compact = React.useContext(CompactContext);
   return (
-    <section className="flex flex-col gap-4">
-      <div className="flex items-baseline gap-2.5 border-b border-hairline pb-2">
+    <section className={`flex flex-col ${compact ? "gap-3" : "gap-4"}`}>
+      <div
+        className={`flex items-baseline gap-2.5 border-b border-hairline ${
+          compact ? "pb-1.5" : "pb-2"
+        }`}
+      >
         <span
-          className="tabular-nums text-[12px] font-black leading-none text-altus-red"
+          className="tabular-nums rounded-md px-1.5 py-1 text-[11px] font-black leading-none text-altus-red"
+          style={{ background: "color-mix(in srgb, var(--color-altus-red) 10%, transparent)" }}
           aria-hidden
         >
           {number}
@@ -666,7 +1269,7 @@ function FormSection({
           {hint}
         </span>
       </div>
-      <div className="flex flex-col gap-5">{children}</div>
+      <div className={`flex flex-col ${compact ? "gap-3.5" : "gap-5"}`}>{children}</div>
     </section>
   );
 }
@@ -1000,6 +1603,15 @@ function TagsInput({
   );
 }
 
+/**
+ * Whether this form is rendering in its compact (Project Plan) size.
+ *
+ * A context because `Field` and `FormSection` are used a dozen times each, and
+ * threading a `compact` prop through every one of them would be noise at every
+ * call site for a decision the form makes once.
+ */
+const CompactContext = React.createContext(false);
+
 function Field({
   id,
   label,
@@ -1011,14 +1623,15 @@ function Field({
   required?: boolean;
   children: React.ReactNode;
 }) {
+  const compact = React.useContext(CompactContext);
   return (
-    <div className="flex flex-col gap-2.5">
+    <div className={`flex flex-col ${compact ? "gap-1.5" : "gap-2.5"}`}>
       <label
         htmlFor={id}
         className="font-bold"
         style={{
           fontFamily: "var(--font-sans), system-ui, sans-serif",
-          fontSize: 15,
+          fontSize: compact ? 13.5 : 15,
           letterSpacing: "-0.005em",
           color: "var(--color-ink-strong)",
         }}

@@ -107,6 +107,7 @@ export const STATUS_LABELS_FALLBACK: Record<TaskStatus, string> = {
   follow_up_2:  "Follow Up 2",       // Tier-3 NEW
   follow_up_3:  "Follow Up 3",       // Tier-3 NEW
   done:         "Done",
+  abandoned:    "Abandoned",
   approved:     "Approved",
   not_approved: "Not Approved",
   cancelled:    "Cancelled",
@@ -132,6 +133,11 @@ export const STATUS_TONES_FALLBACK: Record<TaskStatus, StatusColorToken> = {
   follow_up_2:  "tangerine",
   follow_up_3:  "crimson",
   done:         "green",
+  // The one repeat in this map, and deliberate: `stone` belonged to
+  // `cancelled`, which is RETIRED and offered nowhere. Abandoned is the live
+  // statement of the same idea, so it inherits the grey rather than borrowing
+  // a colour that still means something else.
+  abandoned:    "stone",
   approved:     "purple",
   not_approved: "rose",
   cancelled:    "stone",

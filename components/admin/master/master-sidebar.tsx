@@ -52,13 +52,13 @@ const NAV: ReadonlyArray<NavItem> = [
   },
   {
     href: "/master-setup/products" as Route,
-    label: "Product Masters",
-    hint: "Category → Product → SKU",
+    label: "Product Master",
+    hint: "The product catalogue",
     icon: Boxes,
   },
   {
     href: "/master-setup/customers" as Route,
-    label: "Customer Masters",
+    label: "Customer Master",
     hint: "Profiles & classification",
     icon: Contact,
   },

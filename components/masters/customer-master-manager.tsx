@@ -2,6 +2,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { MoonStar, Sunrise } from "lucide-react";
 import type { CustomerRow } from "@/lib/queries/master-data";
 import { formatInr } from "@/lib/format";
 import {
@@ -21,6 +22,7 @@ import {
   CancelButton,
   Field,
   SaveButton,
+  NumberField,
   SelectInput,
   TextInput,
   Toggle,
@@ -29,9 +31,15 @@ import { CodeCell, RowMenu, StatusCell } from "./row-menu";
 import { MastersDialog } from "./masters-dialog";
 import { MASTERS_GRADIENT } from "./theme";
 import { BulkUpload } from "./bulk-upload";
+import { InlineNumber, InlineSelect, type SaveResult } from "@/components/admin/master/inline-edit";
+import { ACTIVE_STATUS, YES_NO } from "@/lib/forms/client-bulk-columns";
+import { MasterGrid, type GridCol } from "@/components/admin/master/master-grid";
+import { ViewSwitch, type MasterView } from "@/components/admin/master/view-switch";
+import { MASTERS_ACCENT, MASTERS_ACCENT_SOFT } from "./theme";
 import {
   STATUS_FILTER_DEFAULT,
   STATUS_FILTER_OPTIONS,
+  customerCountLabel,
   isDormant,
   matchesStatusFilter,
   statusLabel,
@@ -50,7 +58,10 @@ export function CustomerMasterManager({
 }) {
   const router = useRouter();
   const [editing, setEditing] = React.useState<CustomerRow | null | "new">(null);
+  const [view, setView] = React.useState<MasterView>("table");
   const [pending, start] = React.useTransition();
+
+  const viewSwitch = <ViewSwitch view={view} onChange={setView} accent={MASTERS_GRADIENT} />;
 
   const columns: Column<CustomerRow>[] = [
     {
@@ -67,20 +78,55 @@ export function CustomerMasterManager({
     {
       key: "customerCategory",
       header: "Customer Category",
-      render: (r) => (r.customerCategory ? <Pill tone="purple">{r.customerCategory}</Pill> : <Dash />),
+      width: 200,
+      // Editable where it sits: the category is the one field on this screen
+      // people re-classify in passing, and it comes straight off the
+      // admin-managed `customer_category` list.
+      render: (r) => (
+        <InlineSelect
+          value={r.customerCategory}
+          options={categoryOptions}
+          field="Customer Category"
+          rowLabel={r.name}
+          accent="var(--color-purple-deep)"
+          accentSoft="color-mix(in srgb, var(--color-purple) 10%, transparent)"
+          onSave={(next) => patch(r, { customerCategory: next })}
+        />
+      ),
       value: (r) => r.customerCategory ?? "",
     },
     {
       key: "creditLimit",
       header: "Credit Limit",
-      render: (r) => (r.creditLimit ? formatInr(Number(r.creditLimit)) : <Dash />),
+      width: 175,
+      // Type any figure; the steppers move it one at a time from wherever it
+      // lands, the same as the Client Master's.
+      render: (r) => (
+        <InlineNumber
+          value={r.creditLimit === null ? null : Number(r.creditLimit)}
+          step={1}
+          format={formatInr}
+          field="Credit Limit"
+          rowLabel={r.name}
+          onSave={(next) => patch(r, { creditLimit: next })}
+        />
+      ),
       value: (r) => r.creditLimit ?? "",
     },
     {
       key: "creditPeriodDays",
       header: "Credit Period",
-      render: (r) =>
-        r.creditPeriodDays != null ? `${r.creditPeriodDays} Day${r.creditPeriodDays === 1 ? "" : "s"}` : <Dash />,
+      width: 155,
+      render: (r) => (
+        <InlineNumber
+          value={r.creditPeriodDays}
+          step={1}
+          format={(n) => `${n} Day${n === 1 ? "" : "s"}`}
+          field="Credit Period"
+          rowLabel={r.name}
+          onSave={(next) => patch(r, { creditPeriodDays: next })}
+        />
+      ),
       value: (r) => r.creditPeriodDays ?? "",
     },
     {
@@ -174,6 +220,39 @@ export function CustomerMasterManager({
   const focusedCount = customers.filter((c) => c.focusedView).length;
 
   /**
+   * Save one field of one row, from a cell edited in place.
+   *
+   * Rebuilds the whole customer from the row with the change applied, because
+   * `saveMasterCustomer` takes a complete record — and deliberately carries
+   * the three fields this screen's form no longer shows, so an inline edit
+   * can't blank a value set in Master Setup or by bulk upload, exactly as the
+   * dialog does.
+   */
+  const patch = React.useCallback(
+    async (
+      row: CustomerRow,
+      changes: { customerCategory?: string | null; creditLimit?: number | null; creditPeriodDays?: number | null },
+    ): Promise<SaveResult> => {
+      const res = await saveMasterCustomer(row.id, {
+        name: row.name,
+        customerCategory: row.customerCategory,
+        creditLimit: row.creditLimit,
+        creditPeriodDays: row.creditPeriodDays,
+        focusedView: row.focusedView,
+        purchasePattern: row.purchasePattern,
+        sensitivity: row.sensitivity,
+        salesRepId: row.salesRepId,
+        isActive: row.isActive,
+        ...changes,
+      });
+      if (!res.ok) return { ok: false, error: res.error };
+      router.refresh();
+      return { ok: true };
+    },
+    [router],
+  );
+
+  /**
    * Park one customer as dormant, or bring it back.
    *
    * Per row rather than per selection, because this table has no selection —
@@ -216,6 +295,164 @@ export function CustomerMasterManager({
     });
   }
 
+  /**
+   * Park or reactivate the ticked rows — the Client Master's own control,
+   * over the same `customer_masters` rows.
+   *
+   * One button that flips, decided by the selection itself: with anything
+   * still on the register it parks, and only when every picked row is already
+   * dormant does it offer Reactivate. A pair of buttons would put "Set
+   * Dormant" next to rows that already are.
+   */
+  function toggleDormantMany(selected: CustomerRow[], clear: () => void) {
+    if (selected.length === 0) return;
+    const reactivating = selected.every(isDormant);
+    start(async () => {
+      try {
+        const res = reactivating
+          ? await reactivateCustomers(selected.map((r) => r.id))
+          : await setCustomersDormant(selected.map((r) => r.id));
+        if (!res.ok) {
+          toast.error(res.error);
+          return;
+        }
+        toast.success(
+          reactivating
+            ? `${customerCountLabel(res.count)} back on the register.`
+            : `${customerCountLabel(res.count)} set dormant — hidden until Status is set to Dormant.`,
+        );
+        clear();
+        router.refresh();
+      } catch {
+        toast.error("Couldn't reach the server. Try again in a moment.");
+      }
+    });
+  }
+
+  /**
+   * Delete the ticked rows, one at a time and stopping at the first refusal.
+   *
+   * Sequential rather than `Promise.all`: `deleteMasterCustomer` refuses a
+   * customer that is referenced elsewhere, and a parallel run would report
+   * one failure while other deletes had already gone through — the count in
+   * the message has to be true.
+   */
+  async function removeSelected(selected: CustomerRow[]) {
+    let done = 0;
+    for (const row of selected) {
+      const res = await deleteMasterCustomer(row.id);
+      if (!res.ok) {
+        toast.error(
+          done === 0
+            ? res.error
+            : `Deleted ${done} of ${selected.length}, then stopped: ${res.error}`,
+        );
+        router.refresh();
+        return { ok: false as const, error: res.error };
+      }
+      done++;
+    }
+    toast.success(`${done} customer${done === 1 ? "" : "s"} deleted.`);
+    router.refresh();
+    return { ok: true as const };
+  }
+
+  /**
+   * Grid View — the fields this screen's own form owns, as a sheet.
+   *
+   * Deliberately not every column the table can show: the KYC fields listed
+   * there are read-throughs from the Client Master, and `saveMasterCustomer`
+   * writes none of them. A cell that silently doesn't save is worse than one
+   * that isn't offered.
+   */
+  const gridColumns: GridCol<CustomerRow>[] = [
+    { key: "name", label: "Customer", width: 240, kind: "text", maxLength: 200, frozen: true, get: (r) => r.name },
+    {
+      key: "code",
+      label: "Client Number",
+      width: 130,
+      kind: "text",
+      frozen: true,
+      readOnly: true,
+      mono: true,
+      get: (r) => r.code ?? "",
+    },
+    {
+      key: "customerCategory",
+      label: "Customer Category",
+      width: 200,
+      kind: "select",
+      freeText: true,
+      options: categoryOptions,
+      get: (r) => r.customerCategory ?? "",
+    },
+    { key: "creditLimit", label: "Credit Limit", width: 160, kind: "number", get: (r) => r.creditLimit ?? "" },
+    {
+      key: "creditPeriodDays",
+      label: "Credit Period",
+      width: 150,
+      kind: "number",
+      get: (r) => (r.creditPeriodDays == null ? "" : String(r.creditPeriodDays)),
+    },
+    {
+      key: "focusedView",
+      label: "Focused View",
+      width: 150,
+      kind: "select",
+      options: YES_NO,
+      get: (r) => (r.focusedView ? "Yes" : "No"),
+    },
+    {
+      key: "isActive",
+      label: "Status",
+      width: 150,
+      kind: "select",
+      options: ACTIVE_STATUS,
+      get: (r) => (r.isActive ? "Active" : "Inactive"),
+    },
+  ];
+
+  async function saveGridRow(row: CustomerRow, cells: Record<string, string>) {
+    const num = (v: string) => {
+      const t = v.replace(/,/g, "").trim();
+      return t === "" ? null : Number(t);
+    };
+    // The three fields this form no longer shows travel unedited, so a grid
+    // edit can't blank a value set in Master Setup or by bulk upload — the
+    // same care the dialog takes.
+    const res = await saveMasterCustomer(row.id, {
+      name: cells.name ?? "",
+      customerCategory: cells.customerCategory ?? "",
+      creditLimit: num(cells.creditLimit ?? ""),
+      creditPeriodDays: num(cells.creditPeriodDays ?? ""),
+      focusedView: cells.focusedView === "Yes",
+      purchasePattern: row.purchasePattern,
+      sensitivity: row.sensitivity,
+      salesRepId: row.salesRepId,
+      isActive: cells.isActive !== "Inactive",
+    });
+    if (!res.ok) return { ok: false as const, error: res.error };
+    router.refresh();
+    return { ok: true as const };
+  }
+
+  if (view === "grid") {
+    return (
+      <MasterGrid
+        rows={customers}
+        columns={gridColumns}
+        title="Customer Master"
+        primaryKey="name"
+        primarySearchLabel="Search customer"
+        accent={MASTERS_ACCENT}
+        accentSoft={MASTERS_ACCENT_SOFT}
+        toolbar={viewSwitch}
+        save={saveGridRow}
+        noun="customers"
+      />
+    );
+  }
+
   return (
     <>
       <DataTable
@@ -224,6 +461,7 @@ export function CustomerMasterManager({
         title="Customer Master"
         sorts={sorts}
         tintHeader
+        countNoun="customers"
         exportLabel="Export to Excel"
         csvName="customer-master"
         searchPlaceholder="Search customers"
@@ -253,6 +491,7 @@ export function CustomerMasterManager({
             >
               Focused View — {focusedCount}
             </span>
+            {viewSwitch}
             <BulkUpload target="customers" label="customers" />
           </>
         }
@@ -287,6 +526,67 @@ export function CustomerMasterManager({
             matches: (r, v) => (v === "yes" ? r.focusedView : !r.focusedView),
           },
         ]}
+        // ── The Client Master's own table behaviour, over the same rows ──
+        // These two screens read one `customer_masters` register, so a job
+        // that can be done to a set of clients there is the same job here:
+        // tick the rows, park them, delete them, or open one to read every
+        // field. Keeping the capability on one screen and not the other made
+        // the choice of screen matter when it should not.
+        selectable
+        rowDetail
+        rowDetailTitle={(r) => r.name}
+        selectionActions={({ rows: selected, clear }) => {
+          const reactivating = selected.every(isDormant);
+          return (
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() => toggleDormantMany(selected, clear)}
+              title={
+                reactivating
+                  ? "Put these customers back on the register"
+                  : "Park these customers — they leave this list, the Client Master and the three directories"
+              }
+              className="inline-flex items-center gap-1.5 rounded-pill px-3 h-8 text-[13px] font-semibold text-ink-soft bg-surface-card border border-hairline disabled:opacity-50 whitespace-nowrap"
+            >
+              {reactivating ? (
+                <Sunrise size={14} strokeWidth={2.3} className="shrink-0" />
+              ) : (
+                <MoonStar size={14} strokeWidth={2.3} className="shrink-0" />
+              )}
+              {reactivating ? "Reactivate" : "Set Dormant"}
+            </button>
+          );
+        }}
+        onBulkDelete={removeSelected}
+        deleteNoun="customer"
+        onEdit={(row) => setEditing(row)}
+        // Deactivating is a one-field edit, so it goes through the same action
+        // the dialog saves with rather than a second write path that could
+        // drift from it. Every other field is carried through untouched.
+        onToggleActive={(row) =>
+          void saveMasterCustomer(row.id, {
+            name: row.name,
+            customerCategory: row.customerCategory,
+            creditLimit: row.creditLimit,
+            creditPeriodDays:
+              row.creditPeriodDays != null ? String(row.creditPeriodDays) : null,
+            focusedView: row.focusedView,
+            purchasePattern: row.purchasePattern,
+            sensitivity: row.sensitivity,
+            salesRepId: row.salesRepId,
+            isActive: !row.isActive,
+          })
+            .then((res) => {
+              if (res.ok) {
+                toast.success(`${row.name} ${row.isActive ? "deactivated" : "activated"}.`);
+                router.refresh();
+              } else {
+                toast.error(res.error);
+              }
+            })
+            .catch(() => toast.error("Couldn't reach the server. Try again in a moment."))
+        }
         emptyTitle="No customers yet."
         emptySub="Add one with New Customer, or bring your existing list in with Bulk Upload."
         actions={(row) => (
@@ -418,24 +718,32 @@ function CustomerForm({
           </SelectInput>
         </Field>
 
+        {/* Steppers rather than bare number boxes: both figures are reviewed
+            in round units — a lakh of credit, a fortnight of days — and the
+            buttons move them by exactly that. Typing still works for anything
+            off the step. */}
         <div className="grid grid-cols-2 gap-4">
-          <Field label="Credit limit" hint="Maximum credit allowed, in ₹.">
-            <TextInput
-              type="number"
-              min="0"
-              step="0.01"
+          <Field label="Credit limit">
+            <NumberField
               value={f.creditLimit}
-              onChange={(e) => set("creditLimit", e.target.value)}
+              onChange={(v) => set("creditLimit", v)}
+              step={100000}
+              placeholder="0"
+              hint={
+                f.creditLimit.trim() && Number.isFinite(Number(f.creditLimit.replace(/,/g, "")))
+                  ? formatInr(Number(f.creditLimit.replace(/,/g, "")))
+                  : "Maximum credit allowed, in ₹."
+              }
             />
           </Field>
 
-          <Field label="Credit period" hint="Days of credit allowed, e.g. 30.">
-            <TextInput
-              type="number"
-              min="0"
-              step="1"
+          <Field label="Credit period">
+            <NumberField
               value={f.creditPeriodDays}
-              onChange={(e) => set("creditPeriodDays", e.target.value)}
+              onChange={(v) => set("creditPeriodDays", v)}
+              step={15}
+              placeholder="0"
+              hint="Days of credit allowed, e.g. 30."
             />
           </Field>
         </div>

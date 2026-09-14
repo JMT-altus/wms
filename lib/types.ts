@@ -89,7 +89,15 @@ export interface EmployeeStatusRow {
 export interface TopPerformer {
   employeeId: string;
   employeeName: string;
+  /** The person's team, for the chip under their name on the leaderboard. */
+  department: string;
   doneCount: number;
+  /** Of `doneCount`, how many landed on or before the due date. Tasks with no
+   *  due date can't be judged and count as neither on time nor late. */
+  onTimeCount: number;
+  /** Mean days from a task being raised to it being completed, over the
+   *  completions in scope. Null when nothing here can be measured. */
+  avgTurnaroundDays: number | null;
   weeklySparkline: number[];
   /** 1-based position in the GLOBAL ranking (ties share the better rank) —
    *  stays honest even when the dashboard is filtered to a subset of people. */
@@ -202,6 +210,16 @@ export interface TaskListRow {
   doerDept: string | null;
   initiatorId: string;
   initiatorName: string | null;
+  /**
+   * The project this task belongs to, when it was created from one or linked
+   * to one afterwards.
+   *
+   * Carried on the LIST row, not just the detail: a task's project is part of
+   * what the task IS, and a list that hides it makes "which project is this
+   * for?" a question you answer by opening every row.
+   */
+  projectNodeId: string | null;
+  projectName: string | null;
   createdAt: Date;
   /** The ORIGINAL committed deadline. Immutable after creation — never
    *  compare against this directly; use pickEffectiveDue(row). */

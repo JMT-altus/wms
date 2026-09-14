@@ -9,6 +9,7 @@ import { Plus, X, Upload, Zap } from "lucide-react";
 import { NewTaskForm } from "./new-task-form";
 import { TaskImport } from "./task-import";
 import { QuickDumpDialog } from "./quick-dump-dialog";
+import type { ProjectNodeOption } from "@/lib/queries/projects";
 
 interface Props {
   employees: { id: string; name: string }[];
@@ -17,7 +18,7 @@ interface Props {
   /** Subject roster for the "Subject" picker. */
   subjects: string[];
   /** Project tree nodes for the optional Project link. */
-  projectNodes?: { id: string; label: string }[];
+  projectNodes?: ProjectNodeOption[];
   /** Audience options for the visibility picker. */
   departments?: { id: string; name: string }[];
   /** Optional defaults — usually pre-fill initiator = current user. */
@@ -128,11 +129,14 @@ export function NewTaskDialog({ employees, clients, subjects, projectNodes, depa
           <Tooltip.Root>
             <Tooltip.Trigger asChild>
               <Dialog.Trigger asChild>
-                {/* Icon only. The label and the ⌨ N badge moved into the
-                    tooltip: this button never changes what it does, so the
-                    word "New Task" was costing header width to restate an
-                    icon everyone already reads. `aria-label` keeps it named
-                    for screen readers.
+                {/* The plus, with the key that does the same thing printed on
+                    its corner.
+
+                    The N badge used to live in the tooltip, which meant the
+                    shortcut was only discoverable by hovering for most of a
+                    second — so nobody found it, and the fastest way into this
+                    dialog went unused. Printing the key on the button is how
+                    a shortcut gets learned.
 
                     Carries the app's brand gradient (the same blue → teal as
                     the header hairline and .audit-filter-chip-active), not the
@@ -140,7 +144,8 @@ export function NewTaskDialog({ employees, clients, subjects, projectNodes, depa
                     primary action, not a warning. */}
                 <button
                   type="button"
-                  aria-label="New task"
+                  aria-label="New task (shortcut: N)"
+                  aria-keyshortcuts="N"
                   className="group relative inline-flex size-8 items-center justify-center rounded-lg text-white outline-none focus-visible:ring-2 focus-visible:ring-white/60"
                   style={{
                     background:
@@ -167,6 +172,32 @@ export function NewTaskDialog({ employees, clients, subjects, projectNodes, depa
                   }}
                 >
                   <Plus size={17} strokeWidth={2.8} />
+                  {/* The shortcut key, pinned to the button's top-right corner
+                      rather than stacked under the plus — the button keeps its
+                      32px square and the header band its spacing, and the
+                      badge reads as a label ON the button instead of a second
+                      row inside it.
+
+                      Header navy, not another translucent white: over a blue →
+                      teal gradient a white-on-white chip goes soft, and this
+                      has to read as a key you can press. */}
+                  <span
+                    aria-hidden
+                    className="absolute grid place-items-center rounded-[4px] font-bold"
+                    style={{
+                      top: -5,
+                      right: -5,
+                      width: 14,
+                      height: 13,
+                      fontSize: 9,
+                      lineHeight: 1,
+                      color: "#ffffff",
+                      background: "#0F172A",
+                      boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.45)",
+                    }}
+                  >
+                    N
+                  </span>
                 </button>
               </Dialog.Trigger>
             </Tooltip.Trigger>

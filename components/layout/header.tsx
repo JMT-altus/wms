@@ -1,6 +1,6 @@
 import { headers } from "next/headers";
-import { LiveIndicator } from "./live-indicator";
 import { FullscreenToggle } from "@/components/masters/fullscreen-toggle";
+import { NotificationBell } from "@/components/header/notification-bell";
 import { MobileMenuServer } from "./mobile-menu-server";
 import { UserMenuServer } from "@/components/header/user-menu-server";
 import { NewTaskTrigger } from "@/components/header/new-task-trigger";
@@ -104,17 +104,17 @@ export async function DashboardHeader({
               same items below md, where the rail is hidden. */}
           <div className="flex-1 min-w-0" />
 
-          {/* RIGHT: live indicator + actions + avatar. Every item is shrink-0;
-              secondary chrome (Live) hides below 2xl and the search collapses
-              to an icon there too, so the nav always has room and nothing ever
-              overlaps. The admin shortcut lives in the avatar menu — a standing
-              ADMIN badge restated a fact the user already knows about
-              themselves on every screen. */}
+          {/* RIGHT: actions + avatar. Every item is shrink-0 and the search
+              collapses to an icon below 2xl, so the nav always has room and
+              nothing ever overlaps. The admin shortcut lives in the avatar
+              menu — a standing ADMIN badge restated a fact the user already
+              knows about themselves on every screen. */}
           <div className="flex items-center gap-2.5 2xl:gap-3 shrink-0 max-xl:ml-auto max-md:gap-1.5">
-            <span className="max-2xl:hidden">
-              <LiveIndicator />
-            </span>
             {showNewTask && <NewTaskTrigger />}
+            {/* Unread notifications — the same circle as the fullscreen
+                toggle beside it, carrying a real count rather than the
+                avatar's easily-missed dot. */}
+            <NotificationBell variant="header" />
             {/* Full screen — folds away the browser chrome AND the app's own
                 left rail (globals.css keys off data-app-fullscreen). Hidden on
                 phones, where the rail is already gone and the API is flaky. */}

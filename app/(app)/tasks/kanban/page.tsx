@@ -3,6 +3,9 @@ import { DashboardFooter } from "@/components/layout/footer";
 import { FilterBar } from "@/components/layout/filter-bar";
 import { KanbanBoard } from "@/components/tasks/kanban-board";
 import { listBoardTasks, listDistinctSubjects, getTaskById } from "@/lib/queries/tasks";
+import { listBoardGoals } from "@/lib/queries/weekly-goals";
+import { TaskSearchProvider } from "@/components/tasks/task-search-context";
+import { istYmd } from "@/lib/weekly-goals/week";
 import { listEmployeeOptions } from "@/lib/queries/employees";
 import { listActiveClientNames } from "@/lib/queries/clients";
 import { listActiveDepartmentNames } from "@/lib/queries/departments";
@@ -37,8 +40,11 @@ export default async function KanbanPage({ searchParams }: PageProps) {
     defaultDoerId: me.isAdmin ? undefined : me.id,
   });
 
-  const [tasks, statusDisplay, employees, org, subjects, clients, departments] = await Promise.all([
+  const [tasks, goals, statusDisplay, employees, org, subjects, clients, departments] = await Promise.all([
     listBoardTasks(filters),
+    // Non-admins see only their own goals — the same lock the weekly-goals
+    // planner applies.
+    listBoardGoals(filters, me.isAdmin ? undefined : me.id),
     getStatusDisplayMap(),
     listEmployeeOptions(),
     getOrgSettings(),
@@ -72,9 +78,11 @@ export default async function KanbanPage({ searchParams }: PageProps) {
     d ? d.toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10);
 
   return (
-    <>
+    <TaskSearchProvider>
       <DashboardHeader generatedAt={new Date()} />
       <FilterBar
+        searchPlaceholder="Search Kanban..."
+
         employees={employeeOptions}
         subjects={subjects}
         departments={departments}
@@ -101,28 +109,30 @@ export default async function KanbanPage({ searchParams }: PageProps) {
           className="relative overflow-hidden rounded-section border border-hairline p-5 max-md:p-4"
           style={{ background: "var(--color-surface-card)" }}
         >
-          <header className="relative mb-6 flex items-end justify-between gap-4 flex-wrap">
-            <div>
-              <h1
-                className="text-ink-strong"
-                style={{
-                  fontFamily: "var(--font-serif)",
-                  fontStyle: "italic",
-                  fontWeight: 500,
-                  fontSize: 40,
-                  letterSpacing: "-0.02em",
-                }}
-              >
-                Kanban
-              </h1>
-              <p className="mt-1.5 text-ink-soft" style={{ fontSize: 15.5 }}>
-                Drag a task between columns to change its status.
-                {me.isAdmin ? " Drag a column header to reorder the board." : ""}
-              </p>
-            </div>
+          {/* Brand rule across the top edge of the board panel — the same
+              signature the other module panels wear. */}
+          <span
+            aria-hidden
+            className="absolute inset-x-0 top-0 h-[3px]"
+            style={{ background: "var(--color-altus-red)" }}
+          />
+          <header className="relative mb-6 flex items-center justify-between gap-4">
+            {/* Spacer, so the title is centred against the button opposite. */}
+            <span aria-hidden className="w-[132px] shrink-0 max-md:hidden" />
+            <h1
+              className="min-w-0 flex-1 text-center text-ink-strong max-md:text-left"
+              style={{
+                fontFamily: "var(--font-serif)",
+                fontWeight: 700,
+                fontSize: 40,
+                letterSpacing: "-0.02em",
+              }}
+            >
+              Kanban View
+            </h1>
             <Link
               href={"/tasks" as Route}
-              className="text-[14px] font-semibold text-ink-soft hover:text-ink-strong transition-colors"
+              className="shrink-0 rounded-[10px] border border-hairline-strong bg-white px-4 py-2.5 text-[14px] font-semibold text-ink-soft transition-colors hover:border-altus-red hover:text-ink-strong"
             >
               List View →
             </Link>
@@ -130,6 +140,8 @@ export default async function KanbanPage({ searchParams }: PageProps) {
           <div className="relative">
             <KanbanBoard
               tasks={tasks}
+              goals={goals}
+              today={istYmd(new Date())}
               labels={labels}
               tones={tones}
               isAdmin={me.isAdmin}
@@ -157,6 +169,6 @@ export default async function KanbanPage({ searchParams }: PageProps) {
           }}
         />
       )}
-    </>
+    </TaskSearchProvider>
   );
 }

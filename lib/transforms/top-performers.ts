@@ -1,5 +1,6 @@
 import type { Employee, Task } from "@/db/schema";
 import type { TopPerformer } from "@/lib/types";
+import { isDoneLate } from "@/lib/task-late";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const COMPLETED_STATUSES = new Set(["done", "approved"]);
@@ -20,6 +21,11 @@ export function computeTopPerformers(
 
   const counts = new Map<string, number>();
   const sparks = new Map<string, number[]>();
+  // On-time and turnaround live beside the count: a leaderboard of raw volume
+  // rewards whoever closes the most tickets regardless of whether any of them
+  // landed on the promised day.
+  const onTime = new Map<string, number>();
+  const turnaroundDays = new Map<string, { sum: number; n: number }>();
 
   const today = startOfDay(now);
 
@@ -27,6 +33,28 @@ export function computeTopPerformers(
     if (!COMPLETED_STATUSES.has(t.status)) continue;
     if (t.doerId == null) continue; // unassigned pool tasks aren't anyone's completion
     counts.set(t.doerId, (counts.get(t.doerId) ?? 0) + 1);
+
+    // "On time" is the app's own rule, inverted: a completion is late when it
+    // lands on a calendar day after the due day (lib/task-late.ts). A task
+    // with no due date is unjudgeable, so it counts as neither.
+    if (t.completedAt && t.dueAt) {
+      const late = isDoneLate({
+        status: t.status,
+        completedAt: t.completedAt,
+        dueAt: t.dueAt,
+      });
+      if (!late) onTime.set(t.doerId, (onTime.get(t.doerId) ?? 0) + 1);
+    }
+    if (t.completedAt) {
+      const days = Math.max(
+        0,
+        (t.completedAt.getTime() - t.createdAt.getTime()) / MS_PER_DAY,
+      );
+      const acc = turnaroundDays.get(t.doerId) ?? { sum: 0, n: 0 };
+      acc.sum += days;
+      acc.n += 1;
+      turnaroundDays.set(t.doerId, acc);
+    }
 
     const referenceDate = t.completedAt ?? t.createdAt;
     const d = startOfDay(referenceDate);
@@ -43,10 +71,14 @@ export function computeTopPerformers(
     .map(([employeeId, doneCount]) => {
       const emp = employeeById.get(employeeId);
       if (!emp) return null;
+      const turn = turnaroundDays.get(employeeId);
       return {
         employeeId,
         employeeName: emp.name,
+        department: emp.department ?? "",
         doneCount,
+        onTimeCount: onTime.get(employeeId) ?? 0,
+        avgTurnaroundDays: turn && turn.n > 0 ? turn.sum / turn.n : null,
         weeklySparkline: sparks.get(employeeId) ?? new Array(7).fill(0),
         rank: 0, // assigned below
       } satisfies TopPerformer;
@@ -89,7 +121,10 @@ export function pickPerformersForEmployees(
       return {
         employeeId: id,
         employeeName: emp.name,
+        department: emp.department ?? "",
         doneCount: 0,
+        onTimeCount: 0,
+        avgTurnaroundDays: null,
         weeklySparkline: new Array(7).fill(0),
         rank: unrankedRank,
       } satisfies TopPerformer;

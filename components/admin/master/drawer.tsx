@@ -1,6 +1,6 @@
 "use client";
 import * as React from "react";
-import { X } from "lucide-react";
+import { Minus, Plus, X } from "lucide-react";
 
 /**
  * Right-hand drawer used by every master-data create/edit form.
@@ -144,6 +144,91 @@ export function TextInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
 
 export function SelectInput(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
   return <select {...props} className={inputCls} />;
+}
+
+/**
+ * A figure with −/+ buttons either side, for the ones people nudge rather
+ * than retype — a credit limit reviewed up by a lakh, a credit period moved
+ * from 30 days to 45.
+ *
+ * The value stays a string, like every other input on these forms: an empty
+ * box has to mean "not set", and `type="number"` bound to a number would make
+ * that a 0. Typed input is still free, so anything off the step grid can be
+ * entered directly.
+ */
+export function NumberField({
+  value,
+  onChange,
+  step = 1,
+  min = 0,
+  placeholder,
+  hint,
+}: {
+  value: string;
+  onChange: (next: string) => void;
+  step?: number;
+  min?: number;
+  placeholder?: string;
+  /** Rendered under the box — the figure formatted, usually. */
+  hint?: React.ReactNode;
+}) {
+  const current = Number(value.replace(/,/g, ""));
+  const valid = value.trim() !== "" && Number.isFinite(current);
+
+  const bump = (dir: 1 | -1) => {
+    const base = valid ? current : min;
+    // Snap onto the step grid, so +/- from a typed 47,500 lands on round
+    // numbers instead of carrying the odd 2,500 along forever.
+    const next =
+      dir === 1 ? Math.floor(base / step) * step + step : Math.ceil(base / step) * step - step;
+    onChange(String(Math.max(min, next)));
+  };
+
+  const btn =
+    "shrink-0 grid place-items-center rounded-chip bg-surface-soft border border-hairline text-ink-muted hover:text-ink-strong disabled:opacity-35";
+
+  return (
+    <div>
+      <div className="flex items-stretch gap-2">
+        <button
+          type="button"
+          onClick={() => bump(-1)}
+          disabled={valid && current <= min}
+          aria-label="Decrease"
+          title={`Decrease by ${step.toLocaleString("en-IN")}`}
+          className={btn}
+          style={{ width: 40, height: 44 }}
+        >
+          <Minus size={16} strokeWidth={2.6} />
+        </button>
+        <input
+          value={value}
+          inputMode="numeric"
+          placeholder={placeholder}
+          onChange={(e) => {
+            const raw = e.target.value;
+            if (raw === "" || /^[0-9,]*\.?[0-9]*$/.test(raw)) onChange(raw);
+          }}
+          className={`${inputCls} text-right tabular-nums`}
+        />
+        <button
+          type="button"
+          onClick={() => bump(1)}
+          aria-label="Increase"
+          title={`Increase by ${step.toLocaleString("en-IN")}`}
+          className={btn}
+          style={{ width: 40, height: 44 }}
+        >
+          <Plus size={16} strokeWidth={2.6} />
+        </button>
+      </div>
+      {hint && (
+        <span className="block mt-1 text-ink-subtle" style={{ fontSize: 12 }}>
+          {hint}
+        </span>
+      )}
+    </div>
+  );
 }
 
 export function TextArea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {

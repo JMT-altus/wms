@@ -698,3 +698,46 @@ async function resolveActorNameFor(notificationId: string): Promise<string | nul
     .limit(1);
   return rows[0]?.name ?? null;
 }
+
+/* ------------------------------------------------------------------ */
+/* Dashboard section report — the section's own PDF, emailed           */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Send one dashboard section as a PDF attachment.
+ *
+ * Plain HTML rather than a React template: the mail is a covering note for the
+ * attachment, and the attachment is the report. Recipients are resolved by the
+ * caller (the server action), never by the browser — the client sends the
+ * numbers, not the address list.
+ */
+export async function sendSectionReportEmail(args: {
+  to: string;
+  recipientName?: string;
+  title: string;
+  subtitle?: string;
+  context?: string;
+  filename: string;
+  pdf: Buffer;
+}): Promise<{ id: string | null; error: string | null }> {
+  try {
+    const resend = getResend();
+    if (!resend) return { id: null, error: "RESEND_API_KEY not set" };
+    const greeting = args.recipientName ? `Hi ${args.recipientName},` : "Hi,";
+    const lines = [args.subtitle, args.context].filter(Boolean).join(" · ");
+    const { data, error } = await resend.emails.send({
+      from: FROM,
+      to: args.to,
+      subject: clampSubject(`${args.title} — WMS dashboard report`),
+      html: `<p>${greeting}</p>
+<p>Attached is the <strong>${args.title}</strong> section of the WMS dashboard, as it was filtered when you shared it.</p>
+${lines ? `<p style="color:#475569">${lines}</p>` : ""}
+<p style="color:#94a3b8;font-size:12px">Sent from the JMT Drive Solutions dashboard.</p>`,
+      attachments: [{ filename: args.filename, content: args.pdf.toString("base64") }],
+    });
+    if (error) return { id: null, error: error.message };
+    return { id: data?.id ?? null, error: null };
+  } catch (err) {
+    return { id: null, error: errorMessage(err) };
+  }
+}

@@ -13,6 +13,7 @@ import {
   ShieldCheck,
   Info,
   type LucideIcon,
+  Waypoints,
 } from "lucide-react";
 import { fireToast } from "@/lib/toast";
 import { MODULES, MODULE_IDS, type ModuleId } from "@/lib/nav-modules";
@@ -43,6 +44,7 @@ const MODULE_ICONS: Record<ModuleId, LucideIcon> = {
   training: GraduationCap,
   masters: Boxes,
   targets: Target,
+  project: Waypoints,
 };
 
 type Tab = "everyone" | "departments" | "people";

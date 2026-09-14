@@ -16,6 +16,13 @@ export const TASK_STATUSES = [
   "follow_up_2",    // NEW
   "follow_up_3",    // NEW
   "done",
+  /**
+   * Work STOPPED and will not be finished — the doer's own report, not a
+   * verdict. Distinct from `cancelled` (a legacy ruling, retired) and from the
+   * owner's `on_hold` (which expects the work to resume). Terminal, so it
+   * never counts as pending.
+   */
+  "abandoned",
   // Legacy terminal values — kept for backward compat with imported data.
   // New code should use the `approval_status` column instead.
   "approved",
@@ -39,6 +46,10 @@ export const USER_TASK_STATUSES = [
   "on_hold",
   "need_info",
   "done",
+  // Here as well as in the doer list: this drives the kanban columns and the
+  // filter dropdowns, and a status you can set but cannot then find or filter
+  // for is how work disappears.
+  "abandoned",
 ] as const satisfies readonly TaskStatus[];
 
 /** What the DOER's own status picker offers — the worker's progress report,
@@ -57,6 +68,9 @@ export const DOER_TASK_STATUSES = [
   "follow_up",
   "need_info",
   "done",
+  // Giving up on a piece of work is a REPORT about it, not a ruling on it —
+  // the doer is the one who knows, so it belongs in their list beside "Done".
+  "abandoned",
 ] as const satisfies readonly TaskStatus[];
 
 export const PENDING_STATUSES = [
@@ -133,6 +147,53 @@ export const APPROVAL_LEVEL_LABELS: Record<ApprovalLevel, string> = {
   manager: "Manager approved",
   admin: "Final sign-off",
 };
+
+/* ── Project Plan (migration 0103) ────────────────────────────────────────
+ *
+ * Two vocabularies on the plan tree, exactly mirroring the two the task module
+ * already runs on — the doer's progress report and the manager's verdict —
+ * because a project and the actions under it must never be described in two
+ * different languages.
+ *
+ * The working six ARE `DOER_TASK_STATUSES`, spelled out rather than aliased so
+ * the DB CHECK constraint in 0103 and this list can be read side by side. The
+ * `satisfies` below is what keeps them from drifting apart: drop a value from
+ * the doer list and this file stops compiling.
+ */
+export const PLAN_WORKING_STATUSES = [
+  "dont_know", // displays as "Not Read"
+  "not_started",
+  "initiated",
+  "follow_up",
+  "need_info",
+  "done",
+  "abandoned",
+] as const satisfies typeof DOER_TASK_STATUSES;
+export type PlanWorkingStatus = (typeof PLAN_WORKING_STATUSES)[number];
+
+/**
+ * The verdicts an owner or admin may rule.
+ *
+ * `archived` is in this list because it is one of the things a person picks
+ * from the same menu — but it is STORED as `is_archived`, never as a seventh
+ * string, which is why the DB CHECK constraint only knows the first four.
+ */
+export const PLAN_RESTRICTED_STATUSES = [
+  "not_approved",
+  "approved",
+  "on_hold",
+  "cancelled",
+  "archived",
+] as const;
+export type PlanRestrictedStatusChoice =
+  (typeof PLAN_RESTRICTED_STATUSES)[number];
+
+/** What may actually land in `project_nodes.approval_status` — the choices
+ *  above minus `archived`, which is a boolean column of its own. */
+export type PlanRestrictedStatus = Exclude<
+  PlanRestrictedStatusChoice,
+  "archived"
+>;
 
 /**
  * Raw timer presses (migration 0102). `text` in the DB rather than a pgEnum so

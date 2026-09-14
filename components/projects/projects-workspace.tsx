@@ -44,8 +44,15 @@ import {
 import { fireToast } from "@/lib/toast";
 import type { ProjectTreeNode } from "@/lib/queries/projects";
 import type { EmployeeOption } from "@/lib/queries/employees";
+import { CHILD_KIND, KIND_LABEL, type PlanKind } from "@/lib/plan/levels";
 
-type NodeKind = "project" | "milestone" | "result" | "action" | "sub_action";
+/**
+ * The level model now lives in one place — lib/plan/levels.ts — because the
+ * Project Plan module derives every reference number from it and a second copy
+ * here would let the two screens disagree about what a Result may contain.
+ * 0103 widened the tree to six levels; this file gets that for free.
+ */
+type NodeKind = PlanKind;
 
 /** Roster for owner / team-member pickers, shared via context so it doesn't
  *  have to thread through the recursive tree. */
@@ -54,21 +61,6 @@ function useEmployees() {
   return React.useContext(EmployeesContext);
 }
 
-const CHILD_KIND: Record<NodeKind, NodeKind | null> = {
-  project: "milestone",
-  milestone: "result",
-  result: "action",
-  action: "sub_action",
-  sub_action: null,
-};
-
-const KIND_LABEL: Record<NodeKind, string> = {
-  project: "Project",
-  milestone: "Milestone",
-  result: "Result",
-  action: "Action",
-  sub_action: "Sub-Action",
-};
 
 // Recursive sum of all linked tasks across the subtree. The DB only carries
 // per-node counts; aggregate counts are computed in JS once on render.

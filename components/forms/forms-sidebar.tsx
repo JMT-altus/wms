@@ -12,6 +12,7 @@ import {
   Contact,
   Landmark,
   SlidersHorizontal,
+  TrendingUp,
   Trash2,
   ArrowLeft,
   type LucideIcon,
@@ -62,6 +63,12 @@ const NAV: ReadonlyArray<NavItem> = [
     label: "Client Master",
     hint: "Every onboarded client",
     icon: FileText,
+  },
+  {
+    href: `${BASE}/credit-limit` as Route,
+    label: "Credit Limit",
+    hint: "Which limits went up or down",
+    icon: TrendingUp,
   },
   {
     href: `${BASE}/contacts` as Route,

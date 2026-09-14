@@ -1,8 +1,23 @@
+import * as React from "react";
+import Link from "next/link";
+import type { Route } from "next";
 import { format, formatDistanceToNow } from "date-fns";
-import { Calendar, Sparkles, ArrowRight } from "lucide-react";
+import { Calendar, ChevronRight, Sparkles, ArrowRight } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
 import type { TaskDetail as TaskDetailModel } from "@/lib/queries/tasks";
+import type { PlanTrailStep } from "@/lib/queries/plan";
+import { isExecutable, type PlanKind } from "@/lib/plan/levels";
 import type { TaskPriority } from "@/db/enums";
+
+/** What each rung of the plan is called, for the lineage strip. */
+const PLAN_STEP_LABEL: Partial<Record<PlanKind, string>> = {
+  project: "Project",
+  milestone: "Milestone",
+  result: "Result",
+  action: "Action",
+  sub_action: "Sub-action",
+  sub_sub_action: "Sub-sub-action",
+};
 
 const PRIORITY_PILL: Record<
   TaskPriority,
@@ -35,7 +50,23 @@ const PRIORITY_PILL: Record<
  * eyebrow priority chip, oversized serif subject, meta avatars row,
  * then the description body and (when present) internal notes.
  */
-export function TaskDetail({ task }: { task: TaskDetailModel }) {
+export function TaskDetail({
+  task,
+  planTrail = [],
+}: {
+  task: TaskDetailModel;
+  /**
+   * The plan rows above this task — Project › Milestone › Result — when it
+   * was raised from an Action or Sub-action.
+   *
+   * A task from the plan used to arrive on this page with no way to tell what
+   * it belonged to: the row it came from is four levels down a tree this
+   * screen cannot see, and "New action" on its own says nothing about why the
+   * work exists. The task has always carried `project_node_id`; this is that
+   * id read out loud.
+   */
+  planTrail?: PlanTrailStep[];
+}) {
   const eyebrow = PRIORITY_PILL[task.priority];
   // sir's changes #11 — the HERO is the task itself (its description = the
   // work to do), not the client name. The form writes Client Name into both
@@ -49,6 +80,24 @@ export function TaskDetail({ task }: { task: TaskDetailModel }) {
   const overdue =
     task.dueAt.getTime() < Date.now() &&
     !["approved", "cancelled", "transferred"].includes(task.status);
+
+  /**
+   * The rungs worth drawing.
+   *
+   * Every container the task sits under, plus the executable rows above it —
+   * dropping only the LAST rung when that rung is the executable row the task
+   * IS, because the headline below already says its name.
+   *
+   * It used to drop the last rung unconditionally, which was right for a task
+   * hanging off an Action and wrong for one hanging off a Result: the Result
+   * was the last rung, so the very thing the task was filed under went
+   * unnamed. Tasks created through the new form's Project → Milestone →
+   * Result picker all hang off a Result.
+   */
+  const rungs = React.useMemo(() => {
+    const last = planTrail[planTrail.length - 1];
+    return last && isExecutable(last.kind) ? planTrail.slice(0, -1) : planTrail;
+  }, [planTrail]);
 
   return (
     <article className="relative">
@@ -83,6 +132,65 @@ export function TaskDetail({ task }: { task: TaskDetailModel }) {
           {eyebrow.label}
         </span>
       </div>
+
+      {/* WHERE THIS CAME FROM — the plan lineage, above the headline, because
+          it is the context you read the headline IN. Each rung carries its
+          REF ("M2", "RD") beside the name: that is how the plan is quoted in
+          conversation, and a milestone named "New Milestone" three times over
+          is only tellable apart by its number.
+          Each is a link into the plan, scoped to its project, so "which
+          project is this?" is one click rather than a hunt through the tree. */}
+      {rungs.length > 0 && (
+        <nav
+          aria-label="Where this sits in the plan"
+          className="flex items-center gap-1.5 flex-wrap mb-3"
+        >
+          {rungs.map((step, i) => (
+            <React.Fragment key={step.id}>
+              {i > 0 && (
+                <ChevronRight
+                  size={13}
+                  strokeWidth={2.6}
+                  className="text-ink-subtle shrink-0"
+                  aria-hidden
+                />
+              )}
+              <Link
+                href={
+                  `/project-plan/views?project=${planTrail[0]!.id}` as Route
+                }
+                title={`${PLAN_STEP_LABEL[step.kind] ?? step.kind} ${step.ref}: ${step.name}`}
+                className="inline-flex items-center gap-1.5 rounded-pill px-2.5 h-6 hover:underline"
+                style={{
+                  fontSize: 12,
+                  fontWeight: 600,
+                  background: "var(--color-surface-soft)",
+                  border: "1px solid var(--color-hairline)",
+                  color: i === 0 ? "var(--color-ink-strong)" : "var(--color-ink-muted)",
+                }}
+              >
+                <span
+                  className="uppercase tracking-[0.08em] shrink-0"
+                  style={{ fontSize: 9.5, color: "var(--color-ink-subtle)" }}
+                >
+                  {PLAN_STEP_LABEL[step.kind] ?? step.kind}
+                </span>
+                {step.ref && (
+                  <span
+                    className="shrink-0 tabular-nums"
+                    style={{ fontSize: 11, fontWeight: 800, color: "var(--color-altus-red)" }}
+                  >
+                    {step.ref}
+                  </span>
+                )}
+                <span className="truncate" style={{ maxWidth: 260 }}>
+                  {step.name}
+                </span>
+              </Link>
+            </React.Fragment>
+          ))}
+        </nav>
+      )}
 
       {/* HEADLINE — the task itself (its description). The biggest element on
           the page; serif, sized to stay legible whether it's a phrase or a

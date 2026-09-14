@@ -19,6 +19,7 @@ const COLORS: Record<TaskStatus, string> = {
   follow_up_2:  "orange",
   follow_up_3:  "orange",
   done:         "green",
+  abandoned:    "stone",   // light grey — see STATUS_TONES_FALLBACK
   approved:     "purple",
   not_approved: "rose",    // light red
   cancelled:    "slate",   // dark grey
@@ -32,6 +33,9 @@ const MISSING_SEED: { status: TaskStatus; label: string; colorToken: string; dis
   { status: "follow_up_1", label: "Follow Up 1", colorToken: "orange", displayOrder: 42 },
   { status: "follow_up_2", label: "Follow Up 2", colorToken: "orange", displayOrder: 44 },
   { status: "follow_up_3", label: "Follow Up 3", colorToken: "orange", displayOrder: 46 },
+  // Seeded by migration 0106 as well; here too so a database that predates it
+  // and runs this script still ends up with an admin-editable row.
+  { status: "abandoned",   label: "Abandoned",   colorToken: "stone",  displayOrder: 75 },
 ];
 
 async function main() {

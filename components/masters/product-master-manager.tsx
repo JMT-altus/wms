@@ -24,6 +24,11 @@ import { CodeCell, RowMenu, StatusCell } from "./row-menu";
 import { MastersDialog } from "./masters-dialog";
 import { MASTERS_GRADIENT } from "./theme";
 import { BulkUpload } from "./bulk-upload";
+import { useRouter } from "next/navigation";
+import { ACTIVE_STATUS } from "@/lib/forms/client-bulk-columns";
+import { MasterGrid, type GridCol } from "@/components/admin/master/master-grid";
+import { ViewSwitch, type MasterView } from "@/components/admin/master/view-switch";
+import { MASTERS_ACCENT, MASTERS_ACCENT_SOFT } from "./theme";
 
 const ACCENT = MASTERS_GRADIENT;
 /** The Save button lives in the dialog footer, outside the form — see SaveButton. */
@@ -31,7 +36,51 @@ const FORM_ID = "masters-product-form";
 
 export function ProductMasterManager({ products }: { products: ProductRow[] }) {
   const [editing, setEditing] = React.useState<ProductRow | null | "new">(null);
+  const [view, setView] = React.useState<MasterView>("table");
   const [pending, start] = React.useTransition();
+  const router = useRouter();
+
+  const viewSwitch = <ViewSwitch view={view} onChange={setView} accent={MASTERS_GRADIENT} />;
+
+  /**
+   * Grid View — the four fields a product has, as a sheet.
+   *
+   * Code and Specification are where the pass happens: a batch of products
+   * arrives without either, and filling them in one dialog at a time is the
+   * job this view exists to remove.
+   */
+  const gridColumns: GridCol<ProductRow>[] = [
+    { key: "name", label: "Name", width: 260, kind: "text", maxLength: 200, frozen: true, get: (r) => r.name },
+    { key: "code", label: "Code", width: 180, kind: "text", maxLength: 60, get: (r) => r.code ?? "" },
+    {
+      key: "specification",
+      label: "Specification",
+      width: 420,
+      kind: "text",
+      maxLength: 2000,
+      get: (r) => r.specification ?? "",
+    },
+    {
+      key: "isActive",
+      label: "Status",
+      width: 150,
+      kind: "select",
+      options: ACTIVE_STATUS,
+      get: (r) => (r.isActive ? "Active" : "Inactive"),
+    },
+  ];
+
+  async function saveGridRow(row: ProductRow, cells: Record<string, string>) {
+    const res = await saveMasterProduct(row.id, {
+      name: cells.name ?? "",
+      code: cells.code ?? "",
+      specification: cells.specification ?? "",
+      isActive: cells.isActive !== "Inactive",
+    });
+    if (!res.ok) return { ok: false as const, error: res.error };
+    router.refresh();
+    return { ok: true as const };
+  }
 
   const columns: Column<ProductRow>[] = [
     {
@@ -92,6 +141,23 @@ export function ProductMasterManager({ products }: { products: ProductRow[] }) {
     });
   }
 
+  if (view === "grid") {
+    return (
+      <MasterGrid
+        rows={products}
+        columns={gridColumns}
+        title="Product Master"
+        primaryKey="name"
+        primarySearchLabel="Search product"
+        accent={MASTERS_ACCENT}
+        accentSoft={MASTERS_ACCENT_SOFT}
+        toolbar={viewSwitch}
+        save={saveGridRow}
+        noun="products"
+      />
+    );
+  }
+
   return (
     <>
       <DataTable
@@ -106,7 +172,12 @@ export function ProductMasterManager({ products }: { products: ProductRow[] }) {
         onNew={() => setEditing("new")}
         newLabel="New Product"
         accent={ACCENT}
-        extraActions={<BulkUpload target="products" label="products" />}
+        extraActions={
+          <>
+            {viewSwitch}
+            <BulkUpload target="products" label="products" />
+          </>
+        }
         filters={[
           {
             key: "status",

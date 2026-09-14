@@ -46,13 +46,13 @@ type BulkResult =
   | { ok: false; error: string };
 
 /**
- * The manager's rulings, grouped apart from Doer Status on purpose: these five
- * entries write TWO DIFFERENT COLUMNS. Hold and Done are points on the doer's
- * lifecycle (`status`); Approved / Not Approved / Cancelled are the manager's
- * verdict on finished work (`approval_status`). Collapsing the two axes into
+ * The initiator's rulings, grouped apart from Doer Status on purpose: these
+ * five entries write TWO DIFFERENT COLUMNS. Hold and Done are points on the
+ * doer's lifecycle (`status`); Approved / Not Approved / Cancelled are the
+ * ruling on finished work (`approval_status`). Collapsing the two axes into
  * one dropdown is the mistake the split column exists to prevent.
  */
-const MANAGER_ACTIONS = [
+const INITIATOR_ACTIONS = [
   { label: "Mark Hold On", kind: "status", value: "on_hold" },
   { label: "Mark Approved", kind: "approval", value: "approved" },
   { label: "Mark Not Approved", kind: "approval", value: "not_approved" },
@@ -66,10 +66,17 @@ const MANAGER_ACTIONS = [
  * The control order is a contract, left to right:
  *
  *   [N] selected - Doer Status - Priority - Reassign - Subject - Client -
- *   Manager Status - Archive - Delete            (Clear, pinned right)
+ *   Initiator Status - Archive - Delete          (Clear, pinned right)
  *
- * Doer-facing edits first, then the manager's ruling, then the two destructive
- * actions. Subject and Client appear only when there are values to offer.
+ * Doer-facing edits first, then the initiator's ruling, then the two
+ * destructive actions. Subject and Client appear only when there are values to
+ * offer.
+ *
+ * "Initiator Status" is what this menu has always written: `approval_status`,
+ * the ruling of the person who RAISED the work. It was labelled "Manager
+ * Status" — a role neither the task nor the plan actually models — and the
+ * list's own column now says Initiator Status too. A menu and a column that
+ * write the same field must not call it two things.
  *
  * The strip is ONE LINE and never wraps - a wrapped bulk bar reflows the table
  * under it every time the selection changes. It scrolls horizontally instead.
@@ -272,18 +279,18 @@ export function BulkActionBar({
           <>
             <span className="mx-1 h-5 w-px shrink-0 bg-hairline" aria-hidden />
 
-            {/* Manager Status - the verdict, a different column */}
+            {/* Initiator Status - the verdict, a different column */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button type="button" disabled={pending} className={chipBtn}>
                   <Gavel size={14} strokeWidth={2.2} />
-                  Manager Status
+                  Initiator Status
                   <ChevronDown size={13} className="opacity-60" />
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="max-h-72 overflow-y-auto">
-                <DropdownMenuLabel>Manager ruling…</DropdownMenuLabel>
-                {MANAGER_ACTIONS.map((a) => (
+                <DropdownMenuLabel>Initiator ruling…</DropdownMenuLabel>
+                {INITIATOR_ACTIONS.map((a) => (
                   <DropdownMenuItem
                     key={a.label}
                     onSelect={() =>

@@ -3,10 +3,11 @@
 import * as React from "react";
 import Link from "next/link";
 import type { Route } from "next";
-import { Plus, Minus, ArrowUpRight } from "lucide-react";
+import { ArrowUpRight } from "lucide-react";
 import type { NeonKey } from "./kpi-card";
 import { KpiDetailPanel } from "./kpi-detail-panel";
-import type { KpiSet, WmsSummary } from "@/lib/types";
+import type { KpiSet, VelocityPoint, WmsSummary } from "@/lib/types";
+import { SectionHeader } from "./section-header";
 
 interface Entry {
   key: keyof KpiSet;
@@ -27,14 +28,40 @@ const ITEMS: Entry[] = [
   { key: "notStarted", label: "Not Started", sublabel: "Awaiting Pickup", neonKey: "not-started", href: "/tasks?status=not_started" },
 ];
 
-export function KpiStrip({ kpis, summary }: { kpis: KpiSet; summary: WmsSummary }) {
+export function KpiStrip({
+  kpis,
+  summary,
+  velocity,
+}: {
+  kpis: KpiSet;
+  summary: WmsSummary;
+  /** Daily created/completed history, plotted in the expanded tile's panel. */
+  velocity: VelocityPoint[];
+}) {
   const [expanded, setExpanded] = React.useState<keyof KpiSet | null>(null);
+  const [collapsed, setCollapsed] = React.useState(false);
   const active = expanded ? ITEMS.find((i) => i.key === expanded) ?? null : null;
+  const total = kpis.total.current;
 
   return (
-    <section className="mt-10 mx-auto max-w-[1600px] px-12 max-md:px-4" aria-label="Task summary">
+    <SectionHeader
+      id="task-summary"
+      title="Task Summary"
+      subtitle={
+        <>
+          <span className="font-bold tabular-nums text-ink-strong">
+            {total.toLocaleString()}
+          </span>{" "}
+          tasks in the current filter
+        </>
+      }
+      collapsed={collapsed}
+      onToggle={() => setCollapsed((v) => !v)}
+    >
+      {/* All six on one line. They're a single readout — Total and the five
+          states that partition it — and a wrapped row reads as two groups. */}
       <div
-        className="grid grid-cols-6 gap-4 max-xl:grid-cols-3 max-md:grid-cols-2"
+        className="grid grid-cols-6 gap-3 max-xl:grid-cols-3 max-md:grid-cols-2"
         role="list"
       >
         {ITEMS.map((item) => {
@@ -43,6 +70,16 @@ export function KpiStrip({ kpis, summary }: { kpis: KpiSet; summary: WmsSummary 
           const up = delta > 0;
           const flat = delta === 0;
           const arrow = up ? "▲" : flat ? "→" : "▼";
+          // Percentage move, which is what you compare a week on: an absolute
+          // "+8" says nothing without knowing it moved from 9 or from 900.
+          // With no previous week there is no percentage to state, so the
+          // count stands in.
+          const deltaText =
+            kpi.previous > 0
+              ? `${Math.abs(Math.round((delta / kpi.previous) * 100))}%`
+              : `${Math.abs(delta)}`;
+          const shareOfTotal =
+            item.key === "done" && total > 0 ? Math.round((kpi.current / total) * 100) : null;
           const deltaColor = flat
             ? "var(--color-ink-subtle)"
             : up
@@ -70,7 +107,7 @@ export function KpiStrip({ kpis, summary }: { kpis: KpiSet; summary: WmsSummary 
                   className="absolute inset-x-0 top-0 h-[4px]"
                   style={{ background: `linear-gradient(90deg, rgb(${neon}), rgb(${neonDeep}))`, boxShadow: `0 1px 8px rgb(${neon} / 0.55)` }}
                 />
-                <div className="flex items-start justify-between gap-2 px-4 pt-4 pb-3.5">
+                <div className="flex items-start justify-between gap-2 px-3.5 pt-3.5 pb-3">
                   <Link
                     href={item.href}
                     className="group/link min-w-0 flex-1 outline-none"
@@ -78,7 +115,7 @@ export function KpiStrip({ kpis, summary }: { kpis: KpiSet; summary: WmsSummary 
                   >
                     <span
                       className="flex items-center gap-1 uppercase font-black tracking-[0.07em] leading-none"
-                      style={{ fontSize: 12.5, color: `rgb(${neonDeep})` }}
+                      style={{ fontSize: 11.5, color: `rgb(${neonDeep})` }}
                     >
                       {item.label}
                       <ArrowUpRight
@@ -92,18 +129,23 @@ export function KpiStrip({ kpis, summary }: { kpis: KpiSet; summary: WmsSummary 
                       style={{
                         fontFamily: "var(--font-display), system-ui, sans-serif",
                         fontWeight: 900,
-                        fontSize: 38,
+                        fontSize: 32,
                         letterSpacing: "-0.02em",
                       }}
                     >
                       {kpi.current.toLocaleString()}
                     </span>
                     <span
-                      className="mt-2 inline-flex items-center gap-1 tabular-nums font-extrabold"
-                      style={{ fontSize: 12.5, color: deltaColor }}
+                      className="mt-2 inline-flex flex-wrap items-center gap-x-1 tabular-nums font-extrabold"
+                      style={{ fontSize: 11.5, color: deltaColor }}
                     >
-                      {arrow} {Math.abs(delta)}
-                      <span className="font-semibold opacity-60">vs last</span>
+                      {arrow} {deltaText}
+                      <span className="font-semibold opacity-60">vs last week</span>
+                      {shareOfTotal != null && (
+                        <span className="font-semibold text-ink-subtle">
+                          · {shareOfTotal}% of total
+                        </span>
+                      )}
                     </span>
                   </Link>
 
@@ -111,14 +153,16 @@ export function KpiStrip({ kpis, summary }: { kpis: KpiSet; summary: WmsSummary 
                     type="button"
                     onClick={() => setExpanded((cur) => (cur === item.key ? null : item.key))}
                     aria-expanded={isOpen}
-                    aria-label={isOpen ? `Collapse ${item.label} details` : `Expand ${item.label} details`}
-                    className="inline-flex size-7 shrink-0 items-center justify-center rounded-full transition-colors"
+                    aria-controls="kpi-detail-panel"
+                    className="shrink-0 rounded-[7px] px-2 py-1 text-[10.5px] font-black uppercase tracking-[0.08em] transition-opacity hover:opacity-80"
                     style={{
-                      color: isOpen ? "#fff" : `rgb(${neonDeep})`,
-                      background: isOpen ? `rgb(${neonDeep})` : `color-mix(in srgb, rgb(${neon}) 14%, transparent)`,
+                      color: isOpen ? "#ffffff" : `rgb(${neonDeep})`,
+                      background: isOpen
+                        ? `rgb(${neonDeep})`
+                        : `color-mix(in srgb, rgb(${neon}) 16%, #ffffff)`,
                     }}
                   >
-                    {isOpen ? <Minus size={16} strokeWidth={3} /> : <Plus size={16} strokeWidth={3} />}
+                    {isOpen ? "Hide" : "View"}
                   </button>
                 </div>
               </div>
@@ -129,6 +173,7 @@ export function KpiStrip({ kpis, summary }: { kpis: KpiSet; summary: WmsSummary 
 
       {/* Single per-card detail panel — animates open via the 0fr→1fr grid trick. */}
       <div
+        id="kpi-detail-panel"
         className="grid transition-[grid-template-rows] duration-300 ease-out"
         style={{ gridTemplateRows: active ? "1fr" : "0fr" }}
       >
@@ -141,13 +186,13 @@ export function KpiStrip({ kpis, summary }: { kpis: KpiSet; summary: WmsSummary 
                 value={kpis[active.key].current}
                 kpi={kpis[active.key]}
                 summary={summary}
-                neon={`var(--kpi-neon-${active.neonKey})`}
+                velocity={velocity}
                 neonDeep={`var(--kpi-neon-${active.neonKey}-deep)`}
               />
             </div>
           )}
         </div>
       </div>
-    </section>
+    </SectionHeader>
   );
 }

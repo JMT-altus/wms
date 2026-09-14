@@ -135,13 +135,25 @@ function groupValue(
   return v && v.length > 0 ? v : by === "client" ? "— No client" : "— No subject";
 }
 import { CriticalBadge } from "@/components/ui/critical-badge";
-import { PRIORITY_LABELS, TASK_STATUSES, TASK_PRIORITIES } from "@/db/enums";
+import {
+  PRIORITY_LABELS,
+  TASK_STATUSES,
+  TASK_PRIORITIES,
+  APPROVAL_STATUSES,
+} from "@/db/enums";
 import type { TaskStatus, StatusColorToken, TaskPriority } from "@/db/enums";
 
 // Canonical status order (Not Read → … → Done → Approved → …) so grouping /
 // sorting by status follows the workflow rather than alphabetical by label.
 const STATUS_ORDER: Record<string, number> = Object.fromEntries(
   TASK_STATUSES.map((s, i) => [s, i]),
+);
+
+// Verdict order, for the Initiator Status column. An unruled row has no entry
+// and falls to the 99 default — last, which is where "nobody has ruled on this
+// yet" belongs in a list someone is sorting by ruling.
+const APPROVAL_ORDER: Record<string, number> = Object.fromEntries(
+  APPROVAL_STATUSES.map((s, i) => [s, i]),
 );
 
 // Priority rank (Critical → Important → Urgent → Normal) so grouping/sorting
@@ -154,9 +166,11 @@ import { TaskRowActions } from "./task-row-actions";
 import { BulkActionBar } from "./bulk-action-bar";
 import { Checkbox } from "@/components/ui/checkbox";
 import { EmployeeAvatar } from "@/components/ui/employee-avatar";
+import { useTaskSearch } from "./task-search-context";
 import { LateBadge } from "@/components/ui/late-badge";
 import { isDoneLate } from "@/lib/task-late";
 import { InlineStatusCell } from "./inline-status-cell";
+import { InlineApprovalCell } from "./inline-approval-cell";
 import {
   InlineDoerCell,
   InlinePriorityCell,
@@ -183,6 +197,7 @@ const COLUMN_LABELS: Record<string, string> = {
   initiatorName: "Initiator",
   priority: "Priority",
   status: "Doer Status",
+  approvalStatus: "Initiator Status",
   subject: "Subject",
   createdAt: "Created",
   dueAt: "Due",
@@ -194,14 +209,20 @@ const COLUMN_LABELS: Record<string, string> = {
 // default forever. Bump the suffix whenever DEFAULT_COLUMN_VISIBILITY changes
 // — v2 introduced the hidden-by-default ID No. / Created columns and the
 // Initiator column.
-const COLUMN_VIS_STORAGE_KEY = "altus.tasks.columnVisibility.v2";
+// — v3 added the hidden-by-default Project column. The key is versioned so a
+//   saved v2 preference doesn't silently pin Project ON for everyone who had
+//   already touched the Columns menu.
+const COLUMN_VIS_STORAGE_KEY = "altus.tasks.columnVisibility.v3";
 
 // Off by default, still in the Columns menu — a default, not a removal.
-//   taskNo    — an internal handle nobody quotes in conversation.
-//   createdAt — the one date on the row that never drives a decision.
+//   taskNo      — an internal handle nobody quotes in conversation.
+//   createdAt   — the one date on the row that never drives a decision.
+//   projectName — most task lists are not project work, so this is a column
+//                 of dashes until you're looking at the lists that are.
 const DEFAULT_COLUMN_VISIBILITY: VisibilityState = {
   taskNo: false,
   createdAt: false,
+  projectName: false,
 };
 
 type StatusLabels = Record<TaskStatus, string>;
@@ -321,6 +342,27 @@ function buildColumns(
       ),
     },
     {
+      accessorKey: "projectName",
+      header: "Project",
+      // Between Subject and Task, where it reads as the third thing that
+      // places a task: which client, what kind of work, which project.
+      //
+      // Hidden by default like the other context columns — most task lists
+      // are not project work, and a column of dashes earns nothing. One tick
+      // in the Columns menu brings it back, and it is searchable either way.
+      meta: { maxCh: 16, minCh: 18 },
+      cell: (info) => {
+        const name = info.getValue<string | null>();
+        return name ? (
+          <span className="text-body-lg font-normal text-ink-muted" title={name}>
+            {name}
+          </span>
+        ) : (
+          <span className="text-ink-subtle">—</span>
+        );
+      },
+    },
+    {
       accessorKey: "title",
       header: "Task",
       // wide: takes whatever width the other columns don't claim.
@@ -412,6 +454,30 @@ function buildColumns(
           </span>
         );
       },
+    },
+    {
+      /**
+       * The INITIATOR's ruling, beside the doer's report and never merged
+       * with it — `approval_status` is its own column in the database for the
+       * reason this list repeats everywhere: "approved" must not erase the
+       * fact that the work was at Follow Up when the verdict landed.
+       *
+       * Sorted by the verdict order in APPROVAL_STATUSES with unruled rows
+       * LAST, because a list sorted by ruling is being read for what has been
+       * ruled on.
+       */
+      accessorKey: "approvalStatus",
+      header: "Initiator Status",
+      sortingFn: (a, b) =>
+        (APPROVAL_ORDER[a.original.approvalStatus ?? ""] ?? 99) -
+        (APPROVAL_ORDER[b.original.approvalStatus ?? ""] ?? 99),
+      cell: ({ row }) => (
+        <InlineApprovalCell
+          taskId={row.original.id}
+          approvalStatus={row.original.approvalStatus}
+          isAdmin={me.isAdmin}
+        />
+      ),
     },
     {
       accessorKey: "createdAt",
@@ -560,7 +626,15 @@ export function TaskTable({
   // Free-text search across task no + the human-readable fields. Runs purely
   // client-side over the already-loaded rows (the list query returns the full
   // filtered set), so it's instant and needs no server round-trip.
-  const [query, setQuery] = React.useState("");
+  //
+  // On the pages that pair this table with the filter bar the input itself
+  // lives up there, and the state arrives through the context. Without a
+  // provider the table keeps its own box in the toolbar, so it still works
+  // standalone.
+  const sharedSearch = useTaskSearch();
+  const [localQuery, setLocalQuery] = React.useState("");
+  const query = sharedSearch ? sharedSearch.query : localQuery;
+  const setQuery = sharedSearch ? sharedSearch.setQuery : setLocalQuery;
   const visibleRows = React.useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return rows;
@@ -812,9 +886,19 @@ export function TaskTable({
       >
         <div className="flex items-center gap-3 flex-wrap min-w-0">
           <GroupByControl value={groupBy} onChange={setGroupBy} />
-          <div className="w-full sm:w-[340px] md:w-[400px] min-w-[200px]">
-            <SearchBox value={query} onChange={setQuery} resultCount={visibleRows.length} />
-          </div>
+          {sharedSearch ? (
+            // The filter bar owns the input; all that's left to show here is
+            // how much of the list survived it.
+            query.trim() && (
+              <span className="text-[12px] font-semibold text-ink-subtle tabular-nums">
+                {visibleRows.length} {visibleRows.length === 1 ? "match" : "matches"}
+              </span>
+            )
+          ) : (
+            <div className="w-full sm:w-[340px] md:w-[400px] min-w-[200px]">
+              <SearchBox value={query} onChange={setQuery} resultCount={visibleRows.length} />
+            </div>
+          )}
           <CompactPager
             pages={pages}
             pageIndex={pageIndex}
@@ -847,7 +931,7 @@ export function TaskTable({
       <div
         // Cap the table to the viewport and scroll it internally so the
         // sticky header row below stays frozen while you page through rows.
-        className="bg-surface-card rounded-section border border-hairline overflow-auto max-h-[calc(100vh-260px)] max-md:hidden"
+        className="table-scroll bg-surface-card rounded-section border border-hairline overflow-auto max-h-[calc(100vh-260px)] max-md:hidden"
         style={{ boxShadow: "0 14px 32px -20px rgba(10, 108, 255, 0.16), 0 2px 6px -2px rgba(15, 23, 42, 0.06)" }}
       >
       <table className="min-w-full">
@@ -996,10 +1080,19 @@ export function TaskTable({
                   ...(col.meta?.minCh ? { minWidth: `${col.meta.minCh}ch` } : null),
                 };
                 const frz = frozen.get(cell.column.id);
+                // Every cell is positioned, not just the pinned ones. In a
+                // `border-collapse: collapse` table the browser paints cells in
+                // document order unless they carry their own stacking context,
+                // so a plain `<td>` further right slid its avatars and text
+                // straight over the frozen Task cell during horizontal scroll.
+                // `relative z-0` puts the scrolling cells in the same stacking
+                // layer as the pinned `z-20` ones, where z-index decides — the
+                // header row has always looked right for exactly this reason:
+                // every `<th>` there is sticky.
                 return (
                   <td
                     key={cell.id}
-                    className={`px-1.5 py-1 max-md:px-1.5 max-md:py-1 ${clamp} ${alignClass(col)} ${hide ? "max-md:hidden" : ""} ${col.meta?.wide && !frz ? "w-full" : ""} ${frz || isActions ? "task-cell-pinned sticky z-20" : ""} ${isActions ? "right-0" : ""}`}
+                    className={`px-1.5 py-1 max-md:px-1.5 max-md:py-1 ${clamp} ${alignClass(col)} ${hide ? "max-md:hidden" : ""} ${col.meta?.wide && !frz ? "w-full" : ""} ${frz || isActions ? "task-cell-pinned sticky z-20" : "relative z-0"} ${isActions ? "right-0" : ""}`}
                     style={{
                       ...capStyle,
                       ...(frz ? frozenStyle(frz) : null),

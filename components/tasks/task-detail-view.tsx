@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import type { Route } from "next";
+import type { PlanTrailStep } from "@/lib/queries/plan";
 import { TaskDetail } from "./task-detail";
 import { TaskEditForm } from "./task-edit-form";
 import { TaskAttachments } from "./task-attachments";
@@ -57,6 +58,8 @@ import { isDoneLate } from "@/lib/task-late";
 
 interface Props {
   task: TaskDetailModel;
+  /** Project › Milestone › Result above this task, or empty when it is not plan work. */
+  planTrail: PlanTrailStep[];
   canEdit: boolean;
   canApproveTask: boolean;
   canReassignTask: boolean;
@@ -208,6 +211,14 @@ const STATUS_TONE: Record<
     bg: "var(--color-green-bg)",
     live: true,
   },
+  abandoned: {
+    label: "Abandoned",
+    rgb: "156, 163, 175",
+    ink: "var(--color-stone-deep)",
+    bg: "var(--color-stone-bg)",
+    // Not live: nobody is working on it, which is the whole statement.
+    live: false,
+  },
   approved: {
     label: "Approved",
     rgb: "168, 85, 247",
@@ -259,6 +270,7 @@ const PRIORITY_LABEL_SHORT: Record<string, string> = {
  */
 export function TaskDetailView({
   task,
+  planTrail,
   canEdit,
   canApproveTask,
   canReassignTask,
@@ -513,7 +525,7 @@ export function TaskDetailView({
                       opacity: 0.85,
                     }}
                   />
-                  <TaskDetail task={task} />
+                  <TaskDetail task={task} planTrail={planTrail} />
                 </section>
 
                 {/* ACTIVITY & COMMENTS CARD — composer at the top,

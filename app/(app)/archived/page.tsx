@@ -1,6 +1,7 @@
 import { DashboardHeader } from "@/components/layout/header";
 import { DashboardFooter } from "@/components/layout/footer";
 import { FilterBar } from "@/components/layout/filter-bar";
+import { TaskSearchProvider } from "@/components/tasks/task-search-context";
 import { TaskListPage } from "@/components/tasks/task-list-page";
 import { listEmployees } from "@/lib/queries/employees";
 import { listTasks, listDistinctSubjects } from "@/lib/queries/tasks";
@@ -53,7 +54,7 @@ export default async function ArchivedPage({ searchParams }: PageProps) {
     d ? d.toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10);
 
   return (
-    <>
+    <TaskSearchProvider>
       <DashboardHeader generatedAt={new Date()} />
       <FilterBar
         employees={employeeOptions}
@@ -84,6 +85,6 @@ export default async function ArchivedPage({ searchParams }: PageProps) {
         subjects={subjects}
       />
       <DashboardFooter />
-    </>
+    </TaskSearchProvider>
   );
 }

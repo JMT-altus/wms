@@ -8,6 +8,9 @@ import { ClientMasterTable } from "@/components/forms/client-master-table";
  * Client Master — the list of everything Create New Client KYC has onboarded.
  * Same `customer_masters` rows, read through one query; no separate client
  * store and no second creation path (New client routes back to the KYC form).
+ *
+ * The history behind the Credit Limit column lives in its own section, next to
+ * this one in the rail — see forms/client-kyc/credit-limit.
  */
 export default async function ClientMasterPage() {
   // Sales people feed the edit dialog's Co-ordinator picker — Edit now opens

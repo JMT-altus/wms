@@ -13,6 +13,7 @@ import {
   X,
   ChevronLeft,
   ChevronRight,
+  ChevronUp,
   Download,
   Plus,
   Search,
@@ -84,6 +85,68 @@ export interface SortDef<T> {
 }
 
 const PAGE_SIZES = [25, 50, 100];
+
+/**
+ * Which way a column is sorting, in the heading itself.
+ *
+ * Drawn on every heading rather than only the sorted one — it is what tells
+ * you the headings are clickable at all — but faded until hovered, so twelve
+ * of them don't read as twelve pieces of state.
+ */
+function SortGlyph({ on, accent }: { on: "asc" | "desc" | null; accent: string }) {
+  return (
+    <span
+      className="data-grid-sort shrink-0 grid place-items-center"
+      data-on={on ? "true" : "false"}
+      aria-hidden
+      style={{ color: on ? accent : "var(--color-ink-subtle)" }}
+    >
+      {on === "asc" ? (
+        <ChevronUp size={12} strokeWidth={3} />
+      ) : on === "desc" ? (
+        <ChevronDown size={12} strokeWidth={3} />
+      ) : (
+        <ArrowUpDown size={11} strokeWidth={2.6} />
+      )}
+    </span>
+  );
+}
+
+/** `dd-mm-yyyy`, the one date format these tables render. */
+const DMY = /^(\d{2})-(\d{2})-(\d{4})$/;
+
+/**
+ * Order two cells the way the person reading them would.
+ *
+ * A column sort works off what the cell SHOWS, because that is what was
+ * clicked — but "38999.00" before "5000.00" and "12-06-2026" before
+ * "29-07-2026" are what a string sort gives you, and neither is an ordering
+ * anyone asked for. So: numbers as numbers, dd-mm-yyyy as dates, everything
+ * else collated naturally.
+ *
+ * Blanks sort last in both directions. A column being sorted is a column
+ * someone wants to READ, and thirty empty cells at the top is the one result
+ * that never helps.
+ */
+function compareCells(a: string, b: string): number {
+  const x = a.trim();
+  const y = b.trim();
+  if (x === y) return 0;
+  if (!x) return 1;
+  if (!y) return -1;
+
+  const dx = DMY.exec(x);
+  const dy = DMY.exec(y);
+  if (dx && dy) return `${dx[3]}${dx[2]}${dx[1]}`.localeCompare(`${dy[3]}${dy[2]}${dy[1]}`);
+
+  // Currency and grouping stripped: a Credit Limit column reads "₹1,00,000",
+  // and that is a number wearing punctuation, not text.
+  const nx = Number(x.replace(/[₹,\s%]/g, ""));
+  const ny = Number(y.replace(/[₹,\s%]/g, ""));
+  if (Number.isFinite(nx) && Number.isFinite(ny)) return nx - ny;
+
+  return x.localeCompare(y, undefined, { numeric: true, sensitivity: "base" });
+}
 
 /**
  * Confirmation for a delete.
@@ -720,6 +783,12 @@ export function DataTable<T extends { id: string }>({
   title?: string;
   sorts?: SortDef<T>[];
   exportLabel?: string;
+  /**
+   * Historically "tint the heading band" — the band is now unconditional, and
+   * this is what remains of it: whether the row-actions column carries a
+   * "Manage" heading. The Masters screens label their own actions and don't
+   * want a second word over them.
+   */
   tintHeader?: boolean;
   /**
    * Extra control(s) in the top-right corner of the title row, next to New —
@@ -821,6 +890,22 @@ export function DataTable<T extends { id: string }>({
   const [page, setPage] = React.useState(0);
   const [pageSize, setPageSize] = React.useState(25);
   const [sortValue, setSortValue] = React.useState(sorts?.[0]?.value ?? "");
+  /**
+   * The column heading someone clicked, if any.
+   *
+   * Separate from the `sorts` dropdown, and it wins while it is set. The
+   * dropdown is the caller's own orderings — the ones only it can express,
+   * like "oldest open first" across three fields — and this is the plain
+   * "sort by what I can see in this column" that every table is expected to
+   * do. Picking from the dropdown clears this, and clicking a heading a third
+   * time hands the ordering back, so the two never both claim to be in force.
+   */
+  const [colSort, setColSort] = React.useState<{ key: string; dir: "asc" | "desc" } | null>(null);
+  /**
+   * A dropped column reorder ends in a click on the heading. Without this the
+   * drag would also sort by whatever column it landed on.
+   */
+  const draggedRef = React.useRef(false);
   const [selected, setSelected] = React.useState<ReadonlySet<string>>(() => new Set());
   // Seeded from the columns' own `defaultHidden`, so a table can carry far
   // more fields than it opens with.
@@ -918,11 +1003,20 @@ export function DataTable<T extends { id: string }>({
       if (!needle) return true;
       return visibleColumns.some((c) => cellValue(row, c).toLowerCase().includes(needle));
     });
-    const sort = sorts?.find((s) => s.value === sortValue);
     // Copy before sorting — `rows` is the caller's array (often straight off a
     // server component's props), and sorting in place would mutate it.
+    if (colSort) {
+      const col = visibleColumns.find((c) => c.key === colSort.key);
+      if (col) {
+        const sign = colSort.dir === "asc" ? 1 : -1;
+        return [...kept].sort(
+          (a, b) => sign * compareCells(cellValue(a, col), cellValue(b, col)),
+        );
+      }
+    }
+    const sort = sorts?.find((s) => s.value === sortValue);
     return sort ? [...kept].sort(sort.compare) : kept;
-  }, [rows, q, active, filters, visibleColumns, cellValue, sorts, sortValue]);
+  }, [rows, q, active, filters, visibleColumns, cellValue, sorts, sortValue, colSort]);
 
   // Any filter change can shrink the list below the current page — snap back so
   // the user never lands on a blank page 4 of 2.
@@ -1348,7 +1442,12 @@ export function DataTable<T extends { id: string }>({
                   />
                   <select
                     value={sortValue}
-                    onChange={(e) => setSortValue(e.target.value)}
+                    onChange={(e) => {
+                      setSortValue(e.target.value);
+                      // Picking an ordering here means this one, not the
+                      // column heading someone clicked earlier.
+                      setColSort(null);
+                    }}
                     aria-label="Sort"
                     className={`shrink-0 rounded-pill px-1.5 ${rowH} bg-surface-card border border-hairline text-[11.5px] font-semibold text-ink-soft outline-none`}
                   >
@@ -1408,13 +1507,19 @@ export function DataTable<T extends { id: string }>({
           header away with it — the table keeps a defined top edge either
           way, and nothing shifts by a pixel when the bar appears. */}
       <div
-        className="rounded-section border border-hairline bg-surface-card overflow-hidden"
-        style={{ borderTopColor: "var(--color-hairline-strong)" }}
+        className="rounded-section bg-surface-card overflow-hidden"
+        style={{
+          // A defined edge all the way round rather than a hairline that fades
+          // into the page: the reference layout reads as a settled object
+          // because you can see where it stops.
+          border: "2px solid var(--color-table-edge)",
+          boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+        }}
       >
         {/* The horizontal scroller. `overflow-hidden` on the card above
             would clip a wide table dead; this is what lets it scroll. */}
-        <div className="overflow-x-auto">
-          <table className="w-full" style={{ minWidth: tableMinWidth }}>
+        <div className="data-grid-scroll">
+          <table className="data-grid" style={{ minWidth: tableMinWidth }}>
             <thead>
               <tr
                 className="text-left uppercase tracking-[0.08em]"
@@ -1422,10 +1527,11 @@ export function DataTable<T extends { id: string }>({
                   fontSize: 11,
                   fontWeight: 700,
                   // Tinted band behind the headings, per the reference layout.
-                  background: tintHeader
-                    ? "color-mix(in srgb, var(--color-blue) 8%, var(--color-surface-soft))"
-                    : undefined,
-                  color: tintHeader ? "var(--color-ink-soft)" : "var(--color-ink-subtle)",
+                  // Unconditional: a table's headings are a different KIND of
+                  // row from its data everywhere, not only on the screens that
+                  // remembered to ask.
+                  background: "color-mix(in srgb, var(--color-blue) 8%, var(--color-surface-soft))",
+                  color: "var(--color-ink-soft)",
                 }}
               >
                 {selectable && (
@@ -1452,6 +1558,7 @@ export function DataTable<T extends { id: string }>({
                     draggable
                     onDragStart={(e) => {
                       setDragKey(c.key);
+                      draggedRef.current = true;
                       e.dataTransfer.effectAllowed = "move";
                       // Firefox refuses to start a drag without payload.
                       e.dataTransfer.setData("text/plain", c.key);
@@ -1473,14 +1580,40 @@ export function DataTable<T extends { id: string }>({
                       setDragKey(null);
                       setOverKey(null);
                     }}
-                    title="Drag to move this column"
+                    onClick={() => {
+                      // A reorder ends with a click on the heading it landed
+                      // on; that click is not a request to sort.
+                      if (draggedRef.current) {
+                        draggedRef.current = false;
+                        return;
+                      }
+                      // Up, down, off — the third click gives the table back
+                      // whatever order it had, rather than stranding it in one
+                      // nobody can undo.
+                      setColSort((prev) =>
+                        prev?.key !== c.key
+                          ? { key: c.key, dir: "asc" }
+                          : prev.dir === "asc"
+                            ? { key: c.key, dir: "desc" }
+                            : null,
+                      );
+                      setPage(0);
+                    }}
+                    aria-sort={
+                      colSort?.key === c.key
+                        ? colSort.dir === "asc"
+                          ? "ascending"
+                          : "descending"
+                        : "none"
+                    }
+                    title="Click to sort · drag to move this column"
                     // `whitespace-nowrap`: a heading is a label, and "Sales
                     // Co-ordinator" broken over two lines reads as two
                     // columns. The declared width is a hint, so a long
                     // heading widens its column and the table scrolls —
                     // which is the behaviour that already exists for wide
                     // tables, rather than a new one.
-                    className={`${title ? "px-3 py-1" : "px-4 py-3"} whitespace-nowrap cursor-grab select-none`}
+                    className={`${title ? "px-3 py-1" : "px-4 py-3"} whitespace-nowrap cursor-pointer select-none`}
                     style={{
                       textAlign: c.align ?? "left",
                       width: c.width,
@@ -1496,7 +1629,17 @@ export function DataTable<T extends { id: string }>({
                           : undefined,
                     }}
                   >
-                    {c.header}
+                    <span
+                      className="inline-flex items-center gap-1.5 align-middle"
+                      style={{
+                        // The glyph follows the heading, so a right-aligned
+                        // number column keeps its label against the figures.
+                        flexDirection: c.align === "right" ? "row-reverse" : "row",
+                      }}
+                    >
+                      {c.header}
+                      <SortGlyph on={colSort?.key === c.key ? colSort.dir : null} accent={accent} />
+                    </span>
                   </th>
                 ))}
                 {actions && (

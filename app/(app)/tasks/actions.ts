@@ -48,6 +48,7 @@ import {
   canComment,
 } from "@/lib/auth/task-permissions";
 import { canTransitionTo, type ActorRole } from "@/lib/auth/status-transitions";
+import { mirrorTaskToNode, mirrorTasksToNodes } from "@/lib/plan/task-sync";
 import {
   EDITABLE_TASK_FIELDS,
   type EditableTaskField,
@@ -352,6 +353,10 @@ export async function rescheduleTask(
     return { ok: false, error: `Could not reschedule: ${(err as Error).message}` };
   }
 
+  // A reschedule moves the plan row's target date with it — otherwise the
+  // register kept showing the old one and pushed it straight back the next
+  // time anything on the row was edited.
+  afterResponse(() => mirrorTaskToNode(taskId));
   revalidateTaskRoutes();
   return { ok: true };
 }
@@ -398,6 +403,9 @@ export async function reassignDoer(
   }
   // Move the event off the old doer's calendar and onto the new doer's.
   afterResponse(() => reconcileTaskEvent(taskId));
+  // …and the plan row's Doer with it, so the register does not still name the
+  // person who handed the work on.
+  afterResponse(() => mirrorTaskToNode(taskId));
   revalidateTaskRoutes();
   return { ok: true };
 }
@@ -587,6 +595,9 @@ export async function bulkReassignDoer(
     return { ok: false, error: `Could not reassign: ${(err as Error).message}` };
   }
   for (const id of changed) afterResponse(() => reconcileTaskEvent(id));
+  // Plan rows behind any of these follow their task's doer — see
+  // `mirrorTaskToNode`. One query decides which ids are linked at all.
+  afterResponse(() => mirrorTasksToNodes(changed));
   revalidateTaskRoutes();
   return { ok: true, updated: changed.length, skipped: ids.length - changed.length };
 }
@@ -631,6 +642,7 @@ export async function bulkSetSubject(
   } catch (err) {
     return { ok: false, error: `Could not update: ${(err as Error).message}` };
   }
+  afterResponse(() => mirrorTasksToNodes(changed));
   revalidateTaskRoutes();
   return { ok: true, updated: changed.length, skipped: ids.length - changed.length };
 }
@@ -1316,6 +1328,11 @@ export async function editTaskFields(
   }
 
   afterResponse(() => reconcileTaskEvent(taskId)); // push edits to the calendar event
+  // The return leg of the plan link: a task that came from an Action or a
+  // Sub-Action writes these same fields back onto its plan row, so the two
+  // never disagree about a date, a doer or a subject. A no-op for a task with
+  // no plan row behind it.
+  afterResponse(() => mirrorTaskToNode(taskId));
   revalidateTaskRoutes();
   revalidatePath(`/tasks/${taskId}`);
   return { ok: true };
@@ -1592,6 +1609,8 @@ export async function reassignTask(
 
   // Move the calendar event to the new doer's calendar.
   afterResponse(() => reconcileTaskEvent(taskId));
+  // …and the plan row's Doer with it, the same as the lighter `reassignDoer`.
+  afterResponse(() => mirrorTaskToNode(taskId));
   revalidateTaskRoutes();
   revalidatePath(`/tasks/${taskId}`);
   return { ok: true };

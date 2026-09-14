@@ -205,8 +205,25 @@ export const ClientMasterEditSchema = z.object({
   website: emptyToNull(200),
   tcsApplicable: z.boolean().default(false),
 
-  /* Where they are — the denormalised billing city */
-  city: emptyToNull(120),
+  /* Where they are — the denormalised billing city.
+   *
+   * NOT `emptyToNull`, which folds a missing field into null. City is the one
+   * column here that no screen writing this schema actually shows: the Client
+   * Master's table, dialog and grid all leave it out, because a city belongs
+   * to an address and the Address Book owns it. With `emptyToNull` that meant
+   * every save from those screens set city to null — correcting a spelling
+   * wiped the billing city as a side effect.
+   *
+   * Left `undefined` when absent so `updateClientMasterRecord` can tell "not
+   * sent" from "cleared", and only write the column when it was sent. Sending
+   * "" still clears it. */
+  city: z
+    .string()
+    .trim()
+    .max(120)
+    .transform((v) => (v.length === 0 ? null : v))
+    .nullable()
+    .optional(),
 
   /* Commercial & Credit */
   paymentTerms: emptyToNull(120),

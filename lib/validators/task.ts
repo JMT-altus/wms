@@ -59,6 +59,16 @@ const isoDateToDate = z
 export const CreateTaskSchema = z
   .object({
     title: z.string().trim().min(1, "Client name is required").max(240),
+    /**
+     * The Client column, when it is NOT simply the title.
+     *
+     * The two are the same thing for a task typed into the new-task form —
+     * that form's "Client name" field IS the title — so this defaults to the
+     * title and nothing had to change. A task created from a plan row sets it
+     * apart: its title is the row's name and its client is the project the
+     * row sits under.
+     */
+    client: z.string().trim().max(240).nullable().optional().default(null),
     doerId: uuid.optional(),
     doerIds: z.array(uuid).min(1, "Pick at least one Doer").max(50).optional(),
     initiatorId: uuid,

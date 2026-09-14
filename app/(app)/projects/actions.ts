@@ -21,6 +21,7 @@ import { requireUser } from "@/lib/auth/current";
 import { rateLimitOrError } from "@/lib/rate-limit";
 import { CACHE_TAGS } from "@/lib/cache-tags";
 import { notify } from "@/lib/notifications/dispatch";
+import { PARENT_KIND, PLAN_KINDS } from "@/lib/plan/levels";
 
 type Result<T = unknown> = ({ ok: true } & T) | { ok: false; error: string };
 
@@ -60,7 +61,10 @@ async function authorizeProjectNodeMutation(
   return { ok: true, node };
 }
 
-const KIND = z.enum(["project", "milestone", "result", "action", "sub_action"]);
+// The six levels, read from the shared level model rather than re-spelled —
+// 0103 added sub_sub_action and this list must not be the one place that
+// forgets it.
+const KIND = z.enum(PLAN_KINDS);
 const NameSchema = z.string().trim().min(1, "Name is required").max(160, "Name is too long");
 
 const CreateSchema = z.object({
@@ -69,14 +73,9 @@ const CreateSchema = z.object({
   parentId: z.string().uuid().nullable().optional(),
 });
 
-// Each kind's required parent kind (null = top-level).
-const CHILD_OF: Record<string, string | null> = {
-  project: null,
-  milestone: "project",
-  result: "milestone",
-  action: "result",
-  sub_action: "action",
-};
+// Each kind's required parent kind (null = top-level). Same table the plan
+// module validates against — see lib/plan/levels.ts.
+const CHILD_OF: Record<string, string | null> = PARENT_KIND;
 
 export async function createProjectNode(
   input: z.input<typeof CreateSchema>,

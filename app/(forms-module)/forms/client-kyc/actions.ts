@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import type { z } from "zod";
+import { z } from "zod";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
@@ -15,6 +15,7 @@ import {
   documents,
   documentEvents,
   lookupItems,
+  products,
 } from "@/db/schema";
 import type { Employee } from "@/db/schema";
 import { getCurrentEmployee } from "@/lib/auth/current";
@@ -35,6 +36,7 @@ import {
 } from "@/lib/queries/client-bulk-options";
 import { missingKycFields } from "@/lib/masters/kyc-completeness";
 import { setCustomerDormancy, type DormancyResult } from "@/lib/masters/dormancy-store";
+import { recordCreditLimitChange } from "@/lib/masters/credit-limit";
 import {
   COLUMN_BY_KEY,
   isBlankRow,
@@ -92,6 +94,7 @@ function revalidateKyc(): void {
   revalidatePath("/forms/client-kyc/new");
   revalidatePath("/forms/client-kyc/drafts");
   revalidatePath("/forms/client-kyc/clients");
+  revalidatePath("/forms/client-kyc/credit-limit");
   revalidatePath("/forms/client-kyc/recycle-bin");
   revalidatePath("/masters/customers");
   revalidatePath("/master-setup/customers");
@@ -1206,6 +1209,63 @@ export async function releaseClientDraft(id: string): Promise<Result> {
  * the KYC form, which is the screen that can complete them; letting this
  * dialog write to a draft would be a second, partial way to finish one.
  */
+/**
+ * Set which products a client buys, from the Client Master's Product Types
+ * cell.
+ *
+ * Its own action because Product Types is the one field on that screen which
+ * does not live on `customer_masters` — it is `customer_product_map`, a row
+ * per product. `updateClientMasterRecord` writes the client row and nothing
+ * else, and widening it to reach into a child table would make every
+ * single-field edit on that screen a two-table write.
+ *
+ * Takes product NAMES, because that is what the cell shows and what the
+ * option list offers; anything that doesn't resolve to an active product is
+ * dropped rather than guessed at. Replace-all, the same shape the KYC form's
+ * own save uses, so the two cannot disagree about what the set means.
+ */
+export async function updateClientProducts(id: string, names: unknown): Promise<Result> {
+  const g = await guard();
+  if ("error" in g) return g.error;
+  if (!isUuid(id)) return { ok: false, error: "Invalid id." };
+
+  const parsed = z.array(z.string().trim().min(1).max(200)).max(200).safeParse(names);
+  if (!parsed.success) return { ok: false, error: zodError(parsed.error) };
+
+  try {
+    const wanted = new Set(parsed.data.map((n) => n.toLowerCase()));
+    const active = await db
+      .select({ id: products.id, name: products.name })
+      .from(products)
+      .where(eq(products.isActive, true));
+    const ids = active.filter((p) => wanted.has(p.name.toLowerCase())).map((p) => p.id);
+
+    await db.transaction(async (tx) => {
+      // The client has to exist and be onboarded — the same gate
+      // `updateClientMasterRecord` applies, so a draft can't be edited here.
+      const [row] = await tx
+        .select({ id: customerMasters.id })
+        .from(customerMasters)
+        .where(and(eq(customerMasters.id, id), eq(customerMasters.kycStage, "complete")));
+      if (!row) throw new Error("stage");
+
+      await tx.delete(customerProductMap).where(eq(customerProductMap.customerId, id));
+      if (ids.length > 0) {
+        await tx
+          .insert(customerProductMap)
+          .values(ids.map((productId) => ({ customerId: id, productId })));
+      }
+    });
+  } catch (err) {
+    if (err instanceof Error && err.message === "stage") {
+      return { ok: false, error: "That client is no longer in the Client Master." };
+    }
+    return { ok: false, error: dbError(err, "client") };
+  }
+  revalidateKyc();
+  return { ok: true, id };
+}
+
 export async function updateClientMasterRecord(id: string, input: unknown): Promise<Result> {
   const g = await guard();
   if ("error" in g) return g.error;
@@ -1216,6 +1276,14 @@ export async function updateClientMasterRecord(id: string, input: unknown): Prom
   const v = parsed.data;
 
   try {
+    // The limit BEFORE this write, so a change to it can be recorded. One
+    // small read rather than a trigger: the audit row is worth little without
+    // an author, and a trigger has no idea who is signed in.
+    const [before] = await db
+      .select({ creditLimit: customerMasters.creditLimit })
+      .from(customerMasters)
+      .where(eq(customerMasters.id, id));
+
     const [row] = await db
       .update(customerMasters)
       .set({
@@ -1237,7 +1305,10 @@ export async function updateClientMasterRecord(id: string, input: unknown): Prom
         testCertificateNeeded: v.testCertificateNeeded,
         website: v.website,
         tcsApplicable: v.tcsApplicable,
-        city: v.city,
+        // Only when it was actually sent — see the schema's note. The Client
+        // Master's screens don't carry city, and writing it unconditionally
+        // nulled the billing city on every edit made from them.
+        ...(v.city !== undefined && { city: v.city }),
         paymentTerms: v.paymentTerms,
         freightCharges: v.freightCharges,
         creditPeriodDays: v.creditDays,
@@ -1257,6 +1328,8 @@ export async function updateClientMasterRecord(id: string, input: unknown): Prom
       .where(and(eq(customerMasters.id, id), eq(customerMasters.kycStage, "complete")))
       .returning({ id: customerMasters.id });
     if (!row) return { ok: false, error: "That client is no longer in the Client Master." };
+
+    await recordCreditLimitChange(id, before?.creditLimit ?? null, v.creditLimit, g.me.id);
   } catch (err) {
     return { ok: false, error: dbError(err, "client") };
   }

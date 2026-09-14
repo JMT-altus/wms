@@ -20,10 +20,15 @@ import { CodeCell } from "@/components/masters/row-menu";
 import { TypePill, distinctValues } from "./kyc/master-list";
 import {
   RecordEditDialog,
+  asOptions,
   type EditField,
   type EditValues,
 } from "./kyc/record-edit-dialog";
 import { KYC_ACCENT } from "./kyc/tokens";
+import { InlineSelect, type SaveResult } from "@/components/admin/master/inline-edit";
+import { MasterGrid, type GridCol } from "@/components/admin/master/master-grid";
+import { ViewSwitch, type MasterView } from "@/components/admin/master/view-switch";
+import { KYC_ACCENT_SOFT } from "./kyc/tokens";
 
 /**
  * Client Address Book — every address, one row per address.
@@ -37,9 +42,20 @@ import { KYC_ACCENT } from "./kyc/tokens";
  * so the tiles, search, filter chips, sort, export and pagination are the
  * exact components at the exact sizes.
  */
-export function ClientAddressBook({ rows }: { rows: ClientAddressRow[] }) {
+export function ClientAddressBook({
+  rows,
+  states,
+  countries,
+}: {
+  rows: ClientAddressRow[];
+  /** The admin-managed State list — the KYC form's own address picker. */
+  states: string[];
+  /** The admin-managed Country list, same source. */
+  countries: string[];
+}) {
   const router = useRouter();
   const [editing, setEditing] = React.useState<ClientAddressRow | null>(null);
+  const [view, setView] = React.useState<MasterView>("table");
 
   /**
    * Bulk delete for the ticked rows. The table asks for confirmation and
@@ -78,9 +94,29 @@ export function ClientAddressBook({ rows }: { rows: ClientAddressRow[] }) {
     { key: "line2", label: "Address Line 2", span: 2, maxLength: 200 },
     { key: "line3", label: "Address Line 3", span: 2, maxLength: 200 },
     { key: "line4", label: "Address Line 4", span: 2, maxLength: 200 },
-    { key: "city", label: "City", span: 1, maxLength: 120 },
-    { key: "state", label: "State", span: 1, maxLength: 120 },
-    { key: "country", label: "Country", span: 1, maxLength: 120 },
+    // City has no master list — it is typed per address — so its suggestions
+    // are the cities already on record, which is what keeps "Pune" from
+    // gaining a "pune" twin. State and Country do have lists; both stay
+    // combos rather than closed selects because the column is free text and
+    // the list is admin-managed, so a value nobody has added yet must still
+    // save.
+    {
+      key: "city",
+      label: "City",
+      type: "combo",
+      span: 1,
+      maxLength: 120,
+      options: asOptions(distinctValues(rows, (r) => r.city)),
+    },
+    { key: "state", label: "State", type: "combo", span: 1, maxLength: 120, options: asOptions(states) },
+    {
+      key: "country",
+      label: "Country",
+      type: "combo",
+      span: 1,
+      maxLength: 120,
+      options: asOptions(countries),
+    },
     { key: "pinCode", label: "Pin Code", span: 1, inputMode: "numeric", maxLength: 20 },
     // Collected on Invoice Mailing in the KYC form; editable here on any row
     // because the column exists on all of them.
@@ -92,6 +128,83 @@ export function ClientAddressBook({ rows }: { rows: ClientAddressRow[] }) {
     const res = await updateClientAddress(editing.id, v);
     if (res.ok) router.refresh();
     return res;
+  }
+
+  /**
+   * Save one field of one row, from a cell edited in place.
+   *
+   * Sends the whole address rebuilt from the row, because
+   * `updateClientAddress` takes a complete one — the same payload the dialog
+   * sends, so there is no second write path to drift from it.
+   */
+  const patch = React.useCallback(
+    async (row: ClientAddressRow, changes: EditValues): Promise<SaveResult> => {
+      const res = await updateClientAddress(row.id, {
+        addressType: row.addressType,
+        line1: row.line1 ?? "",
+        line2: row.line2 ?? "",
+        line3: row.line3 ?? "",
+        line4: row.line4 ?? "",
+        city: row.city ?? "",
+        state: row.state ?? "",
+        country: row.country ?? "",
+        pinCode: row.pinCode ?? "",
+        email: row.email ?? "",
+        ...changes,
+      });
+      if (!res.ok) return { ok: false, error: res.error };
+      router.refresh();
+      return { ok: true };
+    },
+    [router],
+  );
+
+  /** Cities already on record, as the City cell's options. */
+  const cityOptions = React.useMemo(() => distinctValues(rows, (r) => r.city), [rows]);
+
+  /** Address Type is an enum shown by its label, so the picker maps back. */
+  const ADDRESS_TYPE_LABELS = CLIENT_ADDRESS_TYPES.map((t) => CLIENT_ADDRESS_TYPE_LABELS[t]);
+  const addressTypeByLabel = new Map(
+    CLIENT_ADDRESS_TYPES.map((t) => [CLIENT_ADDRESS_TYPE_LABELS[t], t]),
+  );
+
+  const viewSwitch = <ViewSwitch view={view} onChange={setView} accent={KYC_ACCENT} />;
+
+  /**
+   * Grid View — every address as one editable row, the four street lines
+   * included. The table joins those into one Street Address cell to stay
+   * readable; the sheet keeps them apart, because correcting line 2 is
+   * exactly the kind of pass this view is for.
+   */
+  const gridColumns: GridCol<ClientAddressRow>[] = [
+    { key: "company", label: "Company", width: 210, kind: "text", frozen: true, readOnly: true, get: (r) => r.company },
+    { key: "code", label: "Client Number", width: 130, kind: "text", frozen: true, readOnly: true, mono: true, get: (r) => r.code ?? "" },
+    { key: "addressType", label: "Type", width: 185, kind: "select", options: ADDRESS_TYPE_LABELS, get: (r) => r.typeLabel },
+    { key: "line1", label: "Address Line 1", width: 240, kind: "text", maxLength: 200, get: (r) => r.line1 ?? "" },
+    { key: "line2", label: "Address Line 2", width: 240, kind: "text", maxLength: 200, get: (r) => r.line2 ?? "" },
+    { key: "line3", label: "Address Line 3", width: 240, kind: "text", maxLength: 200, get: (r) => r.line3 ?? "" },
+    { key: "line4", label: "Address Line 4", width: 240, kind: "text", maxLength: 200, get: (r) => r.line4 ?? "" },
+    { key: "city", label: "City", width: 175, kind: "select", freeText: true, options: cityOptions, get: (r) => r.city ?? "" },
+    { key: "state", label: "State", width: 175, kind: "select", freeText: true, options: states, get: (r) => r.state ?? "" },
+    { key: "country", label: "Country", width: 165, kind: "select", freeText: true, options: countries, get: (r) => r.country ?? "" },
+    { key: "pinCode", label: "Pin Code", width: 130, kind: "text", maxLength: 20, get: (r) => r.pinCode ?? "" },
+    { key: "email", label: "Email", width: 230, kind: "text", maxLength: 200, get: (r) => r.email ?? "" },
+  ];
+
+  async function saveGridRow(row: ClientAddressRow, cells: Record<string, string>) {
+    const g = (k: string) => cells[k] ?? "";
+    return patch(row, {
+      addressType: addressTypeByLabel.get(g("addressType")) ?? row.addressType,
+      line1: g("line1"),
+      line2: g("line2"),
+      line3: g("line3"),
+      line4: g("line4"),
+      city: g("city"),
+      state: g("state"),
+      country: g("country"),
+      pinCode: g("pinCode"),
+      email: g("email"),
+    });
   }
 
   const columns: Column<ClientAddressRow>[] = [
@@ -111,8 +224,23 @@ export function ClientAddressBook({ rows }: { rows: ClientAddressRow[] }) {
     {
       key: "type",
       header: "Type",
-      width: 155,
-      render: (r) => <TypePill label={r.typeLabel} />,
+      width: 190,
+      // Billing / Delivery / Invoice Mailing — a closed enum, so the cell
+      // offers its three labels and hands back the value behind the one
+      // picked. Not clearable: an address is always one of the three.
+      render: (r) => (
+        <InlineSelect
+          value={r.typeLabel}
+          options={ADDRESS_TYPE_LABELS}
+          clearable={false}
+          field="Type"
+          rowLabel={r.company}
+          accent={KYC_ACCENT}
+          onSave={(next) =>
+            patch(r, { addressType: next ? (addressTypeByLabel.get(next) ?? r.addressType) : r.addressType })
+          }
+        />
+      ),
       value: (r) => r.typeLabel,
     },
     {
@@ -126,22 +254,54 @@ export function ClientAddressBook({ rows }: { rows: ClientAddressRow[] }) {
     {
       key: "city",
       header: "City",
-      width: 120,
-      render: (r) => r.city ?? <Dash />,
+      width: 165,
+      // No master list — cities are typed per address — so the menu offers
+      // the ones already on record. That is what stops one city arriving as
+      // "Pune", "pune" and "PUNE".
+      render: (r) => (
+        <InlineSelect
+          value={r.city}
+          options={cityOptions}
+          field="City"
+          rowLabel={r.company}
+          accent={KYC_ACCENT}
+          onSave={(next) => patch(r, { city: next ?? "" })}
+        />
+      ),
       value: (r) => r.city ?? "",
     },
     {
       key: "state",
       header: "State",
-      width: 130,
-      render: (r) => r.state ?? <Dash />,
+      width: 165,
+      // The two fields on an address that come off a master list, so the two
+      // that are dropdowns here. The rest is street text, typed per address.
+      render: (r) => (
+        <InlineSelect
+          value={r.state}
+          options={states}
+          field="State"
+          rowLabel={r.company}
+          accent={KYC_ACCENT}
+          onSave={(next) => patch(r, { state: next ?? "" })}
+        />
+      ),
       value: (r) => r.state ?? "",
     },
     {
       key: "country",
       header: "Country",
-      width: 110,
-      render: (r) => r.country ?? <Dash />,
+      width: 155,
+      render: (r) => (
+        <InlineSelect
+          value={r.country}
+          options={countries}
+          field="Country"
+          rowLabel={r.company}
+          accent={KYC_ACCENT}
+          onSave={(next) => patch(r, { country: next ?? "" })}
+        />
+      ),
       value: (r) => r.country ?? "",
     },
     {
@@ -224,11 +384,29 @@ export function ClientAddressBook({ rows }: { rows: ClientAddressRow[] }) {
     },
   ];
 
+  if (view === "grid") {
+    return (
+      <MasterGrid
+        rows={rows}
+        columns={gridColumns}
+        title="Client Address Book"
+        primaryKey="company"
+        primarySearchLabel="Search company"
+        accent={KYC_ACCENT}
+        accentSoft={KYC_ACCENT_SOFT}
+        toolbar={viewSwitch}
+        save={saveGridRow}
+        noun="addresses"
+      />
+    );
+  }
+
   return (
     <>
       <DataTable
         rows={rows}
         columns={columns}
+        headerActions={viewSwitch}
         filters={filters}
         sorts={sorts}
         title="Client Address Book"

@@ -1,6 +1,7 @@
 import "server-only";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
+import { withDbRetry } from "@/lib/db/retry";
 import { orgSettings, type OrgSettings } from "@/db/schema";
 
 /**
@@ -52,11 +53,22 @@ const DEFAULTS: OrgSettings = {
   updatedById: null,
 };
 
+/**
+ * Retried, because EVERY module's layout awaits this before it renders
+ * anything — the workspace, Masters, Targets and the Project Plan all call it
+ * for the idle timeout. The DEFAULTS above already cover a missing ROW, but a
+ * failed QUERY threw, and a dropped socket on the pooler then took the whole
+ * page down with "Failed query" rather than degrading anything.
+ *
+ * Same reasoning as `getCurrentEmployee`, which has been retried for exactly
+ * this reason: the transient codes (ECONNRESET, and 57014 when a queued
+ * statement hits the pooler's own timeout) are the ones `withDbRetry` knows to
+ * try again on a fresh connection. A real error still surfaces on the first
+ * attempt.
+ */
 export async function getOrgSettings(): Promise<OrgSettings> {
-  const [row] = await db
-    .select()
-    .from(orgSettings)
-    .where(eq(orgSettings.id, 1))
-    .limit(1);
+  const [row] = await withDbRetry("org settings", () =>
+    db.select().from(orgSettings).where(eq(orgSettings.id, 1)).limit(1),
+  );
   return row ?? DEFAULTS;
 }

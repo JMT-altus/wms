@@ -17,12 +17,18 @@ import {
 } from "@/app/(forms-module)/forms/client-kyc/actions";
 import { CodeCell } from "@/components/masters/row-menu";
 import { TypePill, distinctValues } from "./kyc/master-list";
+import { YES_NO } from "@/lib/forms/client-bulk-columns";
 import {
   RecordEditDialog,
+  asOptions,
   type EditField,
   type EditValues,
 } from "./kyc/record-edit-dialog";
 import { KYC_ACCENT } from "./kyc/tokens";
+import { InlineSelect, InlineText, type SaveResult } from "@/components/admin/master/inline-edit";
+import { MasterGrid, type GridCol } from "@/components/admin/master/master-grid";
+import { ViewSwitch, type MasterView } from "@/components/admin/master/view-switch";
+import { KYC_ACCENT_SOFT } from "./kyc/tokens";
 
 /** Account numbers and IFSC codes read as codes, not prose. */
 const MONO = "var(--font-mono), ui-monospace, monospace";
@@ -38,9 +44,20 @@ const MONO = "var(--font-mono), ui-monospace, monospace";
  * directories, so tiles, search, filters, sort, export and pagination match
  * them exactly.
  */
-export function ClientBankMaster({ rows }: { rows: ClientBankRow[] }) {
+export function ClientBankMaster({
+  rows,
+  bankNames,
+  accountTypes,
+}: {
+  rows: ClientBankRow[];
+  /** The admin-managed Bank Name list — the KYC form's own picker. */
+  bankNames: string[];
+  /** The admin-managed Account Type list, same source. */
+  accountTypes: string[];
+}) {
   const router = useRouter();
   const [editing, setEditing] = React.useState<ClientBankRow | null>(null);
+  const [view, setView] = React.useState<MasterView>("table");
 
   /**
    * Bulk delete for the ticked rows. The table asks for confirmation and
@@ -66,11 +83,26 @@ export function ClientBankMaster({ rows }: { rows: ClientBankRow[] }) {
   }
   const EDIT_FIELDS: EditField[] = [
     { key: "accountName", label: "Account Name", maxLength: 160 },
-    { key: "bankName", label: "Bank Name", maxLength: 160 },
+    // Both lists are admin-managed and the columns are free text, so these
+    // are combos: pick the bank from the list of scheduled banks, or type the
+    // co-operative branch nobody has added yet.
+    {
+      key: "bankName",
+      label: "Bank Name",
+      type: "combo",
+      maxLength: 160,
+      options: asOptions(bankNames),
+    },
     { key: "accountNo", label: "Account No", maxLength: 60 },
     { key: "ifscSwift", label: "IFSC / SWIFT", maxLength: 30 },
     { key: "branch", label: "Branch", maxLength: 160 },
-    { key: "accountType", label: "Account Type", maxLength: 40 },
+    {
+      key: "accountType",
+      label: "Account Type",
+      type: "combo",
+      maxLength: 40,
+      options: asOptions(accountTypes),
+    },
     { key: "isPrimary", label: "Primary", type: "checkbox", placeholder: "This is the primary account" },
   ];
 
@@ -79,6 +111,64 @@ export function ClientBankMaster({ rows }: { rows: ClientBankRow[] }) {
     const res = await updateClientBankAccount(editing.id, v);
     if (res.ok) router.refresh();
     return res;
+  }
+
+  /**
+   * Save one field of one row, from a cell edited in place. Rebuilds the whole
+   * account from the row, because `updateClientBankAccount` takes a complete
+   * one — the same payload the dialog sends.
+   */
+  const patch = React.useCallback(
+    async (row: ClientBankRow, changes: EditValues): Promise<SaveResult> => {
+      const res = await updateClientBankAccount(row.id, {
+        accountName: row.accountName ?? "",
+        bankName: row.bankName ?? "",
+        accountNo: row.accountNo ?? "",
+        ifscSwift: row.ifscSwift ?? "",
+        branch: row.branch ?? "",
+        accountType: row.accountType ?? "",
+        isPrimary: row.isPrimary,
+        ...changes,
+      });
+      if (!res.ok) return { ok: false, error: res.error };
+      router.refresh();
+      return { ok: true };
+    },
+    [router],
+  );
+
+  /** Account names already on record, as the Account Name box's suggestions. */
+  const accountNameOptions = React.useMemo(
+    () => distinctValues(rows, (r) => r.accountName),
+    [rows],
+  );
+
+  const viewSwitch = <ViewSwitch view={view} onChange={setView} accent={KYC_ACCENT} />;
+
+  /** Grid View — every bank account as one editable row. */
+  const gridColumns: GridCol<ClientBankRow>[] = [
+    { key: "company", label: "Company", width: 210, kind: "text", frozen: true, readOnly: true, get: (r) => r.company },
+    { key: "code", label: "Client Number", width: 130, kind: "text", frozen: true, readOnly: true, mono: true, get: (r) => r.code ?? "" },
+    { key: "accountName", label: "Account Name", width: 230, kind: "text", maxLength: 160, get: (r) => r.accountName ?? "" },
+    { key: "bankName", label: "Bank Name", width: 220, kind: "select", freeText: true, options: bankNames, get: (r) => r.bankName ?? "" },
+    { key: "accountNo", label: "Account No", width: 190, kind: "text", maxLength: 60, get: (r) => r.accountNo ?? "" },
+    { key: "ifscSwift", label: "IFSC / SWIFT", width: 170, kind: "text", maxLength: 30, get: (r) => r.ifscSwift ?? "" },
+    { key: "branch", label: "Branch", width: 200, kind: "text", maxLength: 160, get: (r) => r.branch ?? "" },
+    { key: "accountType", label: "Account Type", width: 175, kind: "select", freeText: true, options: accountTypes, get: (r) => r.accountType ?? "" },
+    { key: "isPrimary", label: "Primary", width: 130, kind: "select", options: YES_NO, get: (r) => (r.isPrimary ? "Yes" : "No") },
+  ];
+
+  async function saveGridRow(row: ClientBankRow, cells: Record<string, string>) {
+    const g = (k: string) => cells[k] ?? "";
+    return patch(row, {
+      accountName: g("accountName"),
+      bankName: g("bankName"),
+      accountNo: g("accountNo"),
+      ifscSwift: g("ifscSwift"),
+      branch: g("branch"),
+      accountType: g("accountType"),
+      isPrimary: g("isPrimary") === "Yes",
+    });
   }
 
   const columns: Column<ClientBankRow>[] = [
@@ -98,10 +188,21 @@ export function ClientBankMaster({ rows }: { rows: ClientBankRow[] }) {
     {
       key: "accountName",
       header: "Account Name",
-      width: 190,
+      width: 230,
+      // Typed per account, so a box rather than a dropdown — there is no
+      // master list of account names and inventing one would be wrong. It
+      // does suggest the names already on record, because one company's
+      // accounts usually share a name.
       render: (r) => (
-        <span className="inline-flex items-center gap-1.5 flex-wrap">
-          {r.accountName ? <strong className="text-ink-strong">{r.accountName}</strong> : <Dash />}
+        <span className="flex items-center gap-1.5">
+          <InlineText
+            value={r.accountName}
+            suggestions={accountNameOptions}
+            maxLength={160}
+            field="Account Name"
+            rowLabel={r.company}
+            onSave={(next) => patch(r, { accountName: next ?? "" })}
+          />
           {r.isPrimary && <TypePill label="Primary" strong />}
         </span>
       ),
@@ -110,8 +211,20 @@ export function ClientBankMaster({ rows }: { rows: ClientBankRow[] }) {
     {
       key: "bankName",
       header: "Bank Name",
-      width: 170,
-      render: (r) => r.bankName ?? <Dash />,
+      width: 205,
+      // Off the admin-managed bank list, so the cell is that list. A bank
+      // already on a row that has since left the list still shows, and can
+      // still be changed — the account exists either way.
+      render: (r) => (
+        <InlineSelect
+          value={r.bankName}
+          options={bankNames}
+          field="Bank Name"
+          rowLabel={r.company}
+          accent={KYC_ACCENT}
+          onSave={(next) => patch(r, { bankName: next ?? "" })}
+        />
+      ),
       value: (r) => r.bankName ?? "",
     },
     {
@@ -150,8 +263,17 @@ export function ClientBankMaster({ rows }: { rows: ClientBankRow[] }) {
     {
       key: "accountType",
       header: "Account Type",
-      width: 130,
-      render: (r) => r.accountType ?? <Dash />,
+      width: 165,
+      render: (r) => (
+        <InlineSelect
+          value={r.accountType}
+          options={accountTypes}
+          field="Account Type"
+          rowLabel={r.company}
+          accent={KYC_ACCENT}
+          onSave={(next) => patch(r, { accountType: next ?? "" })}
+        />
+      ),
       value: (r) => r.accountType ?? "",
     },
   ];
@@ -212,11 +334,29 @@ export function ClientBankMaster({ rows }: { rows: ClientBankRow[] }) {
     },
   ];
 
+  if (view === "grid") {
+    return (
+      <MasterGrid
+        rows={rows}
+        columns={gridColumns}
+        title="Client Bank Master"
+        primaryKey="company"
+        primarySearchLabel="Search company"
+        accent={KYC_ACCENT}
+        accentSoft={KYC_ACCENT_SOFT}
+        toolbar={viewSwitch}
+        save={saveGridRow}
+        noun="accounts"
+      />
+    );
+  }
+
   return (
     <>
       <DataTable
         rows={rows}
         columns={columns}
+        headerActions={viewSwitch}
         filters={filters}
         sorts={sorts}
         title="Client Bank Master"

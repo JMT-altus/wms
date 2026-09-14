@@ -9,6 +9,10 @@ import { AgingHeatmap } from "@/components/dashboard/aging-heatmap";
 import { WelcomeHero } from "@/components/dashboard/welcome-hero";
 import { MyDayCard } from "@/components/dashboard/my-day-card";
 import { DashboardLoadError } from "@/components/dashboard/dashboard-load-error";
+import { DashboardTabs } from "@/components/dashboard/dashboard-tabs";
+import { WeeklyGoalsBand } from "@/components/dashboard/weekly-goals-band";
+import { listWeeklyGoals } from "@/lib/queries/weekly-goals";
+import { currentWeekStart } from "@/lib/weekly-goals/week";
 import { listEmployees } from "@/lib/queries/employees";
 import { listDistinctSubjects } from "@/lib/queries/tasks";
 import { listActiveDepartmentNames } from "@/lib/queries/departments";
@@ -49,6 +53,13 @@ export default async function DashboardPage({ searchParams }: PageProps) {
   let todayTasks: Awaited<ReturnType<typeof getMyTodayTasks>> | null;
   let subjects: string[];
   let departments: string[];
+  // This week's goals for the signed-in user. Degrades to an empty band on
+  // failure — the dashboard must not die for a decorative strip.
+  const weekGoals = me
+    ? await listWeeklyGoals({ employeeId: me.id, weekStart: currentWeekStart() }).catch(
+        () => [],
+      )
+    : [];
   try {
     [allEmployees, data, statusDisplay, myDay, todayTasks, subjects, departments] = await Promise.all([
       listEmployees(),
@@ -137,28 +148,60 @@ export default async function DashboardPage({ searchParams }: PageProps) {
               </div>
             )}
             <div className={mobileToday ? "max-md:hidden" : undefined}>
+              {/* Section rail — grows as the remaining analytics sections land.
+                  Only sections that actually render are listed; a tab that
+                  scrolls nowhere is worse than no tab. */}
+              <DashboardTabs
+                tabs={[
+                  { id: "task-summary", label: "Task Summary" },
+                  { id: "status-distribution", label: "Status Mix" },
+                  { id: "top-performers", label: "Top Performers" },
+                  { id: "status-by-doer", label: "Status by Doer" },
+                  { id: "aging-heatmap", label: "Aging Heatmap" },
+                ]}
+              />
+              <WeeklyGoalsBand
+                goals={weekGoals.map((g) => ({
+                  id: g.id,
+                  targetDone: g.targetDone,
+                  priority: g.priority,
+                  pctDone: g.pctDone,
+                }))}
+              />
               {me && myDay && (
                 <MyDayCard
                   firstName={me.name.split(" ")[0] ?? me.name}
                   counts={myDay}
                 />
               )}
-              <KpiStrip kpis={data.kpis} summary={data.wmsSummary} />
-              <div className="mx-auto max-w-[1600px] px-12 max-md:px-4 mt-12 grid grid-cols-2 max-lg:grid-cols-1 gap-6">
+              <KpiStrip
+                kpis={data.kpis}
+                summary={data.wmsSummary}
+                velocity={data.velocity}
+              />
+              <div
+                id="status-distribution"
+                className="mx-auto mt-12 max-w-[1600px] scroll-mt-[190px] px-12 max-md:px-4"
+              >
                 <StatusDistributionChart
                   data={data.statusDistribution}
                   labels={statusLabels}
                   tones={statusTones}
                   isAdmin={Boolean(me?.isAdmin)}
                 />
-                <TopPerformersSection performers={data.topPerformers} />
               </div>
+              {/* Full width, and carrying its own header + anchor: the podium
+                  and the ranked list need the room to sit side by side. */}
+              <TopPerformersSection performers={data.topPerformers} />
+              {/* The section carries its own anchor id and header. */}
               <StatusTable rows={data.statusTable} view={filters.view} />
-              <AgingHeatmap
-                rows={data.agingTable}
-                cellTasks={data.agingHeatmapData.byCell}
-                hiddenCells={data.agingHeatmapData.hiddenByCell}
-              />
+              <div id="aging-heatmap" className="scroll-mt-[190px]">
+                <AgingHeatmap
+                  rows={data.agingTable}
+                  cellTasks={data.agingHeatmapData.byCell}
+                  hiddenCells={data.agingHeatmapData.hiddenByCell}
+                />
+              </div>
             </div>
           </>
         )}

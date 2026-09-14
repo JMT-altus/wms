@@ -2,6 +2,7 @@ import { and, eq, gte, inArray, isNull, isNotNull, lt, or, asc, desc, sql } from
 import { alias } from "drizzle-orm/pg-core";
 import { unstable_cache } from "next/cache";
 import { db, employees, tasks } from "@/lib/db";
+import { projectNodes } from "@/db/schema";
 import { TASK_STATUSES, TASK_PRIORITIES, PENDING_STATUSES } from "@/db/enums";
 import type { ApprovalLevel, TaskStatus, ApprovalStatus, Visibility } from "@/db/enums";
 import { employeeIdsInDepartments } from "@/lib/queries/departments";
@@ -76,6 +77,8 @@ export async function listTasks(filters: TaskListFilters): Promise<TaskListRow[]
   // doubled the wall-clock cost of the list view for no functional gain.
   const doerEmp = alias(employees, "doer_emp");
   const initEmp = alias(employees, "init_emp");
+  /** The project a task hangs off, for the list's Project column. */
+  const projectNode = alias(projectNodes, "task_project_node");
 
   const rows = await db
     .select({
@@ -101,6 +104,10 @@ export async function listTasks(filters: TaskListFilters): Promise<TaskListRow[]
       approvalStatus: tasks.approvalStatus,
       firstReadAt: tasks.firstReadAt,
       completedAt: tasks.completedAt,
+      // The project the task hangs off, resolved to its name here rather than
+      // in the table — the id alone is not something anyone can read.
+      projectNodeId: tasks.projectNodeId,
+      projectName: projectNode.name,
       // Was it approved after its due date? The approval moment is
       // `approved_at` when the Approve action stamped it, else the audit row
       // the status dropdown left behind — the two paths record it in
@@ -124,6 +131,7 @@ export async function listTasks(filters: TaskListFilters): Promise<TaskListRow[]
     .from(tasks)
     .leftJoin(doerEmp, eq(tasks.doerId, doerEmp.id))
     .leftJoin(initEmp, eq(tasks.initiatorId, initEmp.id))
+    .leftJoin(projectNode, eq(tasks.projectNodeId, projectNode.id))
     .where(and(...conditions))
     .orderBy(desc(tasks.createdAt))
     .limit(1000);
@@ -143,6 +151,8 @@ export async function listTasks(filters: TaskListFilters): Promise<TaskListRow[]
     doerDept: r.doerDept ?? null,
     initiatorId: r.initiatorId,
     initiatorName: r.initiatorName ?? null,
+    projectNodeId: r.projectNodeId ?? null,
+    projectName: r.projectName ?? null,
     createdAt: r.createdAt,
     dueAt: r.dueAt,
     revisedTargetDate: r.revisedTargetDate ?? null,
@@ -252,6 +262,8 @@ export async function listTasksPage(
 
   const doerEmp = alias(employees, "doer_emp");
   const initEmp = alias(employees, "init_emp");
+  /** Same Project column as `listTasks` — see the note there. */
+  const projectNode = alias(projectNodes, "task_project_node");
 
   // Fetch one extra row so we know whether a next page exists without a
   // separate `count(*)` round-trip.
@@ -279,6 +291,8 @@ export async function listTasksPage(
       approvalStatus: tasks.approvalStatus,
       firstReadAt: tasks.firstReadAt,
       completedAt: tasks.completedAt,
+      projectNodeId: tasks.projectNodeId,
+      projectName: projectNode.name,
       // Same "approved after its due date?" expression as listTasks above.
       approvedLate: sql<boolean | null>`(
         CASE WHEN ${tasks.approvalStatus} = 'approved' OR ${tasks.status} = 'approved'
@@ -298,6 +312,7 @@ export async function listTasksPage(
     .from(tasks)
     .leftJoin(doerEmp, eq(tasks.doerId, doerEmp.id))
     .leftJoin(initEmp, eq(tasks.initiatorId, initEmp.id))
+    .leftJoin(projectNode, eq(tasks.projectNodeId, projectNode.id))
     .where(and(...conditions))
     .orderBy(desc(tasks.createdAt), desc(tasks.id))
     .limit(pageSize + 1);
@@ -322,6 +337,8 @@ export async function listTasksPage(
     doerDept: r.doerDept ?? null,
     initiatorId: r.initiatorId,
     initiatorName: r.initiatorName ?? null,
+    projectNodeId: r.projectNodeId ?? null,
+    projectName: r.projectName ?? null,
     createdAt: r.createdAt,
     dueAt: r.dueAt,
     revisedTargetDate: r.revisedTargetDate ?? null,
@@ -367,6 +384,9 @@ export interface BoardTask {
   client: string | null;
   description: string | null;
   status: (typeof TASK_STATUSES)[number];
+  /** The INITIATOR's ruling — the board's second half buckets by this, and it
+   *  is a different column from `status` on purpose. Null = nobody has ruled. */
+  approvalStatus: "approved" | "not_approved" | "cancelled" | "transferred" | null;
   priority: (typeof TASK_PRIORITIES)[number];
   /** Null = unassigned (a quick-dumped pool task awaiting assignment). */
   doerId: string | null;
@@ -418,6 +438,7 @@ export async function listBoardTasks(filters?: TaskListFilters): Promise<BoardTa
       client: tasks.client,
       description: tasks.description,
       status: tasks.status,
+      approvalStatus: tasks.approvalStatus,
       priority: tasks.priority,
       doerId: tasks.doerId,
       dueAt: tasks.dueAt,
@@ -448,6 +469,7 @@ export async function listAgendaTasks(employeeId: string): Promise<BoardTask[]> 
       client: tasks.client,
       description: tasks.description,
       status: tasks.status,
+      approvalStatus: tasks.approvalStatus,
       priority: tasks.priority,
       doerId: tasks.doerId,
       dueAt: tasks.dueAt,
