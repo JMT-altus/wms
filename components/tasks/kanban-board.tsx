@@ -1,5 +1,6 @@
 "use client";
 
+import { describedLabel } from "@/lib/display-label";
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -1317,7 +1318,7 @@ function TaskHoverCard({
           style={{ animationDelay: DELAY[1], fontSize: 17, fontWeight: 800, lineHeight: 1.3, letterSpacing: "-0.01em" }}
         >
           {t.taskNo != null && <span className="text-ink-subtle tabular-nums">#{t.taskNo} · </span>}
-          {t.title}
+          {describedLabel(t.description, t.title)}
         </h3>
 
         <div className="hc-item mt-3" style={{ animationDelay: DELAY[2] }}>

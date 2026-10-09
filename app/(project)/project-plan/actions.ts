@@ -33,6 +33,10 @@ import {
   hasTask,
   isExecutable,
   isPlanKind,
+  requiresTargetDate,
+  targetDateRequiredMessage,
+  requiresDescription,
+  DESCRIPTION_REQUIRED_MESSAGE,
   UNCLASSIFIED_MILESTONE,
   UNCLASSIFIED_RESULT,
   type PlanKind,
@@ -92,6 +96,24 @@ function targetDateAt(ymd: string): Date | null {
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
+/**
+ * The server's half of the Target Date rule — see `requiresTargetDate`.
+ *
+ * The forms refuse an empty date before they call, but a form is a courtesy:
+ * a stale tab or a direct call must not be able to create an undated Action.
+ * Null when the date is fine, otherwise the sentence to show.
+ */
+function missingTargetDateError(kind: string, ymd: string | null | undefined): string | null {
+  if (!requiresTargetDate(kind)) return null;
+  return ymd && targetDateAt(ymd) ? null : targetDateRequiredMessage(kind);
+}
+
+/** The server's half of the Description rule — see `requiresDescription`. */
+function missingDescriptionError(kind: string, description: string | null | undefined): string | null {
+  if (!requiresDescription(kind)) return null;
+  return description?.trim() ? null : DESCRIPTION_REQUIRED_MESSAGE;
+}
+
 function todayAtNoon(): Date {
   const now = new Date();
   return new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12, 0, 0, 0);
@@ -110,7 +132,7 @@ function sanitiseLinks(links: string[] | null | undefined): string[] | null {
 /* ── syncNodeTask — the ONLY path that touches a plan row's task ─────────── */
 
 /**
- * Reconcile the one `tasks` row an executable (or Result) node points at.
+ * Reconcile the one `tasks` row an executable node points at.
  *
  * Creation is LAZY: the row becomes a real task the moment it has BOTH an
  * owner and a target date — the two columns `tasks` cannot be inserted
@@ -341,26 +363,37 @@ const CreateNodeSchema = z.object({
   name: NameSchema.optional(),
 });
 
+/** The bare `+` also carries a date, which an Action or Sub-Action must have. */
+const QuickCreateSchema = CreateNodeSchema.extend({
+  targetDate: z.string().trim().nullable().optional().default(null),
+  description: z.string().trim().max(8000).nullable().optional().default(null),
+});
+
 /**
  * The bare `+` on a row.
  *
- * A TASK-LEVEL row seeds `owner_id = me` and `target_date = today` and syncs,
- * so the work is never invisible; both are editable cells the moment the row
- * lands, so a wrong guess costs one click. Containers get neither — a
- * milestone is not something anyone does.
+ * A TASK-LEVEL row seeds `owner_id = me` and syncs, so the work is never
+ * invisible. An ACTION or SUB-ACTION must be given its Target Date by the
+ * caller and is refused without one; a Sub-Sub-Action still seeds today.
+ * Containers get neither — a milestone is not something anyone does.
  */
 export async function createPlanNode(
-  input: z.input<typeof CreateNodeSchema>,
+  input: z.input<typeof QuickCreateSchema>,
 ): Promise<Result<{ id: string }>> {
   const me = await requireUser();
   const limited = rateLimitOrError(me.id, "write");
   if (limited) return limited;
 
-  const parsed = CreateNodeSchema.safeParse(input);
+  const parsed = QuickCreateSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
   }
-  const { kind, parentId, name } = parsed.data;
+  const { kind, parentId, name, targetDate, description } = parsed.data;
+
+  const dateError = missingTargetDateError(kind, targetDate);
+  if (dateError) return { ok: false, error: dateError };
+  const descError = missingDescriptionError(kind, description);
+  if (descError) return { ok: false, error: descError };
 
   const parentCheck = await checkParent(kind, parentId ?? null);
   if (!parentCheck.ok) return parentCheck;
@@ -380,11 +413,18 @@ export async function createPlanNode(
         // initiator. See the note in `insertNode`; a container used to land
         // here unowned, which left its creator with no standing on it.
         ownerId: me.id,
+        description: description?.trim() || null,
         // Written as well as implied: the Owner column reads `initiator_id`,
         // so a quick-added row that only carried the id in `owner_id` showed
         // a blank Owner until someone opened the edit dialog.
         initiatorId: me.id,
-        ...(seedsTask ? { targetDate: todayAtNoon() } : {}),
+        ...(seedsTask
+          ? {
+              targetDate: requiresTargetDate(kind)
+                ? targetDateAt(targetDate!)
+                : todayAtNoon(),
+            }
+          : {}),
       })
       .returning({ id: projectNodes.id });
     if (!row) return { ok: false, error: "Insert returned no row." };
@@ -445,6 +485,10 @@ export async function createPlanNodeForTask(
       error: `A ${data.kind.replace(/_/g, " ")} has no task — use the container path.`,
     };
   }
+  const dateError = missingTargetDateError(data.kind, data.targetDate);
+  if (dateError) return { ok: false, error: dateError };
+  const descError = missingDescriptionError(data.kind, data.description);
+  if (descError) return { ok: false, error: descError };
   const parentCheck = await checkParent(data.kind, data.parentId ?? null);
   if (!parentCheck.ok) return parentCheck;
 
@@ -481,6 +525,12 @@ const ResolvePlacementSchema = z.object({
   /** Carried onto that row, so the plan is not a tree of empty names. */
   description: z.string().trim().nullable().optional(),
   subject: z.string().trim().nullable().optional(),
+  /**
+   * The Target Date (YYYY-MM-DD) of the Action or Sub-Action this creates.
+   * Required in practice — both of those levels refuse to be made without one —
+   * but optional in the schema so the refusal is OUR sentence, not zod's.
+   */
+  targetDate: z.string().trim().nullable().optional(),
 });
 
 /**
@@ -515,8 +565,15 @@ export async function resolvePlanPlacement(
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
   }
-  const { projectId, milestoneId, resultId, actionId, name, description, subject } =
+  const { projectId, milestoneId, resultId, actionId, name, description, subject, targetDate } =
     parsed.data;
+
+  // Checked before ANY write: the Unclassified Milestone/Result below are real
+  // rows, and a refused task must not leave them behind.
+  const dateError = missingTargetDateError(actionId ? "sub_action" : "action", targetDate);
+  if (dateError) return { ok: false, error: dateError };
+  const descError = missingDescriptionError(actionId ? "sub_action" : "action", description);
+  if (descError) return { ok: false, error: descError };
 
   /*
    * A chosen Result used to SHORT-CIRCUIT here, returning the Result itself as
@@ -616,8 +673,8 @@ export async function resolvePlanPlacement(
   const leafName = name?.trim() || subject?.trim() || "Untitled action";
 
   const leaf = actionId
-    ? await createLeaf(me, actionId, "sub_action", leafName, description ?? null, subject ?? null)
-    : await createLeaf(me, resultNode, "action", leafName, description ?? null, subject ?? null);
+    ? await createLeaf(me, actionId, "sub_action", leafName, description ?? null, subject ?? null, targetDate ?? null)
+    : await createLeaf(me, resultNode, "action", leafName, description ?? null, subject ?? null, targetDate ?? null);
   if (!leaf.ok) return leaf;
 
   // The caller creates the task next and is the only one who can set its
@@ -667,6 +724,7 @@ async function createLeaf(
   name: string,
   description: string | null,
   subject: string | null,
+  targetDate: string | null,
 ): Promise<Result<{ id: string }>> {
   return insertNode(
     me,
@@ -676,7 +734,7 @@ async function createLeaf(
       name,
       description,
       notes: null,
-      targetDate: null,
+      targetDate,
       ownerId: null,
       category: null,
       purpose: null,
@@ -924,6 +982,36 @@ export async function bulkCreatePlanNodes(
   }
   const { kind, parentId, rows } = parsed.data;
 
+  // Rejected as a whole, naming the rows: a silent default of "today" put an
+  // invented deadline on every undated row and notified people about it.
+  if (requiresTargetDate(kind)) {
+    const undated = rows
+      .map((r, i) => (r.targetDate && targetDateAt(r.targetDate) ? 0 : i + 1))
+      .filter((n) => n > 0);
+    if (undated.length > 0) {
+      const shown = undated.slice(0, 10).join(", ");
+      const more = undated.length > 10 ? ` and ${undated.length - 10} more` : "";
+      return {
+        ok: false,
+        error: `${targetDateRequiredMessage(kind)} Rows without one: ${shown}${more}. Nothing was imported.`,
+      };
+    }
+  }
+
+  if (requiresDescription(kind)) {
+    const blank = rows
+      .map((r, i) => (r.description?.trim() ? 0 : i + 1))
+      .filter((n) => n > 0);
+    if (blank.length > 0) {
+      const shown = blank.slice(0, 10).join(", ");
+      const more = blank.length > 10 ? ` and ${blank.length - 10} more` : "";
+      return {
+        ok: false,
+        error: `${DESCRIPTION_REQUIRED_MESSAGE} Rows without one: ${shown}${more}. Nothing was imported.`,
+      };
+    }
+  }
+
   const parentCheck = await checkParent(kind, parentId ?? null);
   if (!parentCheck.ok) return parentCheck;
 
@@ -939,8 +1027,8 @@ export async function bulkCreatePlanNodes(
       sortOrder: order,
       createdById: me.id,
       description: r.description || null,
-      // A blank owner is filled by the importer and a blank date by today, so
-      // no imported row quietly fails to become a task.
+      // A blank owner is filled by the importer. A blank date is filled by
+      // today only below Action/Sub-Action level — those two were refused above.
       ownerId: r.ownerId ?? (seedsTask ? me.id : null),
       targetDate: r.targetDate
         ? targetDateAt(r.targetDate)
@@ -1037,6 +1125,14 @@ export async function updatePlanNode(
   });
   if (!node) return { ok: false, error: "That row no longer exists." };
   if (node.isArchived) return { ok: false, error: "That row is archived." };
+
+  // Only an edit that SETS the description is checked: renaming or re-dating a
+  // legacy row that never had one must not be blocked, but saving it with the
+  // description cleared (or the edit form's empty box) must.
+  if (fields.description !== undefined) {
+    const descError = missingDescriptionError(node.kind, fields.description);
+    if (descError) return { ok: false, error: descError };
+  }
 
   // An executable row takes these FROM ITS TASK. Accepting them here would
   // write a second copy free to disagree with the record of truth.
@@ -1894,6 +1990,18 @@ export async function bulkUpdatePlanNodes(
     startsAt,
     endsAt,
   } = parsed.data;
+
+  // A bulk edit that blanks the description must not reach an Action or a
+  // Sub-Action: the whole selection is refused and nothing is written.
+  if (description !== undefined && !description?.trim()) {
+    const kinds = await db
+      .select({ kind: projectNodes.kind })
+      .from(projectNodes)
+      .where(inArray(projectNodes.id, ids));
+    if (kinds.some((k) => requiresDescription(k.kind))) {
+      return { ok: false, error: DESCRIPTION_REQUIRED_MESSAGE };
+    }
+  }
 
   const blankToNull = (v: string | null | undefined) =>
     v === undefined ? undefined : v === null || v.trim() === "" ? null : v.trim();

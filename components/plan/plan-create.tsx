@@ -386,6 +386,7 @@ function CreateDialog({
               hideSchedule={!isTaskLevel}
               preset={{
                 noun: KIND_LABEL[kind],
+                kind,
                 // A container has no subject of its own — its name is the
                 // whole of Basics.
                 hideSubject: !isTaskLevel,
@@ -442,7 +443,10 @@ function CreateDialog({
                         subject: values.subject ?? null,
                         targetDate: values.dueAt?.slice(0, 10) ?? null,
                       });
-                      if (!res.ok) return { ok: false as const, error: res.error };
+                      if (!res.ok) {
+                        toast.error(res.error);
+                        return { ok: false as const, error: res.error };
+                      }
                       rememberCreated(res.id, values.title.trim() || values.subject?.trim() || "");
                       // The project's client, so the task lands in the list
                       // under the engagement it belongs to rather than under

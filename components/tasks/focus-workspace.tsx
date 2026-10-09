@@ -1,5 +1,6 @@
 "use client";
 
+import { describedLabel } from "@/lib/display-label";
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -417,9 +418,14 @@ function TaskHero({ task, elapsedLabel }: { task: TaskShape; elapsedLabel: strin
           color: "#fff",
           textWrap: "balance",
           textShadow: "0 2px 12px rgba(0,0,0,0.4)",
+          // A description can run to paragraphs; the full text follows below.
+          display: "-webkit-box",
+          WebkitLineClamp: 4,
+          WebkitBoxOrient: "vertical",
+          overflow: "hidden",
         }}
       >
-        {task.title}
+        {describedLabel(task.description, task.title)}
       </h1>
 
       {/* Description body — readable prose */}

@@ -6,7 +6,14 @@
  * is not.
  */
 
-import { hasSchedule, type PlanKind } from "@/lib/plan/levels";
+import {
+  hasSchedule,
+  requiresTargetDate,
+  targetDateRequiredMessage,
+  requiresDescription,
+  DESCRIPTION_REQUIRED_MESSAGE,
+  type PlanKind,
+} from "@/lib/plan/levels";
 
 /**
  * The dialog refuses to preview more than this and the action refuses to
@@ -239,7 +246,7 @@ export function matchOwner(input: string, roster: readonly RosterEntry[]): Owner
 /* ── Row model ───────────────────────────────────────────────────────────── */
 
 export type BulkIssue =
-  | { level: "error"; code: "name-missing" | "name-too-long" | "end-before-start"; message: string }
+  | { level: "error"; code: "name-missing" | "name-too-long" | "end-before-start" | "target-date-missing" | "description-missing"; message: string }
   | { level: "warning"; code: "owner-unmatched" | "not-scheduled" | "duplicate-existing" | "duplicate-file"; message: string };
 
 export interface BulkRow {
@@ -317,6 +324,26 @@ export function evaluateBulkRows(
         level: "error",
         code: "end-before-start",
         message: "The end date is before the start date.",
+      });
+    }
+
+    // An Action or Sub-Action cannot be created undated — see
+    // `requiresTargetDate`. Blocking, so the row is unticked and says why
+    // instead of being given an invented date.
+    if (requiresTargetDate(kind) && !row.targetDate) {
+      issues.push({
+        level: "error",
+        code: "target-date-missing",
+        message: targetDateRequiredMessage(kind),
+      });
+    }
+
+    // Likewise the description: blocking, so the row is unticked and says why.
+    if (requiresDescription(kind) && !row.description?.trim()) {
+      issues.push({
+        level: "error",
+        code: "description-missing",
+        message: DESCRIPTION_REQUIRED_MESSAGE,
       });
     }
 

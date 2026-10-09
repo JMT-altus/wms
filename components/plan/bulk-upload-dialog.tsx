@@ -15,7 +15,13 @@ import {
   type BulkRow,
   type RosterEntry,
 } from "@/lib/plan/bulk";
-import { KIND_LABEL, hasSchedule, type PlanKind } from "@/lib/plan/levels";
+import {
+  KIND_LABEL,
+  hasSchedule,
+  targetDateRequiredMessage,
+  DESCRIPTION_REQUIRED_MESSAGE,
+  type PlanKind,
+} from "@/lib/plan/levels";
 import type { PlanBranch } from "@/lib/plan/context";
 import { bulkCreatePlanNodes } from "@/app/(project)/project-plan/actions";
 import { ParentPickers, ancestorLevels, seedValue, type PickerNode } from "./parent-pickers";
@@ -138,6 +144,22 @@ export function BulkUploadDialog({ tree, branch, roster, onClose, onDone }: Prop
   function submit() {
     if (!parentReady) {
       toast.error("Pick a destination first.");
+      return;
+    }
+    // Undated Actions / Sub-Actions are unticked and flagged row by row, but a
+    // person who ticks nothing deserves the REASON, not just "nothing ticked".
+    const undated = rows.filter((r) =>
+      r.issues.some((i) => i.code === "target-date-missing"),
+    ).length;
+    if (included.length === 0 && undated > 0) {
+      toast.error(`${targetDateRequiredMessage(kind)} ${undated} row(s) have none.`);
+      return;
+    }
+    const undescribed = rows.filter((r) =>
+      r.issues.some((i) => i.code === "description-missing"),
+    ).length;
+    if (included.length === 0 && undescribed > 0) {
+      toast.error(`${DESCRIPTION_REQUIRED_MESSAGE} ${undescribed} row(s) have none.`);
       return;
     }
     if (included.length === 0) {

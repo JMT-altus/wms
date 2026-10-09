@@ -103,6 +103,12 @@ export function PlanKanban({ tree, viewer, query, projectId, chip, kinds }: Prop
   const [dragging, setDragging] = React.useState<string | null>(null);
   const [over, setOver] = React.useState<ColumnId | null>(null);
   const [pending, setPending] = React.useState(false);
+  /**
+   * Which half of the board is on screen. Doer first: it is the half every row
+   * has (its report, or "Not scheduled"), where the Initiator half only holds
+   * the rows somebody has ruled on.
+   */
+  const [side, setSide] = React.useState<"doer" | "initiator">("doer");
 
   const cards = React.useMemo(() => {
     const out: Card[] = [];
@@ -332,13 +338,43 @@ export function PlanKanban({ tree, viewer, query, projectId, chip, kinds }: Prop
     // One provider for every card's hover card — Radix wants exactly one
     // above them, and the board is the only thing on the page that has them.
     <Tooltip.Provider delayDuration={260} skipDelayDuration={400}>
+      {/* ABOVE the scroller, not inside it: the switch stays put while the
+          columns scroll sideways underneath. */}
+      <div
+        role="radiogroup"
+        aria-label="Board view"
+        className="mb-3 inline-flex rounded-lg p-0.5"
+        style={{
+          background: "color-mix(in srgb, var(--color-hairline) 40%, transparent)",
+          border: "1px solid var(--color-hairline)",
+        }}
+      >
+        {(["doer", "initiator"] as const).map((s) => {
+          const active = side === s;
+          return (
+            <button
+              key={s}
+              type="button"
+              role="radio"
+              aria-checked={active}
+              onClick={() => setSide(s)}
+              className="rounded-md px-4 h-8 text-[13.5px] font-bold transition-colors"
+              style={
+                active
+                  ? { background: PLAN_SIDE[s].tone, color: "#fff" }
+                  : { background: "transparent", color: "var(--color-ink-soft)" }
+              }
+            >
+              {PLAN_SIDE[s].label}
+            </button>
+          );
+        })}
+      </div>
+
       <div className="overflow-x-auto pb-2">
-        {/* The two halves side by side, with a wider gap than the one between
-            columns — the gap IS the boundary. */}
-        <div className="flex gap-7 min-w-max items-start">
-          {renderHalf("doer")}
-          {renderHalf("initiator")}
-        </div>
+        {/* One half at a time. The same columns, cards and drop handling —
+            the switch only chooses which strip is drawn. */}
+        <div className="flex gap-7 min-w-max items-start">{renderHalf(side)}</div>
       </div>
     </Tooltip.Provider>
   );

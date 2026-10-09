@@ -155,15 +155,17 @@ describe("countPlan — over the WHOLE tree", () => {
       subActions: 0,
       subSubActions: 0,
       inWms: 1,
-      notScheduled: 2,
+      // The two actions are task-level; one has its task. The Result is a
+      // container and needs none, so it is not counted here.
+      notScheduled: 1,
     });
   });
 
-  it("counts a Result as schedulable — it gets a task too", () => {
+  it("does not count a Result as schedulable — it is a container with no task", () => {
     const c = countPlan([n("project", "p", "P", [
       n("milestone", "m", "M", [n("result", "r", "R")]),
     ])]);
-    expect(c.notScheduled).toBe(1);
+    expect(c.notScheduled).toBe(0);
     expect(c.inWms).toBe(0);
   });
 

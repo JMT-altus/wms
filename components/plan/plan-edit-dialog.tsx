@@ -11,6 +11,8 @@ import {
   durationDays,
   hasSchedule,
   isExecutable,
+  requiresDescription,
+  DESCRIPTION_REQUIRED_MESSAGE,
 } from "@/lib/plan/levels";
 import type { PlanNode } from "@/lib/queries/plan";
 import { updatePlanNode } from "@/app/(project)/project-plan/actions";
@@ -90,6 +92,11 @@ export function PlanEditDialog({ node, refLabel, employees, onClose, onDone }: P
   function save() {
     if (name.trim() === "") {
       toast.error("A name is required.");
+      return;
+    }
+    // Compulsory for an Action / Sub-Action; the server refuses it as well.
+    if (requiresDescription(node.kind) && description.trim() === "") {
+      toast.error(DESCRIPTION_REQUIRED_MESSAGE);
       return;
     }
     // Caught here as well as on the server: an inverted range is a typo the
@@ -214,7 +221,11 @@ export function PlanEditDialog({ node, refLabel, employees, onClose, onDone }: P
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   rows={3}
-                  placeholder="What this covers — optional"
+                  placeholder={
+                    requiresDescription(node.kind)
+                      ? "What needs to happen — required"
+                      : "What this covers — optional"
+                  }
                   className="plan-edit-input resize-y"
                 />
               </Row>

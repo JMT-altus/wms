@@ -75,11 +75,12 @@ describe("the six levels", () => {
 });
 
 describe("the three predicates are NOT the same set", () => {
-  it("hasTask includes Result; isExecutable does not", () => {
-    // This is the distinction the whole module rests on: a Result gets a task
-    // AND keeps derived progress. Collapsing the two would make a container's
-    // progress a self-report competing with its own children.
-    expect(hasTask("result")).toBe(true);
+  it("a Result is a container with no task", () => {
+    // A Result keeps derived progress ("0 out of 3 actions") and gets no WMS
+    // task of its own: the Action under it is the same piece of work, and a
+    // task on both put both in the task list. Making it executable would turn
+    // a container's progress into a self-report competing with its children.
+    expect(hasTask("result")).toBe(false);
     expect(isExecutable("result")).toBe(false);
     expect(isContainer("result")).toBe(true);
   });

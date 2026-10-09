@@ -22,6 +22,7 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "sonner";
+import * as Dialog from "@radix-ui/react-dialog";
 import {
   CHILD_KIND,
   KIND_LABEL,
@@ -31,6 +32,10 @@ import {
   hasTask,
   isExecutable,
   levelStyleProps,
+  requiresTargetDate,
+  targetDateRequiredMessage,
+  requiresDescription,
+  DESCRIPTION_REQUIRED_MESSAGE,
   type PlanKind,
   isValidChild,
 } from "@/lib/plan/levels";
@@ -279,6 +284,11 @@ export function PlanTreeTable({
    * the row controls have to stay shut for.
    */
   const [pending, setPending] = React.useState(false);
+  // The "+" on a row that makes an Action / Sub-Action, waiting for its date.
+  const [datePrompt, setDatePrompt] = React.useState<{
+    parentId: string;
+    kind: PlanKind;
+  } | null>(null);
 
   // Counted over the WHOLE TREE, never the rendered rows: results start
   // collapsed, so counting what is on screen reports "0 Actions".
@@ -388,11 +398,27 @@ export function PlanTreeTable({
    */
   function addChild(parentId: string, kind: PlanKind) {
     if (pending) return;
+    // An Action or Sub-Action cannot be made undated, and a bare "+" has no
+    // date to give — so ask for it first rather than inventing one.
+    if (requiresTargetDate(kind) || requiresDescription(kind)) {
+      setDatePrompt({ parentId, kind });
+      return;
+    }
+    createChild(parentId, kind, null, null);
+  }
+
+  function createChild(
+    parentId: string,
+    kind: PlanKind,
+    targetDate: string | null,
+    description: string | null,
+  ) {
+    if (pending) return;
     setExpanded((prev) => new Set(prev).add(parentId));
     setPending(true);
     void (async () => {
       try {
-        const res = await createPlanNode({ kind, parentId });
+        const res = await createPlanNode({ kind, parentId, targetDate, description });
         if (!res.ok) {
           toast.error(res.error ?? "That didn't work.");
           return;
@@ -825,6 +851,19 @@ export function PlanTreeTable({
           New project
         </button>
       </div>
+
+      {datePrompt && (
+        <TargetDatePrompt
+          kind={datePrompt.kind}
+          pending={pending}
+          onCancel={() => setDatePrompt(null)}
+          onConfirm={(ymd, description) => {
+            const { parentId, kind } = datePrompt;
+            setDatePrompt(null);
+            createChild(parentId, kind, ymd, description);
+          }}
+        />
+      )}
 
       {deleting && (
         <PlanDeleteDialog
@@ -1540,6 +1579,125 @@ function InlineName({
         <PenLine size={13} strokeWidth={2.4} />
       </button>
     </span>
+  );
+}
+
+/**
+ * The questions the bare "+" has to ask before it makes an Action or a
+ * Sub-Action: its Target Date and its Description. An empty answer is refused
+ * here with the module's sentence, and the server refuses it again.
+ */
+function TargetDatePrompt({
+  kind,
+  pending,
+  onCancel,
+  onConfirm,
+}: {
+  kind: PlanKind;
+  pending: boolean;
+  onCancel: () => void;
+  onConfirm: (ymd: string, description: string) => void;
+}) {
+  const [value, setValue] = React.useState("");
+  const [description, setDescription] = React.useState("");
+
+  function submit() {
+    if (!value) {
+      toast.error(targetDateRequiredMessage(kind));
+      return;
+    }
+    if (requiresDescription(kind) && !description.trim()) {
+      toast.error(DESCRIPTION_REQUIRED_MESSAGE);
+      return;
+    }
+    onConfirm(value, description.trim());
+  }
+
+  return (
+    <Dialog.Root open onOpenChange={(v) => !v && onCancel()}>
+      <Dialog.Portal>
+        <Dialog.Overlay
+          className="fixed inset-0 z-[60]"
+          style={{ background: "rgba(15, 23, 42, 0.45)", backdropFilter: "blur(4px)" }}
+        />
+        <Dialog.Content
+          className="fixed left-1/2 top-1/2 z-[70] -translate-x-1/2 -translate-y-1/2 rounded-section border border-hairline bg-surface-card shadow-xl p-6"
+          style={{ width: "min(420px, calc(100vw - 48px))" }}
+        >
+          <Dialog.Title className="text-ink-strong font-black" style={{ fontSize: 19 }}>
+            New {KIND_LABEL[kind]}
+          </Dialog.Title>
+          <Dialog.Description
+            className="mt-1 text-[14px] font-semibold"
+            style={{ color: "var(--color-ink-muted)" }}
+          >
+            A {KIND_LABEL[kind].toLowerCase()} needs a Target Date and a Description before it can be created.
+          </Dialog.Description>
+          <label className="mt-4 block">
+            <span
+              className="block mb-1.5 text-[12px] font-bold uppercase tracking-[0.09em]"
+              style={{ color: "var(--color-ink-muted)" }}
+            >
+              Target Date
+            </span>
+            <input
+              type="date"
+              autoFocus
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") submit();
+              }}
+              className="w-full rounded-lg px-3 h-10 text-[15px] outline-none focus:ring-1"
+              style={{
+                background: "var(--color-surface-card)",
+                border: "1px solid var(--color-hairline-strong)",
+                color: "var(--color-ink)",
+              }}
+            />
+          </label>
+          <label className="mt-4 block">
+            <span
+              className="block mb-1.5 text-[12px] font-bold uppercase tracking-[0.09em]"
+              style={{ color: "var(--color-ink-muted)" }}
+            >
+              {KIND_LABEL[kind]} Description
+            </span>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              rows={3}
+              placeholder="What needs to happen…"
+              className="w-full rounded-lg px-3 py-2 text-[15px] outline-none focus:ring-1 resize-y"
+              style={{
+                background: "var(--color-surface-card)",
+                border: "1px solid var(--color-hairline-strong)",
+                color: "var(--color-ink)",
+              }}
+            />
+          </label>
+          <div className="mt-5 flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={onCancel}
+              className="rounded-lg px-4 h-10 text-[14px] font-semibold"
+              style={{ border: "1px solid var(--color-hairline-strong)", color: "var(--color-ink)" }}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={submit}
+              disabled={pending}
+              className="rounded-lg px-4 h-10 text-[14px] font-semibold text-white disabled:opacity-50"
+              style={{ background: PLAN_RED }}
+            >
+              Create {KIND_LABEL[kind]}
+            </button>
+          </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
 }
 

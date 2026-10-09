@@ -409,6 +409,10 @@ export function ClientContactMaster({
         toolbar={viewSwitch}
         save={saveGridRow}
         noun="contacts"
+        // No search boxes on this sheet; the "All columns" menu is the one
+        // control left, and it only chooses which columns are drawn.
+        searchable={false}
+        columnPicker
       />
     );
   }

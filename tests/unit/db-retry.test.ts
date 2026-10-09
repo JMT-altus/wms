@@ -52,7 +52,7 @@ describe("withDbRetry", () => {
     expect(calls).toBe(1);
   });
 
-  it("gives up rather than looping forever when the fault persists", async () => {
+  it("gives up after 4 attempts rather than looping forever when the fault persists", async () => {
     let calls = 0;
     await expect(
       withDbRetry("always down", async () => {
@@ -60,7 +60,8 @@ describe("withDbRetry", () => {
         throw pgError("57014", "canceling statement due to statement timeout");
       }),
     ).rejects.toThrow();
-    expect(calls).toBe(3);
+    // The default is 4 attempts (waits of 250/500/1000ms between them).
+    expect(calls).toBe(4);
   });
 });
 

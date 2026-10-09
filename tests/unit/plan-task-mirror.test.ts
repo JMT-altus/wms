@@ -162,22 +162,13 @@ describe("mirrorTaskToNode", () => {
     expect(updateMock).not.toHaveBeenCalled();
   });
 
-  it("writes nothing to a Project or a Milestone — those have no task", async () => {
+  it("writes nothing to a Project, a Milestone or a Result — those have no task", async () => {
     taskFindFirst.mockResolvedValue(task());
-    for (const kind of ["project", "milestone"]) {
+    for (const kind of ["project", "milestone", "result"]) {
       nodeFindFirst.mockResolvedValue(node({ kind }));
       await mirrorTaskToNode("t1");
     }
     expect(updateMock).not.toHaveBeenCalled();
-  });
-
-  it("mirrors a Result too — a Result carries a task by design", async () => {
-    taskFindFirst.mockResolvedValue(task());
-    nodeFindFirst.mockResolvedValue(node({ kind: "result" }));
-
-    await mirrorTaskToNode("t1");
-
-    expect(updateMock).toHaveBeenCalledTimes(1);
   });
 
   it("swallows a db failure — the task edit is already committed", async () => {

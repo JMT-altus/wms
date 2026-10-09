@@ -148,12 +148,51 @@ const EXECUTABLE_SET: ReadonlySet<string> = new Set(EXECUTABLE_KINDS);
 const TASK_SET: ReadonlySet<string> = new Set(TASK_KINDS);
 const SCHEDULED_SET: ReadonlySet<string> = new Set(SCHEDULED_KINDS);
 
+/**
+ * The levels that may not be created without a Target Date.
+ *
+ * An Action or a Sub-Action is the work somebody is asked to do, and an undated
+ * one is a row nobody can be held to — so creation refuses it everywhere
+ * (dialog, WMS form, quick-add, bulk upload) and the server re-checks. A
+ * Sub-Sub-Action keeps its old behaviour.
+ */
+export const TARGET_DATE_REQUIRED_KINDS = [
+  "action",
+  "sub_action",
+] as const satisfies readonly PlanKind[];
+
+/** Must a row of this kind carry a Target Date at creation? */
+export function requiresTargetDate(kind: string | null | undefined): boolean {
+  return (TARGET_DATE_REQUIRED_KINDS as readonly string[]).includes(kind ?? "");
+}
+
+/** The one sentence every creation path shows when the date is missing. */
+export function targetDateRequiredMessage(kind: string): string {
+  const noun = kind === "sub_action" ? "Sub-action" : "Action";
+  return `Target Date is required. You cannot create this ${noun} without a Target Date.`;
+}
+
+/**
+ * The levels whose Description is compulsory, on create AND on edit.
+ *
+ * Same two levels as the Target Date rule: an Action or Sub-Action is the work
+ * itself, and a row whose description is blank is a name nobody can act on.
+ * Containers and Sub-Sub-Actions are unaffected.
+ */
+export function requiresDescription(kind: string | null | undefined): boolean {
+  return kind === "action" || kind === "sub_action";
+}
+
+/** The one sentence every path shows when an Action / Sub-Action has no description. */
+export const DESCRIPTION_REQUIRED_MESSAGE =
+  "Action and Sub-action description is compulsory.";
+
 /** Does this row report its status from a linked task rather than the node? */
 export function isExecutable(kind: string): boolean {
   return EXECUTABLE_SET.has(kind);
 }
 
-/** Does this row get a `tasks` record at all? Result counts; a Milestone does not. */
+/** Does this row get a `tasks` record at all? Only the three executables; a Result is a container and does not. */
 export function hasTask(kind: string): boolean {
   return TASK_SET.has(kind);
 }

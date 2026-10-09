@@ -1,3 +1,4 @@
+import { describedLabel } from "@/lib/display-label";
 import * as React from "react";
 import Link from "next/link";
 import type { Route } from "next";
@@ -75,7 +76,7 @@ export function TaskDetail({
   const description = task.description?.trim() || null;
   const clientName = task.client?.trim() || task.title?.trim() || null;
   const headline =
-    description || task.subject?.trim() || clientName || "Untitled task";
+    description || task.title?.trim() || task.subject?.trim() || clientName || "Untitled task";
   const subjectChip = task.subject?.trim() || null;
   const overdue =
     task.dueAt.getTime() < Date.now() &&

@@ -48,6 +48,11 @@ export interface EditField {
   min?: number;
   /** `number`: render the current figure in ₹ under the box. */
   format?: "inr";
+  /**
+   * `number`: set false for a plain box with no −/+ buttons — a figure that is
+   * typed, never nudged. Defaults to true. `step` is ignored when false.
+   */
+  stepper?: boolean;
   /** `multi`: accept values that aren't on the list. */
   allowCustom?: boolean;
 }
@@ -196,6 +201,7 @@ function NumberStepper({
   min = 0,
   format,
   placeholder,
+  stepper = true,
   onChange,
 }: {
   value: string;
@@ -203,6 +209,7 @@ function NumberStepper({
   min?: number;
   format?: "inr";
   placeholder?: string;
+  stepper?: boolean;
   onChange: (next: string) => void;
 }) {
   const current = Number(value.replace(/,/g, ""));
@@ -223,6 +230,7 @@ function NumberStepper({
   return (
     <div className="flex flex-col">
       <div className="flex items-stretch gap-1.5">
+        {stepper && (
         <button
           type="button"
           onClick={() => bump(-1)}
@@ -234,6 +242,7 @@ function NumberStepper({
         >
           <Minus size={15} strokeWidth={2.6} />
         </button>
+        )}
         <input
           value={value}
           inputMode="numeric"
@@ -245,6 +254,7 @@ function NumberStepper({
           className={`${CONTROL} flex-1 min-w-0 text-right tabular-nums`}
           style={{ borderColor: BORDER }}
         />
+        {stepper && (
         <button
           type="button"
           onClick={() => bump(1)}
@@ -255,6 +265,7 @@ function NumberStepper({
         >
           <Plus size={15} strokeWidth={2.6} />
         </button>
+        )}
       </div>
       {format === "inr" && (
         <span className="mt-1 text-ink-subtle" style={{ fontSize: 11.5 }}>
@@ -442,6 +453,7 @@ export function RecordEditDialog({
                       min={f.min}
                       format={f.format}
                       placeholder={f.placeholder}
+                      stepper={f.stepper}
                       onChange={(next) => set(f.key, next)}
                     />
                   ) : f.type === "textarea" ? (

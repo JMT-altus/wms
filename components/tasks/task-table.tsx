@@ -1,4 +1,5 @@
 "use client";
+import { describedLabel } from "@/lib/display-label";
 import * as React from "react";
 import Link from "next/link";
 import type { Route } from "next";
@@ -1408,8 +1409,7 @@ function GroupByControl({
  * the first several words.
  */
 function taskCellLabel(row: TaskListRow): string {
-  const desc = row.description?.replace(/\s+/g, " ").trim();
-  return desc && desc.length > 0 ? desc : row.title;
+  return describedLabel(row.description, row.title);
 }
 
 /** Sticky offset for one frozen column. Position only — forcing a width here
@@ -1446,7 +1446,7 @@ function TaskTitleCell({ row }: { row: TaskListRow }) {
   const subject = row.subject?.trim();
   // The title cell caps at ~32ch (max-md ~20ch); anything longer is clipped,
   // so a long title alone is worth expanding even without a description.
-  const titleTruncated = row.title.trim().length > 30;
+  const titleTruncated = taskCellLabel(row).length > 30;
   const hasMore = Boolean(desc) || titleTruncated;
   if (!hasMore) return link;
   return (
@@ -1478,18 +1478,13 @@ function TaskTitleCell({ row }: { row: TaskListRow }) {
                 marginBottom: desc ? 8 : 0,
               }}
             >
-              {row.title}
+              {taskCellLabel(row)}
             </div>
             {desc ? (
-              <p
-                className="whitespace-pre-wrap"
-                style={{
-                  fontSize: 14.5,
-                  lineHeight: 1.55,
-                  color: "var(--color-ink-soft)",
-                }}
-              >
-                {desc}
+              // The description is the headline above; the stored name is the
+              // secondary line, so nothing is shown twice and nothing is lost.
+              <p style={{ fontSize: 13, color: "var(--color-ink-subtle)" }}>
+                Name — {row.title}
               </p>
             ) : (
               <p style={{ fontSize: 13, color: "var(--color-ink-subtle)" }}>

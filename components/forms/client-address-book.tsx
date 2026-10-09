@@ -397,6 +397,10 @@ export function ClientAddressBook({
         toolbar={viewSwitch}
         save={saveGridRow}
         noun="addresses"
+        // No search boxes on this sheet; the "All columns" menu is the one
+        // control left, and it only chooses which columns are drawn.
+        searchable={false}
+        columnPicker
       />
     );
   }

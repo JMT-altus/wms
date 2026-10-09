@@ -38,12 +38,6 @@ import { KYC_ACCENT, KYC_ACCENT_SOFT } from "./kyc/tokens";
 /** The columns that make up a credit decision, and nothing else. */
 const CREDIT_KEYS = ["creditLimit", "creditDays", "paymentTerms", "grade"] as const;
 
-/**
- * How far one click moves a limit. Shift-click moves ten times that, so a
- * lakh is two clicks — see the stepper in `MasterGrid`.
- */
-const LIMIT_STEP = 1000;
-
 const TONE = {
   increased: { color: "var(--color-green-deep)", soft: "color-mix(in srgb, var(--color-green) 12%, transparent)" },
   decreased: { color: "var(--color-red-deep)", soft: "color-mix(in srgb, var(--color-red) 12%, transparent)" },
@@ -143,15 +137,15 @@ export function CreditLimitGrid({
         mono: true,
         get: (r) => r.code ?? "",
       },
-      // The one cell the screen exists for, and the only one with buttons:
-      // a review moves a limit up or down far more often than it types a
-      // fresh figure, so that move is a click.
+      // The one cell the screen exists for. A plain typed box (no −/+) that
+      // refuses anything but digits, commas and one dot as it is typed; the
+      // server still validates and normalises on save.
       {
         key: "creditLimit",
         label: "Credit Limit",
         width: 190,
         kind: "number",
-        step: LIMIT_STEP,
+        numericOnly: true,
         get: (r) => r.creditLimit ?? "",
       },
       // The history's own columns, carried onto the sheet: the same pill, the
@@ -308,6 +302,10 @@ export function CreditLimitGrid({
       title="Credit Limit"
       primaryKey="name"
       primarySearchLabel="Search client"
+      // The search boxes are gone from this sheet; the one control left up
+      // here is the column menu.
+      searchable={false}
+      columnPicker
       accent={KYC_ACCENT}
       accentSoft={KYC_ACCENT_SOFT}
       toolbar={toolbar}

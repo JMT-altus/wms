@@ -7,6 +7,7 @@ import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { ImagePlus, Link2, Plus, X, FileImage, Check } from "lucide-react";
+import { toast } from "sonner";
 import {
   TASK_PRIORITIES,
   PRIORITY_LABELS,
@@ -21,6 +22,10 @@ import {
   UNCLASSIFIED_MILESTONE,
   UNCLASSIFIED_RESULT,
   type PlanKind,
+  requiresTargetDate,
+  targetDateRequiredMessage,
+  requiresDescription,
+  DESCRIPTION_REQUIRED_MESSAGE,
 } from "@/lib/plan/levels";
 import type { ProjectNodeOption } from "@/lib/queries/projects";
 import { resolvePlanPlacement } from "@/app/(project)/project-plan/actions";
@@ -111,6 +116,11 @@ interface Props {
   preset?: {
     /** "Project", "Milestone", "Result", … — the noun on every label. */
     noun: string;
+    /**
+     * The plan level this form creates. Lets the form tell an Action or
+     * Sub-Action — which may not be made without a Target Date — from the rest.
+     */
+    kind?: PlanKind;
     /** Containers have no subject; the name is the whole of Basics. */
     hideSubject?: boolean;
     /**
@@ -182,6 +192,16 @@ type NewTaskFormValues = z.infer<typeof NewTaskSchema>;
  */
 const PlanTaskSchema = NewTaskSchema.extend({
   description: z.string().trim().min(1, "Say what this is — a description is required"),
+  // Plan rows call it the Target Date, and it is never defaulted (see below).
+  dueAt: z.string().min(1, "Target Date is required."),
+});
+
+/**
+ * Project Plan ACTION / SUB-ACTION mode — the description is compulsory, and
+ * the message is the module's one sentence for it.
+ */
+const PlanActionSchema = PlanTaskSchema.extend({
+  description: z.string().trim().min(1, DESCRIPTION_REQUIRED_MESSAGE),
 });
 
 /**
@@ -248,6 +268,18 @@ export function NewTaskForm({ employees, clients, subjects, projectNodes = [], d
     .toISOString()
     .slice(0, 10);
 
+  /**
+   * An Action or Sub-Action must be given its Target Date by a person, so the
+   * plan's task-level dialog opens with the field EMPTY rather than prefilled
+   * with tomorrow — a prefilled date is a default nobody chose.
+   */
+  const planTaskLevel = Boolean(preset && !preset.hideSubject);
+  const dateRequiredByPlan = Boolean(preset && requiresTargetDate(preset.kind));
+  // Whether anyone has touched the Due Date. Used by the WMS form, where the
+  // field is prefilled for ordinary tasks but not acceptable as a default once
+  // the task is being filed as a plan Action / Sub-Action.
+  const [dueTouched, setDueTouched] = React.useState(false);
+
   const {
     register,
     control,
@@ -263,7 +295,9 @@ export function NewTaskForm({ employees, clients, subjects, projectNodes = [], d
         : preset?.hideSubject
           ? PlanContainerSchema
           : preset
-            ? PlanTaskSchema
+            ? requiresDescription(preset.kind)
+              ? PlanActionSchema
+              : PlanTaskSchema
             : NewTaskSchema,
     ),
     defaultValues: {
@@ -272,7 +306,7 @@ export function NewTaskForm({ employees, clients, subjects, projectNodes = [], d
       initiatorId: defaults?.initiatorId ?? "",
       doerIds: defaults?.doerId ? [defaults.doerId] : [],
       priority: defaults?.priority ?? DEFAULT_PRIORITY,
-      dueAt: defaults?.dueAt ?? tomorrow,
+      dueAt: defaults?.dueAt ?? (planTaskLevel ? "" : tomorrow),
       subject: defaults?.subject ?? "",
       description: defaults?.description ?? "",
       notes: defaults?.notes ?? "",
@@ -456,6 +490,23 @@ export function NewTaskForm({ employees, clients, subjects, projectNodes = [], d
     setLinks((prev) => prev.filter((_, i) => i !== idx));
   }
 
+  /**
+   * A form that fails validation on the Due Date says so in a TOAST as well as
+   * inline, for the two cases where it is the Target Date of an Action or
+   * Sub-Action: the plan dialog, and the WMS form once a project is chosen.
+   */
+  function onInvalid(errs: typeof errors) {
+    if (errs.description && preset && requiresDescription(preset.kind)) {
+      toast.error(DESCRIPTION_REQUIRED_MESSAGE);
+    }
+    if (!errs.dueAt) return;
+    if (dateRequiredByPlan && preset?.kind) {
+      toast.error(targetDateRequiredMessage(preset.kind));
+    } else if (!preset && projectPick) {
+      toast.error(targetDateRequiredMessage(leafKind));
+    }
+  }
+
   const submit = handleSubmit((values) => {
     setError(null);
     // The <input type="date"> gives YYYY-MM-DD; convert to ISO at noon UTC
@@ -568,6 +619,14 @@ export function NewTaskForm({ employees, clients, subjects, projectNodes = [], d
       // milestone or result becomes a real Unclassified row under the project
       // — the server does it, because it is a write.
       if (projectPick) {
+        // The date field is prefilled for an ordinary task; as a plan Action or
+        // Sub-Action it has to be chosen. Refused here, before anything is made.
+        if (!preset && !dueTouched) {
+          const message = targetDateRequiredMessage(leafKind);
+          toast.error(message);
+          setError(message);
+          return;
+        }
         if (!leafName.trim()) {
           setError(
             `Give this ${KIND_LABEL[leafKind].toLowerCase()} a name — it is what the Project Plan will show.`,
@@ -586,8 +645,10 @@ export function NewTaskForm({ employees, clients, subjects, projectNodes = [], d
           name: leafName.trim().slice(0, 160),
           description: values.description || null,
           subject: values.subject || null,
+          targetDate: values.dueAt || null,
         });
         if (!placed.ok) {
+          toast.error(placed.error);
           setError(placed.error);
           return;
         }
@@ -656,7 +717,7 @@ export function NewTaskForm({ employees, clients, subjects, projectNodes = [], d
         );
       }
     });
-  });
+  }, onInvalid);
 
   function commitTag() {
     const t = tagInput.trim();
@@ -852,8 +913,17 @@ export function NewTaskForm({ employees, clients, subjects, projectNodes = [], d
             )}
           />
         </Field>
-        <Field id="nt-due" label="Due Date" required={!isComplete}>
-          <input id="nt-due" type="date" className="nt-input" {...register("dueAt")} />
+        <Field
+          id="nt-due"
+          label={planTaskLevel ? "Target Date" : "Due Date"}
+          required={!isComplete}
+        >
+          <input
+            id="nt-due"
+            type="date"
+            className="nt-input"
+            {...register("dueAt", { onChange: () => setDueTouched(true) })}
+          />
         </Field>
       </div>
 

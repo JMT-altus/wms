@@ -3,7 +3,8 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Check, Loader2, Minus, Plus, Search, TriangleAlert } from "lucide-react";
+import { Check, Columns3, Loader2, Minus, Plus, Search, TriangleAlert } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type { ClientBulkColumn } from "@/lib/forms/client-bulk-columns";
 import { SheetCell } from "@/components/forms/sheet-cell";
 import { announceSave } from "@/lib/masters/save-toast";
@@ -67,6 +68,12 @@ export interface GridCol<T> {
    * Shift-click steps by ten times this.
    */
   step?: number;
+  /**
+   * `number`: refuse anything but digits, commas and one dot as it is typed.
+   * Opt-in, so the other sheets that share this grid keep their cells exactly
+   * as they were.
+   */
+  numericOnly?: boolean;
   /** What this cell shows for a row. */
   get: (row: T) => string;
   /**
@@ -105,6 +112,8 @@ export function MasterGrid<T extends { id: string }>({
   emptyTitle,
   save,
   noun = "records",
+  searchable = true,
+  columnPicker = false,
 }: {
   rows: T[];
   columns: GridCol<T>[];
@@ -135,12 +144,26 @@ export function MasterGrid<T extends { id: string }>({
    */
   save: (row: T, cells: Cells) => Promise<SaveResult>;
   noun?: string;
+  /**
+   * Show the two search boxes and the column the second one looks in. On by
+   * default; a sheet that turns it off has no search controls at all.
+   */
+  searchable?: boolean;
+  /**
+   * Show an "All columns" menu that ticks columns on and off. Off by default.
+   * It only chooses what is DRAWN: every column still takes part in the row's
+   * cells, edits and saves, so hiding one never loses or rewrites its data.
+   * Frozen columns stay: they are how a row is named.
+   */
+  columnPicker?: boolean;
 }) {
   const router = useRouter();
   const [primaryQuery, setPrimaryQuery] = React.useState("");
   const [query, setQuery] = React.useState("");
   /** Which column the second search looks in. "" is every column. */
   const [scope, setScope] = React.useState("");
+  /** Columns the picker has switched off. Presentation only. */
+  const [hiddenKeys, setHiddenKeys] = React.useState<ReadonlySet<string>>(new Set());
   const [edits, setEdits] = React.useState<Record<string, Cells>>({});
   const [status, setStatus] = React.useState<Record<string, RowState>>({});
 
@@ -224,6 +247,13 @@ export function MasterGrid<T extends { id: string }>({
   }, [columns]);
 
   const primary = columns.find((c) => c.key === primaryKey) ?? columns[0];
+
+  /** What is drawn. `columns` itself still drives cells, search and saves. */
+  const shown = React.useMemo(
+    () =>
+      columnPicker ? columns.filter((c) => c.frozen || !hiddenKeys.has(c.key)) : columns,
+    [columns, columnPicker, hiddenKeys],
+  );
 
   const cellsOf = React.useCallback(
     (row: T): Cells => Object.fromEntries(columns.map((c) => [c.key, c.get(row)])),
@@ -421,6 +451,64 @@ export function MasterGrid<T extends { id: string }>({
         {leading}
 
         <div className="ml-auto flex items-center gap-2 flex-wrap justify-end">
+          {columnPicker && (
+            <Popover>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  aria-label="Choose columns"
+                  className="inline-flex items-center gap-1.5 rounded-chip px-3 h-8 bg-surface-soft border border-hairline text-[12.5px] font-semibold text-ink-soft"
+                >
+                  <Columns3 size={14} strokeWidth={2.4} />
+                  {hiddenKeys.size === 0 ? "All columns" : `Columns · ${shown.length}/${columns.length}`}
+                </button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-[230px]">
+                <div className="flex items-center justify-between px-1 pb-1.5">
+                  <span className="text-[12px] font-bold uppercase tracking-[0.08em] text-ink-subtle">
+                    Columns
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setHiddenKeys(new Set())}
+                    disabled={hiddenKeys.size === 0}
+                    className="text-[12px] font-semibold disabled:opacity-40"
+                    style={{ color: accent }}
+                  >
+                    Show all
+                  </button>
+                </div>
+                {columns.map((c) => {
+                  const on = c.frozen || !hiddenKeys.has(c.key);
+                  return (
+                    <label
+                      key={c.key}
+                      className="flex items-center gap-2 rounded-md px-1.5 py-1 text-[13px] text-ink-strong hover:bg-surface-soft"
+                      style={{ cursor: c.frozen ? "default" : "pointer", opacity: c.frozen ? 0.6 : 1 }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={on}
+                        disabled={c.frozen}
+                        onChange={() =>
+                          setHiddenKeys((prev) => {
+                            const next = new Set(prev);
+                            if (next.has(c.key)) next.delete(c.key);
+                            else next.add(c.key);
+                            return next;
+                          })
+                        }
+                      />
+                      {c.label}
+                    </label>
+                  );
+                })}
+              </PopoverContent>
+            </Popover>
+          )}
+
+          {searchable && (
+          <>
           {/* The first column's own search — the record you already have in
               mind — kept apart from the one below, which answers "which rows
               carry this value at all". */}
@@ -480,6 +568,8 @@ export function MasterGrid<T extends { id: string }>({
               />
             </span>
           </span>
+          </>
+          )}
 
           {toolbar}
         </div>
@@ -503,7 +593,7 @@ export function MasterGrid<T extends { id: string }>({
         >
           <thead>
             <tr>
-              {columns.map((c) => (
+              {shown.map((c) => (
                 <th
                   key={c.key}
                   style={{
@@ -530,7 +620,7 @@ export function MasterGrid<T extends { id: string }>({
             {rows.length === 0 && (
               <tr>
                 <td
-                  colSpan={columns.length + 2}
+                  colSpan={shown.length + 2}
                   className="px-4 py-10 text-center text-ink-muted"
                   style={{ fontSize: 13.5 }}
                 >
@@ -539,7 +629,7 @@ export function MasterGrid<T extends { id: string }>({
                       ? (emptyTitle ?? `No ${noun} yet.`)
                       : "Nothing matches that search."}
                   </span>
-                  {allRows.length > 0 && (
+                  {allRows.length > 0 && searchable && (
                     <button
                       type="button"
                       onClick={() => {
@@ -561,7 +651,7 @@ export function MasterGrid<T extends { id: string }>({
               const state = status[row.id] ?? "clean";
               return (
                 <tr key={row.id} data-state={state}>
-                  {columns.map((column) => {
+                  {shown.map((column) => {
                     // A frozen cell has to be PAINTED, not left transparent, or
                     // the columns scrolling beneath show through it.
                     const pinned = column.frozen
@@ -615,7 +705,17 @@ export function MasterGrid<T extends { id: string }>({
                         error={null}
                         rowFlagged={state === "error"}
                         optionList={column.options}
-                        onChange={(v) => change(row, column.key, v)}
+                        onChange={(v) =>
+                          change(
+                            row,
+                            column.key,
+                            // A numeric column keeps what it had when a keystroke
+                            // would make it something that is not a number.
+                            column.numericOnly && !/^[0-9,]*\.?[0-9]*$/.test(v)
+                              ? (cells[column.key] ?? "")
+                              : v,
+                          )
+                        }
                         onCommit={() => commitRow(row)}
                         onFocus={() => {}}
                         registerRef={registrar(rowIndex, column.key)}

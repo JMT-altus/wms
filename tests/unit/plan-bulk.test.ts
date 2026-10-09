@@ -240,7 +240,7 @@ function row(over: Partial<BulkRow> = {}): BulkRow {
     targetDate: "2026-06-12",
     startDate: null,
     endDate: null,
-    description: null,
+    description: "Install the card readers",
     issues: [],
     include: true,
     ...over,
@@ -288,9 +288,50 @@ describe("evaluateBulkRows", () => {
     expect(r!.include).toBe(true);
   });
 
-  it("warns 'no task yet' on a task level missing an owner or a date", () => {
-    const [r] = evaluateBulkRows([row({ targetDate: null })], opts);
+  it("warns 'no task yet' on a task level missing an owner", () => {
+    const [r] = evaluateBulkRows([row({ ownerId: null, ownerText: "" })], opts);
     expect(r!.issues.some((i) => i.code === "not-scheduled")).toBe(true);
+    expect(r!.include).toBe(true);
+  });
+
+  it("blocks an Action or Sub-Action with no target date and unticks it", () => {
+    for (const kind of ["action", "sub_action"] as const) {
+      const [r] = evaluateBulkRows([row({ targetDate: null })], {
+        kind,
+        existingNames: [],
+      });
+      const issue = r!.issues.find((i) => i.code === "target-date-missing");
+      expect(issue?.level).toBe("error");
+      expect(issue?.message).toMatch(/Target Date is required/);
+      expect(r!.include).toBe(false);
+    }
+  });
+
+  it("blocks an Action or Sub-Action with no description and unticks it", () => {
+    for (const kind of ["action", "sub_action"] as const) {
+      for (const description of [null, "   "]) {
+        const [r] = evaluateBulkRows([row({ description })], { kind, existingNames: [] });
+        const issue = r!.issues.find((i) => i.code === "description-missing");
+        expect(issue?.level).toBe("error");
+        expect(issue?.message).toBe("Action and Sub-action description is compulsory.");
+        expect(r!.include).toBe(false);
+      }
+    }
+  });
+
+  it("does not ask a container or a Sub-Sub-Action for a description", () => {
+    for (const kind of ["milestone", "result", "sub_sub_action"] as const) {
+      const [r] = evaluateBulkRows([row({ description: null })], { kind, existingNames: [] });
+      expect(r!.issues.some((i) => i.code === "description-missing")).toBe(false);
+    }
+  });
+
+  it("still lets a Sub-Sub-Action through without a target date", () => {
+    const [r] = evaluateBulkRows([row({ targetDate: null })], {
+      kind: "sub_sub_action",
+      existingNames: [],
+    });
+    expect(r!.issues.some((i) => i.code === "target-date-missing")).toBe(false);
     expect(r!.include).toBe(true);
   });
 

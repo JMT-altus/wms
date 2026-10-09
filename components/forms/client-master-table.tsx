@@ -117,7 +117,7 @@ const textToList = (v: string) =>
  *           row, so the list is a suggestion and a value off it still saves.
  *   select  Sales Co-ordinator, Grade, Export — a closed set; anything else
  *           is either a broken foreign key or outside an enum.
- *   number  Credit Limit and Credit Days, with −/+ steppers.
+ *   number  Credit Days, with −/+ steppers; Credit Limit, a plain typed box.
  */
 function editFields(salesPeople: EmployeeOption[], o: ClientBulkOptions, tags: string[]): EditField[] {
   return [
@@ -199,14 +199,14 @@ function editFields(salesPeople: EmployeeOption[], o: ClientBulkOptions, tags: s
       options: asOptions(o.freightCharges),
     },
     { key: "creditDays", label: "Credit Days", type: "number", span: 2, step: 15, placeholder: "0" },
-    // Steps of a lakh — the unit credit limits are actually reviewed in, and
-    // the increment the Credit Limit master list itself is written in.
+    // Typed, never nudged: a plain numeric box with the ₹ reading beneath it,
+    // and no −/+ buttons.
     {
       key: "creditLimit",
       label: "Credit Limit",
       type: "number",
       span: 2,
-      step: 100000,
+      stepper: false,
       format: "inr",
       placeholder: "0",
     },
@@ -763,13 +763,10 @@ export function ClientMasterTable({
       key: "creditLimit",
       header: "Credit Limit",
       width: 175,
-      // Type any figure; the steppers move it one at a time from wherever it
-      // lands, so 10 goes 11, 12 and back 10, 9, 8. They are for the last
-      // adjustment, not for reaching a number from zero.
+      // A plain box: type the figure. No `step`, so InlineNumber draws no −/+.
       render: (r) => (
         <InlineNumber
           value={r.creditLimit === null ? null : Number(r.creditLimit)}
-          step={1}
           format={formatInr}
           field="Credit Limit"
           rowLabel={r.name}

@@ -12,6 +12,80 @@ import type { TaskListFilters, TaskListRow } from "@/lib/types";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
+/**
+ * What the Tasks list's CLIENT column shows for a task that hangs off the
+ * Project Plan.
+ *
+ * `tasks.client` is a copy written when the plan row syncs, and the plan's
+ * fallback chain ends in the PROJECT'S OWN NAME when no client was ever named
+ * on the project — so a project with no Client Name leaves its name in this
+ * column, and the list showed "Website Development" under Client. A project
+ * name is not a client.
+ *
+ * Read-side only; the stored value is not touched (the plan owns it):
+ *
+ *   - stored client differs from the project's name  → it is a real answer
+ *     (typed on the row, or chosen on the form), shown as-is;
+ *   - stored client is empty or just the project's name → the Client Name on
+ *     the project, or nothing ("—") when the project has none;
+ *   - no plan row / no project above it → the stored value, unchanged.
+ *
+ * One extra query for the whole page, and only when some row is plan-linked.
+ */
+export function resolveProjectClient(
+  stored: string | null,
+  projectName: string,
+  projectClientName: string | null,
+): string | null {
+  const own = stored?.trim() || null;
+  if (own && own !== projectName.trim()) return own;
+  return projectClientName?.trim() || null;
+}
+
+async function applyProjectClients<
+  T extends { client: string | null; projectNodeId: string | null },
+>(rows: T[]): Promise<T[]> {
+  const nodeIds = [
+    ...new Set(rows.map((r) => r.projectNodeId).filter((v): v is string => !!v)),
+  ];
+  if (nodeIds.length === 0) return rows;
+
+  let found: { start_id: string; name: string; client_name: string | null }[];
+  try {
+    found = await db.execute<{
+      start_id: string;
+      name: string;
+      client_name: string | null;
+    }>(sql`
+      with recursive chain as (
+        select n.id as start_id, n.parent_id, n.kind, n.name, n.client_name, 0 as depth
+          from project_nodes n
+         where n.id in (${sql.join(nodeIds.map((id) => sql`${id}::uuid`), sql`, `)})
+        union all
+        select c.start_id, p.parent_id, p.kind, p.name, p.client_name, c.depth + 1
+          from chain c
+          join project_nodes p on p.id = c.parent_id
+         where c.depth < 6
+      )
+      select distinct on (start_id) start_id, name, client_name
+        from chain
+       where kind = 'project'
+       order by start_id, depth
+    `) as unknown as typeof found;
+  } catch (err) {
+    // The list must render even if this lookup fails; fall back to what is stored.
+    console.warn("[tasks] project client lookup failed", err instanceof Error ? err.message : err);
+    return rows;
+  }
+
+  const byNode = new Map(found.map((f) => [f.start_id, f]));
+  return rows.map((r) => {
+    const project = r.projectNodeId ? byNode.get(r.projectNodeId) : undefined;
+    if (!project) return r;
+    return { ...r, client: resolveProjectClient(r.client, project.name, project.client_name) };
+  });
+}
+
 // A task's "effective" status spans two columns: the working `status` and the
 // admin `approval_status` verdict. The dashboard counts treat a task as e.g.
 // Not Approved when EITHER column says so (lib/queries/dashboard.ts), so the
@@ -137,7 +211,7 @@ export async function listTasks(filters: TaskListFilters): Promise<TaskListRow[]
     .limit(1000);
 
   const now = Date.now();
-  return rows.map((r) => ({
+  return applyProjectClients(rows.map((r) => ({
     id: r.id,
     taskNo: r.taskNo,
     title: r.title,
@@ -164,7 +238,7 @@ export async function listTasks(filters: TaskListFilters): Promise<TaskListRow[]
     firstReadAt: r.firstReadAt,
     completedAt: r.completedAt,
     approvedLate: r.approvedLate ?? null,
-  }));
+  })));
 }
 
 // ─── Phase 4.2 — cursor pagination ────────────────────────────────────────
@@ -323,7 +397,7 @@ export async function listTasksPage(
   const nextCursor = hasMore && last ? encodeCursor(last) : null;
 
   const now = Date.now();
-  const rows: TaskListRow[] = pageRows.map((r) => ({
+  const rows: TaskListRow[] = await applyProjectClients(pageRows.map((r) => ({
     id: r.id,
     taskNo: r.taskNo,
     title: r.title,
@@ -350,7 +424,7 @@ export async function listTasksPage(
     firstReadAt: r.firstReadAt,
     completedAt: r.completedAt,
     approvedLate: r.approvedLate ?? null,
-  }));
+  })));
 
   return { rows, nextCursor };
 }
