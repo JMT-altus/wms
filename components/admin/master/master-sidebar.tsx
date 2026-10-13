@@ -10,6 +10,7 @@ import {
   Library,
   KeyRound,
   DatabaseZap,
+  FileUp,
   LayoutGrid,
   ShieldCheck,
   ArrowLeft,
@@ -79,6 +80,12 @@ const NAV: ReadonlyArray<NavItem> = [
     label: "Data Ingestion",
     hint: "Sheets / Tally mapping",
     icon: DatabaseZap,
+  },
+  {
+    href: "/master-setup/tally-import" as Route,
+    label: "Tally Data Import",
+    hint: "Excel / CSV from Tally",
+    icon: FileUp,
   },
 ];
 

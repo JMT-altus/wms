@@ -8,6 +8,7 @@ import { requireAdmin } from "@/lib/auth/current";
 import { rateLimitOrError } from "@/lib/rate-limit";
 import { computeSalary } from "@/lib/salary/compute";
 import { assembleMonthInputs } from "@/lib/salary/generate";
+import { PolicyReadError } from "@/lib/attendance/policy-read";
 import { getRun } from "@/lib/queries/salary";
 import { GenerateSalarySchema, RunEditSchema } from "@/lib/validators/salary";
 
@@ -102,6 +103,9 @@ export async function generateSalary(input: unknown): Promise<ActionResult<{ gen
       generated += 1;
     }
   } catch (err: unknown) {
+    // A policy-read failure happens while assembling inputs, before any run is
+    // written. Say what happened rather than labelling it a database error.
+    if (err instanceof PolicyReadError) return { ok: false, error: err.message };
     const msg = err instanceof Error ? err.message : String(err);
     return { ok: false, error: `DB: ${msg}` };
   }

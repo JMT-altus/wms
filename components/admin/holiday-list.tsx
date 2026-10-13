@@ -18,6 +18,8 @@ export interface HolidayItem {
   holidayDate: string;
   label: string;
   isActive: boolean;
+  /** An optional holiday: each person may take one; not a day off for everyone. */
+  isOptional: boolean;
 }
 
 /** "12 Aug 2026" from a YYYY-MM-DD string (no timezone drift). */
@@ -135,6 +137,22 @@ function HolidayRow({
     });
   }
 
+  function toggleOptional() {
+    startTransition(async () => {
+      const res = await updateHoliday({ id: item.id, isOptional: !item.isOptional });
+      if (!res.ok) {
+        fireToast({ message: res.error });
+        return;
+      }
+      fireToast({
+        message: item.isOptional
+          ? `${item.label} is now a public holiday.`
+          : `${item.label} is now an optional holiday.`,
+      });
+      onDone();
+    });
+  }
+
   function remove() {
     startTransition(async () => {
       const res = await removeHoliday({ id: item.id });
@@ -155,7 +173,14 @@ function HolidayRow({
       <td className="px-5 py-4 text-ink-strong font-medium tabular-nums whitespace-nowrap">
         {prettyDate(item.holidayDate)}
       </td>
-      <td className="px-5 py-4 text-ink-soft">{item.label}</td>
+      <td className="px-5 py-4 text-ink-soft">
+        {item.label}
+        {item.isOptional && (
+          <span className="ml-2 rounded-pill px-2 py-0.5 text-[11px] font-bold bg-[#FFFBEB] text-[#B45309]">
+            Optional
+          </span>
+        )}
+      </td>
       <td className="px-5 py-4">
         {item.isActive ? (
           <span
@@ -200,6 +225,15 @@ function HolidayRow({
             >
               <Power size={15} strokeWidth={2.2} />
               {item.isActive ? "Deactivate" : "Reactivate"}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onSelect={(e) => {
+                e.preventDefault();
+                toggleOptional();
+              }}
+            >
+              <Power size={15} strokeWidth={2.2} />
+              {item.isOptional ? "Make public holiday" : "Make optional holiday"}
             </DropdownMenuItem>
             <DropdownMenuItem
               onSelect={(e) => {

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Eraser, PenLine, Upload } from "lucide-react";
 import { fireToast } from "@/lib/toast";
-import { submitConsent } from "@/app/(app)/salary/policy/actions";
+import { submitConsent } from "@/app/(app)/hr/policies/actions";
 
 const CANVAS_W = 480;
 const CANVAS_H = 160;

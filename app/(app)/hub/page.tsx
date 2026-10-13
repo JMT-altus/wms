@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import type { Route } from "next";
 import {
@@ -9,6 +10,7 @@ import {
   Boxes,
   Target,
   Waypoints,
+  BriefcaseBusiness,
   FileText,
   ArrowRight,
   Lock,
@@ -16,6 +18,7 @@ import {
 import { getCurrentEmployee } from "@/lib/auth/current";
 import { getMyModuleAccess } from "@/lib/auth/module-access";
 import { UserMenuServer } from "@/components/header/user-menu-server";
+import { PendingLeavePromptServer } from "@/components/attendance/leave/pending-leave-prompt-server";
 import { MODULES, type ModuleId } from "@/lib/nav-modules";
 
 export const dynamic = "force-dynamic";
@@ -113,6 +116,17 @@ const STYLES: Record<ModuleId | "admin" | "forms", Style> = {
     glow: "rgba(225, 6, 0, 0.42)",
     ring: "rgba(225, 6, 0, 0.55)",
   },
+  // Fuchsia — the one accent family left over, distinct from the violet Targets
+  // tile and the rose Forms tile beside it.
+  hr: {
+    Icon: BriefcaseBusiness,
+    bg: "linear-gradient(150deg, #fef4ff 0%, #fae5fd 55%, #f3d0fb 100%)",
+    ink: "#86198f",
+    title: "#A21CAF",
+    btn: "linear-gradient(135deg, #D946EF, #A21CAF)",
+    glow: "rgba(217, 70, 239, 0.40)",
+    ring: "rgba(217, 70, 239, 0.55)",
+  },
   admin: {
     Icon: DatabaseZap,
     bg: "linear-gradient(150deg, #fff8f0 0%, #ffeede 55%, #ffe2c9 100%)",
@@ -168,9 +182,12 @@ export default async function HubPage({
   // Only the modules this person is allowed into get a tile. The guard in
   // app/(app)/layout.tsx enforces the same list on direct URL hits and sends
   // them back here with ?denied=<module>.
+  // HR is held back and appended after the admin-only tiles below, so it is the
+  // ninth tile on a full hub rather than slotting in before Admin and Forms.
   const visibleModules = MODULES.filter(
-    (m) => access[m.id]?.allowed && !m.hiddenFromHub,
+    (m) => access[m.id]?.allowed && !m.hiddenFromHub && m.id !== "hr",
   );
+  const hrModule = MODULES.find((m) => m.id === "hr");
   const deniedModule = params.denied
     ? MODULES.find((m) => m.id === params.denied)
     : undefined;
@@ -209,6 +226,11 @@ export default async function HubPage({
           },
         ]
       : []),
+    // Last. Gated by module access like every other module tile (admins pass
+    // through the admin bypass; everyone else needs an HR grant).
+    ...(hrModule && access.hr?.allowed
+      ? [{ key: hrModule.id, label: hrModule.label, tagline: hrModule.tagline, href: hrModule.landing }]
+      : []),
   ];
 
   const istHour = Number(
@@ -225,6 +247,12 @@ export default async function HubPage({
       className="header-dark header-navy relative min-h-[100svh] overflow-hidden"
       style={{ background: "linear-gradient(168deg, #02203f 0%, #04305e 46%, #063f70 100%)" }}
     >
+      {/* Approvers: a reminder of leave requests waiting on them. Streams in on
+          its own so it never holds up the hub, and renders nothing for anyone
+          with nothing to decide. */}
+      <Suspense fallback={null}>
+        <PendingLeavePromptServer />
+      </Suspense>
       {/* ── Aurora backdrop — slow-drifting colour glows + a dot mesh, so the
              launcher reads as a living, premium canvas rather than flat white. */}
       <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">

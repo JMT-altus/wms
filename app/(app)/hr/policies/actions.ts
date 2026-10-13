@@ -10,7 +10,9 @@ import { getCurrentPolicy } from "@/lib/queries/salary-policy";
 
 type Result<T = unknown> = ({ ok: true } & T) | { ok: false; error: string };
 
-const PATH = "/salary/policy";
+// The page now lives under HR. The old URL only redirects, so there is nothing
+// to revalidate there.
+const PATH = "/hr/policies";
 
 const MAX_PDF_BYTES = 25 * 1024 * 1024; // mirror documents/actions.ts
 const MAX_SIG_BYTES = 5 * 1024 * 1024;

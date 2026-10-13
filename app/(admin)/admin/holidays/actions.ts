@@ -86,17 +86,19 @@ const UpdateSchema = z
     id: z.string().uuid(),
     label: LabelSchema.optional(),
     isActive: z.boolean().optional(),
+    isOptional: z.boolean().optional(),
   })
   .strict()
-  .refine((v) => v.label !== undefined || v.isActive !== undefined, {
+  .refine((v) => v.label !== undefined || v.isActive !== undefined || v.isOptional !== undefined, {
     message: "No changes to save.",
   });
 
-/** Rename or activate/deactivate a holiday (admin). */
+/** Rename, activate/deactivate, or classify (public / optional) a holiday (admin). */
 export async function updateHoliday(input: {
   id: string;
   label?: string;
   isActive?: boolean;
+  isOptional?: boolean;
 }): Promise<ActionResult> {
   const me = await requireAdmin();
   const limited = rateLimitOrError(me.id, "write");
@@ -117,6 +119,7 @@ export async function updateHoliday(input: {
   const patch: Record<string, unknown> = {};
   if (parsed.data.label !== undefined) patch.label = parsed.data.label;
   if (parsed.data.isActive !== undefined) patch.isActive = parsed.data.isActive;
+  if (parsed.data.isOptional !== undefined) patch.isOptional = parsed.data.isOptional;
 
   try {
     await db.update(holidays).set(patch).where(eq(holidays.id, parsed.data.id));

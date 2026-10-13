@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { UploadCloud } from "lucide-react";
 import { fireToast } from "@/lib/toast";
-import { uploadSalaryPolicy } from "@/app/(app)/salary/policy/actions";
+import { uploadSalaryPolicy } from "@/app/(app)/hr/policies/actions";
 
 /**
  * Admin control to publish (or replace) the current salary-policy PDF with a

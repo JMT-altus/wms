@@ -2,8 +2,8 @@ import "server-only";
 import { and, asc, desc, eq, gte, inArray, lte, type SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { db } from "@/lib/db";
-import { employees, leaveRequests } from "@/db/schema";
-import type { LeaveKind, LeaveStatus } from "@/db/enums";
+import { employees, leaveApprovers, leaveRequests } from "@/db/schema";
+import type { LeaveKind, LeaveStatus, LeaveType } from "@/db/enums";
 import {
   leaveCycleFor,
   balanceWindow,
@@ -26,7 +26,12 @@ export interface LeaveRow {
   id: string;
   employeeId: string;
   employeeName: string;
-  kind: LeaveKind;
+  /** Pay treatment; null on a request filed from the Apply-for-Leave form. */
+  kind: LeaveKind | null;
+  /** Emergency | Planned; null on requests that pre-date the form. */
+  leaveType: LeaveType | null;
+  approverId: string | null;
+  approverName: string | null;
   startDate: string;
   endDate: string;
   days: number;
@@ -162,12 +167,16 @@ async function selectLeaveRows(
   order: "newest" | "by_start",
 ): Promise<LeaveRow[]> {
   const decider = alias(employees, "decider");
+  const approver = alias(employees, "approver");
   const rows = await db
     .select({
       id: leaveRequests.id,
       employeeId: leaveRequests.employeeId,
       employeeName: employees.name,
       kind: leaveRequests.kind,
+      leaveType: leaveRequests.leaveType,
+      approverId: leaveRequests.approverId,
+      approverName: approver.name,
       startDate: leaveRequests.startDate,
       endDate: leaveRequests.endDate,
       days: leaveRequests.days,
@@ -181,6 +190,7 @@ async function selectLeaveRows(
     .from(leaveRequests)
     .innerJoin(employees, eq(leaveRequests.employeeId, employees.id))
     .leftJoin(decider, eq(leaveRequests.decidedById, decider.id))
+    .leftJoin(approver, eq(leaveRequests.approverId, approver.id))
     .where(where)
     .orderBy(
       order === "newest"
@@ -192,12 +202,84 @@ async function selectLeaveRows(
     ...r,
     days: Number(r.days),
     decidedByName: r.decidedByName ?? null,
+    approverName: r.approverName ?? null,
   }));
 }
 
 /** My leave requests, newest first. */
 export async function listMyLeave(employeeId: string): Promise<LeaveRow[]> {
   return selectLeaveRows(eq(leaveRequests.employeeId, employeeId), "newest");
+}
+
+/**
+ * Pending requests this person may rule on, oldest-first: an admin sees every
+ * pending request (as before); a listed approver sees the ones routed to them.
+ */
+export async function listPendingLeaveFor(
+  userId: string,
+  isAdmin: boolean,
+): Promise<LeaveRow[]> {
+  if (isAdmin) return listPendingLeave();
+  return selectLeaveRows(
+    and(eq(leaveRequests.status, "pending"), eq(leaveRequests.approverId, userId)),
+    "by_start",
+  );
+}
+
+export interface LeaveApproverRow {
+  employeeId: string;
+  name: string;
+  isDefault: boolean;
+}
+
+/** Everyone listed as a leave approver, the default first. */
+export async function listLeaveApprovers(): Promise<LeaveApproverRow[]> {
+  return db
+    .select({
+      employeeId: leaveApprovers.employeeId,
+      name: employees.name,
+      isDefault: leaveApprovers.isDefault,
+    })
+    .from(leaveApprovers)
+    .innerJoin(employees, eq(leaveApprovers.employeeId, employees.id))
+    .where(eq(employees.isActive, true))
+    .orderBy(desc(leaveApprovers.isDefault), asc(employees.name));
+}
+
+/** The approver new requests are routed to, or null if none is configured. */
+export async function getDefaultLeaveApprover(): Promise<LeaveApproverRow | null> {
+  return (await listLeaveApprovers()).find((a) => a.isDefault) ?? null;
+}
+
+/** What the settings card and the form need to say about the default approver. */
+export type DefaultApproverStatus =
+  | { state: "ok"; name: string }
+  | { state: "inactive"; name: string }
+  | { state: "missing" };
+
+/**
+ * Whether new requests have a working default approver. Unlike
+ * `getDefaultLeaveApprover` this also sees a default who has since been
+ * deactivated, so the page can say why requests are going to the admins.
+ */
+export async function getDefaultApproverStatus(): Promise<DefaultApproverStatus> {
+  const rows = await db
+    .select({ name: employees.name, isActive: employees.isActive })
+    .from(leaveApprovers)
+    .innerJoin(employees, eq(leaveApprovers.employeeId, employees.id))
+    .where(eq(leaveApprovers.isDefault, true))
+    .limit(1);
+  const row = rows[0];
+  if (!row) return { state: "missing" };
+  return row.isActive ? { state: "ok", name: row.name } : { state: "inactive", name: row.name };
+}
+
+export async function isLeaveApprover(employeeId: string): Promise<boolean> {
+  const row = await db.query.leaveApprovers.findFirst({
+    where: eq(leaveApprovers.employeeId, employeeId),
+    columns: { employeeId: true },
+  });
+  return Boolean(row);
 }
 
 /** All pending leave requests (admin), oldest-first (queue order). */

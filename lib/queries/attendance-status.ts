@@ -10,6 +10,9 @@ import {
 import { computeDayCode, type DayCodeResult } from "@/lib/attendance/status";
 import { listHolidayDateSet } from "@/lib/queries/holidays";
 import { listEmployeeLeaveForRange, type LeaveRow } from "@/lib/queries/leave";
+import { leaveKindOn, type LeavePay } from "@/lib/leave/workflow";
+import { getPolicyAsOf, getPolicyAsOfStrict } from "@/lib/queries/attendance-policy";
+import { readNullLeaveKind } from "@/lib/attendance/policy-read";
 import {
   getCompOffMapForRange,
   type CompOffRangeMaps,
@@ -267,20 +270,27 @@ interface DayContextInputs {
   converted: Set<string>;
   /** Redeemed dates for this employee (grade CO). */
   redeemed: Set<string>;
+  /**
+   * How an approved leave with no explicit pay kind is graded — the attendance
+   * policy's `approved_leave_payment`, as of the month being graded.
+   */
+  nullLeaveKindAs: LeavePay;
 }
 
-/** Which leave kind ("paid"|"unpaid") covers `ymd`, or null. A date is covered
- *  when it falls within an approved leave's inclusive [startDate,endDate].
- *  Paid wins if (unusually) both overlap. */
-function leaveKindOn(ymd: string, leaves: LeaveRow[]): "paid" | "unpaid" | null {
-  let unpaid: "unpaid" | null = null;
-  for (const lv of leaves) {
-    if (ymd >= lv.startDate && ymd <= lv.endDate) {
-      if (lv.kind === "paid") return "paid";
-      unpaid = "unpaid";
-    }
-  }
-  return unpaid;
+/**
+ * The policy decides how a no-kind approved leave is paid. Resolved once per
+ * month (a policy change never alters an earlier month).
+ *
+ * Display pages (`strict` false) fall back to the initial policy value, with a
+ * log line, rather than break. Salary generation passes `strict` and gets a
+ * thrown `PolicyReadError` instead — it never computes pay from a fallback.
+ */
+async function nullLeaveKindForMonth(year: number, month: number, strict = false): Promise<LeavePay> {
+  const asOf = `${year}-${String(month).padStart(2, "0")}-01`;
+  return readNullLeaveKind(() => (strict ? getPolicyAsOfStrict(asOf) : getPolicyAsOf(asOf)), asOf, {
+    strict,
+    log: (message, err) => console.error(message, err),
+  });
 }
 
 // ── core grader ─────────────────────────────────────────────────────────────
@@ -357,7 +367,7 @@ function gradeMonth(
     // NOT consume the leave (you don't burn a paid leave on a day off). So if
     // it's a holiday, we pass leave:null and let the holiday/W-O credit stand.
     // Otherwise the engine's PL/LWP precedence applies.
-    const leave = isHoliday ? null : leaveKindOn(ymd, dayCtx.leaves);
+    const leave = isHoliday ? null : leaveKindOn(ymd, dayCtx.leaves, dayCtx.nullLeaveKindAs);
 
     let graded: DayCodeResult;
     if (isConverted) {
@@ -451,10 +461,11 @@ export async function getEmployeeMonthStatus(
 
   // Phase-B calendar/leave/comp-off context. `listHolidayDateSet` is per
   // calendar year; a month is always within one year so `year` is correct.
-  const [holidaySet, leaves, compOff] = await Promise.all([
+  const [holidaySet, leaves, compOff, nullLeaveKindAs] = await Promise.all([
     listHolidayDateSet(year),
     listEmployeeLeaveForRange([employeeId], first, last),
     getCompOffMapForRange([employeeId], first, last),
+    nullLeaveKindForMonth(year, month),
   ]);
 
   const defaults = companyDefaults(org);
@@ -465,6 +476,7 @@ export async function getEmployeeMonthStatus(
     leaves,
     converted: compOff.convertedByEmp.get(employeeId) ?? new Set<string>(),
     redeemed: compOff.redeemedByEmp.get(employeeId) ?? new Set<string>(),
+    nullLeaveKindAs,
   });
 }
 
@@ -478,6 +490,11 @@ export interface DashboardRow {
 export interface MonthDashboardFilters {
   /** Restrict to a single weekly-off cohort, if set. */
   weeklyOff?: number;
+  /**
+   * Salary generation sets this: a policy that can't be read or validated throws
+   * `PolicyReadError` instead of falling back to the initial setting.
+   */
+  strictPolicy?: boolean;
 }
 
 /**
@@ -528,9 +545,10 @@ export async function getMonthDashboard(
   // query each across ALL employees (still no N+1) — the result maps are then
   // sliced per employee in the grade loop below.
   const allEmpIds = people.map((p) => p.id);
-  const [allLeaves, compOff]: [LeaveRow[], CompOffRangeMaps] = await Promise.all([
+  const [allLeaves, compOff, nullLeaveKindAs]: [LeaveRow[], CompOffRangeMaps, LeavePay] = await Promise.all([
     listEmployeeLeaveForRange(allEmpIds, first, last),
     getCompOffMapForRange(allEmpIds, first, last),
+    nullLeaveKindForMonth(year, month, filters?.strictPolicy === true),
   ]);
 
   // Group approved leaves by employee once.
@@ -570,6 +588,7 @@ export async function getMonthDashboard(
       leaves: leavesByEmp.get(p.id) ?? [],
       converted: compOff.convertedByEmp.get(p.id) ?? new Set<string>(),
       redeemed: compOff.redeemedByEmp.get(p.id) ?? new Set<string>(),
+      nullLeaveKindAs,
     });
     out.push({
       employeeId: p.id,

@@ -16,6 +16,7 @@ import { PlanKanban } from "./plan-kanban";
 import { PlanRegisterTable } from "./plan-register-table";
 import { PlanTreeTable } from "./plan-tree-table";
 import { usePlanBranch } from "./use-plan-branch";
+import { PLAN_EDGE, PLAN_NAVY_SCOPE } from "./theme";
 
 
 /**
@@ -134,9 +135,10 @@ export function PlanWorkspace({
   }
 
   return (
-    <div className="min-w-0">
+    <div className="min-w-0" style={PLAN_NAVY_SCOPE} data-plan-calm>
       <PlanToolbar
         level={level}
+        board={view === "kanban"}
         counts={counts}
         chip={chip}
         onChip={setChip}
@@ -159,10 +161,10 @@ export function PlanWorkspace({
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Local search — projects, milestones, results, actions"
             aria-label="Search the plan"
-            className="w-full rounded-lg pl-9 pr-3 h-10 text-[14px] outline-none focus:ring-1"
+            className="w-full rounded-lg pl-9 pr-3 h-9 text-[13.5px] outline-none transition-colors duration-150 hover:border-[#B9C6DA] focus:border-[#14336B] focus:shadow-[0_0_0_3px_rgba(20,51,107,0.14)] motion-reduce:transition-none"
             style={{
-              background: "var(--color-surface-card)",
-              border: "1px solid var(--color-hairline-strong)",
+              background: "#FFFFFF",
+              border: `1px solid ${PLAN_EDGE}`,
               color: "var(--color-ink)",
             }}
           />

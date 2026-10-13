@@ -369,6 +369,14 @@ export const LEAVE_KIND_LABELS: Record<LeaveKind, string> = {
   unpaid: "Unpaid Leave",
 };
 
+/** What the employee says the leave is, on the Apply-for-Leave form (0108). */
+export const LEAVE_TYPES = ["emergency", "planned"] as const;
+export type LeaveType = (typeof LEAVE_TYPES)[number];
+export const LEAVE_TYPE_LABELS: Record<LeaveType, string> = {
+  emergency: "Emergency",
+  planned: "Planned",
+};
+
 export const LEAVE_STATUS = ["pending","approved","rejected","cancelled"] as const;
 export type LeaveStatus = (typeof LEAVE_STATUS)[number];
 export const LEAVE_STATUS_LABELS: Record<LeaveStatus, string> = {

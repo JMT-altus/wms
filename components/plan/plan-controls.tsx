@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { KIND_LABEL_PLURAL, PLAN_KINDS, KIND_DEPTH } from "@/lib/plan/levels";
 import type { PlanSort } from "@/lib/plan/table";
-import { PLAN_RED, TABULAR } from "./theme";
+import { PLAN_EDGE, PLAN_RED, TABULAR } from "./theme";
 
 /**
  * The band of controls above the plan table.
@@ -89,8 +89,8 @@ export function PlanControls({
     <div
       className="mb-3 rounded-xl px-2.5 py-2"
       style={{
-        background: "var(--color-surface-card)",
-        border: "1px solid var(--color-hairline-strong)",
+        background: "#FFFFFF",
+        border: `1px solid ${PLAN_EDGE}`,
       }}
     >
       {/* ONE LINE, always. `flex-wrap` let Export drop to a second row the

@@ -14,7 +14,6 @@ import {
   Waypoints,
   type LucideIcon,
 } from "lucide-react";
-import { PLAN_GRADIENT } from "./theme";
 import {
   RAIL_WIDTH,
   RAIL_WIDTH_COLLAPSED,
@@ -132,19 +131,22 @@ export function PlanSidebar({ userName }: { userName: string }) {
           {!collapsed && (
             <>
               <p
-                className="text-[14px] mt-3 px-2.5 py-1.5 rounded-lg font-bold text-white leading-[1.25]"
-                style={{ background: PLAN_GRADIENT }}
+                className="text-[13.5px] mt-3 px-2.5 py-1.5 rounded-lg font-semibold text-white leading-[1.25]"
+                style={{
+                  background: "rgba(255,255,255,0.08)",
+                  border: "1px solid rgba(255,255,255,0.14)",
+                }}
               >
                 Project Plan
               </p>
-              <p className="text-[13px] mt-1.5 text-white/50">Signed in as {userName}</p>
+              <p className="text-[12.5px] mt-1.5 text-white/50">Signed in as {userName}</p>
             </>
           )}
         </div>
 
         <nav
           aria-label="Project Plan"
-          className="px-3 flex flex-col gap-1 flex-1 overflow-y-auto min-h-0"
+          className="px-3 flex flex-col gap-0.5 flex-1 overflow-y-auto min-h-0"
         >
           {NAV.map((item) => {
             const Icon = item.icon;
@@ -155,20 +157,27 @@ export function PlanSidebar({ userName }: { userName: string }) {
                 href={item.href}
                 aria-current={active ? "page" : undefined}
                 title={collapsed ? item.label : undefined}
-                className={`group relative flex gap-2.5 py-2.5 rounded-lg transition-all ${
+                className={`group relative flex gap-2.5 py-2 rounded-lg transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#7FB0FF] ${
                   collapsed ? "items-center justify-center px-0" : "items-start px-3"
                 }`}
                 style={
                   active
                     ? {
-                        background: PLAN_GRADIENT,
+                        // A pale-blue wash on the navy, and a thin bar on its
+                        // edge: selected, without a block of colour.
+                        background: "rgba(127,176,255,0.16)",
                         color: "#ffffff",
-                        boxShadow:
-                          "0 8px 22px -10px rgba(225,6,0,0.55), inset 0 1px 0 rgba(255,255,255,0.14)",
                       }
                     : { color: "rgba(255,255,255,0.80)" }
                 }
               >
+                {active && (
+                  <span
+                    aria-hidden
+                    className="absolute left-0 top-2 bottom-2 w-[3px] rounded-full"
+                    style={{ background: "#7FB0FF" }}
+                  />
+                )}
                 {!active && (
                   <span
                     aria-hidden
@@ -180,15 +189,15 @@ export function PlanSidebar({ userName }: { userName: string }) {
                   size={18}
                   strokeWidth={2.2}
                   className={`relative shrink-0 ${collapsed ? "" : "mt-0.5"}`}
-                  style={{ color: active ? "rgba(255,255,255,0.95)" : "rgba(255,255,255,0.65)" }}
+                  style={{ color: active ? "#BBD4FF" : "rgba(255,255,255,0.65)" }}
                 />
                 {!collapsed && (
                   <span className="relative min-w-0">
-                    <span className="block text-[14.5px] font-medium">{item.label}</span>
+                    <span className="block text-[14px] font-medium">{item.label}</span>
                     <span
-                      className="block text-[12.5px] mt-0.5"
+                      className="block text-[12px] mt-px leading-snug"
                       style={{
-                        color: active ? "rgba(255,255,255,0.75)" : "rgba(255,255,255,0.45)",
+                        color: active ? "rgba(255,255,255,0.70)" : "rgba(255,255,255,0.45)",
                       }}
                     >
                       {item.hint}
@@ -247,7 +256,7 @@ export function PlanMobileNav() {
             className="shrink-0 rounded-pill px-3.5 h-9 inline-flex items-center text-[14.5px] font-semibold"
             style={
               active
-                ? { background: PLAN_GRADIENT, color: "#fff" }
+                ? { background: "rgba(127,176,255,0.22)", color: "#fff", border: "1px solid rgba(127,176,255,0.5)" }
                 : { color: "rgba(255,255,255,0.78)", border: "1px solid rgba(255,255,255,0.16)" }
             }
           >

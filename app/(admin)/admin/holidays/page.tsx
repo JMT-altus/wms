@@ -27,6 +27,7 @@ export default async function HolidaysPage({
     holidayDate: r.holidayDate,
     label: r.label,
     isActive: r.isActive,
+    isOptional: r.isOptional,
   }));
   const activeCount = items.filter((i) => i.isActive).length;
 

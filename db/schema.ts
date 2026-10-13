@@ -1728,6 +1728,13 @@ export const holidays = pgTable(
     holidayDate: date("holiday_date").notNull().unique(),
     label: text("label").notNull(),
     isActive: boolean("is_active").notNull().default(true),
+    /**
+     * An OPTIONAL holiday (0107): each employee may take any ONE of these, or a
+     * comp-off, and works a full day on the rest. It is listed and badged, but
+     * is NOT a day off for everyone — attendance grading ignores it (see
+     * `listHolidayDateSet`). False is the old behaviour: a day off for all.
+     */
+    isOptional: boolean("is_optional").notNull().default(false),
     createdById: uuid("created_by_id").references(() => employees.id, {
       onDelete: "set null",
     }),
@@ -1748,7 +1755,18 @@ export const leaveRequests = pgTable(
     employeeId: uuid("employee_id")
       .notNull()
       .references(() => employees.id, { onDelete: "cascade" }),
-    kind: text("kind").$type<"paid" | "unpaid">().notNull(),
+    /**
+     * Paid/unpaid is a PAY decision for the leave policy, so it is null on a
+     * request filed from the Apply-for-Leave form (0108). Only 'paid' counts
+     * against the allowance; null counts against nothing.
+     */
+    kind: text("kind").$type<"paid" | "unpaid">(),
+    /** Emergency | Planned — what the employee said it is (0108). */
+    leaveType: text("leave_type").$type<"emergency" | "planned">(),
+    /** Who the request was routed to when it was filed (0108). */
+    approverId: uuid("approver_id").references(() => employees.id, {
+      onDelete: "set null",
+    }),
     startDate: date("start_date").notNull(),
     endDate: date("end_date").notNull(),
     days: numeric("days", { precision: 5, scale: 1 }).notNull(),
@@ -1770,6 +1788,41 @@ export const leaveRequests = pgTable(
     index("leave_requests_employee_start_idx").on(t.employeeId, t.startDate),
     index("leave_requests_status_idx").on(t.status),
   ],
+);
+
+/**
+ * Who may decide leave requests, and which one is the default a new request is
+ * routed to (0108). Admins are also allowed to decide, as they always were.
+ */
+export const leaveApprovers = pgTable("leave_approvers", {
+  employeeId: uuid("employee_id")
+    .primaryKey()
+    .references(() => employees.id, { onDelete: "cascade" }),
+  isDefault: boolean("is_default").notNull().default(false),
+  createdById: uuid("created_by_id").references(() => employees.id, {
+    onDelete: "set null",
+  }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * Append-only history of attendance-policy changes (0109). The current value of a
+ * setting on a date is resolved in lib/attendance/policy.ts; nothing here is
+ * ever updated or deleted by the app.
+ */
+export const attendancePolicyChanges = pgTable(
+  "attendance_policy_changes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    policyKey: text("policy_key").notNull(),
+    value: jsonb("value").$type<unknown>().notNull(),
+    previousValue: jsonb("previous_value").$type<unknown>(),
+    effectiveFrom: date("effective_from").notNull(),
+    reason: text("reason").notNull(),
+    changedById: uuid("changed_by_id").references(() => employees.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("attendance_policy_changes_key_idx").on(t.policyKey, t.effectiveFrom, t.createdAt)],
 );
 
 export type LeaveRequest = typeof leaveRequests.$inferSelect;

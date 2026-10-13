@@ -2900,6 +2900,27 @@ select.nt-input {
   background: color-mix(in srgb, var(--color-ink-strong) 5%, var(--color-surface-card));
 }
 
+/* The plan registers and the hierarchy table share the calm treatment: a pale
+   cool header band and understated heading text. Specific enough to beat
+   `.plan-table thead th` above, and scoped so no other table is touched. */
+[data-plan-calm] .plan-table thead th {
+  background: #F5F8FC;
+  color: var(--color-ink-muted);
+  font-weight: 600;
+}
+
+/* Project Views opts into a paler, bluer hover (and a calmer header hover). The
+   rest of the plan tables keep the neutral one above. */
+[data-plan-calm] .plan-table tbody tr:hover > td {
+  background: #F3F7FC;
+  transition: background-color 120ms ease;
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-plan-calm] .plan-table tbody tr:hover > td {
+    transition: none;
+  }
+}
+
 /* Ticked rows keep the module's own wash, and still stay opaque. */
 .plan-table tbody tr[data-selected="true"] > td {
   background: color-mix(in srgb, #e10600 7%, var(--color-surface-card));
@@ -3176,4 +3197,37 @@ select.nt-input {
   font-weight: 600;
   line-height: 1.5;
   white-space: nowrap;
+}
+
+/* ── Attendance page motion ───────────────────────────────────────────────
+   Short, transform/opacity-only entrances so nothing reflows. Sections rise a
+   few pixels; the KPI cards only fade (a transform animation held by
+   fill-mode would swallow the cards' hover lift). All of it is off for people
+   who ask the OS for reduced motion. */
+@keyframes att-rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes att-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.att-rise {
+  animation: att-rise 320ms cubic-bezier(0.2, 0.7, 0.3, 1) both;
+  animation-delay: var(--att-delay, 0ms);
+}
+.att-fade {
+  animation: att-fade 240ms ease-out both;
+}
+.att-kpi {
+  animation: att-fade 280ms ease-out both;
+}
+.att-kpi:nth-child(1) { animation-delay: 90ms; }
+.att-kpi:nth-child(2) { animation-delay: 135ms; }
+.att-kpi:nth-child(3) { animation-delay: 180ms; }
+.att-kpi:nth-child(4) { animation-delay: 225ms; }
+.att-kpi:nth-child(5) { animation-delay: 270ms; }
+.att-kpi:nth-child(6) { animation-delay: 315ms; }
+@media (prefers-reduced-motion: reduce) {
+  .att-rise, .att-fade, .att-kpi { animation: none; }
 }

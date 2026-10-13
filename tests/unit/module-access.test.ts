@@ -111,7 +111,10 @@ describe("moduleIdForPath", () => {
     expect(moduleIdForPath("/tasks/kanban")).toBe("wms");
     expect(moduleIdForPath("/attendance")).toBe("employees");
     expect(moduleIdForPath("/attendance/dashboard")).toBe("employees");
-    expect(moduleIdForPath("/salary/policy")).toBe("employees");
+    expect(moduleIdForPath("/salary")).toBe("employees");
+    // Policies moved under HR; the old URL belongs to HR too, so its guard is HR's.
+    expect(moduleIdForPath("/salary/policy")).toBe("hr");
+    expect(moduleIdForPath("/hr/policies")).toBe("hr");
     expect(moduleIdForPath("/incentive")).toBe("sales");
     expect(moduleIdForPath("/outstanding/contracts")).toBe("sales");
     expect(moduleIdForPath("/training")).toBe("training");

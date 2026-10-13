@@ -6,6 +6,7 @@ import { fireToast } from "@/lib/toast";
 import {
   LEAVE_KIND_LABELS,
   LEAVE_STATUS_LABELS,
+  LEAVE_TYPE_LABELS,
   type LeaveStatus,
 } from "@/db/enums";
 import type { LeaveRow } from "@/lib/queries/leave";
@@ -38,7 +39,7 @@ export function LeaveList({
       <p className="text-[15px] text-ink-subtle">
         {mode === "pending"
           ? "No leave requests are awaiting approval."
-          : "No leave requests yet — submit one with the form above."}
+          : "No leave applications yet — submit one with the form above."}
       </p>
     );
   }
@@ -58,6 +59,10 @@ function LeaveCard({ row, mode }: { row: LeaveRow; mode: "mine" | "pending" }) {
   const style = STATUS_STYLE[row.status];
 
   function decide(verdict: "approved" | "rejected") {
+    if (verdict === "rejected" && !note.trim()) {
+      fireToast({ message: "A reason is required to reject a leave request.", type: "error" });
+      return;
+    }
     startTransition(async () => {
       const res = await decideLeave({ id: row.id, verdict, note: note.trim() || undefined });
       if (!res.ok) {
@@ -89,7 +94,8 @@ function LeaveCard({ row, mode }: { row: LeaveRow; mode: "mine" | "pending" }) {
 
   return (
     <li
-      className="rounded-section bg-surface-card p-5 max-md:p-4"
+      id={`leave-${row.id}`}
+      className="rounded-section bg-surface-card p-5 max-md:p-4 scroll-mt-24"
       style={{
         border: "1px solid var(--color-hairline)",
         boxShadow: "0 1px 3px rgba(15,23,42,0.04)",
@@ -99,7 +105,11 @@ function LeaveCard({ row, mode }: { row: LeaveRow; mode: "mine" | "pending" }) {
         <div className="min-w-0">
           <div className="flex items-center gap-2.5 flex-wrap">
             <span className="text-[16px] font-semibold text-ink-strong">
-              {LEAVE_KIND_LABELS[row.kind]}
+              {row.leaveType
+                ? `${LEAVE_TYPE_LABELS[row.leaveType]} leave`
+                : row.kind
+                  ? LEAVE_KIND_LABELS[row.kind]
+                  : "Leave"}
             </span>
             <span
               className="rounded-pill px-2.5 py-0.5 text-[12px] font-bold"
@@ -122,9 +132,20 @@ function LeaveCard({ row, mode }: { row: LeaveRow; mode: "mine" | "pending" }) {
               {row.reason}
             </p>
           )}
+          <p className="text-[12.5px] text-ink-subtle mt-1.5">
+            Submitted {row.createdAt.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric", timeZone: "Asia/Kolkata" })}
+            {row.approverName ? ` · Approver: ${row.approverName}` : ""}
+          </p>
+          {row.status !== "pending" && row.decidedAt && (
+            <p className="text-[12.5px] text-ink-subtle mt-0.5">
+              {LEAVE_STATUS_LABELS[row.status]}
+              {row.decidedByName ? ` by ${row.decidedByName}` : ""} on{" "}
+              {row.decidedAt.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric", timeZone: "Asia/Kolkata" })}
+            </p>
+          )}
           {row.decisionNote && (
             <p className="text-[13px] text-ink-subtle mt-1.5">
-              Note: {row.decisionNote}
+              Remarks: {row.decisionNote}
             </p>
           )}
         </div>
@@ -137,7 +158,8 @@ function LeaveCard({ row, mode }: { row: LeaveRow; mode: "mine" | "pending" }) {
                   value={note}
                   onChange={(e) => setNote(e.target.value)}
                   maxLength={1000}
-                  placeholder="Note (optional)"
+                  placeholder="Remarks (required to reject)"
+                  aria-label="Remarks"
                   className="w-44 rounded-md border border-[#CBD5E1] px-2.5 py-1.5 text-[13px]"
                 />
                 <div className="flex items-center gap-2">

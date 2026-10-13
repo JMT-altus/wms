@@ -1,21 +1,27 @@
-import { MapPin, ShieldCheck } from "lucide-react";
 import { DashboardHeader } from "@/components/layout/header";
 import { DashboardFooter } from "@/components/layout/footer";
-import { PunchCard } from "@/components/attendance/punch-card";
-import { TeamDatePicker } from "@/components/attendance/team-date-picker";
-import { TeamPunchButton } from "@/components/attendance/team-punch-button";
-import { EmployeeAvatar } from "@/components/ui/employee-avatar";
 import { requireUser } from "@/lib/auth/current";
-import { isSuperAdmin } from "@/lib/auth/super-admin";
+import { localDateString } from "@/lib/format";
 import {
-  listMyAttendance,
-  listTeamAttendanceForDate,
-  type DayPunches,
-  type PunchDetail,
-  type TeamAttendanceRow,
-} from "@/lib/queries/attendance";
-import { getOrgSettings } from "@/lib/queries/org-settings";
-import { formatTimeInTz, localDateString } from "@/lib/format";
+  getEarliestAttendanceYear,
+  loadAttendanceOverview,
+  listUpcomingHolidays,
+  type AttendanceOverviewData,
+} from "@/lib/queries/attendance-overview";
+import {
+  greetingFor,
+  monthRange,
+  parseYearMonth,
+  shiftMonth,
+  yearOptions,
+} from "@/lib/attendance/overview";
+import type { HolidayRow } from "@/lib/queries/holidays";
+import { AttendanceOverview } from "@/components/attendance/overview/kpi-cards";
+import { MonthCalendar } from "@/components/attendance/overview/month-calendar";
+import { PeriodSelect } from "@/components/attendance/overview/period-select";
+import { UpcomingHolidays } from "@/components/attendance/overview/upcoming-holidays";
+import { WelcomeHero } from "@/components/attendance/overview/welcome-hero";
+import { PAGE_GROUND } from "@/components/attendance/overview/theme";
 
 export const dynamic = "force-dynamic";
 
@@ -23,19 +29,49 @@ interface PageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
 
-const DAY_LABEL_FMT: Intl.DateTimeFormatOptions = {
+/**
+ * The employee Attendance page: a welcome banner, then the overview, the
+ * monthly calendar and the upcoming holidays.
+ *
+ * ONE piece of state drives it all — the selected month and year, in the URL as
+ * `?y=&m=`. The dropdowns write it, the calendar's arrows write it, and the
+ * overview, the calendar and the dropdowns all read it back, so they cannot
+ * disagree. Absent means "the current month".
+ *
+ * Punching, the personal punch log and the team table are deliberately not
+ * here. Their components, server actions and APIs are untouched (the mobile
+ * app and the admin dashboard use them); this page just doesn't show them.
+ */
+
+const DATE_BADGE_FMT = new Intl.DateTimeFormat("en-IN", {
   weekday: "short",
   day: "2-digit",
   month: "short",
   year: "numeric",
-};
+  timeZone: "UTC",
+});
 
 /** "2026-06-10" → "Wed, 10 Jun 2026" without timezone drift. */
 function labelForDate(date: string): string {
-  const [y, m, d] = date.split("-").map(Number);
-  return new Intl.DateTimeFormat("en-IN", DAY_LABEL_FMT).format(
-    new Date(Date.UTC(y ?? 2026, (m ?? 1) - 1, d ?? 1, 12)),
-  );
+  return DATE_BADGE_FMT.format(new Date(`${date}T12:00:00Z`));
+}
+
+const RANGE_FMT = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", timeZone: "UTC" });
+const RANGE_YEAR_FMT = new Intl.DateTimeFormat("en-IN", {
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+  timeZone: "UTC",
+});
+
+/** "1 Oct – 9 Oct 2026": the dates the KPI figures cover. */
+function rangeLabel(r: { start: string; end: string }): string {
+  const at = (ymd: string) => new Date(`${ymd}T12:00:00Z`);
+  const sameYear = r.start.slice(0, 4) === r.end.slice(0, 4);
+  const start = (sameYear ? RANGE_FMT : RANGE_YEAR_FMT).format(at(r.start));
+  return r.start === r.end
+    ? RANGE_YEAR_FMT.format(at(r.end))
+    : `${start} – ${RANGE_YEAR_FMT.format(at(r.end))}`;
 }
 
 export default async function AttendancePage({ searchParams }: PageProps) {
@@ -44,254 +80,110 @@ export default async function AttendancePage({ searchParams }: PageProps) {
   const tz = me.timezone || "Asia/Kolkata";
   const today = localDateString(tz);
 
-  // My last 14 calendar days.
-  const since = localDateString(tz, new Date(Date.now() - 13 * 86_400_000));
+  const [ty, tm] = today.split("-").map(Number) as [number, number];
+  const { year: calYear, month: calMonth } = parseYearMonth(sp.y, sp.m, today);
 
-  const rawDate = typeof sp.date === "string" ? sp.date : today;
-  const teamDate = /^\d{4}-\d{2}-\d{2}$/.test(rawDate) ? rawDate : today;
+  // The link for a month; the current month is the default, so it is no query.
+  const hrefFor = (y: number, m: number): string =>
+    y === ty && m === tm ? "/attendance" : `/attendance?y=${y}&m=${m}`;
 
-  const [myDays, team, settings] = await Promise.all([
-    listMyAttendance(me.id, since),
-    me.isAdmin ? listTeamAttendanceForDate(teamDate) : Promise.resolve(null),
-    getOrgSettings(),
+  // Each degrades to an inline message rather than taking the page down. The
+  // overview is always about MY id — never one taken from the URL.
+  const [overview, holidays, earliestYear] = await Promise.all([
+    loadAttendanceOverview({
+      employeeId: me.id,
+      today,
+      year: calYear,
+      month: calMonth,
+    }).catch((err): AttendanceOverviewData | null => {
+      console.error("[attendance] overview load failed", err);
+      return null;
+    }),
+    listUpcomingHolidays(today).catch((err): HolidayRow[] | null => {
+      console.error("[attendance] holidays load failed", err);
+      return null;
+    }),
+    getEarliestAttendanceYear(me.id).catch((err): number | null => {
+      console.error("[attendance] earliest year lookup failed", err);
+      return null;
+    }),
   ]);
 
-  const todayRow = myDays.find((d) => d.date === today);
-  const office =
-    settings.officeLat != null && settings.officeLng != null
-      ? {
-          lat: settings.officeLat,
-          lng: settings.officeLng,
-          radiusM: settings.attendanceRadiusM,
-        }
-      : null;
+  const years = yearOptions(earliestYear, ty, calYear);
+  const oldestYear = years[years.length - 1]!;
+
+  // The arrows stop where the dropdowns do: January of the first year on
+  // record, December of this year.
+  const prev = shiftMonth(calYear, calMonth, -1);
+  const next = shiftMonth(calYear, calMonth, 1);
+  const prevHref = prev.year < oldestYear ? null : hrefFor(prev.year, prev.month);
+  const nextHref = next.year > ty ? null : hrefFor(next.year, next.month);
+
+  const range = monthRange(calYear, calMonth, today);
 
   return (
     <>
       <DashboardHeader generatedAt={new Date()} />
-      <main className="mx-auto max-w-[860px] px-8 max-md:px-4 pt-8 pb-16">
-        <header className="mb-6">
-          <h1 className="text-display-lg text-ink-strong">Attendance</h1>
-          <p className="text-body-lg text-ink-subtle mt-1">
-            {office
-              ? `Punch with your fingerprint, within ${office.radiusM}m of the office.`
-              : "Check in when you start, check out when you wrap up. One of each per day."}
-          </p>
-        </header>
+      <div style={{ background: PAGE_GROUND }}>
+        <main className="mx-auto max-w-[1200px] px-8 max-md:px-4 pt-7 pb-10 max-md:pb-8 grid gap-6">
+          {/* A. Welcome — light, no surface of its own */}
+          <div className="att-rise" style={{ ["--att-delay" as string]: "0ms" }}>
+            <WelcomeHero
+              greeting={greetingFor(me.name)}
+              subtitle="Your attendance, working hours and monthly summary at a glance."
+              dateLabel={labelForDate(today)}
+            />
+          </div>
 
-        <PunchCard
-          todayLabel={labelForDate(today)}
-          inLabel={todayRow?.in ? formatTimeInTz(todayRow.in.at, tz) : null}
-          outLabel={todayRow?.out ? formatTimeInTz(todayRow.out.at, tz) : null}
-          tz={tz}
-          office={office}
-          biometricExempt={me.attendanceBiometricExempt}
-        />
+          {/* B. Attendance Overview */}
+          <div className="att-rise" style={{ ["--att-delay" as string]: "60ms" }}>
+            <AttendanceOverview
+              kpis={overview?.kpis ?? null}
+              selector={
+                // Keyed by the month so it resets itself when the URL moves
+                // some other way — the calendar's arrows, say.
+                <PeriodSelect
+                  key={`${calYear}-${calMonth}`}
+                  year={calYear}
+                  month={calMonth}
+                  years={years}
+                  currentYear={ty}
+                  currentMonth={tm}
+                />
+              }
+              rangeLabel={range.end >= range.start ? rangeLabel(range) : undefined}
+              notStarted={range.end < range.start}
+              error={overview === null}
+            />
+          </div>
 
-        <MyLog days={myDays} tz={tz} />
-
-        {team && (
-          <TeamSection
-            team={team}
-            date={teamDate}
-            tz={tz}
-            canQuickPunch={isSuperAdmin(me.email) && teamDate === today}
-          />
-        )}
-      </main>
-      <DashboardFooter />
-    </>
-  );
-}
-
-/**
- * Punch time + verification badge: green shield = biometric-verified,
- * blue pin = location captured without biometric. Hover shows the distance
- * from office when a geofence was active.
- */
-function PunchTime({ punch, tz }: { punch: PunchDetail | null; tz: string }) {
-  if (!punch) return <>—</>;
-  const dist =
-    punch.distanceM != null ? `${Math.round(punch.distanceM)}m from office` : null;
-  return (
-    <span className="inline-flex items-center gap-1.5 text-ink-soft">
-      {formatTimeInTz(punch.at, tz)}
-      {punch.verifyMethod === "biometric" ? (
-        <span
-          title={`Biometric-verified${dist ? ` · ${dist}` : ""}`}
-          aria-label={`Biometric-verified${dist ? ` · ${dist}` : ""}`}
-          className="inline-flex"
-        >
-          <ShieldCheck
-            size={14}
-            strokeWidth={2.4}
-            style={{ color: "var(--color-green-deep)" }}
-          />
-        </span>
-      ) : punch.verifyMethod === "gps_only" ? (
-        <span
-          title={`Location-verified${dist ? ` · ${dist}` : ""}`}
-          aria-label={`Location-verified${dist ? ` · ${dist}` : ""}`}
-          className="inline-flex"
-        >
-          <MapPin
-            size={14}
-            strokeWidth={2.4}
-            style={{ color: "var(--color-blue-deep)" }}
-          />
-        </span>
-      ) : null}
-    </span>
-  );
-}
-
-function MyLog({ days, tz }: { days: DayPunches[]; tz: string }) {
-  return (
-    <section
-      className="mt-6 rounded-section bg-surface-card p-6 max-md:p-4"
-      style={{
-        border: "1px solid var(--color-hairline)",
-        boxShadow: "0 1px 3px rgba(15,23,42,0.04)",
-      }}
-    >
-      <h2 className="text-display-2xs text-ink-strong mb-4">My last 14 days</h2>
-      {days.length === 0 ? (
-        <p className="text-[15px] text-ink-subtle">No punches yet — your log starts with today&apos;s first check-in.</p>
-      ) : (
-        <table className="w-full text-[14px]">
-          <thead>
-            <tr className="text-left text-[12px] uppercase tracking-wide text-ink-subtle">
-              <th className="py-2 pr-3 font-semibold">Date</th>
-              <th className="py-2 pr-3 font-semibold">In</th>
-              <th className="py-2 pr-3 font-semibold">Out</th>
-              <th className="py-2 font-semibold max-md:hidden">Notes</th>
-            </tr>
-          </thead>
-          <tbody>
-            {days.map((d) => (
-              <tr
-                key={d.date}
-                className="border-t"
-                style={{ borderColor: "var(--color-hairline)" }}
-              >
-                <td className="py-2.5 pr-3 text-ink-strong whitespace-nowrap">
-                  {labelForDate(d.date)}
-                </td>
-                <td className="py-2.5 pr-3 tabular-nums text-ink-soft">
-                  <PunchTime punch={d.in} tz={tz} />
-                </td>
-                <td className="py-2.5 pr-3 tabular-nums text-ink-soft">
-                  <PunchTime punch={d.out} tz={tz} />
-                </td>
-                <td className="py-2.5 text-ink-subtle max-md:hidden">
-                  {[d.in?.note, d.out?.note].filter(Boolean).join(" · ") || ""}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-    </section>
-  );
-}
-
-function TeamSection({
-  team,
-  date,
-  tz,
-  canQuickPunch,
-}: {
-  team: TeamAttendanceRow[];
-  date: string;
-  tz: string;
-  /** Super-admin viewing today — show inline Check in / Check out controls. */
-  canQuickPunch: boolean;
-}) {
-  const present = team.filter((r) => r.in).length;
-  return (
-    <section
-      className="mt-6 rounded-section bg-surface-card p-6 max-md:p-4"
-      style={{
-        border: "1px solid var(--color-hairline)",
-        boxShadow: "0 1px 3px rgba(15,23,42,0.04)",
-      }}
-    >
-      <div className="flex items-center justify-between gap-3 flex-wrap mb-4">
-        <div>
-          <h2 className="text-display-2xs text-ink-strong">Team — {labelForDate(date)}</h2>
-          <p className="text-[14px] text-ink-subtle mt-1">
-            {present} of {team.length} checked in
-          </p>
-        </div>
-        <TeamDatePicker date={date} />
+          {/* C + D. Calendar, then holidays — side by side on a wide screen,
+              stacked (calendar first) everywhere else. */}
+          <div
+            className="att-rise grid gap-6 items-start lg:grid-cols-[minmax(0,1.55fr)_minmax(340px,1fr)]"
+            style={{ ["--att-delay" as string]: "120ms" }}
+          >
+            <MonthCalendar
+              days={overview?.days ?? []}
+              year={calYear}
+              month={calMonth}
+              today={today}
+              prevHref={prevHref}
+              nextHref={nextHref}
+              todayHref={hrefFor(ty, tm)}
+              error={overview === null}
+            />
+            <UpcomingHolidays holidays={holidays ?? []} today={today} error={holidays === null} />
+          </div>
+        </main>
       </div>
-      <table className="w-full text-[14px]">
-        <thead>
-          <tr className="text-left text-[12px] uppercase tracking-wide text-ink-subtle">
-            <th className="py-2 pr-3 font-semibold">Employee</th>
-            <th className="py-2 pr-3 font-semibold">In</th>
-            <th className="py-2 pr-3 font-semibold">Out</th>
-            <th className="py-2 font-semibold max-md:hidden">Notes</th>
-          </tr>
-        </thead>
-        <tbody>
-          {team.map((r) => (
-            <tr
-              key={r.employeeId}
-              className="border-t"
-              style={{ borderColor: "var(--color-hairline)" }}
-            >
-              <td className="py-2.5 pr-3">
-                <span className="inline-flex items-center gap-2.5 text-ink-strong">
-                  <EmployeeAvatar name={r.name} size="sm" />
-                  {r.name}
-                </span>
-              </td>
-              <td className="py-2.5 pr-3 tabular-nums">
-                {r.in ? (
-                  <PunchTime punch={r.in} tz={tz} />
-                ) : canQuickPunch ? (
-                  <TeamPunchButton
-                    employeeId={r.employeeId}
-                    logDate={date}
-                    kind="in"
-                    name={r.name}
-                    tz={tz}
-                  />
-                ) : (
-                  <span
-                    className="rounded-pill px-2 py-0.5 text-[12px] font-semibold"
-                    style={{
-                      background: "color-mix(in srgb, var(--color-altus-red) 10%, transparent)",
-                      color: "var(--color-altus-red)",
-                    }}
-                  >
-                    Absent
-                  </span>
-                )}
-              </td>
-              <td className="py-2.5 pr-3 tabular-nums text-ink-soft">
-                {r.out ? (
-                  <PunchTime punch={r.out} tz={tz} />
-                ) : canQuickPunch && r.in ? (
-                  <TeamPunchButton
-                    employeeId={r.employeeId}
-                    logDate={date}
-                    kind="out"
-                    name={r.name}
-                    tz={tz}
-                  />
-                ) : (
-                  <PunchTime punch={r.out} tz={tz} />
-                )}
-              </td>
-              <td className="py-2.5 text-ink-subtle max-md:hidden">
-                {[r.in?.note, r.out?.note].filter(Boolean).join(" · ") || ""}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </section>
+      {/* The shared footer carries its own 8rem top margin, which sits OUTSIDE
+          the ground above and shows the app wallpaper as a blank band. The page
+          now ends where its content does, so the margin is dropped here — for
+          this page only, without touching the footer every other page uses. */}
+      <div className="[&>footer]:mt-0">
+        <DashboardFooter />
+      </div>
+    </>
   );
 }

@@ -3,7 +3,7 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, ListTodo, CalendarDays, FolderKanban, SquareKanban, Target,
   CalendarCheck, CalendarRange, Award, IndianRupee, Receipt, CalendarOff,
-  Contact, Sparkles, GraduationCap, LayoutGrid, Users,
+  Contact, Sparkles, GraduationCap, LayoutGrid, Users, ScrollText,
   BookOpen, Share2, Gauge, ListChecks, MessageSquare, Settings, Archive,
 } from "lucide-react";
 import type { Route } from "next";
@@ -20,7 +20,7 @@ interface Props {
 const ICONS: Record<string, typeof LayoutDashboard> = {
   LayoutDashboard, ListTodo, CalendarDays, FolderKanban, SquareKanban, Target,
   CalendarCheck, CalendarRange, Award, IndianRupee, Receipt, CalendarOff,
-  Contact, Sparkles, GraduationCap, LayoutGrid, Users,
+  Contact, Sparkles, GraduationCap, LayoutGrid, Users, ScrollText,
   BookOpen, Share2, Gauge, ListChecks, MessageSquare, Settings, Archive,
 };
 

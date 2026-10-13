@@ -15,6 +15,8 @@ import {
   levelStyleProps,
 } from "@/lib/plan/levels";
 import { matchesChip, type PlanChip } from "@/lib/plan/table";
+import { expandableIds, flattenPlanTree } from "@/lib/plan/views";
+import type { PlanWorkingStatus } from "@/db/enums";
 import {
   PLAN_RESTRICTED_STATUSES,
   PLAN_STATUS_LABEL,
@@ -30,6 +32,7 @@ import {
 import { actorForRow, type PlanViewer } from "@/lib/plan/viewer";
 import type { PlanNode } from "@/lib/queries/plan";
 import { setPlanNodeStatus } from "@/app/(project)/project-plan/actions";
+import { PlanRef } from "./plan-ref";
 import { PLAN_RED, PLAN_RED_SOFT, PLAN_SIDE, TABULAR } from "./theme";
 
 /**
@@ -96,6 +99,29 @@ interface Card {
   node: PlanNode;
   ancestorOwnerIds: (string | null)[];
   path: string;
+  /** P1, M2, RA, A3, SA3.1 — the label people quote, the same one every plan table shows. */
+  ref: string;
+  /** The whole traceability path (P1M2RAA3), for the tooltip. */
+  fullRef: string;
+}
+
+/**
+ * Every row's reference, numbered over the WHOLE tree.
+ *
+ * Read from the same `flattenPlanTree` the hierarchy and Project Views use,
+ * with everything expanded and nothing filtered, so a card says P1 or A3 exactly
+ * where the tables say it — filtering the board by search, project or chip must
+ * not renumber what is left. Ordinals count per kind among siblings, which is
+ * how the rest of the plan numbers them.
+ */
+export function boardRefs(
+  tree: PlanNode[],
+): Map<string, { ref: string; fullRef: string }> {
+  const out = new Map<string, { ref: string; fullRef: string }>();
+  for (const line of flattenPlanTree(tree, expandableIds(tree))) {
+    out.set(line.node.id, { ref: line.ref, fullRef: line.fullRef });
+  }
+  return out;
 }
 
 export function PlanKanban({ tree, viewer, query, projectId, chip, kinds }: Props) {
@@ -110,6 +136,8 @@ export function PlanKanban({ tree, viewer, query, projectId, chip, kinds }: Prop
    */
   const [side, setSide] = React.useState<"doer" | "initiator">("doer");
 
+  const refs = React.useMemo(() => boardRefs(tree), [tree]);
+
   const cards = React.useMemo(() => {
     const out: Card[] = [];
     const q = query.trim().toLowerCase();
@@ -122,7 +150,14 @@ export function PlanKanban({ tree, viewer, query, projectId, chip, kinds }: Prop
         (node.description ?? "").toLowerCase().includes(q);
       const levelOk = !kinds || kinds.includes(node.kind);
       if (matches && levelOk && matchesChip(node, chip ?? null)) {
-        out.push({ node, ancestorOwnerIds: ownerTrail, path: path.join(" / ") });
+        const r = refs.get(node.id);
+        out.push({
+          node,
+          ancestorOwnerIds: ownerTrail,
+          path: path.join(" / "),
+          ref: r?.ref ?? "",
+          fullRef: r?.fullRef ?? "",
+        });
       }
       for (const child of node.children) {
         walk(child, [...ownerTrail, node.ownerId], [...path, node.name]);
@@ -130,7 +165,7 @@ export function PlanKanban({ tree, viewer, query, projectId, chip, kinds }: Prop
     }
     for (const root of roots) walk(root, [], []);
     return out;
-  }, [tree, query, projectId, chip, kinds]);
+  }, [tree, refs, query, projectId, chip, kinds]);
 
   /**
    * Every card filed under BOTH of its answers — its doer column always, and
@@ -440,6 +475,11 @@ function KanbanCard({
       }
     >
       <div className="flex items-start gap-1.5">
+        {card.ref && (
+          <PlanRef title={card.fullRef} tone="grey" size={10.5}>
+            {card.ref}
+          </PlanRef>
+        )}
         <span
           className="shrink-0 rounded-[4px] px-1 text-[10.5px] font-bold"
           style={{
@@ -620,12 +660,25 @@ function HoverLine({ label, value }: { label: string; value: string | null | und
  * "Not scheduled" is this half's own answer for a task-level row that has no
  * task yet — it is a fact about the row's fields, not a status.
  */
-function doerColumnFor(node: PlanNode): ColumnId {
+export function doerColumnFor(node: PlanNode): ColumnId {
   if (hasTask(node.kind) && !node.task) return UNSCHEDULED;
-  const status = isExecutable(node.kind) ? node.task?.status : node.status;
+  const raw = isExecutable(node.kind) ? node.task?.status : node.status;
+  // A task can still carry a status the plan no longer offers. Those were
+  // retired INTO another one (migrations 0051 and the follow-up collapse), so
+  // the card goes where its successor is rather than falling through to "Not
+  // Started" and reading as work nobody has begun.
+  const status = raw ? (RETIRED_TASK_STATUS[raw] ?? raw) : raw;
   if (status && isWorkingStatus(status)) return status;
   return "not_started";
 }
+
+/** Task statuses that were folded into a working status; see `doerColumnFor`. */
+const RETIRED_TASK_STATUS: Readonly<Record<string, PlanWorkingStatus>> = {
+  follow_up_1: "follow_up",
+  follow_up_2: "follow_up",
+  follow_up_3: "follow_up",
+  need_help: "need_info",
+};
 
 /**
  * The row's column in the INITIATOR half, or null when nobody has ruled.
@@ -634,7 +687,7 @@ function doerColumnFor(node: PlanNode): ColumnId {
  * verdict piles into one lane is a lane that holds most of the plan and means
  * nothing. The initiator half shows the work that has actually been ruled on.
  */
-function initiatorColumnFor(node: PlanNode): ColumnId | null {
+export function initiatorColumnFor(node: PlanNode): ColumnId | null {
   return node.approvalStatus && isRestrictedStatus(node.approvalStatus)
     ? node.approvalStatus
     : null;

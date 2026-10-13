@@ -26,7 +26,7 @@ import {
   type PickerNode,
 } from "./parent-pickers";
 import { BulkUploadDialog } from "./bulk-upload-dialog";
-import { PLAN_GRADIENT_BAR, PLAN_RED, PLAN_RED_SOFT } from "./theme";
+import { PLAN_EDGE, PLAN_GRADIENT_BAR, PLAN_RED, PLAN_RED_SOFT } from "./theme";
 
 /**
  * The five create boxes, plus Bulk Upload.
@@ -114,10 +114,10 @@ export function PlanCreate(props: PlanCreateProps) {
             type="button"
             onClick={() => setOpenKind(box.kind)}
             title={box.hint}
-            className="group relative inline-flex items-center gap-1.5 rounded-lg pl-3 pr-5 h-10 text-[14px] font-semibold whitespace-nowrap transition-colors"
+            className="group relative inline-flex items-center gap-1.5 rounded-lg pl-2.5 pr-4 h-9 text-[13px] font-semibold whitespace-nowrap transition-colors"
             style={{
-              background: "var(--color-surface-card)",
-              border: "1px solid var(--color-hairline-strong)",
+              background: "#FFFFFF",
+              border: `1px solid ${PLAN_EDGE}`,
               color: "var(--color-ink)",
             }}
             onMouseEnter={(e) => {
@@ -125,8 +125,8 @@ export function PlanCreate(props: PlanCreateProps) {
               e.currentTarget.style.background = `color-mix(in srgb, ${PLAN_RED_SOFT} 22%, var(--color-surface-card))`;
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.borderColor = "var(--color-hairline-strong)";
-              e.currentTarget.style.background = "var(--color-surface-card)";
+              e.currentTarget.style.borderColor = PLAN_EDGE;
+              e.currentTarget.style.background = "#FFFFFF";
             }}
           >
             <Plus size={14} strokeWidth={2.8} />
@@ -146,10 +146,10 @@ export function PlanCreate(props: PlanCreateProps) {
         <button
           type="button"
           onClick={() => setBulkOpen(true)}
-          className="inline-flex items-center gap-1.5 rounded-lg px-3.5 h-10 text-[14px] font-semibold whitespace-nowrap"
+          className="inline-flex items-center gap-1.5 rounded-lg px-3 h-9 text-[13px] font-semibold whitespace-nowrap transition-colors duration-150 hover:bg-[#F1F5FB] hover:border-[#B9C6DA] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#14336B] motion-reduce:transition-none"
           style={{
-            background: "var(--color-surface-card)",
-            border: "1px solid var(--color-hairline-strong)",
+            background: "#FFFFFF",
+            border: `1px solid ${PLAN_EDGE}`,
             color: "var(--color-ink)",
           }}
         >

@@ -7,13 +7,14 @@ import type { Route } from "next";
 import {
   LayoutDashboard, ListTodo, CalendarDays, FolderKanban, SquareKanban, Target,
   CalendarCheck, CalendarRange, Award, IndianRupee, Receipt, CalendarOff,
-  Contact, Sparkles, GraduationCap, LayoutGrid, Users,
+  Contact, Sparkles, GraduationCap, LayoutGrid, Users, ScrollText,
   BookOpen, Share2, Gauge, ListChecks, MessageSquare, Settings, ArrowLeft, Archive,
 } from "lucide-react";
 import { moduleForPath, type ModuleNavItem } from "@/lib/nav-modules";
 import { RAIL_WIDTH, RAIL_WIDTH_COLLAPSED, useRailCollapsed } from "./rail-collapse";
 import { RailToggle } from "./rail-toggle";
 import { NavHistoryButtons } from "./nav-history-buttons";
+import { RailGroup } from "./rail-group";
 
 /**
  * The workspace's left rail — the module nav that used to be a pill row in the
@@ -33,7 +34,7 @@ import { NavHistoryButtons } from "./nav-history-buttons";
 const ICONS: Record<string, typeof LayoutDashboard> = {
   LayoutDashboard, ListTodo, CalendarDays, FolderKanban, SquareKanban, Target,
   CalendarCheck, CalendarRange, Award, IndianRupee, Receipt, CalendarOff,
-  Contact, Sparkles, GraduationCap, LayoutGrid, Users,
+  Contact, Sparkles, GraduationCap, LayoutGrid, Users, ScrollText,
   BookOpen, Share2, Gauge, ListChecks, MessageSquare, Settings, Archive,
 };
 
@@ -147,6 +148,18 @@ export function AppSidebar({
         <nav aria-label="Primary" className="px-2.5 flex flex-col gap-0.5 flex-1 overflow-y-auto min-h-0">
           {items.map((item) => {
             const Icon = ICONS[item.icon] ?? LayoutDashboard;
+            if (item.children) {
+              return (
+                <RailGroup
+                  key={item.href}
+                  item={item}
+                  Icon={Icon}
+                  pathname={pathname}
+                  accent={accent}
+                  collapsed={collapsed}
+                />
+              );
+            }
             const active = isActive(item);
             const count = item.taskCount
               ? activeTasks

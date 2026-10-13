@@ -14,6 +14,7 @@ import {
   Info,
   type LucideIcon,
   Waypoints,
+  BriefcaseBusiness,
 } from "lucide-react";
 import { fireToast } from "@/lib/toast";
 import { MODULES, MODULE_IDS, type ModuleId } from "@/lib/nav-modules";
@@ -45,6 +46,7 @@ const MODULE_ICONS: Record<ModuleId, LucideIcon> = {
   masters: Boxes,
   targets: Target,
   project: Waypoints,
+  hr: BriefcaseBusiness,
 };
 
 type Tab = "everyone" | "departments" | "people";

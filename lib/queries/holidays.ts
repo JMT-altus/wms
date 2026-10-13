@@ -8,6 +8,8 @@ export interface HolidayRow {
   holidayDate: string;
   label: string;
   isActive: boolean;
+  /** An optional holiday: listed, but not a day off for everyone. */
+  isOptional: boolean;
   createdAt: Date;
 }
 
@@ -32,6 +34,7 @@ export async function listHolidays(year?: number): Promise<HolidayRow[]> {
       holidayDate: holidays.holidayDate,
       label: holidays.label,
       isActive: holidays.isActive,
+      isOptional: holidays.isOptional,
       createdAt: holidays.createdAt,
     })
     .from(holidays)
@@ -44,6 +47,10 @@ export async function listHolidays(year?: number): Promise<HolidayRow[]> {
 /**
  * Set of active holiday dates (YYYY-MM-DD) for a calendar year. Used by the
  * attendance query layer (B7) to mark off holidays in the monthly grid.
+ *
+ * MANDATORY holidays only. An optional holiday is a day each person may choose
+ * to take, not a day off for all, so it must not grade as "H" (a paid day with
+ * no work expected) — staff work it unless they take it through leave/comp-off.
  */
 export async function listHolidayDateSet(year: number): Promise<Set<string>> {
   const rows = await db
@@ -52,6 +59,7 @@ export async function listHolidayDateSet(year: number): Promise<Set<string>> {
     .where(
       and(
         eq(holidays.isActive, true),
+        eq(holidays.isOptional, false),
         gte(holidays.holidayDate, `${year}-01-01`),
         lte(holidays.holidayDate, `${year}-12-31`),
       ),

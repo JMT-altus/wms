@@ -49,7 +49,7 @@ import { PlanRef } from "./plan-ref";
 import { PlanEditDialog } from "./plan-edit-dialog";
 import { PlanDeleteDialog } from "./plan-delete-dialog";
 import { PlanBulkBar } from "./plan-bulk-bar";
-import { PLAN_RED, PLAN_RED_SOFT, PLAN_ROW_LINE, TABULAR } from "./theme";
+import { PLAN_EDGE, PLAN_RED, PLAN_RED_SOFT, PLAN_ROW_LINE, TABULAR } from "./theme";
 
 /**
  * The registers — one level, flat, carrying the chain of parents above it.
@@ -167,8 +167,8 @@ export function PlanRegisterTable({ tree, level, viewer, query, projectId, chip,
       <div
         className="rounded-xl overflow-auto"
         style={{
-          // The same navy frame every table in the module carries.
-          border: "2px solid var(--color-table-edge)",
+          // One pale hairline round the table.
+          border: `1px solid ${PLAN_EDGE}`,
           background: "var(--color-surface-card)",
           maxHeight: "calc(100vh - 320px)",
         }}

@@ -39,6 +39,10 @@ export const MODULE_CODE_DEFAULTS: Record<ModuleId, boolean> = {
   // everyone, and the module's single permission rule is about who may RULE
   // on a row's status — not who may look at one.
   project: true,
+  // Off by default, like Employees — the module Policies used to sit in. Admins
+  // get in through the admin bypass and anyone else is granted HR deliberately,
+  // so moving Policies under HR widens nobody's access.
+  hr: false,
 };
 
 /** Where a resolved yes/no came from — surfaced in the admin matrix. */

@@ -7,6 +7,23 @@
  * them (kept as strings here so this file stays server/client neutral).
  */
 
+import {
+  POST_APPOINTMENT_BASE,
+  POST_APPOINTMENT_SECTIONS,
+  postAppointmentHref,
+} from "@/lib/hr/post-appointment";
+import {
+  DURING_EMPLOYMENT_BASE,
+  DURING_EMPLOYMENT_SECTIONS,
+  duringEmploymentHref,
+} from "@/lib/hr/during-employment";
+import {
+  APPRAISAL_LETTERS_BASE,
+  APPRAISAL_LETTER_SECTIONS,
+  appraisalLetterHref,
+} from "@/lib/hr/appraisal-letters";
+import { EXIT_BASE, EXIT_SECTIONS, exitHref } from "@/lib/hr/exit";
+
 export type ModuleId =
   | "wms"
   | "employees"
@@ -14,7 +31,8 @@ export type ModuleId =
   | "training"
   | "masters"
   | "targets"
-  | "project";
+  | "project"
+  | "hr";
 
 export interface ModuleNavItem {
   href: string;
@@ -29,6 +47,10 @@ export interface ModuleNavItem {
   match?: string[];
   /** Paths that must NOT match (so sibling routes don't both highlight). */
   notMatch?: string[];
+  /** Makes this a foldable group: the row toggles and these are listed under it, numbered. */
+  children?: ModuleNavItem[];
+  /** For a child of a group: the number printed beside it. Omitted = its position; null = none. */
+  num?: string | null;
 }
 
 export interface ModuleDef {
@@ -89,7 +111,8 @@ export const MODULES: ModuleDef[] = [
     routes: ["/attendance", "/salary", "/reimbursements", "/leave-approval", "/dcc"],
     accent: { from: "#12B3A0", to: "#0C7C6F", ink: "#0C7C6F" },
     items: [
-      { href: "/attendance", label: "Attendance", icon: "CalendarCheck", notMatch: ["/attendance/dashboard"] },
+      { href: "/attendance", label: "Attendance", icon: "CalendarCheck", notMatch: ["/attendance/dashboard", "/attendance/leave"] },
+      { href: "/attendance/leave", label: "Apply for Leave", icon: "CalendarOff" },
       { href: "/attendance/dashboard", label: "Att Report", icon: "CalendarRange", adminOnly: true },
       // DCC — the daily KPI checklist. Sibling routes listed in notMatch so the
       // board pill doesn't stay lit on Team and Ranking, same pattern as Tasks.
@@ -97,7 +120,6 @@ export const MODULES: ModuleDef[] = [
       { href: "/dcc/dashboard", label: "DCC Team", icon: "Users" },
       { href: "/salary", label: "Salary", icon: "IndianRupee", adminOnly: true },
       { href: "/reimbursements", label: "Reimbursements", icon: "Receipt" },
-      { href: "/leave-approval", label: "Leave Approval", icon: "CalendarOff" },
     ],
   },
   {
@@ -201,6 +223,67 @@ export const MODULES: ModuleDef[] = [
     // Projects / Milestones / Results / Actions / Sub-Actions / Kanban is
     // seven entries, and a pill row stops being readable around six.
     items: [],
+  },
+  {
+    id: "hr",
+    label: "HR",
+    tagline: "People policies and HR resources.",
+    icon: "BriefcaseBusiness",
+    // Straight to Policies — with one entry there is nothing for a landing page
+    // to add. Add a /hr page when a second section exists.
+    landing: "/hr/policies",
+    // Policies used to live at /salary/policy under Employees. That URL still
+    // works (it redirects) but belongs to HR now, so access is judged by HR for
+    // old links too: the longest matching prefix wins over "/salary".
+    routes: ["/hr", "/salary/policy"],
+    accent: { from: "#D946EF", to: "#A21CAF", ink: "#86198F" },
+    items: [
+      { href: "/hr/policies", label: "Policies", icon: "ScrollText" },
+      { href: "/hr/help-desk", label: "HR Help Desk", icon: "MessageSquare" },
+      { href: "/hr/attendance-import", label: "Attendance Import", icon: "CalendarDays" },
+      {
+        href: POST_APPOINTMENT_BASE,
+        label: "Post-Appointment",
+        icon: "ListChecks",
+        children: POST_APPOINTMENT_SECTIONS.map((s) => ({
+          href: postAppointmentHref(s.slug),
+          label: s.label,
+          icon: "ListChecks",
+        })),
+      },
+      {
+        href: DURING_EMPLOYMENT_BASE,
+        label: "During Employment",
+        icon: "Users",
+        children: DURING_EMPLOYMENT_SECTIONS.map((s) => ({
+          href: duringEmploymentHref(s.slug),
+          label: s.label,
+          icon: "ListChecks",
+        })),
+      },
+      {
+        href: APPRAISAL_LETTERS_BASE,
+        label: "Appraisal Letters",
+        icon: "Award",
+        children: APPRAISAL_LETTER_SECTIONS.map((s) => ({
+          href: appraisalLetterHref(s.slug),
+          label: s.label,
+          icon: "ListChecks",
+          num: s.num,
+        })),
+      },
+      {
+        href: EXIT_BASE,
+        label: "Exit",
+        icon: "Archive",
+        children: EXIT_SECTIONS.map((s) => ({
+          href: exitHref(s.slug),
+          label: s.label,
+          icon: "ListChecks",
+          num: s.num,
+        })),
+      },
+    ],
   },
 ];
 

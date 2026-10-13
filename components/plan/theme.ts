@@ -30,15 +30,30 @@ export const PLAN_MAX_WIDTH = 1600;
 /**
  * The rule between two rows.
  *
- * Black rather than the app's blue-tinted hairline: these tables are read for
- * long stretches across a lot of columns, and a faint line stops doing its one
- * job — letting the eye track a single row from the frozen names all the way
- * out to the last date.
- *
- * `--color-ink-strong` is the palette's black; it follows the app into dark
- * mode, which a hard-coded `#000` would not.
+ * Thin and pale. It used to be the palette's black, to help the eye track a
+ * row across a wide table; a heavy rule on every row made the table look like a
+ * grid of boxes, and the hover tint now does the tracking.
  */
-export const PLAN_ROW_LINE = "1px solid var(--color-ink-strong)";
+export const PLAN_ROW_LINE = "1px solid #E3E9F2";
+
+/** The one thin frame colour for tables and controls: a pale cool grey-blue. */
+export const PLAN_EDGE = "#D5DEEB";
+
+/**
+ * The plan screens drawn in the app's own two colours — deep navy and white —
+ * instead of the module's red. Every colour above is read through a CSS
+ * variable, so setting these on a screen's root re-points the chevrons, the
+ * selected tab, the active chips, the create boxes and the progress fills
+ * without touching any of them. Dialogs open in portals outside the root and
+ * keep the module's own accent.
+ */
+export const PLAN_NAVY_SCOPE = {
+  "--plan-ink": "#14336B",
+  "--plan-ink-deep": "#0B2250",
+  "--plan-soft": "#DCE6F7",
+  "--plan-accent": "linear-gradient(135deg, #14336B 0%, #0B2250 100%)",
+  "--plan-accent-bar": "linear-gradient(90deg, #14336B 0%, #0B2250 100%)",
+} as React.CSSProperties;
 
 /** Tabular numerals for every numeric column, so digits line up down a page. */
 export const TABULAR: React.CSSProperties = {

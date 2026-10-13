@@ -78,7 +78,7 @@ import {
   saveColumnPrefs,
   subscribeToColumnPrefs,
 } from "./plan-columns-store";
-import { PLAN_RED, PLAN_ROW_LINE, TABULAR } from "./theme";
+import { PLAN_EDGE, PLAN_RED, PLAN_ROW_LINE, TABULAR } from "./theme";
 
 /**
  * The hierarchy table — all six levels in one compact enterprise table.
@@ -599,10 +599,8 @@ export function PlanTreeTable({
       <div
         className="rounded-xl overflow-auto"
         style={{
-          // The module's tables all wear the same navy edge — see
-          // `--color-table-edge` in globals.css. Only the frame: the rules
-          // inside each table stay whatever that table needs.
-          border: "2px solid var(--color-table-edge)",
+          // One pale hairline round the table; the rules inside stay thin too.
+          border: `1px solid ${PLAN_EDGE}`,
           background: "var(--color-surface-card)",
           maxHeight: fullScreen ? "calc(100vh - 190px)" : "calc(100vh - 420px)",
         }}

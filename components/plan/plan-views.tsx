@@ -44,7 +44,12 @@ import { RecordedInput } from "./plan-progress-cell";
 import { PlanEditDialog } from "./plan-edit-dialog";
 import { PlanPanelCell } from "./plan-panel-cell";
 import { PlanRef } from "./plan-ref";
-import { PLAN_RED, TABULAR } from "./theme";
+import { PLAN_NAVY_SCOPE as NAVY_SCOPE, PLAN_RED, TABULAR } from "./theme";
+
+/** The table's one line colour, and the hover wash: pale cool grey-blue. */
+const RULE = "#E3E9F2";
+const EDGE = "#D5DEEB";
+const HEAD_BG = "#F5F8FC";
 
 /**
  * Project Views — the whole plan as ONE indented tree, with the columns that
@@ -229,24 +234,36 @@ export function PlanViews({ tree, viewer, employees }: Props) {
   const refresh = React.useCallback(() => router.refresh(), [router]);
 
   return (
-    <div className="min-w-0">
+    <div className="min-w-0" style={NAVY_SCOPE} data-plan-calm>
       {/* ── Header ────────────────────────────────────────────────────── */}
-      <div className="flex flex-wrap items-center gap-3 mb-4">
-        <div className="min-w-0">
-          <h1
-            className="font-black"
-            style={{ fontSize: 22, letterSpacing: "-0.018em", color: "var(--color-ink-strong)" }}
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2.5 mb-4">
+        {/* The title takes whatever is left and its subtitle wraps before the
+            controls ever have to. */}
+        <div className="min-w-0 flex-1 basis-[220px]">
+          {/* A level-1 heading on a div, on purpose: globals.css sizes every
+              <h1> at 30–46px with !important so page titles match app-wide, and
+              no inline size can beat that. The role keeps it the page's h1 for
+              assistive tech; this page wants a medium title, and the table is
+              what the screen is for. */}
+          <div
+            role="heading"
+            aria-level={1}
+            className="font-bold"
+            style={{ fontSize: 20, lineHeight: 1.2, letterSpacing: "-0.012em", color: "#0B2250" }}
           >
             Project Views
-          </h1>
-          <p className="mt-0.5 text-[13.5px]" style={{ color: "var(--color-ink-muted)" }}>
+          </div>
+          <p className="mt-0.5 text-[13px]" style={{ color: "var(--color-ink-muted)" }}>
             The whole plan as one tree — open a row to see what sits under it.
           </p>
         </div>
 
-        <span className="flex-1" />
-
-        <label className="relative min-w-[210px]">
+        {/* The four controls are ONE group, so they move together: side by
+            side in a single row from md up, and only on a phone do they wrap.
+            Loose children of the header could be split by the wrap, which is
+            how Collapse ended up alone on a second line. */}
+        <div className="flex items-center gap-3 max-md:flex-wrap md:flex-nowrap">
+        <label className="relative min-w-[180px] max-md:flex-1">
           <Search
             size={14}
             strokeWidth={2.4}
@@ -258,10 +275,10 @@ export function PlanViews({ tree, viewer, employees }: Props) {
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Find a row…"
             aria-label="Find a row"
-            className="w-full rounded-lg pl-9 pr-2.5 h-9 text-[14px] outline-none focus:ring-1"
+            className="w-full rounded-lg pl-9 pr-2.5 h-9 text-[13.5px] outline-none transition-colors duration-150 hover:border-[#B9C6DA] focus:border-[#14336B] focus:shadow-[0_0_0_3px_rgba(20,51,107,0.14)] motion-reduce:transition-none"
             style={{
-              background: "var(--color-surface-card)",
-              border: "1px solid var(--color-hairline-strong)",
+              background: "#FFFFFF",
+              border: `1px solid ${EDGE}`,
               color: "var(--color-ink)",
             }}
           />
@@ -271,13 +288,13 @@ export function PlanViews({ tree, viewer, employees }: Props) {
           value={rootId ?? ""}
           onChange={(e) => scopeTo(e.target.value || null)}
           aria-label="Show one project"
-          className="rounded-lg px-3 h-9 text-[14px] outline-none"
+          className="rounded-lg px-3 h-9 text-[13.5px] outline-none transition-colors duration-150 hover:border-[#B9C6DA] focus:border-[#14336B] focus:shadow-[0_0_0_3px_rgba(20,51,107,0.14)] motion-reduce:transition-none"
           style={{
-            background: "var(--color-surface-card)",
-            border: "1px solid var(--color-hairline-strong)",
+            background: "#FFFFFF",
+            border: `1px solid ${EDGE}`,
             color: "var(--color-ink)",
-            minWidth: 200,
-            maxWidth: 300,
+            minWidth: 170,
+            maxWidth: 280,
           }}
         >
           <option value="">All projects</option>
@@ -298,6 +315,7 @@ export function PlanViews({ tree, viewer, employees }: Props) {
           <X size={13} strokeWidth={2.4} />
           Collapse
         </HeaderBtn>
+        </div>
       </div>
 
       {/* ── The tree ──────────────────────────────────────────────────── */}
@@ -307,12 +325,12 @@ export function PlanViews({ tree, viewer, employees }: Props) {
           `data-grid` carries the rules and the band; the vertical scroll and
           the height cap are this screen's own. */}
       <div
-        className="rounded-section data-grid-scroll overflow-y-auto"
+        className="rounded-xl data-grid-scroll overflow-y-auto"
         style={{
-          border: "2px solid var(--color-table-edge)",
-          boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
-          background: "var(--color-surface-card)",
-          maxHeight: "calc(100vh - 300px)",
+          // One hairline, not the forms tables' heavy navy frame.
+          border: `1px solid ${EDGE}`,
+          background: "#FFFFFF",
+          maxHeight: "calc(100vh - 280px)",
         }}
       >
         <table
@@ -409,7 +427,9 @@ export function PlanViews({ tree, viewer, employees }: Props) {
                         )}
                       </button>
 
-                      <PlanRef title={line.fullRef}>{line.ref}</PlanRef>
+                      <PlanRef title={line.fullRef} tone="grey">
+                        {line.ref}
+                      </PlanRef>
 
                       {/* LEVEL_STYLE carries the hierarchy — weight, size,
                           italics and caps. Caps is a text-transform, so the
@@ -605,7 +625,7 @@ function ProgressBar({ percent }: { percent: number }) {
       <span
         aria-hidden
         className="flex-1 min-w-0 rounded-full overflow-hidden"
-        style={{ height: 4, background: "var(--color-hairline)" }}
+        style={{ height: 4, background: "#E6ECF5" }}
       >
         <span
           className="block h-full rounded-full"
@@ -627,18 +647,16 @@ function Th({
 }) {
   return (
     <th
-      className="px-3 py-2.5 text-left text-[11.5px] font-bold uppercase tracking-wide whitespace-nowrap"
+      className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.06em] whitespace-nowrap"
       style={{
         width,
         minWidth: width,
-        color: "var(--color-ink-soft)",
+        color: "var(--color-ink-muted)",
         // Inline, because `.plan-table thead th` sets a background of its own
         // and a stylesheet rule cannot outrank it from here.
-        background: "color-mix(in srgb, var(--color-blue) 8%, var(--color-surface-soft))",
-        // The band's lower edge, in the table's own navy — the one line this
-        // table keeps, because it separates the headings from the data rather
-        // than chopping the data up.
-        borderBottom: "2px solid var(--color-table-edge)",
+        background: HEAD_BG,
+        // A single thin rule under the headings, like every rule below it.
+        borderBottom: `1px solid ${EDGE}`,
         ...(frozen
           ? {
               position: "sticky",
@@ -667,11 +685,11 @@ function Td({
       // The separator is on the CELL, not the row: a sticky cell paints its own
       // background over a border set on the <tr>, which is how a frozen column
       // ends up as the one stripe with no line under it.
-      className="px-3 py-2.5 align-middle"
+      className="px-3 py-2 align-middle"
       style={{
         width,
         minWidth: width,
-        borderBottom: "1px solid var(--color-hairline)",
+        borderBottom: `1px solid ${RULE}`,
         ...(frozen
           ? {
               position: "sticky",
@@ -708,11 +726,11 @@ function HeaderBtn({
     <button
       type="button"
       onClick={onClick}
-      className="inline-flex items-center gap-1.5 rounded-lg px-3 h-9 text-[13.5px] font-semibold whitespace-nowrap"
+      className="inline-flex items-center gap-1.5 rounded-lg px-3 h-9 text-[13px] font-semibold whitespace-nowrap transition-colors duration-150 hover:bg-[#F1F5FB] hover:border-[#B9C6DA] hover:text-[#0B2250] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#14336B] active:bg-[#E7EDF7] motion-reduce:transition-none"
       style={{
         color: "var(--color-ink-muted)",
-        background: "var(--color-surface-card)",
-        border: "1px solid var(--color-hairline-strong)",
+        background: "#FFFFFF",
+        border: `1px solid ${EDGE}`,
       }}
     >
       {children}

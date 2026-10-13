@@ -30,7 +30,8 @@ export async function assembleMonthInputs(month: string): Promise<MonthInputRow[
   const fy = fyForMonth(month);
 
   const [dashboard, profiles] = await Promise.all([
-    getMonthDashboard(y, m, refTodayISO),
+    // strictPolicy: a policy that can't be read must stop the run, never fall back.
+    getMonthDashboard(y, m, refTodayISO, { strictPolicy: true }),
     listSalaryProfiles(),
   ]);
   // index attendance summary by employeeId
