@@ -22,12 +22,15 @@ export function RailGroup({
   pathname,
   accent,
   collapsed,
+  light = false,
 }: {
   item: ModuleNavItem;
   Icon: LucideIcon;
   pathname: string;
   accent: string;
   collapsed: boolean;
+  /** White rail: dark text on white, blue active row. */
+  light?: boolean;
 }) {
   const children = item.children ?? [];
   const inside = pathname === item.href || pathname.startsWith(`${item.href}/`);
@@ -50,7 +53,11 @@ export function RailGroup({
         title={item.label}
         aria-current={inside ? "page" : undefined}
         className="relative flex items-center justify-center py-2 rounded-lg"
-        style={inside ? { background: accent, color: "#fff" } : { color: "rgba(255,255,255,0.80)" }}
+        style={
+          light
+            ? inside ? { background: "#0A6CFF", color: "#fff" } : { color: "#334155" }
+            : inside ? { background: "rgba(255,255,255,0.12)", color: "#fff" } : { color: "rgba(255,255,255,0.80)" }
+        }
       >
         <Icon size={16} strokeWidth={2.2} />
       </Link>
@@ -65,10 +72,17 @@ export function RailGroup({
         aria-expanded={open}
         aria-controls={panelId}
         onClick={() => setManual(!open)}
-        className="group relative flex w-full items-center gap-2.5 px-2.5 py-2 rounded-lg text-left transition-colors hover:bg-white/[0.06]"
-        style={{ color: inside ? "#fff" : "rgba(255,255,255,0.80)" }}
+        className={`group relative flex w-full items-center gap-2.5 px-2.5 py-2 rounded-lg text-left transition-colors ${
+          light ? "hover:bg-[#EEF4FF]" : "hover:bg-white/[0.06]"
+        }`}
+        style={{ color: light ? (inside ? "#0B4FB8" : "#334155") : inside ? "#fff" : "rgba(255,255,255,0.80)" }}
       >
-        <Icon size={16} strokeWidth={2.2} className="shrink-0" style={{ color: "rgba(255,255,255,0.65)" }} />
+        <Icon
+          size={16}
+          strokeWidth={2.2}
+          className="shrink-0"
+          style={{ color: light ? (inside ? "#0A6CFF" : "#64748b") : "rgba(255,255,255,0.65)" }}
+        />
         <span className="flex-1 min-w-0 text-[13.5px] font-medium truncate">{item.label}</span>
         <ChevronDown
           size={14}
@@ -81,7 +95,7 @@ export function RailGroup({
         <ol
           id={panelId}
           className="mt-0.5 ml-[18px] flex flex-col gap-0.5 pl-2"
-          style={{ borderLeft: "1px solid rgba(255,255,255,0.12)" }}
+          style={{ borderLeft: light ? "1px solid #E2E8F0" : "1px solid rgba(255,255,255,0.12)" }}
         >
           {children.map((c, i) => {
             const active = pathname === c.href || pathname.startsWith(`${c.href}/`);
@@ -91,8 +105,14 @@ export function RailGroup({
                   href={c.href as Route}
                   aria-current={active ? "page" : undefined}
                   title={c.label}
-                  className="flex items-start gap-2 rounded-lg px-2 py-1.5 text-[12.5px] leading-snug transition-colors hover:bg-white/[0.06]"
-                  style={active ? { background: accent, color: "#fff" } : { color: "rgba(255,255,255,0.78)" }}
+                  className={`flex items-start gap-2 rounded-lg px-2 py-1.5 text-[12.5px] leading-snug transition-colors ${
+                    light ? "hover:bg-[#EEF4FF]" : "hover:bg-white/[0.06]"
+                  }`}
+                  style={
+                    light
+                      ? active ? { background: "#0A6CFF", color: "#fff" } : { color: "#475569" }
+                      : active ? { background: "rgba(255,255,255,0.12)", color: "#fff" } : { color: "rgba(255,255,255,0.78)" }
+                  }
                 >
                   {numberFor(c, i) !== null && (
                     <span className="shrink-0 tabular-nums min-w-4 text-right" style={{ opacity: 0.7 }}>

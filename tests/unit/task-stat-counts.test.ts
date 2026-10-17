@@ -5,7 +5,7 @@ import { describe, it, expect, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/db", () => ({ db: {}, tasks: {} }));
 
-import { computeStatCounts } from "@/components/tasks/task-list-page";
+import { computeStatCounts, computeStatusCounts, isUnreadPending } from "@/components/tasks/task-list-page";
 import type { TaskListRow } from "@/lib/types";
 
 function row(p: Partial<TaskListRow>): TaskListRow {
@@ -77,5 +77,31 @@ describe("computeStatCounts", () => {
       row({ status: "done", firstReadAt: null }),
     ];
     expect(computeStatCounts(rows).notRead).toBe(2);
+  });
+});
+
+describe("computeStatusCounts", () => {
+  it("counts rows per workflow status", () => {
+    const rows = [
+      row({ status: "dont_know" }), row({ status: "dont_know" }),
+      row({ status: "on_hold" }), row({ status: "abandoned" }),
+    ];
+    const c = computeStatusCounts(rows);
+    expect(c.dont_know).toBe(2);
+    expect(c.on_hold).toBe(1);
+    expect(c.abandoned).toBe(1);
+    expect(c.need_info).toBeUndefined();
+  });
+});
+
+describe("isUnreadPending", () => {
+  it("is the same definition the Not read count uses", () => {
+    const rows = [
+      row({ status: "not_started", firstReadAt: null }),
+      row({ status: "not_started" }),
+      row({ status: "done", firstReadAt: null }),
+    ];
+    expect(rows.filter(isUnreadPending)).toHaveLength(1);
+    expect(computeStatCounts(rows).notRead).toBe(1);
   });
 });

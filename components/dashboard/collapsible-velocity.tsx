@@ -14,7 +14,7 @@ export function CollapsibleVelocity({ data }: { data: VelocityPoint[] }) {
   const [open, setOpen] = React.useState(false);
 
   return (
-    <section className="mx-auto max-w-[1600px] px-12 max-md:px-4 mt-12 max-md:mt-6">
+    <section className="mx-auto max-w-[1600px] px-8 max-md:px-4 mt-12 max-md:mt-6">
       <div
         className="bg-surface-card rounded-section overflow-hidden"
         style={{

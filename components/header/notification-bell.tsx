@@ -51,8 +51,8 @@ export async function NotificationBell({
           ? {
               // Matches the fullscreen toggle's header circle exactly, so the
               // header's icon-only controls stay one family.
-              background: "rgba(255, 255, 255, 0.08)",
-              border: "1.5px solid rgba(255, 255, 255, 0.16)",
+              background: "var(--chrome-ctl-bg, rgba(255, 255, 255, 0.08))",
+              border: "1.5px solid var(--chrome-ctl-border, rgba(255, 255, 255, 0.16))",
               transition: "background-color 180ms ease, border-color 180ms ease",
             }
           : {
@@ -70,7 +70,7 @@ export async function NotificationBell({
       <Bell
         size={isHeader ? 15 : 18}
         strokeWidth={isHeader ? 2.4 : 2.2}
-        style={{ color: "rgba(255,255,255,0.88)" }}
+        style={{ color: isHeader ? "var(--chrome-ctl-fg, rgba(255,255,255,0.88))" : "rgba(255,255,255,0.88)" }}
       />
       {unread > 0 && (
         <span
@@ -83,7 +83,7 @@ export async function NotificationBell({
             fontWeight: 800,
             background: "var(--color-altus-red)",
             boxShadow: "0 2px 6px -1px rgba(220,38,38,0.55)",
-            border: "1.5px solid rgba(255,255,255,0.95)",
+            border: "1.5px solid var(--chrome-bell-ring, rgba(255,255,255,0.95))",
           }}
         >
           {display}

@@ -41,8 +41,8 @@ export default async function TaskDetailPage({ params }: PageProps) {
 
   return (
     <>
-      <DashboardHeader generatedAt={new Date()} />
-      <main className="w-full px-6 max-md:px-4 pt-8 pb-16">
+      <DashboardHeader generatedAt={new Date()} title="WMS · Task Details" />
+      <main className="wms-fill w-full px-8 max-md:px-4 pt-4 pb-3">
         <Suspense key={id} fallback={<TaskDetailSkeleton />}>
           <TaskDetailLoader
             taskId={id}
@@ -58,7 +58,9 @@ export default async function TaskDetailPage({ params }: PageProps) {
           />
         </Suspense>
       </main>
-      <DashboardFooter />
+      <div className="[&>footer]:mt-6">
+        <DashboardFooter />
+      </div>
     </>
   );
 }

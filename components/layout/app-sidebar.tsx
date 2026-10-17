@@ -15,6 +15,7 @@ import { RAIL_WIDTH, RAIL_WIDTH_COLLAPSED, useRailCollapsed } from "./rail-colla
 import { RailToggle } from "./rail-toggle";
 import { NavHistoryButtons } from "./nav-history-buttons";
 import { RailGroup } from "./rail-group";
+import { isLightChrome } from "@/lib/chrome-theme";
 
 /**
  * The workspace's left rail — the module nav that used to be a pill row in the
@@ -61,6 +62,8 @@ export function AppSidebar({
   if (shouldHideRail(pathname)) return null;
 
   const mod = moduleForPath(pathname);
+  // White-and-blue shell for WMS; the other modules keep the navy rail.
+  const light = isLightChrome(pathname);
   const accent = `linear-gradient(135deg, ${mod.accent.from} 0%, ${mod.accent.to} 100%)`;
   const items = mod.items.filter((i) => !i.adminOnly || isAdmin);
 
@@ -76,7 +79,9 @@ export function AppSidebar({
       // `rail-navy` is the shared navy surface (globals.css) — the same
       // gradient, blur and accent hairline the header uses, rotated to run
       // down the rail so the two read as one continuous plane.
-      className="module-rail header-dark rail-navy fixed left-0 top-0 z-40 h-screen flex flex-col max-md:hidden transition-[width] duration-200"
+      className={`module-rail fixed left-0 top-0 z-40 h-screen flex flex-col max-md:hidden transition-[width] duration-200 ${
+        light ? "chrome-light rail-navy rail-light" : "header-dark rail-navy"
+      }`}
       // The accent hairline down the rail's right edge and the module chip
       // below both read these, so the whole rail shifts colour with the
       // module rather than each piece re-deriving the gradient.
@@ -133,14 +138,15 @@ export function AppSidebar({
             {!collapsed && (
               <span aria-hidden className="shrink-0" style={{ width: 52 }} />
             )}
-            <RailToggle className={collapsed ? "mt-2" : "rail-toggle-in-band absolute right-3.5 z-10"} />
+            <RailToggle light={light} className={collapsed ? "mt-2" : "rail-toggle-in-band absolute right-3.5 z-10"} />
           </div>
           {!collapsed && (
             <>
-              <p className="module-chip text-[12.5px] mt-2.5 px-2.5 py-1.5 rounded-lg font-bold text-white leading-[1.25]">
+              <p className={`module-chip text-[12.5px] mt-2.5 px-2.5 py-1.5 rounded-lg font-bold leading-[1.25] ${light ? "" : "text-white"}`}>
                 {mod.label}
               </p>
-              <p className="text-[11.5px] mt-1.5 text-white/50 leading-snug">{mod.tagline}</p>
+              {/* The WMS rail drops the description; other modules keep theirs. */}
+              {!light && <p className="text-[11.5px] mt-1.5 leading-snug text-white/50">{mod.tagline}</p>}
             </>
           )}
         </div>
@@ -157,6 +163,7 @@ export function AppSidebar({
                   pathname={pathname}
                   accent={accent}
                   collapsed={collapsed}
+                  light={light}
                 />
               );
             }
@@ -176,28 +183,35 @@ export function AppSidebar({
                   collapsed ? "px-0 justify-center" : "px-2.5"
                 }`}
                 style={
-                  active
-                    ? {
-                        background: accent,
-                        color: "#ffffff",
-                        boxShadow:
-                          "0 8px 22px -10px rgba(14,165,183,0.55), inset 0 1px 0 rgba(255,255,255,0.14)",
-                      }
-                    : { color: "rgba(255,255,255,0.80)" }
+                  light
+                    ? active
+                      ? { background: "#0A6CFF", color: "#ffffff", boxShadow: "0 4px 10px -4px rgba(10,108,255,0.55)" }
+                      : { color: "#334155" }
+                    : active
+                      ? {
+                          background: "rgba(255,255,255,0.12)",
+                          color: "#ffffff",
+                          boxShadow: `inset 3px 0 0 ${mod.accent.from}`,
+                        }
+                      : { color: "rgba(255,255,255,0.80)" }
                 }
               >
                 {!active && (
                   <span
                     aria-hidden
                     className="absolute inset-0 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
-                    style={{ background: "rgba(255,255,255,0.06)" }}
+                    style={{ background: light ? "#EEF4FF" : "rgba(255,255,255,0.06)" }}
                   />
                 )}
                 <Icon
                   size={16}
                   strokeWidth={2.2}
                   className="relative shrink-0"
-                  style={{ color: active ? "rgba(255,255,255,0.95)" : "rgba(255,255,255,0.65)" }}
+                  style={{
+                    color: light
+                      ? active ? "#ffffff" : "#64748b"
+                      : active ? "rgba(255,255,255,0.95)" : "rgba(255,255,255,0.65)",
+                  }}
                 />
                 {!collapsed && (
                   <span className="relative flex-1 min-w-0 text-[13.5px] font-medium truncate">
@@ -214,10 +228,17 @@ export function AppSidebar({
                         ? "absolute top-1 right-1.5 px-1 leading-[14px]"
                         : "relative px-1.5 py-0.5 text-[11px]"
                     }`}
-                    style={{
-                      background: active ? "rgba(255,255,255,0.22)" : "rgba(255,255,255,0.16)",
-                      color: active ? "#fff" : "rgba(255,255,255,0.80)",
-                    }}
+                    style={
+                      light
+                        ? {
+                            background: active ? "rgba(255,255,255,0.25)" : "#E8EFFB",
+                            color: active ? "#fff" : "#0B4FB8",
+                          }
+                        : {
+                            background: active ? "rgba(255,255,255,0.22)" : "rgba(255,255,255,0.16)",
+                            color: active ? "#fff" : "rgba(255,255,255,0.80)",
+                          }
+                    }
                   >
                     {count}
                   </span>
@@ -232,14 +253,18 @@ export function AppSidebar({
             top of the rail already opens; the identity had nowhere to live
             except a bare circle in the header. Collapsed, the rail is too
             narrow for a name, so it falls back to that link. */}
-        <div className="px-2.5 pb-3 pt-2 shrink-0" style={{ borderTop: "1px solid rgba(255,255,255,0.10)" }}>
-          {collapsed || !userMenu ? (
+        <div className="px-2.5 pb-3 pt-2 shrink-0" style={{ borderTop: light ? "1px solid #E2E8F0" : "1px solid rgba(255,255,255,0.10)" }}>
+          {/* On the white WMS shell the account menu is in the header, so the foot
+              falls back to the plain "Back to Hub" link, as it does when collapsed. */}
+          {collapsed || !userMenu || light ? (
             <Link
               href={"/hub" as Route}
               title="Back to Hub"
-              className={`group flex items-center gap-2.5 py-2.5 rounded-lg text-[14px] text-white/75 hover:text-white hover:bg-white/[0.06] transition-colors ${
-                collapsed ? "px-0 justify-center" : "px-3.5"
-              }`}
+              className={`group flex items-center gap-2.5 py-2.5 rounded-lg text-[14px] transition-colors ${
+                light
+                  ? "text-slate-600 hover:text-slate-900 hover:bg-[#EEF4FF]"
+                  : "text-white/75 hover:text-white hover:bg-white/[0.06]"
+              } ${collapsed ? "px-0 justify-center" : "px-3.5"}`}
             >
               <ArrowLeft size={16} strokeWidth={2.2} className="transition-transform group-hover:-translate-x-0.5" />
               {!collapsed && "Back to Hub"}

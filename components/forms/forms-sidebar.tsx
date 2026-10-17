@@ -1,5 +1,6 @@
 "use client";
 
+import * as React from "react";
 import type { CSSProperties } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
@@ -14,7 +15,10 @@ import {
   SlidersHorizontal,
   TrendingUp,
   Trash2,
+  LayoutDashboard,
+  ClipboardList,
   ArrowLeft,
+  Building2,
   type LucideIcon,
 } from "lucide-react";
 // The same brand ramp the Masters rail uses. Imported rather than re-declared
@@ -41,6 +45,8 @@ interface NavItem {
   label: string;
   hint: string;
   icon: LucideIcon;
+  /** A small heading drawn above this item (the first of a group). */
+  groupLabel?: string;
 }
 
 const BASE = "/forms/client-kyc";
@@ -99,6 +105,25 @@ const NAV: ReadonlyArray<NavItem> = [
     label: "Recycle Bin",
     hint: "Deleted clients",
     icon: Trash2,
+  },
+  {
+    href: "/forms/collection/dashboard" as Route,
+    label: "Collection Dashboard",
+    hint: "Outstanding and follow-ups at a glance",
+    icon: LayoutDashboard,
+    groupLabel: "Collection",
+  },
+  {
+    href: "/forms/collection/tracker" as Route,
+    label: "Collection Tracker",
+    hint: "Party-wise follow-ups",
+    icon: ClipboardList,
+  },
+  {
+    href: "/forms/collection/master" as Route,
+    label: "Collection Master",
+    hint: "Companies, coordinators & payment terms",
+    icon: Building2,
   },
 ];
 
@@ -169,8 +194,13 @@ export function FormsSidebar({ userName }: { userName: string }) {
             const Icon = item.icon;
             const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
             return (
+              <React.Fragment key={item.href}>
+              {item.groupLabel && !collapsed && (
+                <p className="mt-3 mb-0.5 px-3 text-[10.5px] font-bold uppercase tracking-[0.12em] text-white/40">
+                  {item.groupLabel}
+                </p>
+              )}
               <Link
-                key={item.href}
                 href={item.href}
                 aria-current={active ? "page" : undefined}
                 title={collapsed ? item.label : item.hint}
@@ -207,6 +237,7 @@ export function FormsSidebar({ userName }: { userName: string }) {
                   </span>
                 )}
               </Link>
+              </React.Fragment>
             );
           })}
         </nav>

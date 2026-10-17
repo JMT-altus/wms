@@ -1,6 +1,7 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { isLightChrome } from "@/lib/chrome-theme";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { signOut } from "firebase/auth";
 import { getFirebaseAuth } from "@/lib/firebase/client";
@@ -58,6 +59,8 @@ export function UserMenu({
   variant = "avatar",
 }: Props) {
   const router = useRouter();
+  // White rail on WMS pages: dark text instead of the navy rail's white.
+  const lightRail = isLightChrome(usePathname());
 
   async function handleSignOut() {
     try {
@@ -333,7 +336,7 @@ export function UserMenu({
             aria-label={
               inboxUnread > 0 ? `User menu — ${inboxUnread} unread` : "User menu"
             }
-            className="group flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-left transition-colors hover:bg-white/[0.06] focus:outline-none focus:ring-2 focus:ring-white/40"
+            className={`group flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-left transition-colors ${lightRail ? "hover:bg-[#EEF4FF]" : "hover:bg-white/[0.06]"} focus:outline-none focus:ring-2 focus:ring-[#0A6CFF]/40`}
           >
             <span className="relative shrink-0">
               {showDot && (
@@ -343,7 +346,7 @@ export function UserMenu({
                   style={{
                     background: "var(--color-red)",
                     // Rings against the rail's navy, not a white header.
-                    "--tw-ring-color": "#012a58",
+                    "--tw-ring-color": lightRail ? "#ffffff" : "#012a58",
                   } as React.CSSProperties}
                 />
               )}
@@ -366,17 +369,18 @@ export function UserMenu({
               </span>
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-[13.5px] font-semibold text-white">
+              <span className="block truncate text-[13.5px] font-semibold" style={{ color: lightRail ? "#0f172a" : "#ffffff" }}>
                 {name}
               </span>
-              <span className="block truncate text-[11.5px] text-white/55">
+              <span className="block truncate text-[11.5px]" style={{ color: lightRail ? "#64748b" : "rgba(255,255,255,0.55)" }}>
                 {isAdmin ? "Administrator" : "Team Member"}
               </span>
             </span>
             <ChevronUp
               size={15}
               strokeWidth={2.4}
-              className="shrink-0 text-white/55 transition-colors group-hover:text-white/85"
+              className="shrink-0 transition-opacity group-hover:opacity-80"
+              style={{ color: lightRail ? "#64748b" : "rgba(255,255,255,0.55)" }}
             />
           </button>
         </DropdownMenu.Trigger>

@@ -67,23 +67,25 @@ export function MyDayWorkspace({
   const overdue = agendaTasks.filter((t) => t.dueYmd < todayYmd).length;
 
   return (
-    <main className="mx-auto max-w-[1600px] px-8 max-md:px-4 pt-8 pb-16">
+    <main className="wms-fill mx-auto max-w-[1600px] px-8 max-md:px-4 pt-4 pb-2">
       {/* Welcome banner + view toggle */}
-      <div className="mb-7 flex items-end justify-between gap-4 flex-wrap">
+      <div className="mb-3 flex items-end justify-between gap-4 flex-wrap">
         <div>
-          <h1
+          <div
+            role="heading"
+            aria-level={1}
             className="text-ink-strong"
             style={{
               fontFamily: "var(--font-display), system-ui, sans-serif",
-              fontWeight: 900,
-              fontSize: "clamp(42px, 4.6vw, 60px)",
-              letterSpacing: "-0.025em",
-              lineHeight: 1,
+              fontWeight: 800,
+              fontSize: "clamp(22px, 1.8vw, 26px)",
+              letterSpacing: "-0.02em",
+              lineHeight: 1.15,
             }}
           >
             Welcome, {firstName}
-          </h1>
-          <p className="text-ink-subtle mt-3" style={{ fontSize: 19, lineHeight: 1.5 }}>
+          </div>
+          <p className="text-ink-subtle mt-1" style={{ fontSize: 14, lineHeight: 1.45 }}>
             You have{" "}
             <span className="font-bold text-ink-strong tabular-nums">{dueToday}</span>{" "}
             {dueToday === 1 ? "task" : "tasks"} due today
@@ -110,24 +112,29 @@ export function MyDayWorkspace({
         <AgendaBoard todayYmd={todayYmd} days={days} tasks={agendaTasks} isAdmin={isAdmin} />
       ) : rows.length === 0 ? (
         <div
-          className="bg-surface-card rounded-section border border-hairline p-10 text-center"
-          style={{ boxShadow: "0 14px 32px -20px rgba(10, 108, 255, 0.16), 0 2px 6px -2px rgba(15, 23, 42, 0.06)" }}
+          className="bg-white rounded-section border border-hairline-strong p-8 text-center"
+          style={{ boxShadow: "0 1px 2px rgba(15, 23, 42, 0.05), 0 8px 24px -16px rgba(15, 23, 42, 0.14)" }}
         >
-          <p className="font-bold" style={{ fontSize: 20, color: "var(--color-ink-strong)" }}>
+          <p className="font-bold" style={{ fontSize: 16, color: "var(--color-ink-strong)" }}>
             No tasks match the current filter.
           </p>
-          <p className="mt-2 font-semibold" style={{ fontSize: 15, color: "var(--color-ink-muted)" }}>
+          <p className="mt-1.5 font-medium" style={{ fontSize: 13.5, color: "var(--color-ink-muted)" }}>
             Try widening your date range or clearing assignee filters.
           </p>
         </div>
       ) : (
-        <TaskTable
-          rows={rows}
-          employees={employees}
-          me={me}
-          statusLabels={statusLabels}
-          statusTones={statusTones}
-        />
+        // The same dense table skin as Tasks. My Day carries a welcome row and the
+        // toolbar above the table, so it hands the table a little less height.
+        <div style={{ "--tt-max-h": "calc(100vh - 320px)" } as React.CSSProperties}>
+          <TaskTable
+            rows={rows}
+            employees={employees}
+            me={me}
+            statusLabels={statusLabels}
+            statusTones={statusTones}
+            dense
+          />
+        </div>
       )}
     </main>
   );
@@ -142,8 +149,8 @@ function ViewToggle({ view, onPick }: { view: View; onPick: (v: View) => void })
   ];
   return (
     <div
-      className="inline-flex items-center rounded-pill border border-hairline bg-surface-card p-0.5 shrink-0"
-      style={{ boxShadow: "0 12px 28px -18px rgba(10, 108, 255, 0.15), 0 1px 4px -1px rgba(15, 23, 42, 0.06)" }}
+      className="inline-flex items-center rounded-lg border border-hairline-strong bg-white p-0.5 shrink-0"
+      style={{ boxShadow: "0 1px 2px rgba(15, 23, 42, 0.05)" }}
       role="tablist"
       aria-label="My Day view"
     >
@@ -157,8 +164,8 @@ function ViewToggle({ view, onPick }: { view: View; onPick: (v: View) => void })
             role="tab"
             aria-selected={active}
             onClick={() => onPick(o.key)}
-            className={`inline-flex items-center gap-1.5 px-4 h-9 rounded-pill text-[14px] font-bold transition-all ${
-              active ? "bg-altus-red text-white" : "text-ink-soft hover:text-ink-strong"
+            className={`inline-flex items-center gap-1.5 px-3.5 h-8 rounded-md text-[13.5px] font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#14336B] motion-reduce:transition-none ${
+              active ? "bg-altus-red text-white" : "text-ink-soft hover:bg-[#EEF2F8] hover:text-ink-strong"
             }`}
           >
             <Icon size={15} strokeWidth={2.3} />

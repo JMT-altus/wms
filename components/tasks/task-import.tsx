@@ -123,9 +123,9 @@ export function TaskImport({
 
       {/* Hero — full hero on the page; in a dialog the dialog title covers it,
           so we only keep the subtitle + Download template row. */}
-      <div className="flex items-start justify-between gap-4 flex-wrap mb-6">
+      <div className="flex items-center justify-between gap-4 flex-wrap mb-3">
         {embedded ? (
-          <p className="text-ink-soft" style={{ fontSize: 14.5, maxWidth: "60ch" }}>
+          <p className="text-ink-soft" style={{ fontSize: 13, maxWidth: "64ch", lineHeight: 1.45 }}>
             Upload a CSV or Excel file — each row becomes one task. Doer &amp;
             Initiator are matched by employee name or email.
           </p>
@@ -154,9 +154,9 @@ export function TaskImport({
         <button
           type="button"
           onClick={downloadTemplate}
-          className="inline-flex items-center gap-2 rounded-pill border border-hairline bg-surface-card px-4 h-11 text-[14px] font-semibold text-ink-strong hover:bg-surface-soft hover:border-hairline-strong transition-colors shrink-0"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-[#D6DEEB] bg-white px-3 h-8 text-[13px] font-semibold text-[#334155] hover:bg-[#F5F8FE] hover:border-[#B8CCEE] transition-colors shrink-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0A6CFF]"
         >
-          <Download size={16} strokeWidth={2.2} />
+          <Download size={14} strokeWidth={2.2} />
           Download template
         </button>
       </div>
@@ -173,7 +173,7 @@ export function TaskImport({
           setDragging(false);
           onPick(e.dataTransfer.files?.[0] ?? null);
         }}
-        className="group flex flex-col items-center justify-center gap-3 rounded-section border-2 border-dashed px-6 py-12 cursor-pointer transition-all"
+        className="group flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed px-6 py-6 cursor-pointer transition-all hover:border-[#9fb2d1] hover:bg-[#F5F8FE]"
         style={{
           borderColor: dragging ? "var(--color-altus-red)" : "var(--color-hairline-strong)",
           background: dragging ? "var(--color-red-bg, #eff6ff)" : "var(--color-surface-soft)",
@@ -187,23 +187,23 @@ export function TaskImport({
           onChange={(e) => onPick(e.target.files?.[0] ?? null)}
         />
         <span
-          className="inline-flex items-center justify-center h-14 w-14 rounded-2xl transition-transform group-hover:scale-105"
+          className="inline-flex items-center justify-center h-10 w-10 rounded-xl transition-transform group-hover:scale-105"
           style={{ background: "var(--color-surface-card)", border: "1px solid var(--color-hairline)" }}
         >
           {file ? (
-            <FileSpreadsheet size={26} className="text-altus-red" strokeWidth={2} />
+            <FileSpreadsheet size={20} className="text-altus-red" strokeWidth={2} />
           ) : (
-            <Upload size={26} className="text-ink-subtle" strokeWidth={2} />
+            <Upload size={20} className="text-ink-subtle" strokeWidth={2} />
           )}
         </span>
         {file ? (
           <span className="text-[15.5px] font-bold text-ink-strong">{file.name}</span>
         ) : (
           <>
-            <span className="text-[16px] font-bold text-ink-strong">
-              Drop your file here, or <span className="text-altus-red">browse</span>
+            <span className="text-[14px] font-semibold text-ink-strong">
+              Drop your file here, or <span className="text-altus-red underline underline-offset-2">browse</span>
             </span>
-            <span className="text-[13px] text-ink-subtle">CSV or Excel (.xlsx) · up to 500 rows</span>
+            <span className="text-[12px] text-ink-subtle">CSV or Excel (.xlsx) · up to 500 rows</span>
           </>
         )}
         {previewing && (
@@ -215,15 +215,15 @@ export function TaskImport({
 
       {/* Expected columns helper (only before a preview, to teach the format) */}
       {!hasPreview && (
-        <div className="mt-5">
-          <p className="text-[12px] font-bold uppercase tracking-[0.08em] text-ink-subtle mb-2.5">
+        <div className="mt-3">
+          <p className="text-[11.5px] font-bold uppercase tracking-[0.08em] text-ink-subtle mb-2">
             Expected columns
           </p>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-1.5">
             {COLUMNS.map((c) => (
               <span
                 key={c.name}
-                className="inline-flex items-center gap-1.5 rounded-pill border px-3 py-1.5 text-[13px] font-semibold"
+                className="inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[12.5px] font-semibold"
                 style={{
                   borderColor: "var(--color-hairline)",
                   background: "var(--color-surface-card)",
@@ -239,7 +239,7 @@ export function TaskImport({
               </span>
             ))}
           </div>
-          <p className="mt-2.5 text-[12.5px] text-ink-subtle">
+          <p className="mt-2 text-[12px] text-ink-subtle">
             <span className="text-altus-red font-bold">*</span> required · Priority accepts
             Critical / Important / Urgent / Normal · dates accept ISO or dd/mm/yyyy · Tags
             comma- or semicolon-separated.
@@ -354,7 +354,7 @@ export function TaskImport({
                 onClick={commit}
                 disabled={committing || preview.validCount === 0}
                 className="inline-flex items-center gap-2 text-white px-6 py-3 rounded-chip text-[15px] font-bold transition-transform hover:-translate-y-0.5 disabled:opacity-50 disabled:translate-y-0"
-                style={{ background: "linear-gradient(135deg, rgb(225,6,0), rgb(168,4,0))", boxShadow: "0 6px 16px rgba(10,108,255,0.32)" }}
+                style={{ background: "linear-gradient(135deg, rgb(2, 99, 204), rgb(0, 66, 138))", boxShadow: "0 4px 12px rgba(10,108,255,0.28)" }}
               >
                 {committing ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} strokeWidth={2.4} />}
                 {committing ? "Importing…" : `Import ${preview.validCount} task${preview.validCount === 1 ? "" : "s"}`}

@@ -17,7 +17,7 @@ const read = (p: string) => readFileSync(root(p), "utf8");
 describe("the HR module", () => {
   const hr = MODULES.find((m) => m.id === "hr")!;
 
-  it("is registered once, last, with Policies, HR Help Desk, Attendance Import, then the Post-Appointment, During Employment, Appraisal Letters and Exit groups", () => {
+  it("is registered once, last, with Policies, HR Help Desk, Attendance Import, Attendance Correction, then the Post-Appointment, During Employment, Appraisal Letters and Exit groups", () => {
     expect(MODULE_IDS.filter((id) => id === "hr")).toHaveLength(1);
     expect(MODULES[MODULES.length - 1]!.id).toBe("hr");
     expect(hr.label).toBe("HR");
@@ -25,6 +25,7 @@ describe("the HR module", () => {
       ["Policies", "/hr/policies"],
       ["HR Help Desk", "/hr/help-desk"],
       ["Attendance Import", "/hr/attendance-import"],
+      ["Attendance Correction", "/hr/attendance-correction"],
       ["Post-Appointment", "/hr/post-appointment"],
       ["During Employment", "/hr/during-employment"],
       ["Appraisal Letters", "/hr/appraisal-letters"],

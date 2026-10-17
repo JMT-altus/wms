@@ -27,11 +27,7 @@ export function MarkAllButton({ hasUnread }: Props) {
           if (!res.ok) fireToast({ message: res.error });
         });
       }}
-      className="nav-pill text-body disabled:cursor-not-allowed disabled:opacity-40"
-      style={{
-        background: "rgba(15, 23, 42, 0.06)",
-        color: "var(--color-ink-strong)",
-      }}
+      className="inline-flex h-8 items-center rounded-lg border border-[#D3E2FB] bg-[#EEF4FF] px-3 text-[13px] font-semibold text-[#0B4FB8] transition-colors hover:bg-[#E2ECFD] hover:border-[#B8CCEE] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0A6CFF] disabled:cursor-not-allowed disabled:border-hairline disabled:bg-[#F5F7FB] disabled:text-ink-subtle disabled:opacity-70 disabled:hover:bg-[#F5F7FB]"
     >
       {isPending ? "Marking…" : "Mark all read"}
     </button>

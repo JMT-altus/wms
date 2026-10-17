@@ -80,26 +80,29 @@ export function DuplicateFinder({
   const totalExtras = extras.length;
 
   return (
-    <div className="mx-auto w-full max-w-[1120px] px-6 max-md:px-4 py-8 pb-32">
+    <div className="mx-auto w-full max-w-[1120px] px-8 max-md:px-4 pt-4 pb-3">
       <button
         type="button"
         onClick={() => router.push("/tasks" as Route)}
-        className="inline-flex items-center gap-1.5 text-[13.5px] font-semibold text-ink-subtle hover:text-ink-strong transition-colors mb-5"
+        className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-ink-subtle hover:text-ink-strong transition-colors mb-3"
       >
         <ArrowLeft size={15} strokeWidth={2.4} />
         Back to Tasks
       </button>
 
-      <div className="flex items-start justify-between gap-4 flex-wrap mb-2">
-        <h1
-          className="text-ink-strong inline-flex items-center gap-2.5"
-          style={{ fontFamily: "var(--font-display)", fontSize: 27, fontWeight: 600 }}
+      <div className="flex items-start justify-between gap-4 flex-wrap mb-1">
+        {/* A heading div, not <h1>: the global h1 rule forces 30–46px. */}
+        <div
+          role="heading"
+          aria-level={1}
+          className="text-ink-strong inline-flex items-center gap-2"
+          style={{ fontFamily: "var(--font-display)", fontSize: 20, fontWeight: 800, letterSpacing: "-0.02em" }}
         >
-          <CopyMinus size={24} strokeWidth={2} style={{ color: "var(--color-altus-red)" }} />
+          <CopyMinus size={18} strokeWidth={2.2} style={{ color: "var(--color-altus-red)" }} />
           Duplicate tasks
-        </h1>
+        </div>
       </div>
-      <p className="text-ink-soft mb-7" style={{ fontSize: 15, maxWidth: "70ch" }}>
+      <p className="text-ink-soft mb-4" style={{ fontSize: 13, lineHeight: 1.5, maxWidth: "80ch" }}>
         Tasks that share the <strong>same doer, same due date and identical details</strong>,
         with no repeat frequency — usually the result of a sheet imported twice. The oldest
         copy in each set is kept; newer copies start selected for deletion.
@@ -107,7 +110,7 @@ export function DuplicateFinder({
 
       {groups.length === 0 ? (
         <div
-          className="rounded-section border border-hairline bg-surface-card px-6 py-14 text-center"
+          className="rounded-xl border border-hairline bg-surface-card px-6 py-10 text-center"
           style={{ boxShadow: "0 1px 3px rgba(15,23,42,0.04)" }}
         >
           <CheckCircle2
@@ -117,16 +120,16 @@ export function DuplicateFinder({
             style={{ color: "var(--color-green-deep)" }}
             aria-hidden
           />
-          <p className="text-ink-strong mt-3 font-semibold" style={{ fontSize: 17 }}>
+          <p className="text-ink-strong mt-2 font-semibold" style={{ fontSize: 15 }}>
             No duplicates found
           </p>
-          <p className="text-ink-soft mt-1" style={{ fontSize: 15 }}>
+          <p className="text-ink-soft mt-1" style={{ fontSize: 13 }}>
             Every active task is unique by doer, due date and details.
           </p>
         </div>
       ) : (
         <>
-          <div className="flex items-center gap-3 flex-wrap mb-5">
+          <div className="flex items-center gap-3 flex-wrap mb-3">
             <p className="text-[14px] font-semibold text-ink-soft tabular-nums">
               {groups.length} duplicate {groups.length === 1 ? "set" : "sets"} ·{" "}
               {totalExtras} extra {totalExtras === 1 ? "copy" : "copies"}
@@ -148,7 +151,7 @@ export function DuplicateFinder({
             </button>
           </div>
 
-          <div className="grid gap-4">
+          <div className="grid gap-3">
             {groups.map((g) => (
               <GroupCard
                 key={g.key}
@@ -215,11 +218,11 @@ function GroupCard({
   const first = group.tasks[0]!;
   return (
     <section
-      className="rounded-section border border-hairline bg-surface-card overflow-hidden"
+      className="rounded-xl border border-hairline bg-surface-card overflow-hidden"
       style={{ boxShadow: "0 1px 3px rgba(15,23,42,0.04)" }}
       aria-label={`Duplicate set — ${group.doerName}, due ${dateLabel(group.dueAt)}`}
     >
-      <header className="flex items-center gap-x-3 gap-y-1 flex-wrap px-5 py-3.5 border-b border-hairline bg-surface-soft/60">
+      <header className="flex items-center gap-x-3 gap-y-1 flex-wrap px-4 py-2.5 border-b border-hairline bg-[#F5F7FB]">
         <span className="font-bold text-ink-strong" style={{ fontSize: 15 }}>
           {group.doerName}
         </span>
@@ -247,18 +250,18 @@ function GroupCard({
         </span>
       </header>
 
-      <p className="px-5 pt-3 text-ink-strong" style={{ fontSize: 15, lineHeight: 1.5 }}>
+      <p className="px-4 pt-2.5 text-ink-strong" style={{ fontSize: 13.5, lineHeight: 1.45 }}>
         {first.title?.trim() || first.description?.trim() || "(no description)"}
       </p>
 
-      <ul className="px-3 py-3 grid gap-1">
+      <ul className="px-2 py-2 grid gap-0.5">
         {group.tasks.map((t, i) => {
           const keeper = i === 0;
           const tone = statusTones[t.status] ?? "slate";
           return (
             <li
               key={t.id}
-              className="flex items-center gap-3 rounded-chip px-2 py-2 hover:bg-surface-soft transition-colors max-sm:flex-wrap"
+              className="flex items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-[#F7F9FD] transition-colors max-sm:flex-wrap"
             >
               {keeper ? (
                 <span

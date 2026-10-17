@@ -9,10 +9,12 @@ export function StatusFilter({
   options,
   selected,
   onChange,
+  placeholder = "All Status",
 }: {
   options: { value: string; label: string }[];
   selected: string[];
   onChange: (v: string[]) => void;
+  placeholder?: string;
 }) {
   return (
     <div className="filter-chip">
@@ -21,7 +23,7 @@ export function StatusFilter({
         options={options}
         selected={selected}
         onChange={onChange}
-        placeholder="All Status"
+        placeholder={placeholder}
         className="min-w-[6.5rem] !text-[12px] !font-medium"
       />
     </div>

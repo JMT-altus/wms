@@ -123,6 +123,24 @@ export function NewTaskDialog({ employees, clients, subjects, projectNodes, depa
 
   return (
     <>
+    {/* Header "Import" shortcut (admins) — the same Import tasks popup the New Task
+        dialog opens, one click closer. Sits before the "+", as in the reference. */}
+    {isAdmin && (
+      <button
+        type="button"
+        onClick={goImport}
+        title="Import tasks"
+        aria-label="Import tasks"
+        className="inline-flex size-[30px] shrink-0 items-center justify-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-[#0A6CFF]/50 max-md:hidden"
+        style={{
+          background: "var(--chrome-ctl-bg, rgba(255,255,255,0.08))",
+          border: "1.5px solid var(--chrome-ctl-border, rgba(255,255,255,0.16))",
+          color: "var(--chrome-ctl-fg, rgba(255,255,255,0.88))",
+        }}
+      >
+        <Upload size={15} strokeWidth={2.4} />
+      </button>
+    )}
     <Dialog.Root open={open} onOpenChange={handleOpenChange}>
       <div className="relative">
         <Tooltip.Provider delayDuration={600}>
@@ -292,12 +310,12 @@ export function NewTaskDialog({ employees, clients, subjects, projectNodes, depa
           style={{ background: "rgba(15, 23, 42, 0.45)", backdropFilter: "blur(4px)" }}
         />
         <Dialog.Content
-          className="fixed left-1/2 top-1/2 z-[70] w-[min(1360px,calc(100vw-48px))] -translate-x-1/2 -translate-y-1/2 rounded-section border border-hairline bg-surface-card shadow-xl overflow-hidden"
-          style={{ maxHeight: "calc(100vh - 48px)" }}
+          className="fixed left-1/2 top-1/2 z-[70] w-[min(1040px,calc(100vw-32px))] -translate-x-1/2 -translate-y-1/2 rounded-section border border-hairline bg-surface-card shadow-xl overflow-hidden"
+          style={{ maxHeight: "calc(100vh - 32px)" }}
         >
-          {/* Header — cyan brand bar + big title */}
+          {/* Header — cyan brand bar + title */}
           <div
-            className="relative px-10 py-7 max-md:px-5 max-md:py-5"
+            className="relative px-6 py-4 max-md:px-4 max-md:py-3"
             style={{
               borderBottom: "1px solid var(--color-hairline)",
               background:
@@ -308,7 +326,7 @@ export function NewTaskDialog({ employees, clients, subjects, projectNodes, depa
               aria-hidden
               className="absolute inset-x-0 top-0"
               style={{
-                height: 5,
+                height: 3,
                 background:
                   "linear-gradient(90deg, rgb(2, 99, 204), rgb(0, 66, 138))",
               }}
@@ -317,37 +335,33 @@ export function NewTaskDialog({ employees, clients, subjects, projectNodes, depa
               className="text-ink-strong"
               style={{
                 fontFamily: "var(--font-display), system-ui, sans-serif",
-                fontWeight: 900,
-                fontSize: "clamp(36px, 3.6vw, 52px)",
-                letterSpacing: "-0.024em",
-                lineHeight: 1.02,
+                fontWeight: 800,
+                fontSize: "clamp(20px, 2vw, 26px)",
+                letterSpacing: "-0.02em",
+                lineHeight: 1.1,
               }}
             >
               New Task
             </Dialog.Title>
             <Dialog.Description
-              className="mt-2 font-bold"
+              className="mt-1 font-medium"
               style={{
-                fontSize: 19,
+                fontSize: 13,
                 color: "var(--color-ink-muted)",
               }}
             >
               Capture work, attach context, assign owners — all in one go.
             </Dialog.Description>
             {/* Top-right actions — Quick Dump (allowlist) + Import (admin) + Close. */}
-            <div className="absolute top-6 right-6 flex items-center gap-2.5">
+            <div className="absolute top-3 right-4 flex items-center gap-2">
               {canQuickDump && (
                 <button
                   type="button"
                   onClick={goQuickDump}
                   title="Dump tasks fast, unassigned — assign them later"
-                  className="inline-flex items-center gap-2 rounded-full px-4 h-12 text-[14px] font-bold text-white transition-transform hover:-translate-y-0.5 max-md:px-3"
-                  style={{
-                    background: "linear-gradient(135deg, var(--color-amber), var(--color-tangerine))",
-                    boxShadow: "0 6px 16px -4px color-mix(in srgb, var(--color-amber) 55%, transparent)",
-                  }}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-[#D3E2FB] bg-[#EEF4FF] px-3 h-8 text-[13px] font-semibold text-[#0B4FB8] transition-colors hover:bg-[#E2ECFD] hover:border-[#B8CCEE] active:bg-[#D6E4FB] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0A6CFF] max-md:px-2.5"
                 >
-                  <Zap size={17} strokeWidth={2.6} />
+                  <Zap size={14} strokeWidth={2.4} />
                   <span className="max-md:hidden">Quick Dump</span>
                 </button>
               )}
@@ -356,14 +370,9 @@ export function NewTaskDialog({ employees, clients, subjects, projectNodes, depa
                   type="button"
                   onClick={goImport}
                   title="Bulk-import tasks from CSV or Excel"
-                  className="inline-flex items-center gap-2 rounded-full px-4 h-12 text-[14px] font-semibold transition-colors hover:bg-surface-soft max-md:px-3"
-                  style={{
-                    border: "1px solid var(--color-hairline)",
-                    background: "#ffffff",
-                    color: "var(--color-ink-strong)",
-                  }}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-[#D6DEEB] bg-white px-3 h-8 text-[13px] font-semibold text-[#334155] transition-colors hover:bg-[#F5F8FE] hover:border-[#B8CCEE] active:bg-[#EAF0FB] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0A6CFF] max-md:px-2.5"
                 >
-                  <Upload size={17} strokeWidth={2.2} style={{ color: "var(--color-altus-red)" }} />
+                  <Upload size={14} strokeWidth={2.2} className="text-[#0A6CFF]" />
                   <span className="max-md:hidden">Import</span>
                 </button>
               )}
@@ -373,14 +382,14 @@ export function NewTaskDialog({ employees, clients, subjects, projectNodes, depa
                   aria-label="Close"
                   className="inline-flex items-center justify-center rounded-full transition-all"
                   style={{
-                    width: 48,
-                    height: 48,
+                    width: 32,
+                    height: 32,
                     border: "1px solid var(--color-hairline)",
                     background: "#ffffff",
                     color: "var(--color-ink-muted)",
                   }}
                 >
-                  <X size={24} strokeWidth={2.4} />
+                  <X size={16} strokeWidth={2.4} />
                 </button>
               </Dialog.Close>
             </div>
@@ -388,9 +397,9 @@ export function NewTaskDialog({ employees, clients, subjects, projectNodes, depa
 
           {/* Scrollable body — fills the rectangle */}
           <div
-            className="px-10 py-8 max-md:px-5 max-md:py-5"
+            className="px-6 py-4 max-md:px-4 max-md:py-3"
             style={{
-              maxHeight: "calc(100vh - 240px)",
+              maxHeight: "calc(100vh - 130px)",
               overflowY: "auto",
             }}
           >
@@ -403,6 +412,7 @@ export function NewTaskDialog({ employees, clients, subjects, projectNodes, depa
               departments={departments}
               onSuccess={onSuccess}
               defaults={{ initiatorId: defaultInitiatorId }}
+              compact
             />
           </div>
         </Dialog.Content>
@@ -423,40 +433,40 @@ export function NewTaskDialog({ employees, clients, subjects, projectNodes, depa
             style={{ background: "rgba(15, 23, 42, 0.45)", backdropFilter: "blur(4px)" }}
           />
           <Dialog.Content
-            className="fixed left-1/2 top-1/2 z-[70] w-[min(1100px,calc(100vw-48px))] -translate-x-1/2 -translate-y-1/2 rounded-section border border-hairline bg-surface-card shadow-xl overflow-hidden"
-            style={{ maxHeight: "calc(100vh - 48px)" }}
+            className="fixed left-1/2 top-1/2 z-[70] w-[min(920px,calc(100vw-32px))] -translate-x-1/2 -translate-y-1/2 rounded-xl border border-hairline bg-surface-card shadow-xl overflow-hidden"
+            style={{ maxHeight: "calc(100vh - 32px)" }}
           >
             <div
-              className="relative px-8 py-6 max-md:px-5 max-md:py-5"
+              className="relative px-5 py-3 max-md:px-4"
               style={{
                 borderBottom: "1px solid var(--color-hairline)",
-                background: "linear-gradient(135deg, #ffffff 0%, #FFF5F5 100%)",
+                background: "#ffffff",
               }}
             >
               <span
                 aria-hidden
                 className="absolute inset-x-0 top-0"
-                style={{ height: 5, background: "linear-gradient(90deg, rgb(2, 99, 204), rgb(0, 66, 138))" }}
+                style={{ height: 3, background: "linear-gradient(90deg, rgb(2, 99, 204), rgb(0, 66, 138))" }}
               />
               <Dialog.Title
                 className="text-ink-strong inline-flex items-center gap-2.5"
-                style={{ fontFamily: "var(--font-display), system-ui, sans-serif", fontWeight: 900, fontSize: "clamp(26px, 2.6vw, 36px)", letterSpacing: "-0.02em", lineHeight: 1.05 }}
+                style={{ fontFamily: "var(--font-display), system-ui, sans-serif", fontWeight: 800, fontSize: 20, letterSpacing: "-0.02em", lineHeight: 1.1 }}
               >
-                <Upload size={26} strokeWidth={2.4} style={{ color: "var(--color-altus-red)" }} />
+                <Upload size={18} strokeWidth={2.4} style={{ color: "var(--color-altus-red)" }} />
                 Import tasks
               </Dialog.Title>
               <Dialog.Close asChild>
                 <button
                   type="button"
                   aria-label="Close"
-                  className="absolute top-5 right-5 inline-flex items-center justify-center rounded-full transition-all hover:bg-surface-soft"
-                  style={{ width: 44, height: 44, border: "1px solid var(--color-hairline)", background: "#ffffff", color: "var(--color-ink-muted)" }}
+                  className="absolute top-2.5 right-4 inline-flex items-center justify-center rounded-full transition-all hover:bg-surface-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0A6CFF]"
+                  style={{ width: 32, height: 32, border: "1px solid var(--color-hairline)", background: "#ffffff", color: "var(--color-ink-muted)" }}
                 >
-                  <X size={22} strokeWidth={2.4} />
+                  <X size={16} strokeWidth={2.4} />
                 </button>
               </Dialog.Close>
             </div>
-            <div className="px-8 py-6 max-md:px-5 max-md:py-5" style={{ maxHeight: "calc(100vh - 190px)", overflowY: "auto" }}>
+            <div className="px-5 py-4 max-md:px-4" style={{ maxHeight: "calc(100vh - 110px)", overflowY: "auto" }}>
               <TaskImport embedded onSuccess={() => setImportOpen(false)} />
             </div>
           </Dialog.Content>

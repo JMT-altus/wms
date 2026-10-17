@@ -17,15 +17,18 @@ export function Donut({
   size = 200,
   centerLabel,
   centerValue,
+  solid = false,
 }: {
   data: DonutSlice[];
   size?: number;
+  /** A full pie instead of a ring. Off by default, so every existing donut is unchanged. */
+  solid?: boolean;
   centerLabel?: string;
   centerValue?: string;
 }) {
   const slices = data.filter((d) => d.value > 0);
   const outer = size / 2;
-  const inner = Math.round(outer * 0.62);
+  const inner = solid ? 0 : Math.round(outer * 0.62);
 
   return (
     <div style={{ position: "relative", width: size, height: size }}>

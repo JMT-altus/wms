@@ -2,12 +2,21 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import * as Popover from "@radix-ui/react-popover";
-import { AlertTriangle, Flame, ArrowDownUp, ChevronRight } from "lucide-react";
+import { AlertTriangle, ArrowLeftRight, Check, ChevronDown, ChevronRight, ChevronsUpDown, Flame, ArrowDownUp, Search } from "lucide-react";
 import Link from "next/link";
 import type { Route } from "next";
 import { AGE_BUCKETS, type AgeBucketId } from "@/db/enums";
 import type { AgingRow, HeatmapCellTask } from "@/lib/types";
 import { EmployeeAvatar } from "@/components/ui/employee-avatar";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { SectionHeader } from "./section-header";
+import { SectionShareActions, type SectionReportInput } from "./section-share";
+import { SearchBox, TeamTab } from "./status-table";
 
 // Age-coded palette: cool/green for fresh, hot/red for old.
 // Bars use a gradient pair for depth; deep is the saturated label color.
@@ -44,6 +53,8 @@ function riskScore(row: AgingRow): number {
 
 type SortMode = "risk" | "total" | "oldest";
 
+const SORT_LABELS: Record<SortMode, string> = { risk: "Risk", total: "Total", oldest: "Oldest" };
+
 export function AgingHeatmap({
   rows,
   cellTasks,
@@ -54,15 +65,48 @@ export function AgingHeatmap({
   /** Per cell, how many tasks this viewer isn't allowed to open. */
   hiddenCells?: Record<string, Record<string, number>>;
 }) {
+  const router = useRouter();
   const [sortMode, setSortMode] = React.useState<SortMode>("risk");
+  const [query, setQuery] = React.useState("");
+  const [team, setTeam] = React.useState<string | null>(null);
+  const [ages, setAges] = React.useState<AgeBucketId[]>([]);
+  const [collapsed, setCollapsed] = React.useState(false);
+  const [transposed, setTransposed] = React.useState(false);
 
   const enriched = React.useMemo(
     () => rows.map((r) => ({ ...r, risk: riskScore(r) })),
     [rows],
   );
 
+  const teams = React.useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const r of enriched) {
+      const name = r.department?.trim() || "Others";
+      counts.set(name, (counts.get(name) ?? 0) + 1);
+    }
+    return Array.from(counts.entries()).sort(([x], [y]) =>
+      x === "Others" ? 1 : y === "Others" ? -1 : x.localeCompare(y),
+    );
+  }, [enriched]);
+
+  // Department tab + search narrow the people; the age legend narrows to people
+  // who have tasks in the chosen age range(s).
+  const scoped = React.useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return enriched.filter((r) => {
+      if (team && (r.department?.trim() || "Others") !== team) return false;
+      if (q && !r.employeeName.toLowerCase().includes(q)) return false;
+      return true;
+    });
+  }, [enriched, team, query]);
+
+  const visible = React.useMemo(
+    () => (ages.length === 0 ? scoped : scoped.filter((r) => ages.some((b) => r.buckets[b] > 0))),
+    [scoped, ages],
+  );
+
   const sorted = React.useMemo(() => {
-    const copy = [...enriched];
+    const copy = [...visible];
     if (sortMode === "total") copy.sort((a, b) => b.total - a.total);
     else if (sortMode === "risk") copy.sort((a, b) => b.risk - a.risk);
     else
@@ -72,143 +116,329 @@ export function AgingHeatmap({
           CRITICAL_BUCKETS.reduce((s, k) => s + a.buckets[k], 0),
       );
     return copy;
-  }, [enriched, sortMode]);
+  }, [visible, sortMode]);
 
   const top12 = sorted.slice(0, 12);
   const maxTotal = Math.max(...top12.map((r) => r.total), 1);
 
-  const totalAging = enriched.reduce((s, r) => s + r.total, 0);
+  // The alert reads the whole picture, not the current tab/search.
   const criticalTotal = enriched.reduce(
     (s, r) => s + CRITICAL_BUCKETS.reduce((acc, k) => acc + r.buckets[k], 0),
     0,
   );
 
+  const bucketCounts = React.useMemo(() => {
+    const m = Object.fromEntries(AGE_BUCKETS.map((b) => [b.id, 0])) as Record<AgeBucketId, number>;
+    for (const r of scoped) for (const b of AGE_BUCKETS) m[b.id] += r.buckets[b.id];
+    return m;
+  }, [scoped]);
+
+  const buildReport = React.useCallback(
+    (): SectionReportInput => ({
+      title: "Aging Heatmap",
+      subtitle: `${sorted.length} ${sorted.length === 1 ? "person" : "people"}`,
+      context: [
+        team ? `Team: ${team}` : null,
+        query.trim() ? `Search: ${query.trim()}` : null,
+        ages.length ? `Age: ${ages.map((a) => `${a}d`).join(", ")}` : null,
+      ]
+        .filter(Boolean)
+        .join(" · "),
+      columns: ["Employee", "Risk", ...AGE_BUCKETS.map((b) => `${b.id}d`), "Total"],
+      rows: sorted.map((r) => [
+        r.employeeName,
+        String(r.risk),
+        ...AGE_BUCKETS.map((b) => String(r.buckets[b.id])),
+        String(r.total),
+      ]),
+    }),
+    [sorted, team, query, ages],
+  );
+
   return (
-    <section
-      className="mx-auto max-w-[1600px] px-12 max-md:px-4 mt-12 mb-16"
-      style={{
-        opacity: 0,
-        animation: "fadeUp 500ms ease-out 900ms forwards",
-      }}
+    <SectionHeader
+      id="aging-heatmap"
+      icon={<Flame size={18} strokeWidth={2.2} />}
+      tone="blue"
+      title="Aging Heatmap"
+      collapsed={collapsed}
+      onToggle={() => setCollapsed((v) => !v)}
+      actions={
+        <>
+          <SortMenu value={sortMode} onChange={setSortMode} />
+          <SectionShareActions title="Aging Heatmap" buildReport={buildReport} />
+          {/* Same swap Status by Doer has: people across the top, ages down the side. */}
+          <button
+            type="button"
+            onClick={() => setTransposed((v) => !v)}
+            aria-pressed={transposed}
+            aria-label="Switch rows and columns"
+            title="Switch rows and columns"
+            className="inline-flex size-9 items-center justify-center rounded-[10px] border border-hairline-strong bg-white text-ink-strong transition-colors hover:bg-surface-soft aria-pressed:bg-surface-soft"
+          >
+            <ArrowLeftRight size={16} strokeWidth={2.2} aria-hidden />
+          </button>
+        </>
+      }
+      trailing={<SearchToggle value={query} onChange={setQuery} />}
     >
       <div
-        className="aging-shell rounded-section p-8 max-md:p-5 relative overflow-hidden"
+        className="rounded-section p-3 max-md:p-2.5"
         style={{
-          background:
-            "linear-gradient(160deg, #fffefb 0%, #fef7ed 60%, #eff6ff 100%)",
-          border: "1px solid var(--color-hairline)",
-          boxShadow:
-            "0 14px 32px -20px rgba(10, 108, 255, 0.16), 0 2px 6px -2px rgba(15, 23, 42, 0.06), 0 20px 50px -28px rgba(10, 108, 255, 0.15)",
+          background: "#ffffff",
+          border: "1px solid var(--color-hairline-strong)",
+          boxShadow: "0 1px 2px rgba(15, 23, 42, 0.05), 0 8px 24px -16px rgba(15, 23, 42, 0.16)",
         }}
       >
-        {/* Heat wash backdrop */}
-        <span
-          aria-hidden
-          className="pointer-events-none absolute inset-0"
-          style={{
-            background:
-              "radial-gradient(ellipse 30% 60% at 100% 100%, rgba(239, 68, 68, 0.10), transparent 60%), radial-gradient(ellipse 30% 60% at 0% 0%, rgba(34, 197, 94, 0.08), transparent 60%)",
-          }}
+        {criticalTotal > 0 && <AlertBanner count={criticalTotal} />}
+
+        {enriched.length > 0 && (
+          <div
+            className="mb-2 flex flex-wrap items-center gap-x-1 gap-y-0.5 rounded-xl p-1"
+            style={{ background: "#EEF3FB" }}
+            role="tablist"
+            aria-label="Teams"
+          >
+            <TeamTab compact label="All Employees" count={enriched.length} active={team === null} onClick={() => setTeam(null)} />
+            {teams.map(([name, count]) => (
+              <TeamTab
+                compact
+                key={name}
+                label={name}
+                count={count}
+                active={team === name}
+                onClick={() => setTeam(team === name ? null : name)}
+              />
+            ))}
+          </div>
+        )}
+
+        <Legend
+          counts={bucketCounts}
+          active={ages}
+          onToggle={(id) => setAges((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]))}
         />
 
-        <div className="relative">
-          <header className="mb-6 flex items-start justify-between gap-6 max-md:flex-col max-md:gap-3">
-            <div>
-              <h2 className="flex items-center gap-2.5 text-ink-strong">
-                <Flame
-                  className="size-8"
-                  style={{ color: "#dc2626" }}
-                  strokeWidth={2.25}
-                />
-                <span
-                  className="uppercase font-black tracking-[0.04em]"
-                  style={{
-                    fontFamily: "var(--font-display), system-ui, sans-serif",
-                    fontSize: 30,
-                    letterSpacing: "-0.02em",
-                  }}
-                >
-                  Aging Heatmap
-                </span>
-              </h2>
-              <p className="mt-1.5 font-semibold" style={{ fontSize: 17, color: "var(--color-ink-muted)" }}>
-                {enriched.length} {enriched.length === 1 ? "person" : "people"}
-                {" · "}
-                <span className="tabular-nums" style={{ color: "var(--color-ink-strong)" }}>
-                  {totalAging}
-                </span>{" "}
-                pending {totalAging === 1 ? "task" : "tasks"} aging — click any lane to see them
-              </p>
-            </div>
-            <SortControl value={sortMode} onChange={setSortMode} />
-          </header>
-
-          {criticalTotal > 0 && <AlertBanner count={criticalTotal} />}
-
-          <Legend />
-
-          {top12.length === 0 ? (
-            <p className="mt-6 font-semibold" style={{ fontSize: 17, color: "var(--color-ink-muted)" }}>
-              No pending tasks for the current filter.
-            </p>
-          ) : (
-            <div className="mt-6 space-y-2">
-              <LaneHeader />
-              {top12.map((r, i) => (
-                <Lane
-                  key={r.employeeId}
-                  row={r}
-                  maxTotal={maxTotal}
-                  index={i}
-                  employeeTasks={cellTasks[r.employeeId] ?? {}}
-                  employeeHidden={hiddenCells[r.employeeId] ?? {}}
-                />
-              ))}
-            </div>
-          )}
-        </div>
+        {top12.length === 0 ? (
+          <p className="mt-3 px-1 py-6 text-center text-[13.5px] font-semibold text-ink-subtle">
+            {enriched.length === 0
+              ? "No pending tasks for the current filter."
+              : "No employees match the current selection."}
+          </p>
+        ) : transposed ? (
+          <TransposedAging rows={top12} onOpen={(id) => router.push(`/tasks?emp=${id}` as Route)} />
+        ) : (
+          <div className="mt-2">
+            <LaneHeader sortMode={sortMode} onSort={setSortMode} />
+            {top12.map((r, i) => (
+              <Lane
+                key={r.employeeId}
+                row={r}
+                maxTotal={maxTotal}
+                index={i}
+                employeeTasks={cellTasks[r.employeeId] ?? {}}
+                employeeHidden={hiddenCells[r.employeeId] ?? {}}
+              />
+            ))}
+          </div>
+        )}
       </div>
-    </section>
+    </SectionHeader>
   );
 }
 
-function SortControl({
-  value,
-  onChange,
+/** People across the top, the age ranges (oldest first), risk and total down the side. */
+function TransposedAging({
+  rows,
+  onOpen,
 }: {
-  value: SortMode;
-  onChange: (m: SortMode) => void;
+  rows: (AgingRow & { risk: number })[];
+  onOpen: (employeeId: string) => void;
 }) {
-  const options: { id: SortMode; label: string }[] = [
-    { id: "risk", label: "Risk" },
-    { id: "total", label: "Total" },
-    { id: "oldest", label: "Oldest" },
-  ];
+  const buckets = [...AGE_BUCKETS].reverse();
+  return (
+    <div className="kanban-scroll mt-2 overflow-x-auto">
+      <table className="w-full border-collapse" style={{ minWidth: 180 + rows.length * 110 }}>
+        <thead>
+          <tr className="border-b border-hairline">
+            <th className="px-3 py-2 text-left text-[12px] font-bold uppercase tracking-[0.08em] text-ink-strong">Age</th>
+            {rows.map((r) => (
+              <th key={r.employeeId} className="px-3 py-2 text-center whitespace-nowrap">
+                <button type="button" onClick={() => onOpen(r.employeeId)} className="inline-flex flex-col items-center gap-1 hover:underline">
+                  <EmployeeAvatar name={r.employeeName} size="sm" />
+                  <span className="text-[12.5px] font-bold text-ink-strong">{r.employeeName.split(/s+/)[0]}</span>
+                </button>
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          <tr className="border-b border-[#EEF1F6]">
+            <td className="px-3 py-1.5 text-[13px] font-bold text-ink-strong">Risk</td>
+            {rows.map((r) => (
+              <td key={r.employeeId} className="px-3 py-1.5 text-center"><RiskChip score={r.risk} /></td>
+            ))}
+          </tr>
+          {buckets.map((b) => {
+            const c = BUCKET_COLOR[b.id];
+            return (
+              <tr key={b.id} className="border-b border-[#EEF1F6]">
+                <td className="px-3 py-1.5">
+                  <span
+                    className="inline-flex items-center gap-1.5 rounded-pill px-2.5 py-0.5 text-[12px] font-bold tabular-nums"
+                    style={{ background: c.tint, color: c.deep, border: `1px solid ${c.light}` }}
+                  >
+                    <span className="inline-block size-2 rounded-full" style={{ background: c.fill }} />
+                    {b.id}d
+                  </span>
+                </td>
+                {rows.map((r) => {
+                  const v = r.buckets[b.id];
+                  return (
+                    <td key={r.employeeId} className="px-3 py-1.5 text-center">
+                      {v === 0 ? (
+                        <span className="text-[14px] tabular-nums text-[#c3cad6]">0</span>
+                      ) : (
+                        <span
+                          className="inline-flex min-w-8 items-center justify-center rounded-md px-2 py-0.5 text-[14px] font-bold tabular-nums"
+                          style={{ background: c.tint, color: c.deep }}
+                        >
+                          {v}
+                        </span>
+                      )}
+                    </td>
+                  );
+                })}
+              </tr>
+            );
+          })}
+          <tr>
+            <td className="px-3 py-1.5 text-[13px] font-bold text-ink-strong">Total</td>
+            {rows.map((r) => (
+              <td key={r.employeeId} className="px-3 py-1.5 text-center text-[15px] font-extrabold tabular-nums text-ink-strong">
+                {r.total}
+              </td>
+            ))}
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/** "Sort by: Risk ⌄" — the same three sorts, as a dropdown. */
+function SortMenu({ value, onChange }: { value: SortMode; onChange: (m: SortMode) => void }) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          aria-label="Sort aging table"
+          className="inline-flex h-9 items-center gap-1.5 rounded-[10px] border border-hairline-strong bg-white px-3 text-[13px] font-semibold text-ink-strong outline-none transition-colors hover:bg-surface-soft focus-visible:ring-2 focus-visible:ring-[#0A6CFF]/40"
+        >
+          <ArrowDownUp size={14} className="text-ink-subtle" />
+          Sort by: {SORT_LABELS[value]}
+          <ChevronDown size={13} className="text-ink-subtle" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="min-w-[160px]">
+        {(Object.keys(SORT_LABELS) as SortMode[]).map((m) => (
+          <DropdownMenuItem
+            key={m}
+            onSelect={() => onChange(m)}
+            className="justify-between text-[13px] font-medium"
+          >
+            {SORT_LABELS[m]}
+            {value === m && <Check size={14} strokeWidth={2.4} className="text-[#0A6CFF]" />}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+/** Search as an icon button that opens into the usual search box. */
+function SearchToggle({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [open, setOpen] = React.useState(false);
+  if (open || value) {
+    return (
+      <div
+        onBlur={(e) => {
+          if (!value && !e.currentTarget.contains(e.relatedTarget)) setOpen(false);
+        }}
+      >
+        <SearchBox value={value} onChange={onChange} />
+      </div>
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={() => setOpen(true)}
+      aria-label="Search employees"
+      title="Search employees"
+      className="inline-flex size-9 items-center justify-center rounded-[10px] border border-hairline-strong bg-white text-ink-soft transition-colors hover:bg-surface-soft hover:text-ink-strong"
+    >
+      <Search size={16} strokeWidth={2.2} />
+    </button>
+  );
+}
+
+function AlertBanner({ count }: { count: number }) {
   return (
     <div
-      className="inline-flex items-center gap-1 p-1 rounded-chip bg-surface-card border border-hairline"
-      role="tablist"
-      aria-label="Sort aging table"
+      className="mb-2 flex items-center gap-2.5 rounded-lg px-3 py-2"
+      style={{ background: "#FEECEC", borderLeft: "3px solid #dc2626" }}
+      role="status"
     >
-      <ArrowDownUp className="size-4 text-ink-subtle ml-1.5 mr-0.5" />
-      {options.map((o) => {
-        const active = value === o.id;
+      <AlertTriangle className="size-4 shrink-0" style={{ color: "#dc2626" }} />
+      <p className="text-[13px] text-ink-soft">
+        <span className="font-bold tabular-nums text-ink-strong">{count}</span>{" "}
+        {count === 1 ? "task is" : "tasks are"} aging more than 30 days — escalate or close
+      </p>
+    </div>
+  );
+}
+
+function Legend({
+  counts,
+  active,
+  onToggle,
+}: {
+  counts: Record<AgeBucketId, number>;
+  active: AgeBucketId[];
+  onToggle: (id: AgeBucketId) => void;
+}) {
+  // Oldest first, as the reference reads.
+  const buckets = [...AGE_BUCKETS].reverse();
+  return (
+    <div className="flex flex-wrap items-center gap-1.5 border-b border-hairline pb-2.5">
+      <span
+        className="mr-1 text-[11.5px] font-bold uppercase tracking-[0.1em] text-ink-subtle"
+        style={{ fontFamily: "var(--font-mono-display), ui-monospace, monospace" }}
+      >
+        Age:
+      </span>
+      {buckets.map((b) => {
+        const c = BUCKET_COLOR[b.id];
+        const on = active.includes(b.id);
         return (
           <button
-            key={o.id}
+            key={b.id}
             type="button"
-            role="tab"
-            aria-selected={active}
-            onClick={() => onChange(o.id)}
-            className="px-4 py-2 rounded-pill font-bold transition-all duration-200 tabular-nums"
+            onClick={() => onToggle(b.id)}
+            aria-pressed={on}
+            title={`Show people with tasks aged ${b.id} days`}
+            className="inline-flex items-center gap-1.5 rounded-pill px-2.5 py-1 text-[12px] font-bold tabular-nums outline-none transition-shadow focus-visible:ring-2 focus-visible:ring-[#0A6CFF]/40"
             style={{
-              fontSize: 14,
-              background: active ? "var(--color-ink-strong)" : "transparent",
-              color: active ? "#ffffff" : "var(--color-ink-muted)",
-              boxShadow: active ? "0 4px 10px rgba(15,23,42,0.18)" : "none",
+              background: c.tint,
+              color: c.deep,
+              border: `1px solid ${on ? c.deep : c.light}`,
+              boxShadow: on ? `0 0 0 2px ${c.light}` : "none",
             }}
           >
-            {o.label}
+            <span className="inline-block size-2 rounded-full" style={{ background: c.fill }} />
+            {b.id}d <span className="font-semibold opacity-70">({counts[b.id]})</span>
           </button>
         );
       })}
@@ -216,119 +446,33 @@ function SortControl({
   );
 }
 
-function AlertBanner({ count }: { count: number }) {
+const LANE_COLUMNS = "minmax(150px, 240px) 72px 1fr 56px 24px";
+
+function LaneHeader({ sortMode, onSort }: { sortMode: SortMode; onSort: (m: SortMode) => void }) {
+  const base =
+    "text-[12px] font-bold uppercase tracking-[0.08em] text-ink-strong";
+  const mono = { fontFamily: "var(--font-mono-display), ui-monospace, monospace" } as const;
+  const sortBtn = (mode: SortMode, label: string) => (
+    <button
+      type="button"
+      onClick={() => onSort(mode)}
+      aria-label={`Sort by ${label}`}
+      className={`inline-flex items-center gap-1 ${base} hover:text-ink-soft`}
+      style={mono}
+    >
+      {label}
+      <ChevronsUpDown size={12} strokeWidth={2.4} className={sortMode === mode ? "text-ink-strong" : "text-ink-subtle"} aria-hidden />
+    </button>
+  );
   return (
     <div
-      className="mt-1 mb-3 flex items-center gap-3 rounded-chip px-5 py-3.5"
-      style={{
-        background:
-          "linear-gradient(90deg, rgba(220, 38, 38, 0.12), rgba(220, 38, 38, 0.04))",
-        borderLeft: "4px solid #dc2626",
-        boxShadow: "0 4px 14px -8px rgba(220, 38, 38, 0.45)",
-      }}
+      className="grid items-center gap-3 border-b border-hairline px-2 py-2 max-md:hidden"
+      style={{ gridTemplateColumns: LANE_COLUMNS }}
     >
-      <AlertTriangle className="size-6 shrink-0" style={{ color: "#dc2626" }} />
-      <p style={{ fontSize: 17, color: "var(--color-ink-strong)" }}>
-        <span className="tabular-nums font-black" style={{ fontSize: 22 }}>
-          {count}
-        </span>
-        <span className="font-semibold" style={{ color: "var(--color-ink-soft)" }}>
-          {" "}
-          {count === 1 ? "task is" : "tasks are"} aging more than 30 days —
-          escalate or close
-        </span>
-      </p>
-    </div>
-  );
-}
-
-function Legend() {
-  return (
-    <div className="mt-4 flex items-center gap-1.5 flex-wrap">
-      <span
-        className="uppercase font-bold tracking-[0.10em] mr-1.5"
-        style={{
-          fontFamily: "var(--font-mono-display), ui-monospace, monospace",
-          fontSize: 13,
-          color: "var(--color-ink-muted)",
-        }}
-      >
-        Age
-      </span>
-      {AGE_BUCKETS.map((b) => {
-        const c = BUCKET_COLOR[b.id];
-        return (
-          <div
-            key={b.id}
-            className="inline-flex items-center gap-1.5 rounded-pill px-3 py-1"
-            style={{
-              background: c.tint,
-              border: `1px solid ${c.light}`,
-            }}
-          >
-            <span
-              className="inline-block size-2.5 rounded-full"
-              style={{ background: c.fill, boxShadow: `0 0 6px ${c.fill}` }}
-            />
-            <span
-              className="font-black tabular-nums"
-              style={{ fontSize: 13, color: c.deep }}
-            >
-              {b.id}d
-            </span>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function LaneHeader() {
-  return (
-    <div
-      className="grid items-center gap-4 px-3 pb-2 max-md:hidden"
-      style={{ gridTemplateColumns: "260px 88px 1fr 64px 28px" }}
-    >
-      <span
-        className="uppercase font-bold tracking-[0.10em]"
-        style={{
-          fontFamily: "var(--font-mono-display), ui-monospace, monospace",
-          fontSize: 12,
-          color: "var(--color-ink-muted)",
-        }}
-      >
-        Employee
-      </span>
-      <span
-        className="text-center uppercase font-bold tracking-[0.10em]"
-        style={{
-          fontFamily: "var(--font-mono-display), ui-monospace, monospace",
-          fontSize: 12,
-          color: "var(--color-ink-muted)",
-        }}
-      >
-        Risk
-      </span>
-      <span
-        className="uppercase font-bold tracking-[0.10em]"
-        style={{
-          fontFamily: "var(--font-mono-display), ui-monospace, monospace",
-          fontSize: 12,
-          color: "var(--color-ink-muted)",
-        }}
-      >
-        Pending by age (oldest →)
-      </span>
-      <span
-        className="text-right uppercase font-bold tracking-[0.10em]"
-        style={{
-          fontFamily: "var(--font-mono-display), ui-monospace, monospace",
-          fontSize: 12,
-          color: "var(--color-ink-muted)",
-        }}
-      >
-        Total
-      </span>
+      <span className={base} style={mono}>Employee</span>
+      <span className="justify-self-center">{sortBtn("risk", "Risk")}</span>
+      <span className={base} style={mono}>Pending by age (oldest →)</span>
+      <span className="justify-self-end">{sortBtn("total", "Total")}</span>
       <span aria-hidden />
     </div>
   );
@@ -363,41 +507,27 @@ function Lane({
           router.push(target);
         }
       }}
-      // Tier-3 mobile fix — at 390px the 260+88+1fr+64+28 grid (≈624px min)
-      // overflows the section by ~250px. We collapse to a 2-row stacked
-      // layout via `aging-lane-mobile` (set in globals.css) on `max-md`.
-      className="aging-lane aging-lane-mobile grid items-center gap-4 px-3 py-3.5 rounded-chip transition-all max-md:gap-2 max-md:px-2 max-md:py-3"
+      // Tier-3 mobile fix — below md the grid collapses to a stacked layout via
+      // `aging-lane-mobile` (globals.css), so nothing overflows at 390px.
+      className="aging-lane aging-lane-mobile grid items-center gap-3 border-b border-[#EEF1F6] px-2 py-1.5 transition-colors last:border-b-0 hover:bg-[#F7F9FD] max-md:gap-2 max-md:py-2"
       style={{
-        gridTemplateColumns: "260px 88px 1fr 64px 28px",
-        background: "var(--color-surface-card)",
-        border: "1px solid var(--color-hairline)",
+        gridTemplateColumns: LANE_COLUMNS,
         opacity: 0,
-        animation: `fadeUp 420ms ease-out ${index * 50 + 200}ms forwards`,
+        animation: `fadeUp 420ms ease-out ${index * 40 + 120}ms forwards`,
         cursor: "pointer",
       }}
     >
       {/* Employee — avatar + name */}
-      <div className="flex items-center gap-3 min-w-0">
-        <EmployeeAvatar name={row.employeeName} size="md" />
-        <span
-          className="text-ink-strong truncate font-bold"
-          style={{ fontSize: 17 }}
-        >
-          {row.employeeName}
-        </span>
+      <div className="flex min-w-0 items-center gap-2.5">
+        <EmployeeAvatar name={row.employeeName} size="sm" />
+        <span className="truncate text-[14px] font-bold text-ink-strong">{row.employeeName}</span>
       </div>
 
       {/* Risk score */}
       <RiskChip score={row.risk} />
 
       {/* Heat bar */}
-      <div
-        className="relative rounded-bar bg-surface-soft overflow-hidden"
-        style={{
-          height: 52,
-          border: "1px solid var(--color-hairline)",
-        }}
-      >
+      <div className="relative h-6 overflow-hidden rounded-md bg-[#F1F4F9]">
         <div
           className="absolute inset-y-0 left-0 flex"
           style={{
@@ -426,16 +556,7 @@ function Lane({
       </div>
 
       {/* Total */}
-      <span
-        className="text-right tabular-nums text-ink-strong font-black"
-        style={{
-          fontFamily: "var(--font-display), system-ui, sans-serif",
-          fontSize: 26,
-          letterSpacing: "-0.02em",
-        }}
-      >
-        {row.total}
-      </span>
+      <span className="text-right text-[16px] font-extrabold tabular-nums text-ink-strong">{row.total}</span>
 
       {/* Chevron — telegraphs click target */}
       <span
@@ -443,64 +564,27 @@ function Lane({
         aria-hidden
         style={{ color: "var(--color-ink-subtle)" }}
       >
-        <ChevronRight size={20} strokeWidth={2.4} />
+        <ChevronRight size={18} strokeWidth={2.4} />
       </span>
     </div>
   );
 }
 
 function RiskChip({ score }: { score: number }) {
-  const tone = score >= 60 ? "red" : score >= 35 ? "amber" : "green";
-  const palette = {
-    red: {
-      bg: "linear-gradient(135deg, #fecaca, #f87171)",
-      fg: "#7f1d1d",
-      dot: "#dc2626",
-      glow: "0 4px 12px rgba(220, 38, 38, 0.35)",
-    },
-    amber: {
-      bg: "linear-gradient(135deg, #fef3c7, #fbbf24)",
-      fg: "#78350f",
-      dot: "#d97706",
-      glow: "0 4px 12px rgba(217, 119, 6, 0.30)",
-    },
-    green: {
-      bg: "linear-gradient(135deg, #d1fae5, #34d399)",
-      fg: "#064e3b",
-      dot: "#059669",
-      glow: "0 4px 12px rgba(5, 150, 105, 0.25)",
-    },
-  }[tone];
+  const palette =
+    score >= 60
+      ? { bg: "#FEE2E2", fg: "#991B1B" }
+      : score >= 35
+        ? { bg: "#FEF3C7", fg: "#92400E" }
+        : { bg: "#DCFCE7", fg: "#166534" };
   return (
-    <div
-      className="inline-flex items-center justify-center gap-2 rounded-pill px-3 py-1.5 mx-auto"
-      style={{
-        background: palette.bg,
-        minWidth: 76,
-        boxShadow: palette.glow,
-        border: "1px solid rgba(255,255,255,0.5)",
-      }}
+    <span
+      className="mx-auto inline-flex min-w-[40px] items-center justify-center rounded-md px-2 py-0.5 text-[13px] font-bold tabular-nums"
+      style={{ background: palette.bg, color: palette.fg }}
       title={`Aging risk score: ${score}/100`}
     >
-      <span
-        className="size-2 rounded-full"
-        style={{
-          background: palette.dot,
-          boxShadow: tone === "red" ? `0 0 8px ${palette.dot}` : "none",
-        }}
-      />
-      <span
-        className="font-black tabular-nums"
-        style={{
-          fontFamily: "var(--font-display), system-ui, sans-serif",
-          fontSize: 17,
-          color: palette.fg,
-          letterSpacing: "-0.01em",
-        }}
-      >
-        {score}
-      </span>
-    </div>
+      {score}
+    </span>
   );
 }
 
@@ -566,8 +650,8 @@ function Segment({
               ? "heatPulse 2.4s ease-in-out infinite"
               : "none",
             fontFamily: "var(--font-display), system-ui, sans-serif",
-            fontWeight: 900,
-            fontSize: 17,
+            fontWeight: 800,
+            fontSize: 13,
             textShadow: "0 1px 2px rgba(0,0,0,0.28)",
           }}
           aria-label={`${employeeName}, ${bucketLabel}: ${count} pending`}

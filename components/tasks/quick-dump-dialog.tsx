@@ -207,11 +207,11 @@ export function QuickDumpDialog({
           className="fixed inset-0 z-[60]"
           style={{ background: "rgba(15, 23, 42, 0.45)", backdropFilter: "blur(4px)" }}
         />
-        <Dialog.Content className="fixed left-1/2 top-1/2 z-[70] w-[min(560px,calc(100vw-32px))] -translate-x-1/2 -translate-y-1/2 rounded-section border border-hairline bg-surface-card p-6 shadow-xl max-sm:max-h-[90dvh] max-sm:overflow-y-auto">
-          <div className="flex items-start justify-between mb-4">
+        <Dialog.Content className="fixed left-1/2 top-1/2 z-[70] w-[min(600px,calc(100vw-32px))] -translate-x-1/2 -translate-y-1/2 rounded-xl border border-hairline bg-surface-card p-5 shadow-xl max-sm:max-h-[90dvh] max-sm:overflow-y-auto">
+          <div className="flex items-start justify-between gap-3 mb-3">
             <div>
-              <Dialog.Title className="text-display-md text-ink-strong">Quick Dump</Dialog.Title>
-              <Dialog.Description className="text-[14.5px] text-ink-subtle mt-1.5" style={{ lineHeight: 1.5 }}>
+              <Dialog.Title className="text-ink-strong" style={{ fontSize: 20, lineHeight: 1.2 }}>Quick Dump</Dialog.Title>
+              <Dialog.Description className="text-[13px] text-ink-subtle mt-1" style={{ lineHeight: 1.45 }}>
                 Type a task and press Enter, or tap the mic and speak. Say{" "}
                 <strong>"next task"</strong>, <strong>"new task"</strong> or{" "}
                 <strong>"add"</strong> (or tap Add) to save it and start the next.
@@ -221,14 +221,14 @@ export function QuickDumpDialog({
               <button
                 type="button"
                 aria-label="Close"
-                className="rounded-full p-1 hover:bg-surface-soft text-ink-subtle hover:text-ink-strong"
+                className="inline-flex size-8 shrink-0 items-center justify-center rounded-full hover:bg-surface-soft text-ink-subtle hover:text-ink-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0A6CFF]"
               >
-                <X size={18} />
+                <X size={16} />
               </button>
             </Dialog.Close>
           </div>
 
-          <div className="flex items-stretch gap-2">
+          <div className="flex items-center gap-2">
             <input
               ref={inputRef}
               autoFocus
@@ -244,7 +244,7 @@ export function QuickDumpDialog({
                 }
               }}
               placeholder="e.g. Chase Sharma Traders payment…"
-              className="nt-input flex-1"
+              className="nt-input h-9 min-w-0 flex-1 !rounded-lg !px-3 !py-0 !text-[14px]"
             />
             {supported && (
               <button
@@ -252,16 +252,15 @@ export function QuickDumpDialog({
                 onClick={() => toggle()}
                 aria-pressed={recording}
                 title={recording ? "Stop dictation" : "Dictate"}
-                className="inline-flex items-center justify-center rounded-chip shrink-0"
+                className="inline-flex size-9 items-center justify-center rounded-lg shrink-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0A6CFF]"
                 style={{
-                  width: 48,
                   color: recording ? "#ffffff" : "var(--color-ink-soft)",
                   background: recording ? "var(--color-red)" : "var(--color-surface-soft)",
                   border: recording ? "none" : "1px solid var(--color-hairline)",
                   animation: recording ? "dictatePulse 1.4s ease-out infinite" : "none",
                 }}
               >
-                <Mic size={18} strokeWidth={2.4} />
+                <Mic size={16} strokeWidth={2.4} />
               </button>
             )}
             <button
@@ -273,7 +272,7 @@ export function QuickDumpDialog({
                   ? "Personal — only you will see these"
                   : "Everyone — the whole team will see these"
               }
-              className="inline-flex items-center gap-1.5 px-3 rounded-chip text-[13px] font-bold transition-colors"
+              className="inline-flex h-9 shrink-0 items-center gap-1.5 px-3 rounded-lg text-[13px] font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0A6CFF]"
               style={
                 personal
                   ? { background: "rgba(15,23,42,0.86)", color: "#fff" }
@@ -294,8 +293,7 @@ export function QuickDumpDialog({
                 if (supported) start(); // Add → save + start capturing the next
               }}
               disabled={pending && displayValue.trim().length === 0}
-              className="inline-flex items-center justify-center gap-1.5 px-4 rounded-chip text-[14px] font-bold text-white disabled:opacity-50"
-              style={{ background: "linear-gradient(135deg, var(--color-amber), var(--color-tangerine))" }}
+              className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 px-4 rounded-lg text-[13px] font-semibold text-white bg-[#0A6CFF] hover:bg-[#0858d6] active:bg-[#0749b3] transition-colors disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0A6CFF]"
             >
               {pending ? <Loader2 size={16} className="animate-spin" /> : "Add"}
             </button>
@@ -363,12 +361,11 @@ export function QuickDumpDialog({
             </div>
           )}
 
-          <div className="flex items-center justify-end gap-3 mt-5">
+          <div className="flex items-center justify-end gap-3 mt-4">
             <button
               type="button"
               onClick={done}
-              className="px-5 py-2.5 rounded-chip text-[14px] font-bold text-white"
-              style={{ background: "linear-gradient(135deg, rgb(2, 99, 204), rgb(0, 66, 138))" }}
+              className="h-9 px-4 rounded-lg text-[13px] font-semibold text-white bg-[#0A6CFF] hover:bg-[#0858d6] active:bg-[#0749b3] transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0A6CFF]"
             >
               {added.length > 0 ? `Done · ${added.length} added` : "Done"}
             </button>

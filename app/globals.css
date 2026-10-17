@@ -70,8 +70,8 @@
   --font-mono:  ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 
   /* radii */
-  --radius-kpi:     16px;
-  --radius-section: 16px;
+  --radius-kpi:     12px;
+  --radius-section: 12px;
   --radius-leader:  14px;
   --radius-chip:    12px;
   --radius-pill:    8px;
@@ -132,7 +132,7 @@
   /* The filter bar's own height (26px chips + py-1.5 + its hairline), so a
      second sticky row — the dashboard's section rail — can park directly
      beneath it without a strip of page showing through between them. */
-  --filter-bar-h: 39px;
+  --filter-bar-h: 45px;
 }
 @media (max-width: 767px) {
   :root {
@@ -622,12 +622,12 @@ html[data-density="compact"] body {
   position: relative;
   display: flex;
   align-items: flex-start;
-  gap: 14px;
+  gap: 12px;
   width: 100%;
-  padding: 14px 16px;
-  border-radius: 14px;
-  background: var(--color-surface-card);
-  border: 1px solid var(--color-hairline);
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #ffffff;
+  border: 1px solid var(--color-hairline-strong);
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
   transition:
     transform 220ms cubic-bezier(0.2, 0.7, 0.3, 1),
@@ -1009,10 +1009,11 @@ html[data-density="compact"] body {
      brought in to match. Every filter bar in the app shares this utility, so
      they all stay identical to each other. */
   gap: 5px;
-  height: 26px;
+  height: 32px;
   padding: 0 8px;
+  font-size: 12.5px;
   background: #ffffff;
-  border: 1px solid #f1f0f0;
+  border: 1px solid var(--color-hairline-strong);
   border-radius: 8px;
   transition: box-shadow 180ms ease, transform 180ms ease, border-color 180ms ease, background 180ms ease;
   cursor: pointer;
@@ -1020,8 +1021,12 @@ html[data-density="compact"] body {
 }
 @utility filter-chip {
   &:hover {
-    border-color: rgba(10, 108, 255, 0.40);
-    background: #fbfcff;
+    border-color: #9fb2d1;
+    background: #f8fafd;
+  }
+  &:focus-visible {
+    outline: 2px solid #14336b;
+    outline-offset: 2px;
   }
 }
 
@@ -1040,6 +1045,23 @@ html[data-density="compact"] body {
 .filter-row-fill .filter-chip > :last-child {
   flex: 1 1 auto;
   min-width: 0;
+}
+/* Wrapping layout (My Day, Tasks): chips keep their natural width instead of
+   stretching to fill whatever is left of their line — a lone chip on the second
+   row (Subject) otherwise swallowed the whole row. A cap stops a long selected
+   value from doing the same; the control truncates inside it. */
+.filter-row-fill.filter-row-wrap > .filter-chip {
+  flex: 0 0 auto;
+  max-width: 240px;
+}
+.filter-row-fill.filter-row-wrap .filter-chip > :last-child {
+  flex: 0 1 auto;
+}
+@media (max-width: 639px) {
+  /* Stacked on a phone the chips are full width again. */
+  .filter-row-fill.filter-row-wrap > .filter-chip {
+    max-width: none;
+  }
 }
 @media (max-width: 639px) {
   /* Stacked on mobile: chips are already full-width, and growing them along
@@ -1213,9 +1235,8 @@ html[data-density="compact"] body {
 .app-wallpaper {
   min-height: 100vh;
   background:
-    radial-gradient(1100px 520px at 12% -4%, rgba(10, 108, 255, 0.14), transparent 60%),
-    radial-gradient(880px 460px at 92% 3%, rgba(56, 229, 198, 0.10), transparent 60%),
-    linear-gradient(180deg, #e8effd 0%, #f1f5fd 45%, #e6edf8 100%);
+    radial-gradient(1100px 360px at 50% -8%, rgba(20, 51, 107, 0.05), transparent 70%),
+    #f4f6fa;
 }
 
 /* Header in light mode — nav pills read as highlighted cyan-tinted
@@ -2557,7 +2578,7 @@ select.nt-input {
    components/masters/masters-sidebar.tsx, components/forms/forms-sidebar.tsx.
    ──────────────────────────────────────────────────────────────────── */
 .rail-navy {
-  background-image: linear-gradient(170deg, #001b3d 0%, #012a58 52%, #013a6b 100%);
+  background-image: linear-gradient(180deg, #0a1f44 0%, #0d2b5e 100%);
   backdrop-filter: blur(20px) saturate(160%);
   -webkit-backdrop-filter: blur(20px) saturate(160%);
   border-right: 1px solid rgba(255, 255, 255, 0.08);
@@ -2573,16 +2594,9 @@ select.nt-input {
   top: 0;
   bottom: 0;
   right: 0;
-  width: 2px;
+  width: 1px;
   pointer-events: none;
-  background: linear-gradient(
-    180deg,
-    transparent 0%,
-    var(--module-accent-from, #0a6cff) 30%,
-    var(--module-accent-to, #17b6a0) 70%,
-    transparent 100%
-  );
-  opacity: 0.85;
+  background: rgba(255, 255, 255, 0.1);
 }
 
 /* ────────────────────────────────────────────────────────────────────
@@ -2832,31 +2846,14 @@ select.nt-input {
   overflow: hidden;
   isolation: isolate;
   text-align: center;
-  background-image: linear-gradient(
-    135deg,
-    var(--module-accent-from, #0a6cff) 0%,
-    var(--module-accent-to, #17b6a0) 100%
-  );
-  box-shadow:
-    0 6px 16px -6px color-mix(in srgb, var(--module-accent-from, #0a6cff) 65%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.28);
+  background-image: none;
+  background-color: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: inset 3px 0 0 var(--module-accent-from, #0a6cff);
 }
 
 .module-chip::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: linear-gradient(
-    105deg,
-    transparent 38%,
-    rgba(255, 255, 255, 0.35) 46%,
-    rgba(255, 255, 255, 0.85) 50%,
-    rgba(255, 255, 255, 0.35) 54%,
-    transparent 62%
-  );
-  transform: translateX(-130%);
-  animation: moduleChipShine 9s ease-in-out infinite;
+  content: none;
 }
 
 @keyframes moduleChipShine {
@@ -2872,7 +2869,7 @@ select.nt-input {
 /* Phone counterpart: the rail collapses to a horizontal strip, so the
    gradient and the hairline both rotate to match the header exactly. */
 .rail-navy-top {
-  background-image: linear-gradient(100deg, #001b3d 0%, #012a58 48%, #013a6b 100%);
+  background-image: linear-gradient(90deg, #0a1f44 0%, #0d2b5e 100%);
   backdrop-filter: blur(20px) saturate(160%);
   -webkit-backdrop-filter: blur(20px) saturate(160%);
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
@@ -3230,4 +3227,360 @@ select.nt-input {
 .att-kpi:nth-child(6) { animation-delay: 315ms; }
 @media (prefers-reduced-motion: reduce) {
   .att-rise, .att-fade, .att-kpi { animation: none; }
+}
+
+/* ── Chrome polish ───────────────────────────────────────────────────────
+   The rail head, the module chip and the header hairline used to carry a
+   travelling white glint on a 9s loop. It drew the eye to the chrome on every
+   page; the chrome should sit still and let the content lead. The static
+   accent bar under the mark and the hairline under the header stay. */
+.header-shine-line::after,
+.brand-plate::after {
+  content: none;
+  animation: none;
+}
+
+/* ── Tasks page: dense table variant ─────────────────────────────────────
+   Opt-in through <TaskTable dense>, which adds .tasks-dense to its root. Tasks,
+   My Day's list view and the Archive all use it, so the tables match. Presentation
+   only: it changes size, spacing and colour, never which columns, rows or
+   controls exist. Overrides use !important only where the markup sets the same
+   property inline (the header fill) or must beat a sticky cell's own fill. */
+.tasks-dense .tt-toolbar {
+  padding-block: 4px;
+  border-color: var(--color-hairline-strong);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05) !important;
+}
+.tasks-dense .tt-toolbar button {
+  border-radius: 8px;
+  border-color: var(--color-hairline-strong);
+}
+.tasks-dense .tt-table {
+  max-height: var(--tt-max-h, calc(100vh - 236px));
+  border-color: var(--color-hairline-strong);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05) !important;
+}
+.tasks-dense .tt-table thead th {
+  font-size: 11.5px;
+  letter-spacing: 0.06em;
+  padding-top: 7px;
+  padding-bottom: 7px;
+  background: #f5f7fb !important;
+  color: var(--color-ink-soft);
+}
+.tasks-dense .tt-table tbody td {
+  font-size: 14px;
+  padding-top: 5px;
+  padding-bottom: 5px;
+  border-bottom: 1px solid #eef1f6;
+}
+.tasks-dense .tt-table tbody td .text-body,
+.tasks-dense .tt-table .task-title-link {
+  font-size: 14px;
+}
+.tasks-dense .tt-table tbody tr:hover > td {
+  background-color: #f7f9fd !important;
+}
+/* The Task/Client/Subject cells were capped at 32ch, which cut titles that had
+   room to spare; give them more before an ellipsis is needed. The full text is
+   still one hover away (the cell's own tooltip). */
+.tasks-dense .tt-table td[class*="max-w-[32ch]"],
+.tasks-dense .tt-table .task-title-link {
+  max-width: 46ch;
+}
+
+/* Kanban column bodies: the generic 10px transparent bar was a hairline beside the
+   cards. A slightly wider bar with a faint track is easier to see and to grab. */
+.kb-col-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+.kb-col-scroll::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.04);
+  border-radius: 9999px;
+}
+.kb-col-scroll::-webkit-scrollbar-thumb {
+  background: rgba(15, 23, 42, 0.28);
+  border-radius: 9999px;
+  border: 0;
+}
+.kb-col-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(15, 23, 42, 0.45);
+}
+
+/* ── Page fill ────────────────────────────────────────────────────────────
+   Opt-in full-height page column: header, a growing body, and the footer. A
+   short page keeps its footer at the bottom of the viewport; a long one just
+   pushes the footer down after the content (it stays in normal flow, nothing is
+   fixed or overlapped). Opt-in on purpose — turning every page into a flex column
+   would stop the `mx-auto max-w-*` sections many pages use from stretching. */
+.page-fill {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+.page-fill > .page-fill-body {
+  flex: 1 0 auto;
+}
+
+/* ────────────────────────────────────────────────────────────────────
+   .chrome-light — the white-and-blue shell for the WMS module.
+
+   Applied to the rail (components/layout/app-sidebar.tsx) and the header
+   (components/layout/header.tsx) by isLightChrome() (lib/chrome-theme.ts).
+   Other areas (Forms, Admin, Masters, Plan, Targets) keep the navy chrome.
+   The header controls read these --chrome-* variables with the old dark
+   values as fallbacks, so nothing changes where this class is absent.
+   ──────────────────────────────────────────────────────────────────── */
+.chrome-light {
+  --chrome-ctl-bg: #ffffff;
+  --chrome-ctl-border: #d6deeb;
+  --chrome-ctl-fg: #334155;
+  --chrome-ctl-bg-hover: #eef4ff;
+  --chrome-ctl-border-hover: #a9c4f0;
+  --chrome-ctl-shadow-hover: 0 4px 12px rgba(15, 23, 42, 0.1);
+  --chrome-divider: #e2e8f0;
+  --chrome-bell-ring: #ffffff;
+  --color-ink-strong: #0f172a;
+  --color-ink: #1e293b;
+  --color-ink-soft: #475569;
+  --color-ink-muted: #64748b;
+  --color-ink-subtle: #94a3b8;
+  --color-hairline: #e2e8f0;
+  --color-hairline-strong: #cbd5e1;
+  color-scheme: light;
+}
+
+.rail-light {
+  background: #ffffff;
+  background-image: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border-right: 1px solid #e2e8f0;
+  box-shadow: 1px 0 0 rgba(15, 23, 42, 0.02);
+}
+.rail-light::after {
+  background: transparent;
+}
+.rail-light .brand-plate img {
+  filter: none;
+}
+.rail-light .brand-plate::before {
+  background: linear-gradient(90deg, transparent 0%, #cfe0fb 22%, #0a6cff 50%, #cfe0fb 78%, transparent 100%);
+  opacity: 0.9;
+  box-shadow: none;
+}
+.rail-light .brand-plate::after {
+  content: none;
+}
+.rail-light .module-chip {
+  background-color: #eef4ff;
+  border: 1px solid #d3e2fb;
+  color: #0b4fb8;
+  box-shadow: inset 3px 0 0 var(--module-accent-from, #0a6cff);
+}
+
+.header-light {
+  background: #ffffff;
+  border-bottom: 1px solid #e2e8f0;
+}
+.header-light .header-shine-line {
+  display: none;
+}
+.header-light .global-search-field {
+  background: #f5f7fb;
+  border-color: #dbe3ef;
+  color: #475569;
+}
+.header-light .global-search-field:hover {
+  background: #ffffff;
+  border-color: #a9c4f0;
+  color: #0f172a;
+}
+.header-light .global-search-field kbd {
+  background: #ffffff;
+  border-color: #dbe3ef;
+  color: #64748b;
+}
+
+.rail-light {
+  --rail-fg: #0f172a;
+  --rail-fg-muted: #64748b;
+  --rail-hover: #eef4ff;
+  --rail-ring: #ffffff;
+}
+
+/* Dashboard section anchors: a tab click scrolls the section to just below the
+   sticky header, filter bar and tab rail (about 44px) plus a small gap. */
+.dash-anchor {
+  scroll-margin-top: calc(var(--app-header-h) + var(--filter-bar-h, 44px) + var(--dash-tabs-h, 44px) + 12px);
+}
+
+/* Single-row filter bar (wrapping layout, sm and up): chips hug their label
+   instead of reserving the 6.5rem the dropdown triggers ask for, and the chip
+   padding/gap come in a little so the whole row — filters, Search Tasks and
+   Reset — fits on one line at normal desktop widths. */
+@media (min-width: 640px) {
+  .filter-row-wrap > .filter-chip {
+    padding: 0 5px;
+    gap: 4px;
+    font-size: 12px;
+  }
+  /* Label / clear (x) / caret sit closer inside each dropdown chip. */
+  .filter-row-wrap > .filter-chip > button {
+    gap: 4px;
+  }
+  .filter-row-wrap > .filter-chip [class*="min-w-[6.5rem]"] {
+    min-width: 0;
+  }
+}
+
+/* ── The "+" New Task dialog, compact ──────────────────────────────────────
+   Same fields and behaviour as before; smaller controls and tighter gaps so
+   more of the form fits without scrolling. Scoped to .nt-compact (set by
+   NewTaskForm's `compact` prop) so the plan dialog and the full-page form keep
+   their own sizes. The tag-style pickers carry an inline min-height, hence
+   !important there. */
+.nt-compact .nt-input {
+  padding: 8px 12px;
+  font-size: 14px;
+  border-radius: 10px;
+  min-height: 38px !important;
+}
+.nt-compact textarea.nt-input {
+  padding-top: 8px;
+  padding-bottom: 8px;
+  min-height: 72px !important;
+}
+.nt-compact select.nt-input {
+  padding-right: 36px;
+}
+/* The action row stays in view while the body scrolls. */
+.nt-compact > div:last-child {
+  position: sticky;
+  bottom: -1rem;
+  z-index: 2;
+  background: var(--color-surface-card, #fff);
+  padding: 0.625rem 0 0.25rem;
+}
+
+/* One height for the filter row and the dashboard tab row beneath it, so the
+   two bands read as a pair. */
+:root {
+  --dash-row-h: 44px;
+}
+
+/* ── Footer at the bottom of a short page ─────────────────────────────────
+   A WMS page opts in by giving its <main> the .wms-fill class. The page column
+   (the route template's wrapper, .app-page) then becomes a full-height flex column and that
+   <main> takes the spare height, so the footer sits at the bottom of the window
+   when the content is short and simply follows the content when it is long.
+   Opt-in through :has() on purpose: turning the wrapper into a flex column for
+   every page would shrink the `mx-auto max-w-*` sections that many pages place
+   straight inside it. width:100% keeps the opted-in <main> centred at its max
+   width as before. */
+.app-page:has(> .wms-fill) {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+}
+.app-page > .wms-fill {
+  flex: 1 0 auto;
+  width: 100%;
+}
+
+/* ── Dashboard filter chips: icon-badge style ────────────────────────────────
+   Opt-in through .fb-badge-chips on the FilterBar root (the dashboard). Each chip
+   carries its leading icon on a small tinted square, bold label, and turns blue
+   when it holds a selection (a chip with a clear "x" in it) — the date chip,
+   which always holds a range, is always in that state. Presentation only: the
+   same chips, handlers and filters. */
+@media (min-width: 640px) {
+  .fb-badge-chips .filter-row-wrap > .filter-chip {
+    gap: 6px;
+    padding: 0 8px 0 5px;
+    border-radius: 10px;
+    border-color: #d6deeb;
+    font-weight: 600;
+  }
+  .fb-badge-chips .filter-row-wrap > .filter-chip > svg:first-child {
+    box-sizing: content-box;
+    width: 14px;
+    height: 14px;
+    padding: 4px;
+    border-radius: 7px;
+    background: #f1f4f9;
+    color: #64748b;
+  }
+  /* Selected / holding a value */
+  .fb-badge-chips .filter-row-wrap > .filter-chip:first-child,
+  .fb-badge-chips .filter-row-wrap > .filter-chip:has([aria-label="Clear selection"]),
+  .fb-badge-chips .filter-row-wrap > .filter-chip:has([data-filter-active]) {
+    border-color: #0a6cff;
+    background: #eef4ff;
+    color: #0b4fb8;
+  }
+  .fb-badge-chips .filter-row-wrap > .filter-chip:first-child > svg:first-child,
+  .fb-badge-chips .filter-row-wrap > .filter-chip:has([aria-label="Clear selection"]) > svg:first-child,
+  .fb-badge-chips .filter-row-wrap > .filter-chip:has([data-filter-active]) > svg:first-child {
+    background: rgba(10, 108, 255, 0.14);
+    color: #0a6cff;
+  }
+  .fb-badge-chips .filter-row-wrap > .filter-chip:has([aria-label="Clear selection"]) button,
+  .fb-badge-chips .filter-row-wrap > .filter-chip:has([data-filter-active]) button,
+  .fb-badge-chips .filter-row-wrap > .filter-chip:first-child span {
+    color: #0b4fb8;
+  }
+}
+
+/* ── Tasks filter bar, tight: nine chips + ⋯ + search in one row ────────────
+   Opt-in with .fb-tight (on top of .fb-badge-chips). Smaller type, icon badge,
+   padding and gaps so the whole row fits at laptop widths; the row still
+   scrolls sideways as a fallback on narrower screens. Presentation only. */
+@media (min-width: 640px) {
+  .fb-badge-chips.fb-tight > div {
+    padding-inline: 16px;
+  }
+  .fb-badge-chips.fb-tight .filter-row-wrap > .filter-chip {
+    height: 30px;
+    gap: 4px;
+    padding: 0 6px 0 3px;
+    border-radius: 9px;
+    font-size: 11.5px;
+  }
+  .fb-badge-chips.fb-tight .filter-row-wrap > .filter-chip > svg:first-child {
+    width: 12px;
+    height: 12px;
+    padding: 3px;
+    border-radius: 6px;
+  }
+  .fb-badge-chips.fb-tight .filter-row-wrap > .filter-chip button,
+  .fb-badge-chips.fb-tight .filter-row-wrap > .filter-chip span {
+    font-size: 11.5px;
+    gap: 2px;
+  }
+  .fb-badge-chips.fb-tight .filter-row-wrap > .filter-chip button > svg:last-child {
+    width: 10px;
+    height: 10px;
+  }
+}
+
+/* ── Tasks table, Altus look (TaskTable altus) ───────────────────────────────
+   Bolder, larger sentence-case headers and rounder toolbar controls. Presentation
+   only; the columns, rows, sorting and paging are unchanged. */
+.tasks-altus .tt-table thead th {
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: none;
+  color: #1e293b;
+  padding-top: 9px;
+  padding-bottom: 9px;
+}
+.tasks-altus .tt-toolbar {
+  border-radius: 12px;
+  padding: 8px 12px;
+}
+.tasks-altus .tt-toolbar button {
+  border-radius: 10px;
 }

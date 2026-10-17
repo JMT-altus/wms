@@ -87,7 +87,7 @@ export const MODULES: ModuleDef[] = [
     accent: { from: "#0A6CFF", to: "#0047B3", ink: "#0A6CFF" },
     items: [
       { href: "/", label: "Dashboard", icon: "LayoutDashboard" },
-      { href: "/tasks/agenda", label: "My Day", icon: "CalendarDays" },
+      { href: "/tasks/agenda", label: "Daily Commitments", icon: "CalendarDays" },
       { href: "/tasks", label: "Tasks", icon: "ListTodo", taskCount: true, notMatch: ["/tasks/agenda", "/tasks/kanban"] },
       { href: "/tasks/kanban", label: "Kanban", icon: "SquareKanban" },
       { href: "/weekly-goals", label: "Weekly Goals", icon: "Target" },
@@ -241,6 +241,7 @@ export const MODULES: ModuleDef[] = [
       { href: "/hr/policies", label: "Policies", icon: "ScrollText" },
       { href: "/hr/help-desk", label: "HR Help Desk", icon: "MessageSquare" },
       { href: "/hr/attendance-import", label: "Attendance Import", icon: "CalendarDays" },
+      { href: "/hr/attendance-correction", label: "Attendance Correction", icon: "CalendarCheck" },
       {
         href: POST_APPOINTMENT_BASE,
         label: "Post-Appointment",

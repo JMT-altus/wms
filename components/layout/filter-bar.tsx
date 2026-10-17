@@ -2,6 +2,8 @@
 import * as React from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { useTransition } from "react";
+import { createPortal } from "react-dom";
+import { HEADER_VIEW_SLOT_ID } from "@/lib/header-slots";
 import * as Popover from "@radix-ui/react-popover";
 import { DayPicker, type DateRange } from "react-day-picker";
 import { format, parseISO } from "date-fns";
@@ -38,6 +40,8 @@ import { PriorityFilter } from "./filters/priority-filter";
 import { StatusFilter } from "./filters/status-filter";
 import { SubjectFilter } from "./filters/subject-filter";
 import { ClientFilter } from "./filters/client-filter";
+import { DueDateFilter } from "./filters/due-date-filter";
+import { InitiatorStatusFilter } from "./filters/initiator-status-filter";
 import { useTaskSearch } from "@/components/tasks/task-search-context";
 
 type AssigneeMode = "default" | "all" | "specific" | "unassigned";
@@ -54,6 +58,10 @@ interface Props {
     subj: string[];
     status?: string[];
     client?: string[];
+    /** Due-date bucket value (lib/due-buckets.ts); "" = none. */
+    due?: string;
+    /** Initiator Status verdicts picked (approval_status values). */
+    approval?: string[];
   };
   subjects?: string[]; // pool of distinct task subjects for autocomplete
   /** Active department names from /admin/departments. When empty, the
@@ -62,6 +70,11 @@ interface Props {
   /** Status options (value + admin-overridable label). When provided, the
    *  Status filter chip is shown. Omitted on views without status filtering. */
   statusOptions?: { value: string; label: string }[];
+  /** Initiator Status options (the verdicts). When provided, the "All Initiator
+   *  Status" chip is shown and writes the `approval` URL param. */
+  approvalOptions?: { value: string; label: string }[];
+  /** Placeholder of the status chip. "All Status" unless a page names it. */
+  statusLabel?: string;
   /** Distinct task clients. When provided, the Clients filter chip is shown. */
   clients?: string[];
   /** Pass the signed-in user to enable the "My tasks / All tasks" scope chip.
@@ -80,6 +93,24 @@ interface Props {
    *  wrapper sized to the bar itself leaves it nowhere to go, silently killing
    *  the stick. */
   className?: string;
+  /** Lay the chips out in a wrapping row instead of one scrolling row, so none
+   *  can be clipped by the container. Off by default; only a page that
+   *  wants it (My Day) opts in. */
+  wrap?: boolean;
+  /** Draw the View · Doer/Initiator selector. On by default; the Kanban page turns
+   *  it off because the board has its own Status view selector. */
+  showView?: boolean;
+  /** Draw the View selector in the page header's slot instead of in this bar
+   *  (same control, same state — it is portalled). Falls back to the bar below
+   *  md, where the header has no room. */
+  viewInHeader?: boolean;
+  /** Leave out the Reset button (the dashboard). */
+  hideReset?: boolean;
+  /** Compact actions (the Tasks page): the task search becomes an icon that opens
+   *  into a box, and Reset / ⋯ / search sit together at the right end of the row. */
+  compactActions?: boolean;
+  /** Draw the "All Due Dates" filter (the dashboard). */
+  showDue?: boolean;
 }
 
 const ONE_DAY = 24 * 60 * 60 * 1000;
@@ -90,11 +121,19 @@ export function FilterBar({
   subjects,
   departments,
   statusOptions,
+  approvalOptions,
+  statusLabel,
   clients,
   me,
   assigneeMode: initialAssigneeMode = "all",
   searchPlaceholder = "Search Tasks...",
   className,
+  wrap = false,
+  showView = true,
+  viewInHeader = false,
+  hideReset = false,
+  showDue = false,
+  compactActions = false,
 }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -119,12 +158,23 @@ export function FilterBar({
     React.useState<AssigneeMode>(initialAssigneeMode);
   const [view, setView] = React.useState<"doer" | "initiator">(initial.view);
   const [dept, setDept] = React.useState<string[]>(initial.dept);
+  const [due, setDue] = React.useState<string>(initial.due ?? "");
   const [prio, setPrio] = React.useState<string[]>(initial.prio);
   const [subj, setSubj] = React.useState<string[]>(initial.subj);
   const [status, setStatus] = React.useState<string[]>(initial.status ?? []);
   const [client, setClient] = React.useState<string[]>(initial.client ?? []);
+  const [approval, setApproval] = React.useState<string[]>(initial.approval ?? []);
   const [sheetOpen, setSheetOpen] = React.useState(false);
+  const [searchOpen, setSearchOpen] = React.useState(false);
   const pathname = usePathname();
+  // The header's slot, if this page rendered one. Read through
+  // useSyncExternalStore so there is no setState-in-effect: null on the server
+  // and first client render, the element afterwards.
+  const headerSlot = React.useSyncExternalStore(
+    () => () => {},
+    () => (viewInHeader ? document.getElementById(HEADER_VIEW_SLOT_ID) : null),
+    () => null,
+  );
 
   // The date range is a bare Popover rather than a MultiSelect, so it wires up
   // its own open state. Hover-to-open is off: menus open on click only, so a
@@ -160,6 +210,8 @@ export function FilterBar({
     sp.set("start", start);
     sp.set("end", end);
     sp.set("view", view);
+    // The Tasks "Not read" pill narrowing (?unread=1) lasts until a filter changes.
+    sp.delete("unread");
     // emp resolution:
     //  - specific IDs picked → write `emp=<ids>` (regardless of scope chip)
     //  - non-admin "all" scope → write sentinel `emp=all` so the server
@@ -173,11 +225,19 @@ export function FilterBar({
     } else {
       sp.delete("emp");
     }
+    if (showDue) {
+      if (due) sp.set("due", due);
+      else sp.delete("due");
+    }
     if (dept.length > 0) sp.set("dept", dept.join(",")); else sp.delete("dept");
     if (prio.length > 0) sp.set("prio", prio.join(",")); else sp.delete("prio");
     if (subj.length > 0) sp.set("subj", subj.join(",")); else sp.delete("subj");
     if (status.length > 0) sp.set("status", status.join(",")); else sp.delete("status");
     if (client.length > 0) sp.set("client", client.join(",")); else sp.delete("client");
+    if (approvalOptions) {
+      if (approval.length > 0) sp.set("approval", approval.join(","));
+      else sp.delete("approval");
+    }
     startTransition(() => router.replace(`${pathname}?${sp.toString()}` as any));
   }
 
@@ -195,7 +255,7 @@ export function FilterBar({
     const t = setTimeout(apply, 200);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [start, end, view, emp, assigneeMode, dept, prio, subj, status, client]);
+  }, [start, end, view, emp, assigneeMode, dept, prio, subj, status, client, due, approval]);
 
   function reset() {
     const today = new Date();
@@ -205,11 +265,13 @@ export function FilterBar({
     // Non-admins reset back to "My tasks"; admins/dashboard get "all".
     setAssigneeMode(showScopeChip ? "default" : "all");
     setView("doer");
+    setDue("");
     setDept([]);
     setPrio([]);
     setSubj([]);
     setStatus([]);
     setClient([]);
+    setApproval([]);
   }
 
   const fmt = (s: string) => {
@@ -240,7 +302,9 @@ export function FilterBar({
     (prio.length > 0 ? 1 : 0) +
     (subj.length > 0 ? 1 : 0) +
     (status.length > 0 ? 1 : 0) +
-    (client.length > 0 ? 1 : 0); // start/end have defaults so don't count
+    (client.length > 0 ? 1 : 0) +
+    (approval.length > 0 ? 1 : 0) +
+    (showDue && due ? 1 : 0); // start/end have defaults so don't count
 
   // Edge fades on the chip scroller. The scrollbar is hidden (globals.css,
   // .nav-scroll) to keep the strip short, so a fade is the only thing left
@@ -283,13 +347,38 @@ export function FilterBar({
     };
   }, []);
 
+  const viewSelector = (seg: string) => (
+    <>
+      <SegLabel>View</SegLabel>
+      <div
+        className="inline-flex items-center bg-white border border-hairline-strong rounded-lg relative"
+        style={{
+          padding: 4,
+          boxShadow: "0 1px 2px rgba(15, 23, 42, 0.05)",
+        }}
+        aria-label="View"
+      >
+        <SegButton layoutId={seg} active={view === "doer"} onClick={() => setView("doer")}>
+          Doer
+        </SegButton>
+        <SegButton
+          layoutId={seg}
+          active={view === "initiator"}
+          onClick={() => setView("initiator")}
+        >
+          Initiator
+        </SegButton>
+      </div>
+    </>
+  );
+
   return (
     <div
       // Tight against the bottom of the sticky header. No gap → no strip of
       // page showing through as content scrolls under it.
       className={`sticky top-[var(--app-header-h)] z-40 border-b border-hairline${className ? ` ${className}` : ""}`}
       style={{
-        backgroundColor: "rgba(250, 251, 252, 0.82)",
+        backgroundColor: "rgba(255, 255, 255, 0.94)",
         backdropFilter: "blur(20px) saturate(150%)",
         WebkitBackdropFilter: "blur(20px) saturate(150%)",
       }}
@@ -298,7 +387,7 @@ export function FilterBar({
           the two bars sit on sibling pages and a band that changes height
           between them reads as a layout bug. At py-0 the 26px chips ran edge
           to edge and the strip lost its footing against the header above it. */}
-      <div className="mx-auto max-w-[1600px] px-12 py-1.5 max-md:px-4">
+      <div className={`mx-auto max-w-[1600px] py-1.5 max-md:px-4 ${wrap ? "px-8 sm:flex sm:h-[var(--dash-row-h)] sm:flex-col sm:justify-center sm:py-0" : "px-12"}`}>
         {/* Mobile-only header (Filters label + show/hide). On desktop the label
             is dropped entirely so all the chips fit on a single line. */}
         <div className="hidden max-sm:flex max-sm:w-full max-sm:items-center max-sm:gap-2">
@@ -335,11 +424,16 @@ export function FilterBar({
           </button>
         </div>
 
-        <div className={`flex items-center gap-2 max-sm:w-full max-sm:flex-col max-sm:items-stretch max-sm:gap-3 max-sm:mt-3 ${sheetOpen ? "" : "max-sm:hidden"}`}>
+        <div className={`flex items-center gap-2 max-sm:w-full max-sm:flex-col max-sm:items-stretch max-sm:gap-3 max-sm:mt-3 ${wrap ? "sm:flex-nowrap sm:gap-1 sm:overflow-x-auto nav-scroll" : ""} ${sheetOpen ? "" : "max-sm:hidden"}`}>
           {/* Filter chips — one horizontally-scrollable line on desktop; stack
               vertically on mobile. The dropdowns portal out, so the scroll
               container never clips them. */}
-          <div className="relative flex-1 min-w-0 max-sm:flex-none">
+          {/* In the wrapping layout (My Day, Tasks) this wrapper, the scroller and the row
+              below are all `display: contents` from sm up, so the chips, the search box
+              and the pinned ⋯ / Reset actions are ONE wrapping row. The actions then
+              follow the search box directly instead of being pushed to the far edge by
+              a flex-1 wrapper. */}
+          <div className={`relative flex-1 min-w-0 max-sm:flex-none ${wrap ? "sm:contents" : ""}`}>
           {/* Edge fades. Sit OUTSIDE the scroller so they stay pinned to its
               edges instead of scrolling away with the chips, and are
               pointer-events-none so they never eat a click on the chip
@@ -347,7 +441,7 @@ export function FilterBar({
               and nothing overflows. */}
           <span
             aria-hidden
-            className="pointer-events-none absolute inset-y-0 left-0 z-10 w-8 transition-opacity duration-200 max-sm:hidden"
+            className={`pointer-events-none absolute inset-y-0 left-0 z-10 w-8 transition-opacity duration-200 max-sm:hidden ${wrap ? "hidden" : ""}`}
             style={{
               opacity: edges.left ? 1 : 0,
               background:
@@ -356,15 +450,22 @@ export function FilterBar({
           />
           <span
             aria-hidden
-            className="pointer-events-none absolute inset-y-0 right-0 z-10 w-8 transition-opacity duration-200 max-sm:hidden"
+            className={`pointer-events-none absolute inset-y-0 right-0 z-10 w-8 transition-opacity duration-200 max-sm:hidden ${wrap ? "hidden" : ""}`}
             style={{
               opacity: edges.right ? 1 : 0,
               background:
                 "linear-gradient(to left, rgba(250, 251, 252, 0.95), rgba(250, 251, 252, 0))",
             }}
           />
-          <div ref={scrollerRef} className="overflow-x-auto nav-scroll max-sm:overflow-visible">
-            <div className="filter-row-fill flex items-center gap-1.5 w-max min-w-full max-sm:w-full max-sm:min-w-0 max-sm:flex-col max-sm:items-stretch max-sm:gap-3">
+          <div
+            ref={scrollerRef}
+            className={wrap ? "overflow-visible sm:contents" : "overflow-x-auto nav-scroll max-sm:overflow-visible"}
+          >
+            <div
+              className={`filter-row-fill flex items-center max-sm:w-full max-sm:min-w-0 max-sm:flex-col max-sm:items-stretch max-sm:gap-3 max-sm:pr-0 ${
+                wrap ? "filter-row-wrap flex-wrap gap-x-1.5 gap-y-1.5 w-full sm:contents" : "gap-1.5 w-max min-w-full pr-8"
+              }`}
+            >
           {/* Date range */}
           <Popover.Root open={dateOpen} onOpenChange={setDateOpen}>
             <Popover.Trigger asChild>
@@ -377,7 +478,7 @@ export function FilterBar({
                 {...dateHoverProps}
               >
                 <Calendar size={14} className="text-ink-subtle" strokeWidth={2} />
-                <span className="text-[12px] font-medium text-ink-strong tabular-nums">
+                <span className="text-[12.5px] font-medium text-ink-strong tabular-nums">
                   {formattedRange}
                 </span>
               </button>
@@ -418,9 +519,11 @@ export function FilterBar({
                   ? "+ Add Teammate"
                   : "All Employees"
               }
-              className="min-w-[6.5rem] !text-[12px] !font-medium"
+              className="min-w-[6.5rem] !text-[12.5px] !font-medium"
             />
           </div>
+
+          {showDue && !compactActions && <DueDateFilter value={due} onChange={setDue} />}
 
           {clients && clients.length > 0 && (
             <ClientFilter
@@ -434,7 +537,17 @@ export function FilterBar({
           )}
           <PriorityFilter selected={prio} onChange={setPrio} />
           {statusOptions && statusOptions.length > 0 && (
-            <StatusFilter options={statusOptions} selected={status} onChange={setStatus} />
+            <StatusFilter
+              options={statusOptions}
+              selected={status}
+              onChange={setStatus}
+              placeholder={statusLabel}
+            />
+          )}
+          {/* Tasks page order: Doer Status, Due Dates, Initiator Status, Subjects. */}
+          {showDue && compactActions && <DueDateFilter value={due} onChange={setDue} />}
+          {approvalOptions && approvalOptions.length > 0 && (
+            <InitiatorStatusFilter options={approvalOptions} selected={approval} onChange={setApproval} />
           )}
           {subjects && subjects.length > 0 && (
             <SubjectFilter options={subjects} selected={subj} onChange={setSubj} />
@@ -448,13 +561,13 @@ export function FilterBar({
               The wide left margin is measured: these are a different KIND of
               control from the filter chips, and the gap is what says so. */}
           {showScopeChip && (
-            <div className="ml-[26px] inline-flex items-center gap-2">
+            <div className={`inline-flex shrink-0 items-center gap-2 ${wrap ? "" : "ml-4"}`}>
               <SegLabel>Scope</SegLabel>
               <div
-                className="inline-flex items-center bg-surface-card border border-hairline rounded-[8px] relative"
+                className="inline-flex items-center bg-white border border-hairline-strong rounded-lg relative"
                 style={{
                   padding: 4,
-                  boxShadow: "0 12px 28px -18px rgba(10, 108, 255, 0.15), 0 1px 4px -1px rgba(15, 23, 42, 0.06)",
+                  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.05)",
                 }}
                 aria-label="Task scope"
               >
@@ -485,36 +598,32 @@ export function FilterBar({
             </div>
           )}
 
-          <div
-            className={`inline-flex items-center gap-2 ${showScopeChip ? "ml-[18px]" : "ml-[26px]"}`}
-          >
-            <SegLabel>View</SegLabel>
+          {showView && !headerSlot && (
             <div
-              className="inline-flex items-center bg-surface-card border border-hairline rounded-[8px] relative"
-              style={{
-                padding: 4,
-                boxShadow: "0 12px 28px -18px rgba(10, 108, 255, 0.15), 0 1px 4px -1px rgba(15, 23, 42, 0.06)",
-              }}
-              aria-label="View"
+              className={`inline-flex shrink-0 items-center gap-2 ${wrap ? "" : showScopeChip ? "ml-3" : "ml-4"}`}
             >
-              <SegButton active={view === "doer"} onClick={() => setView("doer")}>
-                Doer
-              </SegButton>
-              <SegButton
-                active={view === "initiator"}
-                onClick={() => setView("initiator")}
-              >
-                Initiator
-              </SegButton>
+              {viewSelector("view-seg-active")}
             </div>
-          </div>
+          )}
+          {/* In the header (md and up) — and, so phones keep the control, a
+              copy here that only shows below md. One selector's worth of state
+              and handlers either way. */}
+          {showView && headerSlot && (
+            <div className="hidden shrink-0 items-center gap-2 max-md:inline-flex">{viewSelector("view-seg-active")}</div>
+          )}
+          {showView &&
+            headerSlot &&
+            createPortal(
+              <div className="inline-flex shrink-0 items-center gap-2 max-md:hidden">{viewSelector("header-view-seg-active")}</div>,
+              headerSlot,
+            )}
 
           {/* Task search — last in the row, after the two segmented groups.
               It narrows what the table shows rather than what the server
               returns, so it sits at the end of the funnel, not among the
               chips that shape the query. */}
-          {search && (
-            <div className="ml-[18px] relative max-sm:w-full max-sm:ml-0">
+          {search && !compactActions && (
+            <div className={`relative min-w-0 w-[160px] max-w-[160px] sm:min-w-[128px] sm:shrink max-sm:ml-0 ${wrap ? "" : "ml-[18px]"}`}>
               <Search
                 size={13}
                 strokeWidth={2.4}
@@ -527,7 +636,7 @@ export function FilterBar({
                 onChange={(e) => search.setQuery(e.target.value)}
                 placeholder={searchPlaceholder}
                 aria-label={searchPlaceholder.replace(/\.\.\.$/, "")}
-                className="h-[26px] w-[190px] max-sm:w-full pl-[26px] pr-7 rounded-pill border border-[#f1f0f0] bg-white text-[12px] font-medium text-ink-strong placeholder:text-ink-subtle outline-none transition-colors hover:border-altus-red/40 focus:border-altus-red focus:ring-2 focus:ring-altus-red/20 [&::-webkit-search-cancel-button]:hidden"
+                className={`box-border h-8 w-full min-w-0 max-w-[160px] pl-[26px] ${search.query ? "pr-6" : "pr-2"} rounded-lg border border-hairline-strong bg-white text-[13px] font-medium text-ink-strong placeholder:text-ink-subtle outline-none transition-colors hover:border-[#9fb2d1] focus:border-[#14336b] focus:ring-2 focus:ring-[#14336b]/20 [&::-webkit-search-cancel-button]:hidden`}
                 style={{ boxShadow: "0 12px 28px -18px rgba(10, 108, 255, 0.15), 0 1px 4px -1px rgba(15, 23, 42, 0.06)" }}
               />
               {search.query && (
@@ -547,7 +656,7 @@ export function FilterBar({
           </div>
           </div>
           {/* Pinned actions — stay put on the right while the filters scroll. */}
-          <div className="flex items-center gap-2 shrink-0 max-sm:w-full max-sm:flex-wrap max-sm:mt-1">
+          <div className={`flex items-center gap-2 shrink-0 max-sm:w-full max-sm:flex-wrap max-sm:mt-1 ${compactActions ? "sm:ml-auto" : ""}`}>
             {/* Import / export — admin-only, on the task list views. Tucked
                 into a ⋯ menu (these are occasional actions) so the filter row
                 stays a single line and the table gets the screen space. The
@@ -568,7 +677,7 @@ export function FilterBar({
                         type="button"
                         aria-label="Import and export"
                         title="Import / export"
-                        className="inline-flex items-center justify-center h-[26px] w-[26px] rounded-[8px] border border-[#f1f0f0] bg-white text-ink-soft hover:text-ink-strong hover:border-altus-red transition-colors"
+                        className="inline-flex items-center justify-center h-8 w-8 rounded-[10px] border border-hairline-strong bg-white text-ink-soft hover:text-ink-strong hover:border-[#9fb2d1] transition-colors"
                         style={{ boxShadow: "0 12px 28px -18px rgba(10, 108, 255, 0.15), 0 1px 4px -1px rgba(15, 23, 42, 0.06)" }}
                       >
                         <MoreHorizontal size={13} strokeWidth={2.4} />
@@ -615,38 +724,85 @@ export function FilterBar({
                   </DropdownMenu>
                 );
               })()}
-            <button
-              type="button"
-              onClick={(e) => {
-                const icon = e.currentTarget.querySelector("svg");
-                if (icon) {
-                  icon.style.transition = "transform 450ms cubic-bezier(.4, 1.4, .5, 1)";
-                  icon.style.transform = "rotate(-360deg)";
-                  setTimeout(() => {
-                    if (icon) {
-                      icon.style.transition = "none";
-                      icon.style.transform = "rotate(0deg)";
-                    }
-                  }, 480);
-                }
-                reset();
-              }}
-              className="inline-flex items-center gap-1.5 text-chip text-ink-subtle hover:text-ink-strong transition-colors px-2 py-1 rounded-[8px] text-[12px]"
-              aria-label="Reset filters"
-            >
-              <RotateCcw size={13} strokeWidth={2.2} />
-              Reset
-            </button>
+            {!hideReset && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  const icon = e.currentTarget.querySelector("svg");
+                  if (icon) {
+                    icon.style.transition = "transform 450ms cubic-bezier(.4, 1.4, .5, 1)";
+                    icon.style.transform = "rotate(-360deg)";
+                    setTimeout(() => {
+                      if (icon) {
+                        icon.style.transition = "none";
+                        icon.style.transform = "rotate(0deg)";
+                      }
+                    }, 480);
+                  }
+                  reset();
+                }}
+                className="inline-flex items-center gap-1.5 text-chip text-ink-subtle hover:text-ink-strong hover:bg-[#EEF2F8] transition-colors px-2 h-8 rounded-lg text-[12.5px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#14336B]"
+                aria-label="Reset filters"
+              >
+                <RotateCcw size={13} strokeWidth={2.2} />
+                Reset
+              </button>
+            )}
             {/* Filters auto-apply as you change them — no Apply button. This
                 tiny indicator just confirms a refresh is in flight. */}
             <span
               aria-live="polite"
-              className="inline-flex items-center gap-1.5 text-chip text-ink-subtle transition-opacity"
+              className={`inline-flex items-center gap-1.5 text-chip text-ink-subtle transition-opacity ${isPending ? "" : "max-w-0 overflow-hidden"}`}
               style={{ opacity: isPending ? 1 : 0 }}
             >
               <Loader2 size={14} strokeWidth={2.2} className="animate-spin" />
               Updating…
             </span>
+            {search && compactActions && (
+              searchOpen || search.query ? (
+                <div className="relative w-[200px] max-sm:w-full">
+                  <Search
+                    size={13}
+                    strokeWidth={2.4}
+                    aria-hidden
+                    className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-subtle"
+                  />
+                  <input
+                    type="search"
+                    autoFocus
+                    value={search.query}
+                    onChange={(e) => search.setQuery(e.target.value)}
+                    onBlur={() => !search.query && setSearchOpen(false)}
+                    placeholder={searchPlaceholder}
+                    aria-label={searchPlaceholder.replace(/\.\.\.$/, "")}
+                    className={`box-border h-8 w-full pl-[26px] ${search.query ? "pr-6" : "pr-2"} rounded-lg border border-hairline-strong bg-white text-[13px] font-medium text-ink-strong placeholder:text-ink-subtle outline-none transition-colors hover:border-[#9fb2d1] focus:border-[#14336b] focus:ring-2 focus:ring-[#14336b]/20 [&::-webkit-search-cancel-button]:hidden`}
+                  />
+                  {search.query && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        search.setQuery("");
+                        setSearchOpen(false);
+                      }}
+                      aria-label="Clear search"
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-ink-subtle transition-colors hover:text-ink-strong"
+                    >
+                      <X size={13} strokeWidth={2.6} />
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setSearchOpen(true)}
+                  aria-label={searchPlaceholder.replace(/\.\.\.$/, "")}
+                  title={searchPlaceholder.replace(/\.\.\.$/, "")}
+                  className="inline-flex size-8 items-center justify-center rounded-[10px] border border-hairline-strong bg-white text-ink-soft transition-colors hover:border-[#9fb2d1] hover:text-ink-strong"
+                >
+                  <Search size={15} strokeWidth={2.2} />
+                </button>
+              )
+            )}
           </div>
         </div>
       </div>
@@ -684,7 +840,7 @@ function SegButton({
     <button
       type="button"
       onClick={onClick}
-      className="relative text-[12px] px-1.5 py-0.5 rounded-pill transition-colors"
+      className="relative shrink-0 whitespace-nowrap text-[12.5px] px-2 py-1 rounded-md transition-colors focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#14336B]"
       style={{
         color: active ? "var(--color-ink-strong)" : "var(--color-ink-subtle)",
         fontWeight: active ? 600 : 500,
@@ -694,11 +850,10 @@ function SegButton({
         <motion.span
           layoutId={layoutId}
           aria-hidden
-          className="absolute inset-0 rounded-pill"
+          className="absolute inset-0 rounded-md"
           style={{
-            background: "var(--color-surface-card)",
-            boxShadow:
-              "0 1px 3px rgba(15, 23, 42, 0.08), 0 0 0 1px rgba(15, 23, 42, 0.04)",
+            background: "#EEF2F8",
+            boxShadow: "inset 0 0 0 1px rgba(20, 51, 107, 0.12)",
           }}
           transition={{ type: "spring", stiffness: 380, damping: 32 }}
         />

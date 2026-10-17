@@ -1,8 +1,10 @@
 import { and, gte, lt, inArray, getTableColumns } from "drizzle-orm";
+import { dueBucketRange } from "@/lib/due-buckets";
 import { db, employees, tasks } from "@/lib/db";
 import { taskAudience } from "@/db/schema";
 import type { Task } from "@/lib/db";
 import type { DashboardData, DashboardFilters, KpiSet } from "@/lib/types";
+import { computeDashboardInsights, computeSummaryPillCounts } from "@/lib/transforms/dashboard-insights";
 import {
   computeKpiTotals,
   computeStatusDistribution,
@@ -65,7 +67,7 @@ export async function loadDashboardData(
       : `${viewer.id}:${viewer.isManagement ? "m" : "-"}:${[...viewer.departmentIds].sort().join("+")}`;
 
   const keyParts = [
-    "dashboard-data:v2",
+    "dashboard-data:v7",
     viewerKey,
     filters.startDate?.toISOString() ?? "_",
     filters.endDate?.toISOString() ?? "_",
@@ -74,6 +76,7 @@ export async function loadDashboardData(
     filters.departments.join(","),
     filters.priorities.join(","),
     filters.subjects.join(","),
+    filters.dueBucket ?? "_",
   ];
   const data = await unstable_cache(
     // The viewer is resolved OUTSIDE the cached function and passed in:
@@ -113,6 +116,14 @@ async function loadDashboardDataUncached(
   }
   if (filters.subjects.length > 0) {
     baseConditions.push(inArray(tasks.subject, filters.subjects));
+  }
+
+  // "All Due Dates": open tasks whose due date falls in the chosen bucket.
+  if (filters.dueBucket) {
+    const { from, to } = dueBucketRange(filters.dueBucket, new Date());
+    baseConditions.push(inArray(tasks.status, [...PENDING_STATUSES]));
+    if (from) baseConditions.push(gte(tasks.dueAt, from));
+    if (to) baseConditions.push(lt(tasks.dueAt, to));
   }
 
   const peopleConditions = [];
@@ -294,10 +305,20 @@ async function loadDashboardDataUncached(
   const heatmapTasks = periodTasks.filter(
     (t) => PENDING_AGES.has(t.status) && t.doerId != null,
   );
+  // Finished AFTER the original due date — the Delivered on Time list. Like the
+  // heatmap popover it carries real titles, so it is filtered to what the
+  // viewer may open (the count in the gauge stays team-wide).
+  const lateTasks = periodTasks.filter(
+    (t) =>
+      !t.archived &&
+      (t.status === "done" || t.status === "approved") &&
+      t.completedAt != null &&
+      Math.floor((t.completedAt.getTime() - t.dueAt.getTime()) / MS_PER_DAY) >= 1,
+  );
   const audienceByTask = new Map<string, AudienceEntry[]>();
   const viewerSeesAll = !viewer || viewer.isSuperAdmin || viewer.isAdmin;
   if (!viewerSeesAll) {
-    const restrictedIds = heatmapTasks
+    const restrictedIds = [...heatmapTasks, ...lateTasks]
       .filter((t) => t.visibility === "restricted")
       .map((t) => t.id);
     if (restrictedIds.length > 0) {
@@ -357,6 +378,26 @@ async function loadDashboardDataUncached(
     });
   }
 
+  const lateDeliveries: DashboardData["lateDeliveries"] = { tasks: [], hidden: 0 };
+  const nameById = new Map(allEmployees.map((e) => [e.id, e.name]));
+  for (const t of lateTasks) {
+    if (!mayOpen(t)) {
+      lateDeliveries.hidden++;
+      continue;
+    }
+    const done = t.completedAt as Date;
+    lateDeliveries.tasks.push({
+      id: t.id,
+      title: t.title,
+      client: t.client,
+      assignee: (t.doerId && nameById.get(t.doerId)) || "Unassigned",
+      daysLate: Math.floor((done.getTime() - t.dueAt.getTime()) / MS_PER_DAY),
+      dueAt: t.dueAt.toISOString(),
+      completedAt: done.toISOString(),
+    });
+  }
+  lateDeliveries.tasks.sort((a, b) => b.daysLate - a.daysLate);
+
   return {
     kpis,
     wmsSummary,
@@ -397,10 +438,29 @@ async function loadDashboardDataUncached(
       },
     },
     topPerformers,
-    agingTable: computeEmployeeAgingTable(periodTasks, allEmployees, now),
+    agingTable: computeEmployeeAgingTable(periodTasks, allEmployees, now).map((r) => ({
+      ...r,
+      department:
+        departmentMap.get(r.employeeId)?.[0]?.name ??
+        allEmployees.find((e) => e.id === r.employeeId)?.department ??
+        "",
+    })),
     agingHeatmap: [],
     agingByDate: computeAgingByDate(periodTasks, now),
     agingHeatmapData: { byCell, hiddenByCell },
+    insights: computeDashboardInsights(
+      periodTasks,
+      allEmployees,
+      now,
+      new Map(
+        allEmployees.map((e) => [
+          e.id,
+          departmentMap.get(e.id)?.[0]?.name ?? e.department ?? "",
+        ]),
+      ),
+    ),
+    summaryPills: computeSummaryPillCounts(periodTasks),
+    lateDeliveries,
     generatedAt: now,
   };
 }

@@ -57,35 +57,42 @@ export default async function WeeklyGoalsPage({ searchParams }: PageProps) {
   const criteria = scopeEmp === "all" ? null : await getEmployeeCriteria(scopeEmp);
 
   return (
-    <>
-      <DashboardHeader generatedAt={new Date()} />
-      {criteria && (
-        <div className="mx-auto max-w-[1600px] px-12 max-md:px-4 pt-6">
-          <CriteriaCard
-            employeeId={scopeEmp}
-            employeeName={me.isAdmin && scopeEmp !== me.id ? criteria.name : undefined}
-            criteria={criteria.criteria}
-            kra={criteria.kra}
-            isAdmin={me.isAdmin}
-            compact
-          />
-        </div>
-      )}
-      <WeeklyGoalsBoard
-        me={{ id: me.id, isAdmin: me.isAdmin }}
-        weekStart={weekStart}
-        weekLabel={formatWeekLabel(weekStart)}
-        isCurrentWeek={weekStart === thisWeek}
-        scopeEmp={scopeEmp}
-        employees={employees}
-        rows={rows}
-        clientOptions={clientOptions}
-        subjectOptions={subjectOptions}
-        prevWeek={prevWeekStart(weekStart)}
-        nextWeek={nextWeekStart(weekStart)}
-        thisWeek={thisWeek}
-      />
-      <DashboardFooter />
-    </>
+    // page-fill: header, body and footer in one full-height column, so the footer
+    // sits at the bottom of the viewport when the content is short and simply
+    // follows the content when it is long (see globals.css).
+    <div className="page-fill">
+      <DashboardHeader generatedAt={new Date()} title="WMS · Weekly Goals" />
+      <div className="page-fill-body">
+        {criteria && (
+          <div className="mx-auto max-w-[1400px] px-8 max-md:px-4 pt-4">
+            <CriteriaCard
+              employeeId={scopeEmp}
+              employeeName={me.isAdmin && scopeEmp !== me.id ? criteria.name : undefined}
+              criteria={criteria.criteria}
+              kra={criteria.kra}
+              isAdmin={me.isAdmin}
+              compact
+            />
+          </div>
+        )}
+        <WeeklyGoalsBoard
+          me={{ id: me.id, isAdmin: me.isAdmin }}
+          weekStart={weekStart}
+          weekLabel={formatWeekLabel(weekStart)}
+          isCurrentWeek={weekStart === thisWeek}
+          scopeEmp={scopeEmp}
+          employees={employees}
+          rows={rows}
+          clientOptions={clientOptions}
+          subjectOptions={subjectOptions}
+          prevWeek={prevWeekStart(weekStart)}
+          nextWeek={nextWeekStart(weekStart)}
+          thisWeek={thisWeek}
+        />
+      </div>
+      <div className="[&>footer]:mt-6">
+        <DashboardFooter />
+      </div>
+    </div>
   );
 }

@@ -86,6 +86,7 @@ const URGENCY_COLOR: Record<Urgency["level"], string> = {
 };
 import * as Tooltip from "@radix-ui/react-tooltip";
 import {
+  ChevronLeft,
   SlidersHorizontal,
   Check,
   ChevronRight,
@@ -538,12 +539,19 @@ export function TaskTable({
   statusTones,
   subjects,
   clients,
+  dense = false,
+  altus = false,
 }: {
   rows: TaskListRow[];
   employees: { id: string; name: string }[];
   me: { id: string; isAdmin: boolean };
   statusLabels?: StatusLabels;
   statusTones?: StatusTones;
+  /** Compact toolbar and rows (the Tasks page). Presentation only. */
+  dense?: boolean;
+  /** Altus-style toolbar (Showing · Rows · Page n of N · Columns on the right),
+   *  bolder headers and an accent on overdue rows. Presentation only. */
+  altus?: boolean;
   /** Bulk-set option rosters. When omitted, fall back to the distinct
    *  subject/client values present in the current rows. */
   subjects?: string[];
@@ -873,7 +881,7 @@ export function TaskTable({
         : `Showing all ${totalFiltered} ${totalFiltered === 1 ? "task" : "tasks"}`;
 
   return (
-    <div ref={listTopRef} className="scroll-mt-6">
+    <div ref={listTopRef} className={`scroll-mt-6${dense ? " tasks-dense" : ""}${altus ? " tasks-altus" : ""}`}>
       {/* Toolbar — one line: Group-by ▾ · Search · pager (1 … N · Next · Last)
           · Rows/page · page readout · Columns. Everything pagination-related
           lives up here so the table gets the vertical space below.
@@ -882,7 +890,7 @@ export function TaskTable({
           so drawing them on the same kind of surface says they belong to it
           rather than floating loose above the page. */}
       <div
-        className="mb-2 flex items-center gap-2 flex-wrap rounded-section border border-hairline bg-surface-card px-2.5 py-1.5"
+        className="tt-toolbar mb-2 flex items-center gap-2 flex-wrap rounded-section border border-hairline bg-surface-card px-2.5 py-1.5"
         style={{ boxShadow: "0 14px 32px -20px rgba(10, 108, 255, 0.16), 0 2px 6px -2px rgba(15, 23, 42, 0.06)" }}
       >
         <div className="flex items-center gap-3 flex-wrap min-w-0">
@@ -900,18 +908,34 @@ export function TaskTable({
               <SearchBox value={query} onChange={setQuery} resultCount={visibleRows.length} />
             </div>
           )}
-          <CompactPager
-            pages={pages}
-            pageIndex={pageIndex}
-            pageCount={pageCount}
-            canNext={table.getCanNextPage()}
-            onGoto={goToPage}
-          />
+          {!altus && (
+            <CompactPager
+              pages={pages}
+              pageIndex={pageIndex}
+              pageCount={pageCount}
+              canNext={table.getCanNextPage()}
+              onGoto={goToPage}
+            />
+          )}
         </div>
         <div className="ml-auto flex items-center gap-3 flex-wrap">
+          {altus && totalFiltered > 0 && (
+            <span className="text-[12.5px] font-semibold text-ink-soft tabular-nums max-md:hidden">
+              Showing {rangeStart}–{rangeEnd} of {totalFiltered}
+            </span>
+          )}
           <div className="flex items-center max-md:hidden">
             <RowsPerPageSelect value={pageSize} onChange={setPageSize} />
           </div>
+          {altus && (
+            <PageNav
+              pageIndex={pageIndex}
+              pageCount={pageCount}
+              canPrev={table.getCanPreviousPage()}
+              canNext={table.getCanNextPage()}
+              onGoto={goToPage}
+            />
+          )}
           <MobileSortControl table={table} className="hidden max-md:flex" />
           <ColumnsMenu table={table} />
         </div>
@@ -932,7 +956,7 @@ export function TaskTable({
       <div
         // Cap the table to the viewport and scroll it internally so the
         // sticky header row below stays frozen while you page through rows.
-        className="table-scroll bg-surface-card rounded-section border border-hairline overflow-auto max-h-[calc(100vh-260px)] max-md:hidden"
+        className="tt-table table-scroll bg-surface-card rounded-section border border-hairline overflow-auto max-h-[calc(100vh-260px)] max-md:hidden"
         style={{ boxShadow: "0 14px 32px -20px rgba(10, 108, 255, 0.16), 0 2px 6px -2px rgba(15, 23, 42, 0.06)" }}
       >
       <table className="min-w-full">
@@ -1053,7 +1077,9 @@ export function TaskTable({
                 boxShadow:
                   row.original.id === focusedId
                     ? "inset 0 0 0 2px var(--color-altus-red)"
-                    : undefined,
+                    : altus && taskUrgency(row.original, row.original.status).level === "overdue"
+                      ? "inset 3px 0 0 #dc2626"
+                      : undefined,
               }}
             >
               {row.getVisibleCells().map((cell) => {
@@ -1239,6 +1265,60 @@ function CompactPager({
       >
         Last
         <ChevronsRight size={15} strokeWidth={2.4} />
+      </button>
+    </nav>
+  );
+}
+
+// Altus-style pager: ‹ Page [n] of N ›. The input jumps to a typed page on
+// Enter or blur; the arrows step one page. Same page state as the numbered pager.
+function PageNav({
+  pageIndex,
+  pageCount,
+  canPrev,
+  canNext,
+  onGoto,
+}: {
+  pageIndex: number;
+  pageCount: number;
+  canPrev: boolean;
+  canNext: boolean;
+  onGoto: (index: number) => void;
+}) {
+  const [draft, setDraft] = React.useState<string | null>(null);
+  const shown = draft ?? String(pageIndex + 1);
+  function commit() {
+    if (draft !== null) {
+      const n = Math.round(Number(draft));
+      if (Number.isFinite(n) && n >= 1 && n <= pageCount && n - 1 !== pageIndex) onGoto(n - 1);
+    }
+    setDraft(null);
+  }
+  const arrow =
+    "inline-flex size-8 items-center justify-center rounded-lg border border-hairline-strong bg-surface-card text-ink-soft transition-colors enabled:hover:border-[#9fb2d1] enabled:hover:text-ink-strong disabled:opacity-40 disabled:cursor-not-allowed";
+  return (
+    <nav className="flex items-center gap-1.5 max-md:hidden" aria-label="Task list pages">
+      <button type="button" onClick={() => onGoto(pageIndex - 1)} disabled={!canPrev} aria-label="Previous page" className={arrow}>
+        <ChevronLeft size={15} strokeWidth={2.4} />
+      </button>
+      <span className="text-[12.5px] font-semibold text-ink-soft">Page</span>
+      <input
+        type="text"
+        inputMode="numeric"
+        value={shown}
+        disabled={pageCount <= 1}
+        onChange={(e) => setDraft(e.target.value.replace(/[^0-9]/g, ""))}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") e.currentTarget.blur();
+          if (e.key === "Escape") setDraft(null);
+        }}
+        aria-label="Page number"
+        className="h-8 w-12 rounded-lg border border-hairline-strong bg-surface-card text-center text-[12.5px] font-bold tabular-nums text-ink-strong outline-none focus:border-[#14336b] focus:ring-2 focus:ring-[#14336b]/20 disabled:opacity-60"
+      />
+      <span className="text-[12.5px] font-semibold text-ink-soft tabular-nums">of {Math.max(1, pageCount)}</span>
+      <button type="button" onClick={() => onGoto(pageIndex + 1)} disabled={!canNext} aria-label="Next page" className={arrow}>
+        <ChevronRight size={15} strokeWidth={2.4} />
       </button>
     </nav>
   );

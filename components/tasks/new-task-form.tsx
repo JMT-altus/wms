@@ -102,6 +102,8 @@ interface Props {
   /** Hide the Schedule block — Project and Milestone are dated by the work
    *  underneath them, so clock times on one would be metadata nothing honours. */
   hideSchedule?: boolean;
+  /** Tighter sizing (smaller fields, gaps and submit button) for the "+" dialog. */
+  compact?: boolean;
   /**
    * Present this form as one Project Plan level.
    *
@@ -246,7 +248,7 @@ interface PreviewFile {
   url: string;
 }
 
-export function NewTaskForm({ employees, clients, subjects, projectNodes = [], departments = [], isAdmin = false, onSuccess, completeTaskId, onCompleted, defaults, beforeSubmit, createOverride, hideSchedule = false, preset }: Props) {
+export function NewTaskForm({ employees, clients, subjects, projectNodes = [], departments = [], isAdmin = false, onSuccess, completeTaskId, onCompleted, defaults, beforeSubmit, createOverride, hideSchedule = false, preset, compact: compactLayout = false }: Props) {
   // Defaults to "Everyone" — new tasks are team-visible unless someone
   // narrows them here.
   //
@@ -735,7 +737,7 @@ export function NewTaskForm({ employees, clients, subjects, projectNodes = [], d
   }
 
   return (
-    <CompactContext.Provider value={Boolean(preset)}>
+    <CompactContext.Provider value={Boolean(preset) || compactLayout}>
     <form
       onSubmit={submit}
       onKeyDown={(e) => {
@@ -745,7 +747,7 @@ export function NewTaskForm({ employees, clients, subjects, projectNodes = [], d
           void submit();
         }
       }}
-      className={`flex flex-col ${preset ? "plan-form" : "gap-6"}`}
+      className={`flex flex-col ${preset ? "plan-form" : compactLayout ? "nt-compact gap-4" : "gap-6"}`}
       noValidate
       /*
        * No browser autofill anywhere in this form.
@@ -1253,7 +1255,7 @@ export function NewTaskForm({ employees, clients, subjects, projectNodes = [], d
         <button
           type="submit"
           disabled={pending}
-          className="text-cta text-white px-8 py-4 rounded-chip transition-transform disabled:opacity-50"
+          className={`text-cta text-white rounded-chip transition-transform disabled:opacity-50 ${compactLayout ? "px-6 py-2.5" : "px-8 py-4"}`}
           style={{
             background: preset
               ? "linear-gradient(135deg, #E10600, #A80400)"
@@ -1262,7 +1264,7 @@ export function NewTaskForm({ employees, clients, subjects, projectNodes = [], d
               ? "0 6px 16px rgba(225, 6, 0, 0.34)"
               : "0 6px 16px rgba(10, 108, 255, 0.34)",
             fontWeight: 800,
-            fontSize: 18,
+            fontSize: compactLayout ? 15 : 18,
             letterSpacing: "0.005em",
           }}
           onMouseEnter={(e) => {

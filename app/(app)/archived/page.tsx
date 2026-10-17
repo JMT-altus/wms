@@ -55,8 +55,10 @@ export default async function ArchivedPage({ searchParams }: PageProps) {
 
   return (
     <TaskSearchProvider>
-      <DashboardHeader generatedAt={new Date()} />
+      <DashboardHeader generatedAt={new Date()} title="WMS · Archive" />
       <FilterBar
+        wrap
+        viewInHeader
         employees={employeeOptions}
         subjects={subjects}
         departments={departments}
@@ -73,6 +75,7 @@ export default async function ArchivedPage({ searchParams }: PageProps) {
         }}
       />
       <TaskListPage
+        compact
         showStats={false}
         title="Archived"
         rows={rows}
@@ -84,7 +87,9 @@ export default async function ArchivedPage({ searchParams }: PageProps) {
         statusTones={statusTones}
         subjects={subjects}
       />
-      <DashboardFooter />
+      <div className="[&>footer]:mt-6">
+        <DashboardFooter />
+      </div>
     </TaskSearchProvider>
   );
 }

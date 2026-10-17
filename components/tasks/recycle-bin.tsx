@@ -68,31 +68,35 @@ export function RecycleBin({ rows }: { rows: AbandonedTaskRow[] }) {
   }
 
   return (
-    <div className="mx-auto w-full max-w-[1120px] px-6 max-md:px-4 py-8 pb-32">
+    <div className="mx-auto w-full max-w-[1120px] px-8 max-md:px-4 pt-4 pb-3">
       <Link
         href={"/tasks" as Route}
-        className="mb-5 inline-flex items-center gap-1.5 text-[13.5px] font-semibold text-ink-subtle transition-colors hover:text-ink-strong"
+        className="mb-3 inline-flex items-center gap-1.5 text-[13px] font-semibold text-ink-subtle transition-colors hover:text-ink-strong"
       >
         <ArrowLeft size={15} strokeWidth={2.4} />
         Back to Tasks
       </Link>
 
-      <h1
-        className="inline-flex items-center gap-2.5 text-ink-strong"
+      {/* A heading div, not <h1>: the global h1 rule forces 30–46px. */}
+      <div
+        role="heading"
+        aria-level={1}
+        className="flex items-center gap-2 text-ink-strong"
         style={{
           fontFamily: "var(--font-display)",
-          fontSize: 27,
-          fontWeight: 600,
+          fontSize: 20,
+          fontWeight: 800,
+          letterSpacing: "-0.02em",
         }}
       >
         <Trash2
-          size={24}
-          strokeWidth={2}
+          size={18}
+          strokeWidth={2.2}
           style={{ color: "var(--color-altus-red)" }}
         />
         Recycle Bin
-      </h1>
-      <p className="mb-7 mt-2 text-ink-soft" style={{ fontSize: 15, maxWidth: "70ch" }}>
+      </div>
+      <p className="mb-4 mt-1 text-ink-soft" style={{ fontSize: 13, lineHeight: 1.5, maxWidth: "80ch" }}>
         Tasks that were abandoned — dropped from every list without being
         destroyed. Their history is intact, so restoring one brings back
         everything that ever happened to it.
@@ -100,31 +104,31 @@ export function RecycleBin({ rows }: { rows: AbandonedTaskRow[] }) {
 
       {rows.length === 0 ? (
         <div
-          className="rounded-section border border-hairline bg-surface-card px-6 py-14 text-center"
+          className="rounded-xl border border-hairline bg-surface-card px-6 py-10 text-center"
           style={{ boxShadow: "0 1px 3px rgba(15,23,42,0.04)" }}
         >
-          <p className="font-semibold text-ink-strong" style={{ fontSize: 17 }}>
+          <p className="font-semibold text-ink-strong" style={{ fontSize: 15 }}>
             The bin is empty
           </p>
-          <p className="mt-1 text-ink-soft" style={{ fontSize: 15 }}>
+          <p className="mt-1 text-ink-soft" style={{ fontSize: 13 }}>
             Nothing has been abandoned.
           </p>
         </div>
       ) : (
-        <ul className="grid gap-2">
+        <ul className="grid gap-1.5">
           {rows.map((row) => {
             const busy = pendingId === row.id;
             return (
               <li
                 key={row.id}
-                className="flex flex-wrap items-center gap-3 rounded-section border border-hairline bg-surface-card px-4 py-3"
+                className="flex flex-wrap items-center gap-3 rounded-xl border border-hairline bg-surface-card px-4 py-2.5 hover:bg-[#F7F9FD] transition-colors"
                 style={{ boxShadow: "0 1px 3px rgba(15,23,42,0.04)" }}
               >
                 <span className="min-w-0 flex-1">
                   <Link
                     href={`/tasks/${row.id}` as Route}
                     className="block truncate font-semibold text-ink-strong hover:underline"
-                    style={{ fontSize: 14.5 }}
+                    style={{ fontSize: 14 }}
                   >
                     {row.taskNo != null && (
                       <span className="tabular-nums text-ink-subtle">
@@ -161,7 +165,7 @@ export function RecycleBin({ rows }: { rows: AbandonedTaskRow[] }) {
                     onClick={() => restore(row)}
                     disabled={busy}
                     aria-label={`Restore ${row.title}`}
-                    className="inline-flex items-center gap-1.5 rounded-md border border-hairline bg-surface-soft px-3 py-1.5 text-[13px] font-medium text-ink-strong disabled:opacity-50"
+                    className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[#D6DEEB] bg-white px-3 text-[13px] font-semibold text-[#334155] transition-colors hover:bg-[#F5F8FE] hover:border-[#B8CCEE] disabled:opacity-50"
                   >
                     {busy ? (
                       <Loader2 size={13} className="animate-spin" />

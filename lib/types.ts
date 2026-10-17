@@ -1,4 +1,5 @@
-import type { TaskStatus, AgeBucketId } from "@/db/enums";
+import type { DueBucket } from "@/lib/due-buckets";
+import type { TaskStatus, AgeBucketId, ApprovalStatus } from "@/db/enums";
 
 export type ViewMode = "doer" | "initiator";
 
@@ -17,6 +18,8 @@ export interface DashboardFilters {
   departments: string[];
   priorities: EisenhowerPriority[];
   subjects: string[];
+  /** Open tasks by distance from their due date (see lib/due-buckets.ts); null = no limit. */
+  dueBucket: DueBucket | null;
 }
 
 export interface KpiTotals {
@@ -107,6 +110,8 @@ export interface TopPerformer {
 export interface AgingRow {
   employeeId: string;
   employeeName: string;
+  /** The department the person is grouped under in the tab strip. */
+  department?: string;
   buckets: Record<AgeBucketId, number>;
   total: number;
 }
@@ -154,6 +159,85 @@ export interface WmsSummary {
   avgTimeToDoneDays: number; // mean created→completed for completed tasks
 }
 
+/** The extra counts the dashboard's summary pills need beyond the KPI set. */
+export interface SummaryPillCounts {
+  notRead: number;
+  initiated: number;
+  followUp: number;
+  abandoned: number;
+}
+
+/** Extra dashboard sections — see lib/transforms/dashboard-insights.ts for the definitions. */
+export interface DashboardInsights {
+  overdueByPerson: {
+    employeeId: string;
+    name: string;
+    /** The department the person is grouped under (the tab strip), "" when none. */
+    department: string;
+    /** Open tasks past their due date — the row's "Late" total. */
+    overdue: number;
+    oldestDays: number;
+    avgDays: number;
+    /** Finished work (Done / Approved) and the share of it delivered on time. */
+    delivered: number;
+    onTimePct: number | null;
+    /** Overdue tasks by how late: 15+ / 8–14 / 4–7 / 1–3 days. */
+    b15: number;
+    b8: number;
+    b4: number;
+    b1: number;
+  }[];
+  sentBack: {
+    employeeId: string;
+    name: string;
+    department: string;
+    /** Tasks declined (Not approved) and sent back to the doer. */
+    sentBack: number;
+    total: number;
+    pct: number;
+    /** Of those, how many are past their due date by 15+ / 8–14 / 4–7 / 1–3 days. */
+    b15: number;
+    b8: number;
+    b4: number;
+    b1: number;
+  }[];
+  delivery: {
+    /** Delivered late, by whole days past the ORIGINAL due date (worst first). */
+    lateBuckets: { key: string; label: string; count: number }[];
+    /** Delivered on the due date or before it. */
+    onTimeBuckets: { key: string; label: string; count: number }[];
+    lateTotal: number;
+    onBeforeTotal: number;
+    /** On/before as a share of the comparable (on/before + late) deliveries. */
+    onTimePct: number;
+    /** Done / Approved tasks with no completion time — left out of the counts. */
+    noComparableDate: number;
+    byPerson: { employeeId: string; name: string; delivered: number; avgDaysVsDue: number }[];
+  };
+  delegationScorecard: {
+    employeeId: string; name: string; directReports: number; delegated: number; completed: number; completedPct: number; overdue: number; sentBack: number;
+  }[];
+  whoCreatesWork: {
+    employeeId: string; name: string; forOthers: number; forSelf: number; total: number; sharePct: number;
+  }[];
+  pullUp: {
+    employeeId: string; name: string; overdue: number; late: number; sentBack: number; onTimePct: number | null; score: number;
+  }[];
+  deliveredOnTime: { employeeId: string; name: string; delivered: number; onTime: number; onTimePct: number }[];
+}
+
+/** A task finished after its original due date, for the Delivered on Time list. */
+export interface LateDelivery {
+  id: string;
+  title: string;
+  client: string | null;
+  assignee: string;
+  /** Whole days between the original due date and completion (always >= 1). */
+  daysLate: number;
+  dueAt: string;
+  completedAt: string;
+}
+
 export interface DashboardData {
   kpis: KpiSet;
   wmsSummary: WmsSummary;
@@ -166,6 +250,10 @@ export interface DashboardData {
   agingHeatmap: AgingHeatmapCell[];
   agingByDate: AgingByDate[];
   agingHeatmapData: AgingHeatmapData;
+  insights: DashboardInsights;
+  summaryPills: SummaryPillCounts;
+  /** Late deliveries this viewer may open, plus how many they may not. */
+  lateDeliveries: { tasks: LateDelivery[]; hidden: number };
   generatedAt: Date;
 }
 
@@ -190,6 +278,10 @@ export interface TaskListFilters {
    *  - "specific": `emp=<one-or-more-ids>` was explicitly set.
    *  - "unassigned": `emp=unassigned` — the pool lens (tasks with no doer). */
   assigneeMode: "default" | "all" | "specific" | "unassigned";
+  /** Initiator Status — the initiator's ruling (`approval_status`). Optional. */
+  approvals?: ApprovalStatus[];
+  /** "All Due Dates" — open tasks whose effective due date is in this bucket. */
+  dueBucket?: DueBucket | null;
 }
 
 export interface TaskListRow {

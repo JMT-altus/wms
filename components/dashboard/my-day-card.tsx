@@ -25,11 +25,11 @@ export function MyDayCard({ firstName, counts }: Props) {
   if (dueToday === 0 && overdue === 0 && doneToday === 0) return null;
 
   return (
-    <section className="mx-auto max-w-[1600px] px-12 max-md:px-4 mt-6">
+    <section className="mx-auto max-w-[1600px] px-8 max-md:px-4 mt-6">
       <Link
         href={"/tasks/agenda" as Route}
-        className="group block rounded-section border border-hairline bg-surface-card px-6 py-4 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
-        style={{ boxShadow: "0 14px 32px -20px rgba(10, 108, 255, 0.16), 0 2px 6px -2px rgba(15, 23, 42, 0.06)" }}
+        className="group block rounded-section border border-hairline-strong bg-white px-6 py-4 transition-all duration-200 hover:border-[#9fb2d1] hover:shadow-md"
+        style={{ boxShadow: "0 1px 2px rgba(15, 23, 42, 0.05), 0 8px 24px -16px rgba(15, 23, 42, 0.16)" }}
       >
         <div className="flex items-center justify-between gap-6 flex-wrap">
           <div className="flex items-center gap-6 flex-wrap">

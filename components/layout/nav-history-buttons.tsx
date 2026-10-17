@@ -25,9 +25,9 @@ export function NavHistoryButtons({ compact = false }: { compact?: boolean } = {
     alignItems: "center",
     justifyContent: "center",
     borderRadius: 9999,
-    background: "rgba(255, 255, 255, 0.08)",
-    border: "1.5px solid rgba(255, 255, 255, 0.16)",
-    color: "rgba(255, 255, 255, 0.88)",
+    background: "var(--chrome-ctl-bg, rgba(255, 255, 255, 0.08))",
+    border: "1.5px solid var(--chrome-ctl-border, rgba(255, 255, 255, 0.16))",
+    color: "var(--chrome-ctl-fg, rgba(255, 255, 255, 0.88))",
     cursor: "pointer",
     transition:
       "background-color 180ms ease, border-color 180ms ease, transform 180ms ease, box-shadow 220ms ease",
@@ -36,16 +36,16 @@ export function NavHistoryButtons({ compact = false }: { compact?: boolean } = {
 
   const onEnter = (e: React.MouseEvent<HTMLButtonElement>) => {
     const el = e.currentTarget;
-    el.style.background = "rgba(255, 255, 255, 0.18)";
-    el.style.borderColor = "rgba(255, 255, 255, 0.32)";
+    el.style.background = "var(--chrome-ctl-bg-hover, rgba(255, 255, 255, 0.18))";
+    el.style.borderColor = "var(--chrome-ctl-border-hover, rgba(255, 255, 255, 0.32))";
     el.style.transform = "translateY(-1px)";
-    el.style.boxShadow = "0 4px 12px rgba(0, 0, 0, 0.25)";
+    el.style.boxShadow = "var(--chrome-ctl-shadow-hover, 0 4px 12px rgba(0, 0, 0, 0.25))";
   };
 
   const onLeave = (e: React.MouseEvent<HTMLButtonElement>) => {
     const el = e.currentTarget;
-    el.style.background = "rgba(255, 255, 255, 0.08)";
-    el.style.borderColor = "rgba(255, 255, 255, 0.16)";
+    el.style.background = "var(--chrome-ctl-bg, rgba(255, 255, 255, 0.08))";
+    el.style.borderColor = "var(--chrome-ctl-border, rgba(255, 255, 255, 0.16))";
     el.style.transform = "";
     el.style.boxShadow = "";
   };
@@ -82,7 +82,7 @@ export function NavHistoryButtons({ compact = false }: { compact?: boolean } = {
           style={{
             width: 1,
             height: 20,
-            background: "rgba(255, 255, 255, 0.15)",
+            background: "var(--chrome-divider, rgba(255, 255, 255, 0.15))",
           }}
         />
       )}

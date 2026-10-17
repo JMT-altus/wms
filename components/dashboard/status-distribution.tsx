@@ -67,9 +67,9 @@ export function StatusDistributionChart({
 
   return (
     <section
-      className="rounded-section bg-surface-card border border-hairline p-7 max-md:p-5"
+      className="rounded-section bg-white border border-hairline-strong p-4 max-md:p-3.5"
       style={{
-        boxShadow: "0 14px 32px -20px rgba(10, 108, 255, 0.16), 0 2px 6px -2px rgba(15, 23, 42, 0.06)",
+        boxShadow: "0 1px 2px rgba(15, 23, 42, 0.06), 0 8px 24px -16px rgba(15, 23, 42, 0.18)",
         opacity: 0,
         animation: "fadeUp 500ms ease-out 500ms forwards",
       }}
@@ -83,10 +83,10 @@ export function StatusDistributionChart({
           segments print their share % centred; text flips to dark on the
           light tones (yellow / amber / light-grey) so it stays legible. */}
       <div
-        className="mt-6 flex w-full overflow-hidden"
+        className="mt-3.5 flex w-full overflow-hidden"
         style={{
-          height: 48,
-          borderRadius: 14,
+          height: 26,
+          borderRadius: 8,
           background: "var(--color-surface-track)",
           boxShadow: "inset 0 1px 2px rgba(15,23,42,0.06)",
         }}
@@ -123,7 +123,7 @@ export function StatusDistributionChart({
                 <span
                   className="tabular-nums font-bold"
                   style={{
-                    fontSize: 15,
+                    fontSize: 12,
                     color: dark ? "#1f2937" : "#ffffff",
                     textShadow: dark
                       ? "0 1px 1px rgba(255,255,255,0.4)"
@@ -147,7 +147,7 @@ export function StatusDistributionChart({
           to be mutually exclusive to be readable. Pending still has its own KPI
           in the strip above, and Archived is a link in the header (it is a flag
           on a task, not a status). 3 cols desktop, 2 tablet, 1 mobile. */}
-      <ul className="mt-6 grid grid-cols-3 gap-3 max-lg:grid-cols-2 max-sm:grid-cols-1">
+      <ul className="mt-3.5 grid grid-cols-4 gap-2.5 max-xl:grid-cols-3 max-lg:grid-cols-2 max-sm:grid-cols-1">
         {rows.map((r, i) => (
           <StatTile
             key={r.status}
@@ -169,17 +169,28 @@ function Header({ isAdmin, archived }: { isAdmin: boolean; archived: number }) {
       <div className="flex items-start gap-3 min-w-0">
         <span
           aria-hidden
-          className="mt-1 inline-flex size-10 shrink-0 items-center justify-center rounded-xl"
+          className="mt-0.5 inline-flex size-9 shrink-0 items-center justify-center rounded-full"
           style={{
-            background: "rgba(15, 23, 42, 0.05)",
-            color: "var(--color-ink-strong)",
+            background: "#EEF2F8",
+            color: "#14336B",
           }}
         >
-          <PieChart size={20} strokeWidth={2.2} />
+          <PieChart size={18} strokeWidth={2.2} />
         </span>
         <div className="min-w-0">
-          <h2 className="text-display-lg text-ink-strong">Status Distribution</h2>
-          <p className="text-body-lg text-ink-subtle mt-0.5">
+          <h2
+            className="text-ink-strong"
+            style={{
+              fontFamily: "var(--font-display), system-ui, sans-serif",
+              fontWeight: 700,
+              fontSize: 18,
+              letterSpacing: "-0.015em",
+              lineHeight: 1.2,
+            }}
+          >
+            Status Distribution
+          </h2>
+          <p className="mt-0.5 text-[13px] font-medium text-ink-soft">
             Tasks by current status — hover the bar for detail, click a card to filter
           </p>
         </div>
@@ -192,10 +203,10 @@ function Header({ isAdmin, archived }: { isAdmin: boolean; archived: number }) {
         <div className="shrink-0 flex items-center gap-2">
           <Link
             href={"/archived" as Route}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full text-[14px] font-semibold text-ink-soft transition-all hover:-translate-y-0.5 hover:text-ink-strong"
+            className="inline-flex items-center gap-1.5 px-3.5 h-9 rounded-lg text-[13.5px] font-semibold text-ink-soft transition-colors hover:bg-[#F1F5FB] hover:text-[#0B2250] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#14336B] motion-reduce:transition-none"
             style={{
-              background: "rgba(15, 23, 42, 0.05)",
-              border: "1px solid var(--color-hairline)",
+              background: "#FFFFFF",
+              border: "1px solid var(--color-hairline-strong)",
             }}
           >
             <Archive size={15} strokeWidth={2.4} />
@@ -204,10 +215,10 @@ function Header({ isAdmin, archived }: { isAdmin: boolean; archived: number }) {
           </Link>
           <Link
             href={"/tasks/kanban" as Route}
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-[14px] font-semibold text-white transition-all hover:-translate-y-0.5"
+            className="inline-flex items-center gap-1.5 px-4 h-9 rounded-lg text-[13.5px] font-semibold text-white transition-colors hover:brightness-110 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#14336B] motion-reduce:transition-none"
             style={{
-              background: "linear-gradient(135deg, #0A6CFF 0%, #0A6CFF 42%, #17B6A0 100%)",
-              boxShadow: "0 4px 12px rgba(10, 108, 255, 0.25)",
+              background: "#0A6CFF",
+              boxShadow: "0 1px 2px rgba(10, 108, 255, 0.3)",
             }}
           >
             <LayoutGrid size={15} strokeWidth={2.4} />
@@ -238,8 +249,8 @@ function StatTile({
     <li>
       <Link
         href={`/tasks?status=${row.status}` as Route}
-        className="dist-tile group flex h-full cursor-pointer flex-col p-4 rounded-chip bg-surface-soft transition-all"
-        style={{ border: "1px solid var(--color-hairline)" }}
+        className="dist-tile group flex h-full cursor-pointer flex-col px-3 py-2.5 rounded-lg bg-white transition-all"
+        style={{ border: "1px solid var(--color-hairline-strong)" }}
       >
         {/* Label row — coloured dot + neutral status name */}
         <div className="flex items-center gap-2">
@@ -257,19 +268,19 @@ function StatTile({
         </div>
 
         {/* Count + share — single baseline row, % pinned right */}
-        <div className="mt-3 flex items-baseline gap-2">
+        <div className="mt-1.5 flex items-baseline gap-2">
           <span
             className="tabular-nums font-black leading-none text-ink-strong"
             style={{
               fontFamily: "var(--font-display), system-ui, sans-serif",
-              fontSize: 34,
+              fontSize: 24,
             }}
           >
             {animated}
           </span>
           <span
             className="ml-auto tabular-nums font-semibold text-ink-subtle"
-            style={{ fontSize: 14 }}
+            style={{ fontSize: 12.5 }}
           >
             {denom > 0 ? `${pct.toFixed(1)}%` : "—"}
           </span>
@@ -278,7 +289,7 @@ function StatTile({
         {/* Share bar — always-present track for a consistent row rhythm */}
         <div
           aria-hidden
-          className="mt-3 h-1.5 w-full overflow-hidden rounded-full"
+          className="mt-2 h-1 w-full overflow-hidden rounded-full"
           style={{ background: "var(--color-surface-track)" }}
         >
           <span

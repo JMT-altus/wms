@@ -2,7 +2,7 @@
 
 import { describedLabel } from "@/lib/display-label";
 import * as React from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import type { Route } from "next";
 import * as Tooltip from "@radix-ui/react-tooltip";
@@ -206,6 +206,20 @@ export function KanbanBoard({
   columnOrder,
 }: Props) {
   const router = useRouter();
+  // Which workflow the board shows: the doer's status columns or the initiator's.
+  // Doer by default, and kept in the URL (`?side=`) so a reload or a shared link
+  // lands on the same half. Only the DISPLAY changes — each column still writes
+  // its own field when a card is dropped on it (see onDragEnd).
+  const searchParams = useSearchParams();
+  const [side, setSide] = React.useState<"doer" | "initiator">(
+    searchParams.get("side") === "initiator" ? "initiator" : "doer",
+  );
+  function pickSide(next: "doer" | "initiator") {
+    setSide(next);
+    const url = new URL(window.location.href);
+    url.searchParams.set("side", next);
+    window.history.replaceState(window.history.state, "", url.toString());
+  }
   const [items, setItems] = React.useState(tasks);
   const [savingId, setSavingId] = React.useState<string | null>(null);
   const [visibleByCol, setVisibleByCol] = React.useState<Record<string, number>>({});
@@ -612,11 +626,11 @@ export function KanbanBoard({
         key={side}
         // The extra left margin on the second half is the boundary — without
         // it the two banners sit one column-gap apart and read as one strip.
-        className={`flex shrink-0 flex-col${side === "initiator" ? " ml-4" : ""}`}
+        className="flex shrink-0 flex-col"
         aria-label={`${side === "doer" ? "Doer" : "Initiator"} status`}
       >
         <div
-          className="mb-2 flex items-baseline gap-2 rounded-lg px-3 py-1.5"
+          className="mb-1.5 flex items-baseline gap-2 rounded-lg px-2.5 py-1"
           style={{
             background: `color-mix(in srgb, ${tone} 9%, transparent)`,
             borderLeft: `3px solid ${tone}`,
@@ -635,7 +649,7 @@ export function KanbanBoard({
           </span>
         </div>
 
-        <div className="flex flex-1 items-stretch gap-4 min-h-0">
+        <div className="flex flex-1 items-stretch gap-2 min-h-0">
           <SortableContext items={cols} strategy={horizontalListSortingStrategy}>
             {cols.map((col) => {
                 const { isArchive, accent, accentDeep, accentBgLight } = accentFor(col, tones);
@@ -713,7 +727,7 @@ export function KanbanBoard({
       : null;
 
   return (
-    <Tooltip.Provider delayDuration={180} skipDelayDuration={400}>
+    <Tooltip.Provider delayDuration={650} skipDelayDuration={0}>
       <DndContext
         sensors={sensors}
         collisionDetection={closestCorners}
@@ -726,11 +740,12 @@ export function KanbanBoard({
         }}
       >
         <div>
+          <SideToggle value={side} onChange={pickSide} />
           {/* No running total here — every column carries its own count badge,
               which is the number you actually want when scanning the board. */}
           <div
-            className="kanban-scroll flex items-stretch gap-4 overflow-x-auto overflow-y-hidden pb-3 max-sm:snap-x max-sm:snap-mandatory"
-            style={{ height: "calc(100dvh - 300px)", minHeight: 460 }}
+            className="kanban-scroll flex items-stretch gap-2 overflow-x-auto overflow-y-hidden rounded-xl bg-[#F4F6FA] p-1.5 pb-2.5 max-sm:snap-x max-sm:snap-mandatory"
+            style={{ height: "calc(100dvh - 232px)", minHeight: 360 }}
           >
             {/* Unassigned pool — pinned first, admins only, not reorderable and
                 not a drop target (you assign by opening the card). */}
@@ -742,15 +757,14 @@ export function KanbanBoard({
                 today={today}
               />
             )}
-            {renderSide("doer")}
-            {renderSide("initiator")}
+            {side === "doer" ? renderSide("doer") : renderSide("initiator")}
           </div>
         </div>
 
         {/* Floating drag preview. */}
         <DragOverlay dropAnimation={{ duration: 200, easing: "cubic-bezier(0.2,0.7,0.3,1)" }}>
           {activeCard ? (
-            <div className="w-[300px] rotate-2 cursor-grabbing rounded-chip border border-altus-red/40 bg-white p-3.5 shadow-2xl">
+            <div className="w-[216px] rotate-2 cursor-grabbing rounded-chip border border-altus-red/40 bg-white p-3.5 shadow-2xl">
               <span
                 className="block text-[15.5px] font-semibold text-ink-strong leading-snug"
                 style={{ display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}
@@ -772,6 +786,52 @@ export function KanbanBoard({
         </DragOverlay>
       </DndContext>
     </Tooltip.Provider>
+  );
+}
+
+// ── Doer / Initiator switch ───────────────────────────────────────────────
+// Which half of the board is on screen. A segmented control, not a heading:
+// the columns and the cards under them really change with it.
+function SideToggle({
+  value,
+  onChange,
+}: {
+  value: "doer" | "initiator";
+  onChange: (v: "doer" | "initiator") => void;
+}) {
+  const opts: { key: "doer" | "initiator"; label: string }[] = [
+    { key: "doer", label: "Doer" },
+    { key: "initiator", label: "Initiator" },
+  ];
+  return (
+    <div className="mb-2 flex items-center gap-2">
+      <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-ink-subtle">
+        Status view
+      </span>
+      <div
+        role="tablist"
+        aria-label="Status view"
+        className="inline-flex items-center rounded-lg border border-hairline-strong bg-white p-0.5"
+      >
+        {opts.map((o) => {
+          const active = value === o.key;
+          return (
+            <button
+              key={o.key}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              onClick={() => onChange(o.key)}
+              className={`h-7 rounded-md px-3 text-[12.5px] font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#14336B] motion-reduce:transition-none ${
+                active ? "bg-altus-red text-white" : "text-ink-soft hover:bg-[#EEF2F8] hover:text-ink-strong"
+              }`}
+            >
+              {o.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
@@ -810,23 +870,23 @@ function KanbanColumn({
   return (
     <div
       ref={setNodeRef}
-      className="flex-shrink-0 w-[320px] max-sm:w-[85vw] max-sm:snap-center flex flex-col h-full overflow-hidden rounded-section transition-colors"
+      className="flex-shrink-0 w-[216px] max-sm:w-[85vw] max-sm:snap-center flex flex-col h-full overflow-hidden rounded-section transition-colors"
       style={{
         transform: CSS.Translate.toString(transform),
         transition,
         // Flat white column with the status colour as a top rule and nothing
         // else — the cards are what should carry the eye, not the lane.
         background: isCardOver ? accentBgLight : "#ffffff",
-        border: `1px solid ${isCardOver ? accent : "var(--color-hairline)"}`,
-        borderTop: `3px solid ${accent}`,
+        border: `1px solid ${isCardOver ? accent : "var(--color-hairline-strong)"}`,
+        borderTop: `2px solid ${accent}`,
         opacity: isDragging ? 0.5 : 1,
-        boxShadow: "0 18px 40px -32px rgba(15, 23, 42, 0.55), 0 1px 3px rgba(15, 23, 42, 0.04)",
+        boxShadow: "0 1px 2px rgba(15, 23, 42, 0.05), 0 8px 24px -16px rgba(15, 23, 42, 0.16)",
         touchAction: "manipulation",
       }}
     >
       {/* Column header — fixed while the cards below it scroll; the grip is
           the admin reorder handle. */}
-      <div className="flex shrink-0 items-center gap-2 px-3.5 pt-3 pb-2.5">
+      <div className="flex shrink-0 items-center gap-2 px-2.5 pt-2 pb-1.5">
         {isAdmin && (
           <button
             type="button"
@@ -839,7 +899,7 @@ function KanbanColumn({
           </button>
         )}
         <span
-          className="inline-flex items-center gap-2 min-w-0 text-[15.5px] font-bold"
+          className="inline-flex items-center gap-1.5 min-w-0 text-[11.5px] font-bold"
           style={{ color: accentDeep }}
         >
           {isArchive ? (
@@ -850,10 +910,10 @@ function KanbanColumn({
           <span className="truncate">{label}</span>
         </span>
         <span
-          className="ml-auto shrink-0 rounded-[8px] px-2 py-0.5 text-[13px] font-bold tabular-nums"
+          className="ml-auto shrink-0 rounded-md px-1.5 py-px text-[11px] font-bold tabular-nums"
           style={{
             color: accentDeep,
-            background: `color-mix(in srgb, ${accent} 14%, #ffffff)`,
+            background: `color-mix(in srgb, ${accent} 12%, #ffffff)`,
           }}
         >
           {count}
@@ -862,7 +922,7 @@ function KanbanColumn({
 
       {/* Each column scrolls on its own, so a long lane never drags the whole
           board down with it and the headers stay in view. */}
-      <div className="kanban-scroll flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto px-3 pb-3">
+      <div className="kanban-scroll kb-col-scroll flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto px-1.5 pb-1.5">
         {children}
       </div>
     </div>
@@ -885,38 +945,38 @@ function UnassignedColumn({
   const accentDeep = "var(--color-amber-deep)";
   return (
     <div
-      className="flex-shrink-0 w-[320px] max-sm:w-[85vw] max-sm:snap-center flex flex-col h-full overflow-hidden rounded-section"
+      className="flex-shrink-0 w-[216px] max-sm:w-[85vw] max-sm:snap-center flex flex-col h-full overflow-hidden rounded-section"
       style={{
         background: "#ffffff",
-        border: "1px solid var(--color-hairline)",
-        borderTop: `3px solid ${accent}`,
-        boxShadow: "0 18px 40px -32px rgba(15, 23, 42, 0.55), 0 1px 3px rgba(15, 23, 42, 0.04)",
+        border: "1px solid var(--color-hairline-strong)",
+        borderTop: `2px solid ${accent}`,
+        boxShadow: "0 1px 2px rgba(15, 23, 42, 0.05), 0 8px 24px -16px rgba(15, 23, 42, 0.16)",
       }}
     >
-      <div className="flex shrink-0 items-center gap-2 px-3.5 pt-3 pb-2.5">
+      <div className="flex shrink-0 items-center gap-2 px-2.5 pt-2 pb-1.5">
         <span
-          className="inline-flex items-center gap-2 min-w-0 text-[15.5px] font-bold"
+          className="inline-flex items-center gap-1.5 min-w-0 text-[11.5px] font-bold"
           style={{ color: accentDeep }}
         >
           <Inbox size={16} strokeWidth={2.4} style={{ color: accent }} />
           <span className="truncate">Unassigned</span>
         </span>
         <span
-          className="ml-auto shrink-0 rounded-[8px] px-2 py-0.5 text-[13px] font-bold tabular-nums"
-          style={{ color: accentDeep, background: `color-mix(in srgb, ${accent} 14%, #ffffff)` }}
+          className="ml-auto shrink-0 rounded-md px-1.5 py-px text-[11px] font-bold tabular-nums"
+          style={{ color: accentDeep, background: `color-mix(in srgb, ${accent} 12%, #ffffff)` }}
         >
           {tasks.length}
         </span>
       </div>
 
-      <div className="kanban-scroll flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto px-3 pb-3">
+      <div className="kanban-scroll kb-col-scroll flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto px-1.5 pb-1.5">
         {tasks.length === 0 ? (
-          <p className="px-2 py-6 text-center text-[13.5px] text-ink-subtle">
+          <p className="px-2 py-4 text-center text-[13px] text-ink-subtle">
             No unassigned tasks. Quick-dumped tasks land here.
           </p>
         ) : (
           <>
-            <p className="px-1 pb-1 text-[12.5px] text-ink-subtle">
+            <p className="px-1 pb-0.5 text-[12px] text-ink-subtle">
               Open a card to assign it to someone.
             </p>
             {tasks.map((t) => (
@@ -1008,10 +1068,10 @@ function KanbanCard({
       className="cursor-pointer"
       style={{ opacity: isDragging ? 0.4 : 1 }}
     >
-      <Tooltip.Root delayDuration={220}>
+      <Tooltip.Root delayDuration={650}>
         <Tooltip.Trigger asChild>
           <div
-            className="group rounded-chip border border-hairline bg-white p-3 shadow-[0_4px_14px_-12px_rgba(15,23,42,0.5)] transition-all duration-200 hover:-translate-y-0.5 hover:border-altus-red/40 hover:shadow-lg"
+            className="group rounded-lg border border-hairline-strong bg-white px-1.5 py-1.5 shadow-[0_1px_2px_rgba(15,23,42,0.05)] transition-all duration-200 hover:border-[#9fb2d1] hover:shadow-md"
             style={{ borderLeft: `3px solid ${accent}` }}
           >
             <div className="flex items-start justify-between gap-2">
@@ -1019,7 +1079,7 @@ function KanbanCard({
                 href={target as Route}
                 draggable={false}
                 onClick={(e) => e.stopPropagation()}
-                className="text-[15px] font-semibold text-ink-strong leading-snug hover:underline"
+                className="text-[12px] font-semibold text-ink-strong leading-[1.28] hover:underline"
                 style={{
                   display: "-webkit-box",
                   WebkitLineClamp: 3,
@@ -1036,9 +1096,9 @@ function KanbanCard({
 
             {/* Number + priority, then the date on its own line — the two
                 things you triage by, in the order you read them. */}
-            <div className="mt-2 flex items-center gap-1.5 flex-wrap">
+            <div className="mt-1 flex items-center gap-1 flex-wrap">
               {t.taskNo != null && (
-                <span className="rounded-[7px] bg-[#f4f5f7] px-1.5 py-[3px] text-[11.5px] font-bold tabular-nums text-ink-soft">
+                <span className="rounded-md bg-[#f1f4f9] px-1 py-px text-[10.5px] font-bold tabular-nums text-ink-soft">
                   #{t.taskNo}
                 </span>
               )}
@@ -1046,19 +1106,17 @@ function KanbanCard({
               {isDoneLate({ status: t.status, completedAt: t.completedAt, dueAt: t.dueAt }) && (
                 <LateBadge />
               )}
-            </div>
-            <div className="mt-1.5">
               <DueChip dueAt={t.dueAt} status={t.status} today={today} />
             </div>
 
-            <div className="mt-2.5 flex items-center gap-2">
-              <span className="min-w-0 flex-1 truncate text-[12.5px] font-medium text-ink-soft">
+            <div className="mt-1.5 flex items-center gap-1.5">
+              <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-ink-soft">
                 {[t.client, t.subject].filter(Boolean).join(" · ")}
               </span>
               {t.doerName && (
                 <span className="flex shrink-0 items-center gap-1.5">
-                  <EmployeeAvatar name={t.doerName} size="sm" className="!h-7 !w-7 !text-[11px]" />
-                  <span className="text-[12.5px] font-semibold text-ink-soft">
+                  <EmployeeAvatar name={t.doerName} size="sm" className="!h-5 !w-5 !text-[9px]" />
+                  <span className="text-[11px] font-semibold text-ink-soft">
                     {t.doerName.split(/\s+/)[0]}
                   </span>
                 </span>
@@ -1092,7 +1150,7 @@ function PriorityChip({ priority }: { priority: TaskPriority }) {
   const neutral = tone === "slate";
   return (
     <span
-      className="inline-flex items-center gap-1 rounded-[7px] px-1.5 py-[3px] text-[11.5px] font-bold whitespace-nowrap"
+      className="inline-flex items-center gap-1 rounded-md px-1 py-px text-[10.5px] font-bold whitespace-nowrap"
       style={{
         color: neutral ? "var(--color-ink-soft)" : `var(--color-${tone}-deep)`,
         border: `1px solid ${
@@ -1123,13 +1181,13 @@ function DueChip({
   const overdue = status !== "done" && istYmd(due) < today;
   return (
     <span
-      className="inline-flex items-center gap-1.5 rounded-[7px] px-1.5 py-[3px] text-[11.5px] font-bold whitespace-nowrap"
+      className="inline-flex items-center gap-1 rounded-md px-1 py-px text-[10.5px] font-bold whitespace-nowrap"
       style={{
         color: overdue ? "var(--color-red-deep)" : "var(--color-ink-soft)",
         border: `1px solid ${
-          overdue ? "color-mix(in srgb, var(--color-red) 35%, transparent)" : "var(--color-hairline-strong)"
+          overdue ? "color-mix(in srgb, var(--color-red) 20%, transparent)" : "var(--color-hairline-strong)"
         }`,
-        background: overdue ? "color-mix(in srgb, var(--color-red) 10%, #ffffff)" : "#ffffff",
+        background: overdue ? "color-mix(in srgb, var(--color-red) 6%, #ffffff)" : "#ffffff",
       }}
     >
       <CalendarDays size={11} strokeWidth={2.4} aria-hidden />
@@ -1256,7 +1314,7 @@ function Meta({
   return (
     <div className="min-w-0">
       <FieldHead icon={icon}>{label}</FieldHead>
-      <div className="mt-1 truncate text-ink-strong" style={{ fontSize: 14.5, fontWeight: 600 }}>
+      <div className="mt-0.5 truncate text-ink-strong" style={{ fontSize: 13.5, fontWeight: 600 }}>
         {value && value.trim() ? value : "—"}
       </div>
     </div>
@@ -1279,12 +1337,12 @@ function TaskHoverCard({
 
   return (
     <div
-      className="relative overflow-hidden rounded-2xl bg-surface-card"
+      className="relative overflow-hidden rounded-xl bg-surface-card"
       style={{
-        width: 384,
+        width: 320,
         maxWidth: "calc(100vw - 32px)",
         border: "1px solid var(--color-hairline-strong)",
-        boxShadow: "0 24px 60px -16px rgba(15,23,42,0.40), 0 4px 12px rgba(15,23,42,0.12)",
+        boxShadow: "0 12px 32px -12px rgba(15,23,42,0.28), 0 2px 6px rgba(15,23,42,0.08)",
       }}
     >
       <span
@@ -1295,7 +1353,7 @@ function TaskHoverCard({
         }}
       />
 
-      <div className="p-5 pt-6">
+      <div className="p-4 pt-5">
         <div className="hc-item flex items-center gap-2 flex-wrap" style={{ animationDelay: DELAY[0] }}>
           <Pill
             tone={statusTone}
@@ -1314,8 +1372,8 @@ function TaskHoverCard({
         </div>
 
         <h3
-          className="hc-item mt-3.5 text-ink-strong"
-          style={{ animationDelay: DELAY[1], fontSize: 17, fontWeight: 800, lineHeight: 1.3, letterSpacing: "-0.01em" }}
+          className="hc-item mt-3 text-ink-strong"
+          style={{ animationDelay: DELAY[1], fontSize: 15, fontWeight: 800, lineHeight: 1.3, letterSpacing: "-0.01em" }}
         >
           {t.taskNo != null && <span className="text-ink-subtle tabular-nums">#{t.taskNo} · </span>}
           {describedLabel(t.description, t.title)}
@@ -1326,7 +1384,7 @@ function TaskHoverCard({
           {desc ? (
             <p
               className="mt-1.5 whitespace-pre-wrap text-ink-soft"
-              style={{ fontSize: 14.5, lineHeight: 1.6, maxHeight: 208, overflowY: "auto" }}
+              style={{ fontSize: 13.5, lineHeight: 1.5, maxHeight: 112, overflowY: "auto" }}
             >
               {desc}
             </p>
@@ -1337,9 +1395,9 @@ function TaskHoverCard({
           )}
         </div>
 
-        <div className="hc-item my-4 h-px bg-hairline" style={{ animationDelay: DELAY[3] }} />
+        <div className="hc-item my-3 h-px bg-hairline" style={{ animationDelay: DELAY[3] }} />
 
-        <div className="hc-item grid grid-cols-2 gap-x-4 gap-y-4" style={{ animationDelay: DELAY[4] }}>
+        <div className="hc-item grid grid-cols-2 gap-x-4 gap-y-3" style={{ animationDelay: DELAY[4] }}>
           <Meta icon={<Building2 size={14} strokeWidth={2.2} />} label="Client" value={t.client} />
           <Meta icon={<Tag size={14} strokeWidth={2.2} />} label="Subject" value={t.subject} />
           <Meta
@@ -1353,7 +1411,7 @@ function TaskHoverCard({
               {t.doerName ? (
                 <>
                   <EmployeeAvatar name={t.doerName} size="sm" />
-                  <span className="truncate text-ink-strong" style={{ fontSize: 14.5, fontWeight: 600 }}>
+                  <span className="truncate text-ink-strong" style={{ fontSize: 13.5, fontWeight: 600 }}>
                     {t.doerName}
                   </span>
                 </>

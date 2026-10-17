@@ -101,7 +101,7 @@ function StatusPill({
   const tone = tones[status] ?? "blue";
   return (
     <span
-      className="inline-flex items-center rounded-pill px-2.5 py-0.5 text-[12.5px] font-bold whitespace-nowrap"
+      className="inline-flex items-center rounded-pill px-2 py-px text-[11.5px] font-bold whitespace-nowrap"
       style={{
         color: `var(--color-${tone}-deep)`,
         background: `color-mix(in srgb, var(--color-${tone}) 14%, transparent)`,
@@ -163,7 +163,7 @@ export function NotificationRow({ row, statusLabels, statusTones }: Props) {
         type="button"
         onClick={onActivate}
         disabled={isPending}
-        className="flex w-full items-start gap-4 px-7 py-5 max-md:px-4 text-left transition-colors hover:bg-[rgba(15,23,42,0.025)] disabled:opacity-70"
+        className="flex w-full items-start gap-3 px-4 py-2.5 text-left transition-colors hover:bg-[#F5F8FE] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[#0A6CFF] disabled:opacity-70"
         style={{
           background: unread
             ? "color-mix(in srgb, var(--color-altus-red) 4%, transparent)"
@@ -173,40 +173,40 @@ export function NotificationRow({ row, statusLabels, statusTones }: Props) {
         {/* Avatar + kind badge */}
         <span className="relative shrink-0">
           {row.actorName ? (
-            <EmployeeAvatar name={row.actorName} size="md" />
+            <EmployeeAvatar name={row.actorName} size="sm" />
           ) : (
             <span
-              className="inline-flex h-10 w-10 items-center justify-center rounded-full text-white"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-full text-white"
               style={{ background: "linear-gradient(135deg, #475569, #1f2937)" }}
             >
-              <Bell size={16} strokeWidth={2.4} />
+              <Bell size={14} strokeWidth={2.4} />
             </span>
           )}
           <span
             aria-hidden
-            className="absolute -bottom-1 -right-1 inline-flex h-5 w-5 items-center justify-center rounded-full"
+            className="absolute -bottom-0.5 -right-0.5 inline-flex h-4 w-4 items-center justify-center rounded-full"
             style={{
               background: `var(--color-${kindMeta.tone})`,
               border: "2px solid var(--color-surface-card)",
               color: "#fff",
             }}
           >
-            <KindIcon size={11} strokeWidth={2.6} />
+            <KindIcon size={9} strokeWidth={2.6} />
           </span>
         </span>
 
         {/* Content */}
         <div className="min-w-0 flex-1">
           <p
-            className="text-[16.5px] leading-snug text-ink-strong"
-            style={{ fontWeight: unread ? 700 : 500 }}
+            className="text-[14px] leading-snug text-ink-strong"
+            style={{ fontWeight: unread ? 600 : 500 }}
           >
             {title}
           </p>
 
           {/* Status transition pills (replaces the old raw-JSON body) */}
           {meta && "to" in meta && (meta.from || meta.to) && (
-            <div className="mt-2 flex items-center gap-1.5 flex-wrap">
+            <div className="mt-1 flex items-center gap-1.5 flex-wrap">
               {meta.from && (
                 <>
                   <StatusPill status={meta.from} labels={statusLabels} tones={statusTones} />
@@ -222,20 +222,20 @@ export function NotificationRow({ row, statusLabels, statusTones }: Props) {
           {/* Genuine free-text body (e.g. a comment) */}
           {meta && "text" in meta && (
             <p
-              className="mt-1.5 text-[14px] text-ink-soft line-clamp-2 border-l-2 border-hairline-strong pl-2.5 italic"
+              className="mt-0.5 text-[12.5px] text-ink-subtle line-clamp-2 border-l-2 border-hairline-strong pl-2 italic"
             >
               {meta.text}
             </p>
           )}
 
           {/* Meta line */}
-          <div className="mt-2 flex items-center gap-2 text-[13px] text-ink-subtle">
+          <div className="mt-1 flex items-center gap-1.5 text-[12px] text-ink-subtle">
             <span className="font-semibold text-ink-soft">{who}</span>
             <span aria-hidden>·</span>
             <span className="tabular-nums">{when}</span>
             {unread && (
               <span
-                className="ml-1 inline-flex items-center rounded-pill px-2 py-0.5 text-[10.5px] font-black uppercase tracking-[0.06em]"
+                className="ml-1 inline-flex items-center rounded-pill px-1.5 py-px text-[10px] font-bold uppercase tracking-[0.06em]"
                 style={{
                   color: "var(--color-altus-red-deep)",
                   background: "color-mix(in srgb, var(--color-altus-red) 12%, transparent)",
@@ -251,7 +251,7 @@ export function NotificationRow({ row, statusLabels, statusTones }: Props) {
         {unread && (
           <span
             aria-hidden
-            className="mt-1.5 inline-flex h-2.5 w-2.5 shrink-0 rounded-full"
+            className="mt-1.5 inline-flex h-2 w-2 shrink-0 rounded-full"
             style={{ background: "var(--color-altus-red)" }}
           />
         )}

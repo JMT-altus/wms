@@ -20,11 +20,13 @@ export default async function RecycleBinPage() {
 
   return (
     <>
-      <DashboardHeader generatedAt={new Date()} />
-      <main className="w-full">
+      <DashboardHeader generatedAt={new Date()} title="WMS · Recycle Bin" />
+      <main className="wms-fill w-full">
         <RecycleBin rows={rows} />
       </main>
-      <DashboardFooter />
+      <div className="[&>footer]:mt-6">
+        <DashboardFooter />
+      </div>
     </>
   );
 }

@@ -125,7 +125,7 @@ export function BulkActionBar({
 
   return (
     <div
-      className="sticky top-[150px] z-30 mb-3 flex items-stretch overflow-hidden rounded-section border border-hairline max-md:top-[120px]"
+      className="sticky top-[calc(var(--app-header-h)+var(--dash-row-h)+8px)] z-30 mb-3 flex items-stretch overflow-hidden rounded-xl border border-hairline max-md:top-[120px]"
       style={{
         // Blurred, translucent card so the rows scrolling beneath stay
         // legible as texture without competing with the controls.
@@ -148,16 +148,17 @@ export function BulkActionBar({
         }}
       />
 
-      {/* Scroller. `min-w-0` is load-bearing: without it the flex child refuses
-          to shrink and the bar widens the page instead of scrolling. */}
-      <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto px-3.5 py-2.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      {/* Wrapping row. It used to scroll sideways, which left Archive and Delete
+          off-screen on a normal laptop width. `min-w-0` stays load-bearing: without
+          it the flex child refuses to shrink and the bar widens the page. */}
+      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-1.5 gap-y-1.5 px-3 py-2">
         <span className="inline-flex shrink-0 items-center gap-2 whitespace-nowrap text-[11px] font-black uppercase tracking-[0.09em] text-ink-strong">
           {pending && <Loader2 size={13} className="animate-spin text-altus-red" />}
           <span className="text-[15px] tabular-nums tracking-normal">{count}</span>
           selected
         </span>
 
-        <span className="mx-1 h-5 w-px shrink-0 bg-hairline" aria-hidden />
+        <span className="mx-0.5 h-5 w-px shrink-0 bg-hairline" aria-hidden />
 
         {/* Doer Status - the worker's progress report */}
         <DropdownMenu>
@@ -165,7 +166,7 @@ export function BulkActionBar({
             <button type="button" disabled={pending} className={chipBtn}>
               <CheckCircle2 size={14} strokeWidth={2.2} />
               Doer Status
-              <ChevronDown size={13} className="opacity-60" />
+              <ChevronDown size={12} className="opacity-60" />
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="max-h-72 overflow-y-auto">
@@ -187,7 +188,7 @@ export function BulkActionBar({
             <button type="button" disabled={pending} className={chipBtn}>
               <Flag size={14} strokeWidth={2.2} />
               Priority
-              <ChevronDown size={13} className="opacity-60" />
+              <ChevronDown size={12} className="opacity-60" />
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start">
@@ -211,7 +212,7 @@ export function BulkActionBar({
             <button type="button" disabled={pending} className={chipBtn}>
               <UserCog size={14} strokeWidth={2.2} />
               Reassign
-              <ChevronDown size={13} className="opacity-60" />
+              <ChevronDown size={12} className="opacity-60" />
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="max-h-72 overflow-y-auto">
@@ -234,7 +235,7 @@ export function BulkActionBar({
               <button type="button" disabled={pending} className={chipBtn}>
                 <Tag size={14} strokeWidth={2.2} />
                 Subject
-                <ChevronDown size={13} className="opacity-60" />
+                <ChevronDown size={12} className="opacity-60" />
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="max-h-72 overflow-y-auto">
@@ -258,7 +259,7 @@ export function BulkActionBar({
               <button type="button" disabled={pending} className={chipBtn}>
                 <Building2 size={14} strokeWidth={2.2} />
                 Client
-                <ChevronDown size={13} className="opacity-60" />
+                <ChevronDown size={12} className="opacity-60" />
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="max-h-72 overflow-y-auto">
@@ -277,7 +278,7 @@ export function BulkActionBar({
 
         {isAdmin && (
           <>
-            <span className="mx-1 h-5 w-px shrink-0 bg-hairline" aria-hidden />
+            <span className="mx-0.5 h-5 w-px shrink-0 bg-hairline" aria-hidden />
 
             {/* Initiator Status - the verdict, a different column */}
             <DropdownMenu>
@@ -285,7 +286,7 @@ export function BulkActionBar({
                 <button type="button" disabled={pending} className={chipBtn}>
                   <Gavel size={14} strokeWidth={2.2} />
                   Initiator Status
-                  <ChevronDown size={13} className="opacity-60" />
+                  <ChevronDown size={12} className="opacity-60" />
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="max-h-72 overflow-y-auto">
@@ -307,7 +308,7 @@ export function BulkActionBar({
               </DropdownMenuContent>
             </DropdownMenu>
 
-            <span className="mx-1 h-5 w-px shrink-0 bg-hairline" aria-hidden />
+            <span className="mx-0.5 h-5 w-px shrink-0 bg-hairline" aria-hidden />
 
             {/* Destructive, last */}
             <button
@@ -335,7 +336,7 @@ export function BulkActionBar({
                   run("Deleted", () => bulkDelete(selectedIds));
                 }
               }}
-              className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-pill border border-hairline-strong px-3 py-1.5 text-[13px] font-bold text-red-deep transition-colors hover:bg-red/8 disabled:opacity-50"
+              className="inline-flex h-8 shrink-0 items-center gap-1 whitespace-nowrap rounded-lg border border-hairline-strong bg-white px-2 text-[12px] font-semibold text-red-deep transition-colors hover:bg-red/8 disabled:opacity-50"
             >
               <Trash2 size={14} strokeWidth={2.2} />
               Delete
@@ -351,7 +352,7 @@ export function BulkActionBar({
           type="button"
           onClick={onClear}
           aria-label="Clear selection"
-          className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-pill px-2.5 py-1.5 text-[13px] font-semibold text-ink-subtle transition-colors hover:text-ink-strong"
+          className="inline-flex h-8 items-center gap-1 whitespace-nowrap rounded-lg px-2 text-[12px] font-semibold text-ink-subtle transition-colors hover:text-ink-strong"
         >
           <X size={14} strokeWidth={2.4} />
           Clear
@@ -362,4 +363,4 @@ export function BulkActionBar({
 }
 
 const chipBtn =
-  "inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-pill border border-hairline-strong px-3 py-1.5 text-[13px] font-bold text-ink-soft hover:border-altus-red hover:text-altus-red transition-colors disabled:opacity-50";
+  "inline-flex h-8 shrink-0 items-center gap-1 whitespace-nowrap rounded-lg border border-hairline-strong bg-white px-2 text-[12px] font-semibold text-ink-soft hover:border-altus-red hover:text-altus-red transition-colors disabled:opacity-50";

@@ -27,15 +27,17 @@ export default async function DuplicateTasksPage() {
 
   return (
     <>
-      <DashboardHeader generatedAt={new Date()} />
-      <main className="w-full">
+      <DashboardHeader generatedAt={new Date()} title="WMS · Find Duplicates" />
+      <main className="wms-fill w-full">
         <DuplicateFinder
           groups={groups}
           statusLabels={statusLabels}
           statusTones={statusTones}
         />
       </main>
-      <DashboardFooter />
+      <div className="[&>footer]:mt-6">
+        <DashboardFooter />
+      </div>
     </>
   );
 }

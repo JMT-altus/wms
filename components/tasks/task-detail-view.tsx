@@ -382,7 +382,7 @@ export function TaskDetailView({
         />
       )}
 
-      <div className="grid grid-cols-[minmax(0,1fr)_360px] gap-10 max-lg:grid-cols-1 max-lg:gap-6 max-md:grid-cols-1 max-md:gap-5">
+      <div className="grid grid-cols-[minmax(0,1fr)_340px] gap-4 max-lg:grid-cols-1 max-lg:gap-4 max-md:grid-cols-1 max-md:gap-4">
         {/* LEFT COLUMN — editorial document */}
         <div className="min-w-0">
           {/* Recurrence badge — small inline indicator for materialized
@@ -436,22 +436,23 @@ export function TaskDetailView({
                   duration: 0.28,
                   ease: [0.2, 0.7, 0.3, 1],
                 }}
-                className="rounded-section border border-hairline bg-surface-card p-6"
-                style={{ boxShadow: "0 14px 32px -20px rgba(10, 108, 255, 0.16), 0 2px 6px -2px rgba(15, 23, 42, 0.06)" }}
+                className="rounded-section border border-hairline-strong bg-white p-5"
+                style={{ boxShadow: "0 1px 2px rgba(15, 23, 42, 0.05), 0 8px 24px -16px rgba(15, 23, 42, 0.14)" }}
               >
-                <div className="flex items-center justify-between mb-5">
-                  <h1
+                <div className="flex items-center justify-between mb-4">
+                  <div
+                    role="heading"
+                    aria-level={1}
                     className="text-ink-strong"
                     style={{
-                      fontFamily: "var(--font-serif)",
-                      fontStyle: "italic",
-                      fontWeight: 500,
-                      fontSize: 32,
+                      fontFamily: "var(--font-display), system-ui, sans-serif",
+                      fontWeight: 800,
+                      fontSize: 22,
                       letterSpacing: "-0.02em",
                     }}
                   >
                     Edit Task
-                  </h1>
+                  </div>
                   <span className="text-[12.5px] text-ink-subtle uppercase tracking-[0.1em] font-bold">
                     Editing
                   </span>
@@ -503,27 +504,20 @@ export function TaskDetailView({
                   duration: 0.28,
                   ease: [0.2, 0.7, 0.3, 1],
                 }}
-                className="flex flex-col gap-5"
+                className="flex flex-col gap-4"
               >
                 {/* TASK BODY CARD — the editorial document container.
                     Subtle elevation lifts it off the canvas without
                     looking heavy. */}
                 <section
-                  className="rounded-section bg-surface-card border border-hairline px-8 py-7 max-md:px-5 max-md:py-6 relative overflow-hidden"
-                  style={{
-                    boxShadow:
-                      "0 14px 32px -20px rgba(10, 108, 255, 0.16), 0 2px 6px -2px rgba(15, 23, 42, 0.06), 0 12px 32px -16px rgba(15, 23, 42, 0.08)",
-                  }}
+                  className="rounded-section bg-white border border-hairline-strong px-5 py-4 max-md:px-4 max-md:py-3.5 relative overflow-hidden"
+                  style={{ boxShadow: "0 1px 2px rgba(15, 23, 42, 0.05), 0 8px 24px -16px rgba(15, 23, 42, 0.14)" }}
                 >
                   {/* Top red accent strip — ties the card to the brand */}
                   <div
                     aria-hidden
-                    className="absolute inset-x-0 top-0 h-[3px]"
-                    style={{
-                      background:
-                        "linear-gradient(90deg, var(--color-altus-red) 0%, var(--color-altus-red-deep) 40%, transparent 100%)",
-                      opacity: 0.85,
-                    }}
+                    className="absolute inset-x-0 top-0 h-[2px]"
+                    style={{ background: "var(--color-altus-red)", opacity: 0.9 }}
                   />
                   <TaskDetail task={task} planTrail={planTrail} />
                 </section>
@@ -550,17 +544,14 @@ export function TaskDetailView({
             valuable above, but the audit timeline belongs below the doc. */}
         <aside className="max-md:w-full">
           <div
-            className="lg:sticky lg:top-24 flex flex-col gap-4"
+            className="lg:sticky lg:top-[72px] flex flex-col gap-3"
             style={{ scrollMarginTop: "6rem" }}
           >
             {/* (1) Status picker — its own compact card, sits at the
                 top so the eye lands on it first. */}
             <section
-              className="rounded-section border border-hairline bg-surface-card px-5 py-4 relative overflow-hidden"
-              style={{
-                boxShadow:
-                  "0 14px 32px -20px rgba(10, 108, 255, 0.16), 0 2px 6px -2px rgba(15, 23, 42, 0.06), 0 8px 24px -16px rgba(15, 23, 42, 0.08)",
-              }}
+              className="rounded-section border border-hairline-strong bg-white px-4 py-3.5 relative overflow-hidden"
+              style={{ boxShadow: "0 1px 2px rgba(15, 23, 42, 0.05), 0 8px 24px -16px rgba(15, 23, 42, 0.14)" }}
             >
               <InteractiveStatusPill
                 taskId={task.id}
@@ -574,7 +565,7 @@ export function TaskDetailView({
               />
               {/* Meta rows directly under the status — keeps the screenshot's
                   "status header + meta block" pairing in one card. */}
-              <div className="mt-5 pt-4 border-t border-hairline grid grid-cols-1 gap-3.5">
+              <div className="mt-3 pt-3 border-t border-hairline grid grid-cols-1 gap-2.5">
                 {task.taskNo != null && (
                   <MetaRow
                     icon={<Hash size={13} strokeWidth={2.4} />}
@@ -625,8 +616,8 @@ export function TaskDetailView({
             {/* (2) Action rail */}
             {anyAction && (
               <section
-                className="rounded-section border border-hairline bg-surface-card"
-                style={{ boxShadow: "0 14px 32px -20px rgba(10, 108, 255, 0.16), 0 2px 6px -2px rgba(15, 23, 42, 0.06)" }}
+                className="rounded-section border border-hairline-strong bg-white"
+                style={{ boxShadow: "0 1px 2px rgba(15, 23, 42, 0.05), 0 8px 24px -16px rgba(15, 23, 42, 0.14)" }}
               >
                 <ActionRail
                   taskId={task.id}
@@ -864,7 +855,7 @@ function InteractiveStatusPill({
     return (
       <div
         key={shown}
-        className="inline-flex items-center gap-2 px-4 py-2.5 rounded-full"
+        className="inline-flex items-center gap-2 px-3.5 py-2 rounded-full"
         style={pillStyle}
       >
         {pillContents}
@@ -881,7 +872,7 @@ function InteractiveStatusPill({
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-label={`Status: ${labels?.[shown] ?? t.label}. Click to change.`}
-        className="inline-flex items-center gap-2 px-4 py-2.5 rounded-full"
+        className="inline-flex items-center gap-2 px-3.5 py-2 rounded-full"
         style={pillStyle}
       >
         {pillContents}
@@ -1001,12 +992,12 @@ function ArchiveToggle({ taskId, archived }: { taskId: string; archived: boolean
     });
   }
   return (
-    <div className="mt-4 pt-4 border-t border-hairline">
+    <div className="mt-3 pt-3 border-t border-hairline">
       <button
         type="button"
         onClick={toggle}
         disabled={pending}
-        className="inline-flex w-full items-center justify-center gap-2 rounded-chip border border-hairline px-3.5 py-2.5 text-[14px] font-semibold text-ink-strong transition-colors hover:bg-surface-soft disabled:opacity-60"
+        className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-hairline-strong bg-white px-3 h-9 text-[13.5px] font-semibold text-ink-strong transition-colors hover:bg-[#F8FAFD] hover:border-[#9fb2d1] disabled:opacity-60"
       >
         {pending ? (
           <Loader2 size={15} className="animate-spin" />
@@ -1049,15 +1040,15 @@ function TopHeaderStrip({
     PRIORITY_LABEL_SHORT[task.priority] ?? task.priority;
 
   return (
-    <div className="mb-6 flex items-center justify-between gap-4 flex-wrap">
+    <div className="mb-4 flex items-center justify-between gap-3 flex-wrap">
       {/* LEFT — back/forward + status pill + priority chip */}
-      <div className="flex items-center gap-3 min-w-0">
+      <div className="flex items-center gap-2.5 min-w-0 flex-wrap">
         <div className="flex items-center gap-1.5 shrink-0">
           <button
             type="button"
             onClick={() => router.back()}
             aria-label="Back"
-            className="size-9 inline-flex items-center justify-center rounded-full border border-hairline bg-white/80 hover:bg-white hover:border-hairline-strong transition-all text-ink-soft"
+            className="size-8 inline-flex items-center justify-center rounded-lg border border-hairline-strong bg-white hover:bg-[#F8FAFD] hover:border-[#9fb2d1] transition-colors text-ink-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#14336B]"
           >
             <ChevronLeft size={16} strokeWidth={2.4} />
           </button>
@@ -1065,7 +1056,7 @@ function TopHeaderStrip({
             type="button"
             onClick={() => router.forward()}
             aria-label="Forward"
-            className="size-9 inline-flex items-center justify-center rounded-full border border-hairline bg-white/80 hover:bg-white hover:border-hairline-strong transition-all text-ink-soft"
+            className="size-8 inline-flex items-center justify-center rounded-lg border border-hairline-strong bg-white hover:bg-[#F8FAFD] hover:border-[#9fb2d1] transition-colors text-ink-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#14336B]"
           >
             <ChevronRight size={16} strokeWidth={2.4} />
           </button>
@@ -1112,14 +1103,14 @@ function TopHeaderStrip({
       <div className="flex items-center gap-2 shrink-0">
         <Link
           href={`/tasks/${task.id}/focus` as Route}
-          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full text-[13px] font-semibold text-ink-soft border border-hairline bg-white/80 hover:bg-white hover:border-hairline-strong transition-all"
+          className="inline-flex h-8 items-center gap-1.5 px-3 rounded-lg text-[13px] font-semibold text-ink-soft border border-hairline-strong bg-white hover:bg-[#F8FAFD] hover:border-[#9fb2d1] transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#14336B]"
         >
           <Maximize2 size={14} strokeWidth={2.4} />
           Focus
         </Link>
         <Link
           href={`/tasks/new?from=${task.id}` as Route}
-          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full text-[13px] font-semibold text-ink-soft border border-hairline bg-white/80 hover:bg-white hover:border-hairline-strong transition-all"
+          className="inline-flex h-8 items-center gap-1.5 px-3 rounded-lg text-[13px] font-semibold text-ink-soft border border-hairline-strong bg-white hover:bg-[#F8FAFD] hover:border-[#9fb2d1] transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#14336B]"
         >
           <Copy size={14} strokeWidth={2.4} />
           Duplicate
@@ -1128,12 +1119,10 @@ function TopHeaderStrip({
           <button
             type="button"
             onClick={onStartEdit}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full text-[13px] font-semibold text-white transition-all hover:-translate-y-px"
+            className="inline-flex h-8 items-center gap-1.5 px-3.5 rounded-lg text-[13px] font-semibold text-white transition-colors hover:brightness-110 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#14336B]"
             style={{
-              background:
-                "linear-gradient(135deg, #0A6CFF 0%, #0A6CFF 42%, #17B6A0 100%)",
-              boxShadow:
-                "0 6px 18px -8px rgba(10, 108, 255, 0.55), inset 0 1px 0 rgba(255,255,255,0.18)",
+              background: "#0A6CFF",
+              boxShadow: "0 1px 2px rgba(10, 108, 255, 0.3)",
             }}
           >
             <Pencil size={14} strokeWidth={2.6} />
@@ -1168,26 +1157,23 @@ function ActivityCard({
   if (!canCommentOnTask && events.length === 0) return null;
   return (
     <section
-      className="rounded-section bg-surface-card border border-hairline px-8 py-7 max-md:px-5 max-md:py-6"
-      style={{
-        boxShadow:
-          "0 14px 32px -20px rgba(10, 108, 255, 0.16), 0 2px 6px -2px rgba(15, 23, 42, 0.06), 0 12px 32px -16px rgba(15, 23, 42, 0.08)",
-      }}
+      className="rounded-section bg-white border border-hairline-strong px-5 py-4 max-md:px-4 max-md:py-3.5"
+      style={{ boxShadow: "0 1px 2px rgba(15, 23, 42, 0.05), 0 8px 24px -16px rgba(15, 23, 42, 0.14)" }}
     >
       <h2
-        className="text-ink-strong mb-5"
+        className="text-ink-strong mb-4"
         style={{
-          fontFamily: "var(--font-serif)",
-          fontStyle: "italic",
-          fontSize: 22,
+          fontFamily: "var(--font-display), system-ui, sans-serif",
+          fontWeight: 800,
+          fontSize: 17,
           letterSpacing: "-0.01em",
-          lineHeight: 1.1,
+          lineHeight: 1.15,
         }}
       >
         Activity & Comments
       </h2>
       {canCommentOnTask && (
-        <div className="mb-5">
+        <div className="mb-4">
           <CommentInput taskId={taskId} me={me} />
         </div>
       )}

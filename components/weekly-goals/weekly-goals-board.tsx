@@ -75,23 +75,28 @@ export function WeeklyGoalsBoard(props: Props) {
   const showingAll = props.scopeEmp === "all";
 
   return (
-    <main className="mx-auto max-w-[1600px] px-12 max-md:px-4 pt-8 pb-24">
+    <main className="mx-auto max-w-[1400px] px-8 max-md:px-4 pt-5 pb-3">
       {/* Header ------------------------------------------------------- */}
-      <header className="mb-6 flex items-start justify-between gap-4 flex-wrap">
+      <header className="mb-4 flex items-center justify-between gap-4 flex-wrap">
         <div>
-          <h1
+          {/* A level-1 heading on a div, on purpose: globals.css sizes every <h1> at
+              30–46px with !important, so no inline size can shrink it. The role keeps
+              it the page's h1. */}
+          <div
+            role="heading"
+            aria-level={1}
             className="text-ink-strong"
             style={{
               fontFamily: "var(--font-display), system-ui, sans-serif",
-              fontWeight: 900,
-              fontSize: "clamp(36px, 3.8vw, 52px)",
-              letterSpacing: "-0.025em",
-              lineHeight: 1,
+              fontWeight: 800,
+              fontSize: 26,
+              letterSpacing: "-0.02em",
+              lineHeight: 1.15,
             }}
           >
             Weekly Goals
-          </h1>
-          <p className="mt-2 text-ink-muted font-semibold" style={{ fontSize: 17 }}>
+          </div>
+          <p className="mt-1 text-ink-subtle font-medium" style={{ fontSize: 14 }}>
             Top priorities each team member commits to finishing this week.
           </p>
         </div>
@@ -104,48 +109,47 @@ export function WeeklyGoalsBoard(props: Props) {
           />
           <Link
             href={"/weekly-goals/dashboard" as Route}
-            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-[14.5px] font-bold text-white transition-all hover:brightness-110 active:scale-[0.98]"
+            className="inline-flex h-9 items-center gap-1.5 px-3.5 rounded-lg text-[13.5px] font-semibold text-white transition-colors hover:brightness-110 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#14336B]"
             style={{
-              background:
-                "linear-gradient(135deg, #0A6CFF 0%, #0A6CFF 42%, #17B6A0 100%)",
-              boxShadow: "0 6px 18px -6px rgba(10, 108, 255, 0.55)",
+              background: "#0A6CFF",
+              boxShadow: "0 1px 2px rgba(10, 108, 255, 0.3)",
             }}
           >
-            <BarChart3 size={16} strokeWidth={2.4} />
+            <BarChart3 size={15} strokeWidth={2.4} />
             Performance Dashboard
           </Link>
         </div>
       </header>
 
       {/* Controls: week nav + employee scope -------------------------- */}
-      <div className="mb-6 flex items-center gap-3 flex-wrap">
-        <div className="inline-flex items-center rounded-full border border-hairline bg-surface-card overflow-hidden">
+      <div className="mb-4 flex items-center gap-2.5 flex-wrap">
+        <div className="inline-flex h-9 items-center rounded-lg border border-hairline-strong bg-white overflow-hidden">
           <button
             type="button"
             aria-label="Previous week"
             onClick={() => go({ week: props.prevWeek, emp: props.scopeEmp })}
-            className="px-3 py-2 hover:bg-black/[0.03] transition-colors"
+            className="h-full px-2.5 hover:bg-[#EEF2F8] transition-colors"
           >
-            <ChevronLeft size={18} />
+            <ChevronLeft size={16} />
           </button>
-          <span className="px-4 py-2 inline-flex items-center gap-2 font-bold text-ink-strong text-[15px] tabular-nums border-x border-hairline">
-            <CalendarDays size={16} className="text-ink-muted" />
+          <span className="h-full px-3 inline-flex items-center gap-2 font-semibold text-ink-strong text-[13.5px] tabular-nums border-x border-hairline-strong">
+            <CalendarDays size={15} className="text-ink-muted" />
             {props.weekLabel}
           </span>
           <button
             type="button"
             aria-label="Next week"
             onClick={() => go({ week: props.nextWeek, emp: props.scopeEmp })}
-            className="px-3 py-2 hover:bg-black/[0.03] transition-colors"
+            className="h-full px-2.5 hover:bg-[#EEF2F8] transition-colors"
           >
-            <ChevronRight size={18} />
+            <ChevronRight size={16} />
           </button>
         </div>
         {!props.isCurrentWeek && (
           <button
             type="button"
             onClick={() => go({ week: props.thisWeek, emp: props.scopeEmp })}
-            className="px-4 py-2 rounded-full border border-hairline bg-surface-card font-bold text-[14px] text-ink-soft hover:text-ink-strong transition-colors"
+            className="h-9 px-3 rounded-lg border border-hairline-strong bg-white font-semibold text-[13px] text-ink-soft hover:text-ink-strong hover:border-[#9fb2d1] transition-colors"
           >
             This week
           </button>
@@ -155,7 +159,7 @@ export function WeeklyGoalsBoard(props: Props) {
           <select
             value={props.scopeEmp}
             onChange={(e) => go({ week: props.weekStart, emp: e.target.value })}
-            className="ml-auto px-4 py-2 rounded-full border border-hairline bg-surface-card font-bold text-[14px] text-ink-strong"
+            className="ml-auto h-9 px-3 rounded-lg border border-hairline-strong bg-white font-semibold text-[13px] text-ink-strong"
           >
             <option value="all">All team members</option>
             {props.employees.map((e) => (
@@ -212,13 +216,13 @@ function avg(rows: WeeklyGoalRow[]): number {
 function EmptyState() {
   return (
     <div
-      className="bg-surface-card rounded-section border border-hairline p-10 text-center"
-      style={{ boxShadow: "0 14px 32px -20px rgba(10, 108, 255, 0.16), 0 2px 6px -2px rgba(15, 23, 42, 0.06)" }}
+      className="bg-white rounded-section border border-hairline-strong px-6 py-6 text-center"
+      style={{ boxShadow: "0 1px 2px rgba(15, 23, 42, 0.05), 0 8px 24px -16px rgba(15, 23, 42, 0.14)" }}
     >
-      <p className="font-bold" style={{ fontSize: 20, color: "var(--color-ink-strong)" }}>
+      <p className="font-bold" style={{ fontSize: 16, color: "var(--color-ink-strong)" }}>
         No weekly goals set yet.
       </p>
-      <p className="mt-2 font-semibold" style={{ fontSize: 15, color: "var(--color-ink-muted)" }}>
+      <p className="mt-1 font-medium" style={{ fontSize: 13.5, color: "var(--color-ink-muted)" }}>
         Pick a team member, then add their top priorities for the week below.
       </p>
     </div>

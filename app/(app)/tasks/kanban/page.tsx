@@ -79,8 +79,10 @@ export default async function KanbanPage({ searchParams }: PageProps) {
 
   return (
     <TaskSearchProvider>
-      <DashboardHeader generatedAt={new Date()} />
+      <DashboardHeader generatedAt={new Date()} title="WMS · Kanban" />
       <FilterBar
+        wrap
+        showView={false}
         searchPlaceholder="Search Kanban..."
 
         employees={employeeOptions}
@@ -102,37 +104,41 @@ export default async function KanbanPage({ searchParams }: PageProps) {
           client: filters.clients,
         }}
       />
-      <main className="w-full px-6 max-md:px-4 pt-6 pb-10">
+      <main className="wms-fill w-full px-4 max-md:px-3 pt-3 pb-3">
         {/* Light canvas (sir's changes #1) — full-bleed (no centred max-width
             gutters), clean white surface; status colour lives in the columns. */}
         <section
-          className="relative overflow-hidden rounded-section border border-hairline p-5 max-md:p-4"
-          style={{ background: "var(--color-surface-card)" }}
+          className="relative overflow-hidden rounded-section border border-hairline-strong p-3 max-md:p-2.5"
+          style={{ background: "#ffffff", boxShadow: "0 1px 2px rgba(15, 23, 42, 0.05), 0 8px 24px -16px rgba(15, 23, 42, 0.16)" }}
         >
           {/* Brand rule across the top edge of the board panel — the same
               signature the other module panels wear. */}
           <span
             aria-hidden
-            className="absolute inset-x-0 top-0 h-[3px]"
+            className="absolute inset-x-0 top-0 h-[2px]"
             style={{ background: "var(--color-altus-red)" }}
           />
-          <header className="relative mb-6 flex items-center justify-between gap-4">
-            {/* Spacer, so the title is centred against the button opposite. */}
-            <span aria-hidden className="w-[132px] shrink-0 max-md:hidden" />
-            <h1
-              className="min-w-0 flex-1 text-center text-ink-strong max-md:text-left"
+          <header className="relative mb-2 flex items-center justify-between gap-4">
+            {/* A level-1 heading on a div, on purpose: globals.css sizes every <h1> at
+                30–46px with !important, so no inline size can shrink it. The role keeps
+                it the page's h1. */}
+            <div
+              role="heading"
+              aria-level={1}
+              className="min-w-0 flex-1 text-left text-ink-strong"
               style={{
-                fontFamily: "var(--font-serif)",
-                fontWeight: 700,
-                fontSize: 40,
+                fontFamily: "var(--font-display), system-ui, sans-serif",
+                fontWeight: 800,
+                fontSize: 21,
                 letterSpacing: "-0.02em",
+                lineHeight: 1.1,
               }}
             >
               Kanban View
-            </h1>
+            </div>
             <Link
               href={"/tasks" as Route}
-              className="shrink-0 rounded-[10px] border border-hairline-strong bg-white px-4 py-2.5 text-[14px] font-semibold text-ink-soft transition-colors hover:border-altus-red hover:text-ink-strong"
+              className="shrink-0 rounded-lg border border-hairline-strong bg-white px-3.5 h-8 inline-flex items-center text-[13px] font-semibold text-ink-soft transition-colors hover:border-[#9fb2d1] hover:text-ink-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#14336B]"
             >
               List View →
             </Link>
@@ -150,7 +156,9 @@ export default async function KanbanPage({ searchParams }: PageProps) {
           </div>
         </section>
       </main>
-      <DashboardFooter />
+      <div className="[&>footer]:mt-6">
+        <DashboardFooter />
+      </div>
       {completeTask && (
         <CompleteTaskModal
           taskId={completeTask.id}

@@ -51,23 +51,21 @@ export default async function InboxPage({ searchParams }: PageProps) {
 
   return (
     <>
-      <DashboardHeader generatedAt={new Date()} />
-      <main className="mx-auto max-w-[1500px] px-12 max-md:px-4 pt-10 pb-16">
-        <header className="mb-8 flex items-end justify-between gap-4 flex-wrap">
+      <DashboardHeader generatedAt={new Date()} title="WMS · Inbox" />
+      <main className="wms-fill mx-auto max-w-[960px] px-8 max-md:px-4 pt-6 pb-3">
+        <header className="mb-4 flex items-center justify-between gap-4 flex-wrap">
           <div>
-            <h1
+            {/* A heading div rather than <h1>: the global h1 rule forces a much
+                larger size, which is what made this page title oversized. */}
+            <div
+              role="heading"
+              aria-level={1}
               className="font-serif text-ink-strong"
-              style={{
-                fontSize: 56,
-                fontStyle: "italic",
-                lineHeight: 0.95,
-                letterSpacing: "-0.03em",
-                fontWeight: 400,
-              }}
+              style={{ fontSize: 22, lineHeight: 1.15, letterSpacing: "-0.02em", fontWeight: 700 }}
             >
               Inbox
-            </h1>
-            <p className="mt-3 text-body-lg text-ink-subtle">
+            </div>
+            <p className="mt-0.5 text-[13px] text-ink-subtle">
               Everything happening on tasks you're part of.
             </p>
           </div>
@@ -78,8 +76,8 @@ export default async function InboxPage({ searchParams }: PageProps) {
           <EmptyState isPaginated={Boolean(before)} />
         ) : (
           <section
-            className="bg-surface-card rounded-section border border-hairline"
-            style={{ boxShadow: "0 14px 32px -20px rgba(10, 108, 255, 0.16), 0 2px 6px -2px rgba(15, 23, 42, 0.06)" }}
+            className="bg-surface-card rounded-xl border border-hairline overflow-hidden"
+            style={{ boxShadow: "0 1px 3px rgba(15, 23, 42, 0.06)" }}
           >
             <ol>
               {notifications.map((n) => (
@@ -95,7 +93,7 @@ export default async function InboxPage({ searchParams }: PageProps) {
         )}
 
         {hasMore && nextCursor && (
-          <div className="mt-10 flex justify-center">
+          <div className="mt-6 flex justify-center">
             <Link
               href={`/inbox?before=${encodeURIComponent(nextCursor)}` as Route}
               className="nav-pill"
@@ -109,7 +107,9 @@ export default async function InboxPage({ searchParams }: PageProps) {
           </div>
         )}
       </main>
-      <DashboardFooter />
+      <div className="[&>footer]:mt-6">
+        <DashboardFooter />
+      </div>
     </>
   );
 }

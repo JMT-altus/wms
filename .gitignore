@@ -90,3 +90,6 @@ docs/2026-05-13-timeline-and-training-plan.md
 
 # Reference repos kept locally for prompt/design lookups — never committed
 ai-refs/
+
+# Employee attendance workbooks (real personal data) — never committed
+attendance-files/

@@ -60,7 +60,7 @@ export function WeeklyGoalsImport(props: Props) {
           setError(null);
           setResult(null);
         }}
-        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-[14.5px] font-bold border border-hairline bg-surface-card text-ink-strong transition-all hover:brightness-95 active:scale-[0.98]"
+        className="inline-flex h-9 items-center gap-1.5 px-3.5 rounded-lg text-[13.5px] font-semibold border border-hairline-strong bg-white text-ink-strong transition-colors hover:border-[#9fb2d1] hover:bg-[#F8FAFD] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#14336B]"
       >
         <Upload size={16} strokeWidth={2.4} />
         Import file
@@ -72,55 +72,70 @@ export function WeeklyGoalsImport(props: Props) {
           onClick={() => !pending && setOpen(false)}
         >
           <div
-            className="w-full max-w-lg rounded-section border border-hairline bg-surface-card p-6 shadow-xl"
+            className="relative w-full max-w-[560px] overflow-hidden rounded-xl border border-hairline bg-surface-card shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-start justify-between gap-4">
+            <span
+              aria-hidden
+              className="absolute inset-x-0 top-0 h-[3px]"
+              style={{ background: "linear-gradient(90deg, rgb(2, 99, 204), rgb(0, 66, 138))" }}
+            />
+            <div className="flex items-center justify-between gap-4 border-b border-hairline px-5 py-3">
               <div className="flex items-center gap-2">
-                <FileSpreadsheet size={20} className="text-altus-red" />
-                <h2 className="font-black text-ink-strong text-[19px]">Import Weekly Goals</h2>
+                <FileSpreadsheet size={18} className="text-altus-red" />
+                <h2 className="text-[18px] font-extrabold text-ink-strong">Import Weekly Goals</h2>
               </div>
               <button
                 type="button"
                 onClick={() => !pending && setOpen(false)}
-                className="rounded-md p-1 text-ink-muted hover:bg-black/[0.05]"
+                className="inline-flex size-8 items-center justify-center rounded-full text-ink-muted transition-colors hover:bg-surface-soft hover:text-ink-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0A6CFF]"
                 aria-label="Close"
               >
-                <X size={18} />
+                <X size={16} />
               </button>
             </div>
 
-            <p className="mt-3 text-[14px] font-semibold text-ink-soft">
+            <div className="px-5 py-4">
+            <p className="text-[13px] leading-[1.5] text-ink-soft">
               Upload a CSV or Excel file (or one exported from Google Sheets) for{" "}
               <strong className="text-ink-strong">{props.weekLabel}</strong>. The first row
               must be the column headers; every row after becomes a goal.
             </p>
 
-            <div className="mt-3 rounded-xl border border-hairline bg-black/[0.015] p-3">
-              <p className="text-[12px] font-black uppercase tracking-[0.05em] text-ink-muted">
+            <div className="mt-3 rounded-lg border border-hairline bg-[#F5F7FB] px-3 py-2.5">
+              <p className="text-[11.5px] font-bold uppercase tracking-[0.06em] text-ink-subtle">
                 Recognised headers
               </p>
-              <p className="mt-1 text-[13px] font-semibold text-ink-soft">
-                Client · Subject · Priority · Incentive · KPI · Target · % Done · Explanation · Link
-                {props.isAdmin && " · Employee (name or email)"}
-              </p>
+              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                {[
+                  "Client", "Subject", "Priority", "Incentive", "KPI", "Target", "% Done", "Explanation", "Link",
+                  ...(props.isAdmin ? ["Employee (name or email)"] : []),
+                ].map((h) => (
+                  <span
+                    key={h}
+                    className="inline-flex items-center rounded-md border border-hairline bg-white px-2 py-0.5 text-[12px] font-semibold text-ink-soft"
+                  >
+                    {h}
+                  </span>
+                ))}
+              </div>
             </div>
 
             {needsEmployeeColumn && (
-              <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-[13px] font-bold text-amber-700">
+              <p className="mt-3 rounded-lg border border-[#FDE6B3] bg-[#FFF8E8] px-3 py-2 text-[12.5px] font-medium text-[#9A5B00]">
                 You&apos;re viewing all team members — include an <strong>Employee</strong> column
                 (name or email) in the file, or pick one person first.
               </p>
             )}
 
             {error && (
-              <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-[13px] font-bold text-altus-red">
+              <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[12.5px] font-medium text-altus-red">
                 {error}
               </p>
             )}
 
             {result && (
-              <div className="mt-3 rounded-lg bg-green-50 px-3 py-2 text-[13px] font-bold text-green-700">
+              <div className="mt-3 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-[12.5px] font-semibold text-green-700">
                 Imported {result.imported} goal{result.imported === 1 ? "" : "s"}
                 {result.skipped > 0 ? ` · ${result.skipped} row(s) skipped` : ""}.
                 {result.warnings.length > 0 && (
@@ -141,11 +156,11 @@ export function WeeklyGoalsImport(props: Props) {
               onChange={onPick}
             />
 
-            <div className="mt-5 flex items-center justify-end gap-2">
+            <div className="mt-4 flex items-center justify-end gap-2">
               <button
                 type="button"
                 onClick={() => !pending && setOpen(false)}
-                className="px-4 py-2 rounded-full border border-hairline bg-surface-card font-bold text-[14px] text-ink-soft hover:text-ink-strong transition-colors"
+                className="inline-flex h-9 items-center rounded-lg border border-[#D6DEEB] bg-white px-4 text-[13px] font-semibold text-[#334155] transition-colors hover:bg-[#F5F8FE] hover:border-[#B8CCEE] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0A6CFF]"
               >
                 {result ? "Done" : "Cancel"}
               </button>
@@ -153,15 +168,12 @@ export function WeeklyGoalsImport(props: Props) {
                 type="button"
                 onClick={() => inputRef.current?.click()}
                 disabled={pending}
-                className="inline-flex items-center gap-2 px-5 py-2 rounded-full text-[14px] font-bold text-white transition-all hover:brightness-110 active:scale-[0.98] disabled:opacity-60"
-                style={{
-                  background:
-                    "linear-gradient(135deg, #0A6CFF 0%, #0A6CFF 42%, #17B6A0 100%)",
-                }}
+                className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#0A6CFF] px-4 text-[13px] font-semibold text-white transition-colors hover:bg-[#0858d6] active:bg-[#0749b3] disabled:opacity-60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0A6CFF]"
               >
                 {pending ? <Loader2 size={15} className="animate-spin" /> : <Upload size={15} />}
                 {pending ? "Importing…" : "Choose file"}
               </button>
+            </div>
             </div>
           </div>
         </div>

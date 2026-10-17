@@ -27,7 +27,7 @@ const EMPTY: GlobalSearchResult = {
  * documents) via a single GIN-indexed server action, grouped + ranked with
  * archived/inactive below active. Debounced + TanStack-Query-cached.
  */
-export function GlobalSearch() {
+export function GlobalSearch({ compact = false }: { compact?: boolean } = {}) {
   const router = useRouter();
   const [open, setOpen] = React.useState(false);
   const [query, setQuery] = React.useState("");
@@ -82,14 +82,19 @@ export function GlobalSearch() {
         <button
           type="button"
           aria-label="Global search"
-          className="global-search-field inline-flex h-9 w-full max-w-[420px] items-center gap-2.5 rounded-[10px] border px-3 text-left transition-colors max-2xl:max-w-[300px] max-md:h-8 max-md:w-9 max-md:justify-center max-md:px-0"
+          title={compact ? "Search everything (Ctrl+K)" : undefined}
+          className={
+            compact
+              ? "global-search-field inline-flex size-[30px] shrink-0 items-center justify-center rounded-full border transition-colors"
+              : "global-search-field inline-flex h-9 w-full max-w-[420px] items-center gap-2.5 rounded-[10px] border px-3 text-left transition-colors max-2xl:max-w-[300px] max-md:h-8 max-md:w-9 max-md:justify-center max-md:px-0"
+          }
         >
-          <Search size={16} strokeWidth={2.2} className="shrink-0" />
-          <span className="flex-1 truncate text-[13.5px] font-semibold max-md:hidden">
+          <Search size={compact ? 15 : 16} strokeWidth={2.2} className="shrink-0" />
+          <span className={`flex-1 truncate text-[13.5px] font-semibold max-md:hidden ${compact ? "!hidden" : ""}`}>
             Search everything…
           </span>
           <kbd
-            className="ml-auto hidden shrink-0 items-center gap-0.5 rounded border px-1.5 py-0.5 text-[11px] font-bold lg:inline-flex max-md:hidden"
+            className={`ml-auto hidden shrink-0 items-center gap-0.5 rounded border px-1.5 py-0.5 text-[11px] font-bold lg:inline-flex max-md:hidden ${compact ? "!hidden" : ""}`}
             aria-hidden
           >
             ⌘K

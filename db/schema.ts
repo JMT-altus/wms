@@ -1825,6 +1825,104 @@ export const attendancePolicyChanges = pgTable(
   (t) => [index("attendance_policy_changes_key_idx").on(t.policyKey, t.effectiveFrom, t.createdAt)],
 );
 
+/**
+ * Collection follow-ups (0110): an append-only history, one row per saved
+ * follow-up, keyed by the party name as the accounting source gives it. It holds
+ * no financial figures — those stay with their source.
+ */
+export const collectionFollowups = pgTable(
+  "collection_followups",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    partyName: text("party_name").notNull(),
+    nextFollowupDate: date("next_followup_date"),
+    note: text("note"),
+    createdById: uuid("created_by_id").references(() => employees.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("collection_followups_party_idx").on(t.partyName, t.createdAt)],
+);
+
+export type CollectionFollowup = typeof collectionFollowups.$inferSelect;
+
+/**
+ * Biometric employee map (migration 0111) — which JMT employee a biometric
+ * machine's Employee Code belongs to. Written ONLY when an admin confirms a match
+ * on the Attendance Bulk Upload page (never seeded, never guessed). A code maps to
+ * one person and a person has one code. See db/migrations/0111_biometric_employee_map.sql.
+ */
+export const biometricEmployeeMap = pgTable(
+  "biometric_employee_map",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    biometricCode: text("biometric_code").notNull(),
+    employeeId: uuid("employee_id")
+      .notNull()
+      .references(() => employees.id, { onDelete: "cascade" }),
+    /** The name the report showed when HR confirmed the match. */
+    nameInFile: text("name_in_file").notNull().default(""),
+    confirmedById: uuid("confirmed_by_id").references(() => employees.id, { onDelete: "set null" }),
+    confirmedAt: timestamp("confirmed_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("biometric_employee_map_code_uq").on(t.biometricCode),
+    uniqueIndex("biometric_employee_map_employee_uq").on(t.employeeId),
+  ],
+);
+
+export type BiometricEmployeeMap = typeof biometricEmployeeMap.$inferSelect;
+
+/**
+ * Collection Master (migration 0112) — company reference list for the Collection
+ * screens: name, Sales Coordinator LABEL as the master file has it, payment terms
+ * as written. No amounts, invoices or due dates. Separate from the Client Master;
+ * linked to it only on an exact, unique name match. See
+ * db/migrations/0112_collection_master.sql.
+ */
+export const collectionMasterImports = pgTable(
+  "collection_master_imports",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    fileName: text("file_name"),
+    sheetName: text("sheet_name"),
+    columnMapping: jsonb("column_mapping").notNull().default({}),
+    ignoredColumns: jsonb("ignored_columns").notNull().default([]),
+    totals: jsonb("totals").notNull().default({}),
+    changes: jsonb("changes").notNull().default([]),
+    importedById: uuid("imported_by_id").references(() => employees.id, { onDelete: "set null" }),
+    importedAt: timestamp("imported_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("collection_master_imports_at_idx").on(t.importedAt)],
+);
+
+export const collectionMasterCompanies = pgTable(
+  "collection_master_companies",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyName: text("company_name").notNull(),
+    /** Lower-case letters and digits only; unique — the company identity. */
+    nameKey: text("name_key").notNull(),
+    /** NULL = Unassigned. A label, never an employee id. */
+    coordinatorLabel: text("coordinator_label"),
+    /** NULL = the file had none. */
+    paymentTerms: text("payment_terms"),
+    customerMasterId: uuid("customer_master_id").references(() => customerMasters.id, { onDelete: "set null" }),
+    clientMatch: text("client_match").$type<"none" | "linked" | "ambiguous">().notNull().default("none"),
+    createdImportId: uuid("created_import_id").references(() => collectionMasterImports.id, { onDelete: "set null" }),
+    lastImportId: uuid("last_import_id").references(() => collectionMasterImports.id, { onDelete: "set null" }),
+    createdById: uuid("created_by_id").references(() => employees.id, { onDelete: "set null" }),
+    updatedById: uuid("updated_by_id").references(() => employees.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("collection_master_companies_name_key_uq").on(t.nameKey),
+    index("collection_master_companies_customer_idx").on(t.customerMasterId),
+  ],
+);
+
+export type CollectionMasterCompany = typeof collectionMasterCompanies.$inferSelect;
+
 export type LeaveRequest = typeof leaveRequests.$inferSelect;
 export type NewLeaveRequest = typeof leaveRequests.$inferInsert;
 

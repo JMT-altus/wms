@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { DashboardFilters, ViewMode } from "@/lib/types";
 import { TASK_PRIORITIES, type TaskPriority } from "@/db/enums";
+import { isDueBucket } from "@/lib/due-buckets";
 
 const isoDate = z
   .string()
@@ -15,6 +16,7 @@ const filtersSchema = z.object({
   dept: z.string().optional(),
   prio: z.string().optional(),
   subj: z.string().optional(),
+  due: z.string().optional(),
 });
 
 const PRIO_SET = new Set<TaskPriority>(TASK_PRIORITIES);
@@ -55,6 +57,7 @@ export function parseFilters(
     departments: [],
     priorities: [],
     subjects: [],
+    dueBucket: null,
   };
   if (!parsed.success) return empty;
 
@@ -72,6 +75,7 @@ export function parseFilters(
     departments,
     priorities,
     subjects: split(parsed.data.subj),
+    dueBucket: isDueBucket(parsed.data.due) ? parsed.data.due : null,
   };
 }
 
@@ -84,5 +88,6 @@ export function filtersToSearchString(filters: DashboardFilters): string {
   if (filters.departments.length > 0) sp.set("dept", filters.departments.join(","));
   if (filters.priorities.length > 0)  sp.set("prio", filters.priorities.join(","));
   if (filters.subjects.length > 0)    sp.set("subj", filters.subjects.join(","));
+  if (filters.dueBucket)              sp.set("due", filters.dueBucket);
   return sp.toString();
 }

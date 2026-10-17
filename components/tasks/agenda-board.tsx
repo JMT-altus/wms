@@ -164,44 +164,43 @@ export function AgendaBoard({ todayYmd, days, tasks, isAdmin }: Props) {
   return (
     <div>
       {/* Lifecycle buckets — Due Now · Upcoming · Overdue · Not Due. */}
-      <div className="mb-7 grid grid-cols-4 gap-4 max-lg:grid-cols-2 max-sm:grid-cols-1">
+      <div className="mb-2.5 grid grid-cols-4 gap-2.5 max-lg:grid-cols-2 max-sm:grid-cols-1">
         {buckets.map((b) => {
           const Icon = b.icon;
           return (
             <div
               key={b.key}
-              className="relative rounded-section overflow-hidden"
+              className="relative rounded-section overflow-hidden bg-white"
               style={{
-                background: `linear-gradient(158deg, #ffffff 0%, color-mix(in srgb, var(--color-${b.tone}) 10%, #ffffff) 100%)`,
-                border: `1.5px solid color-mix(in srgb, var(--color-${b.tone}) 42%, rgba(52, 82, 201, 0.35))`,
-                boxShadow: `0 14px 30px -18px color-mix(in srgb, var(--color-${b.tone}) 60%, transparent), 0 1px 2px rgba(15,23,42,0.05)`,
-                padding: "20px 22px",
+                border: "1px solid var(--color-hairline-strong)",
+                boxShadow: "0 1px 2px rgba(15, 23, 42, 0.05), 0 8px 24px -16px rgba(15, 23, 42, 0.14)",
+                padding: "10px 12px",
               }}
             >
               <span
                 aria-hidden
                 className="absolute inset-x-0 top-0"
-                style={{ height: 4, background: `linear-gradient(90deg, var(--color-${b.tone}), var(--color-${b.tone}-deep))` }}
+                style={{ height: 3, background: `var(--color-${b.tone})` }}
               />
               <span
                 aria-hidden
-                className="absolute right-5 top-5 inline-flex size-9 items-center justify-center rounded-xl"
+                className="absolute right-3 top-3 inline-flex size-7 items-center justify-center rounded-md"
                 style={{
                   background: `color-mix(in srgb, var(--color-${b.tone}) 14%, transparent)`,
                   color: `var(--color-${b.tone}-deep)`,
                 }}
               >
-                <Icon size={18} strokeWidth={2.3} />
+                <Icon size={14} strokeWidth={2.3} />
               </span>
               <span
                 className="uppercase font-black tracking-[0.06em] leading-none"
-                style={{ fontFamily: "var(--font-display), system-ui, sans-serif", fontSize: 13, color: `var(--color-${b.tone}-deep)` }}
+                style={{ fontFamily: "var(--font-display), system-ui, sans-serif", fontSize: 12, color: `var(--color-${b.tone}-deep)` }}
               >
                 {b.label}
               </span>
               <span
-                className="block mt-2 leading-[0.85] tabular-nums text-ink-strong"
-                style={{ fontFamily: "var(--font-display), system-ui, sans-serif", fontWeight: 900, fontSize: 40 }}
+                className="block mt-1.5 leading-none tabular-nums text-ink-strong"
+                style={{ fontFamily: "var(--font-display), system-ui, sans-serif", fontWeight: 800, fontSize: 24 }}
               >
                 {b.n}
               </span>
@@ -211,18 +210,18 @@ export function AgendaBoard({ todayYmd, days, tasks, isAdmin }: Props) {
       </div>
 
       {/* Day-count selector */}
-      <div className="mb-5 flex items-center gap-2 max-sm:flex-wrap">
-        <span className="text-[15px] font-semibold text-ink-subtle mr-1">Show</span>
+      <div className="mb-2.5 flex items-center gap-2 max-sm:flex-wrap">
+        <span className="text-[13px] font-semibold text-ink-subtle mr-1">Show</span>
         {DAY_CHOICES.map((n) => (
           <button
             key={n}
             type="button"
             onClick={() => setDayCount(n)}
-            className="px-4 py-2 rounded-full text-[15px] font-semibold transition-colors"
+            className="h-7 px-3 rounded-lg text-[12.5px] font-semibold transition-colors hover:border-[#9fb2d1] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#14336B] motion-reduce:transition-none"
             style={{
-              background: dayCount === n ? "var(--color-ink-strong)" : "var(--color-surface-soft)",
+              background: dayCount === n ? "#14336B" : "#ffffff",
               color: dayCount === n ? "#fff" : "var(--color-ink-soft)",
-              border: "1px solid var(--color-hairline)",
+              border: `1px solid ${dayCount === n ? "#14336B" : "var(--color-hairline-strong)"}`,
             }}
           >
             {n} days
@@ -232,7 +231,7 @@ export function AgendaBoard({ todayYmd, days, tasks, isAdmin }: Props) {
 
       <div
         ref={scrollRef}
-        className="flex gap-5 overflow-x-auto pb-4"
+        className="flex gap-3 overflow-x-auto pb-3"
         onDragOver={(e) => {
           // Bubbles up from the day columns; track pointer + run the loop.
           updateEdgeFromPointer(e.clientX);
@@ -300,15 +299,11 @@ function Column({
   const droppable = !!ymd && canReschedule;
   return (
     <div
-      className="flex-shrink-0 w-[360px] max-md:w-[300px] rounded-section p-4 transition-colors"
+      className="flex-shrink-0 w-[280px] max-md:w-[264px] rounded-section p-2.5 transition-colors"
       style={{
-        background: isOver
-          ? "var(--color-blue-bg)"
-          : "linear-gradient(180deg, #ffffff 0%, #fbfcff 100%)",
-        border: `1px solid ${isOver ? "var(--color-blue)" : "rgba(52, 82, 201, 0.16)"}`,
-        boxShadow: isOver
-          ? "0 0 0 3px rgba(10, 108, 255, 0.14)"
-          : "0 14px 34px -22px rgba(10, 108, 255, 0.40), 0 12px 28px -18px rgba(10, 108, 255, 0.15), 0 1px 4px -1px rgba(15, 23, 42, 0.06)",
+        background: isOver ? "var(--color-blue-bg)" : "#ffffff",
+        border: `1px solid ${isOver ? "var(--color-blue)" : "var(--color-hairline-strong)"}`,
+        boxShadow: isOver ? "0 0 0 3px rgba(10, 108, 255, 0.14)" : "0 1px 2px rgba(15, 23, 42, 0.05), 0 8px 24px -16px rgba(15, 23, 42, 0.14)",
       }}
       onDragOver={
         droppable
@@ -330,21 +325,21 @@ function Column({
           : undefined
       }
     >
-      <div className="flex items-center justify-between mb-4 px-1">
+      <div className="flex items-center justify-between mb-2 px-1 pb-2 border-b border-hairline">
         <span
-          className="inline-flex items-center gap-2 text-[17px] font-bold"
+          className="inline-flex items-center gap-1.5 text-[14px] font-bold"
           style={{ color: `var(--color-${tone}-deep)` }}
         >
-          {label === "Overdue" && <AlertTriangle size={17} strokeWidth={2.4} />}
+          {label === "Overdue" && <AlertTriangle size={15} strokeWidth={2.4} />}
           {label}
         </span>
-        <span className="text-[14px] font-semibold text-ink-subtle tabular-nums">{sub}</span>
+        <span className="text-[12px] font-semibold text-ink-subtle tabular-nums">{sub}</span>
       </div>
       {/* Tall droppable area so each column fills the screen and there's a
           generous target to drop onto. */}
-      <div className="flex flex-col gap-3 min-h-[calc(100vh_-_330px)]">
+      <div className="flex flex-col gap-2 min-h-[max(220px,calc(100vh_-_400px))]">
         {tasks.length === 0 ? (
-          <p className="text-[14px] text-ink-subtle px-1 py-4">
+          <p className="text-[12.5px] text-ink-subtle px-1 py-2">
             {droppable ? "Drop a task here." : "Nothing here."}
           </p>
         ) : (
@@ -361,14 +356,14 @@ function Column({
                     }
                   : undefined
               }
-              className={`rounded-chip bg-gradient-to-b from-white to-[#eef3ff] border border-hairline p-4 shadow-[0_4px_14px_-10px_rgba(10,108,255,0.32)] transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 block ${
+              className={`rounded-lg bg-white border border-hairline-strong px-3 py-2.5 shadow-[0_1px_2px_rgba(15,23,42,0.05)] transition-all duration-200 hover:border-[#9fb2d1] hover:shadow-md block ${
                 canReschedule ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"
               }`}
             >
               <span
-                className="text-[16.5px] font-semibold text-ink-strong block"
+                className="text-[14px] font-semibold text-ink-strong block"
                 style={{
-                  lineHeight: 1.4,
+                  lineHeight: 1.35,
                   display: "-webkit-box",
                   WebkitLineClamp: 4,
                   WebkitBoxOrient: "vertical",
@@ -378,7 +373,7 @@ function Column({
                 {t.description || t.title}
               </span>
               {t.subject && (
-                <span className="mt-2 text-[13px] font-semibold text-ink-subtle block">
+                <span className="mt-1 text-[12px] font-medium text-ink-subtle block">
                   {t.subject}
                 </span>
               )}

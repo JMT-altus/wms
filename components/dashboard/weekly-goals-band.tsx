@@ -34,14 +34,15 @@ export function WeeklyGoalsBand({ goals }: { goals: GoalBandRow[] }) {
 
   return (
     <section
-      className="mx-auto max-w-[1600px] px-12 max-md:px-4 mt-8"
+      className="mx-auto max-w-[1600px] px-8 max-md:px-4 mt-8"
       aria-label="This week's goals"
     >
       <div
         className="overflow-hidden rounded-section border"
         style={{
-          borderColor: "color-mix(in srgb, var(--color-altus-red) 28%, transparent)",
+          borderColor: "var(--color-hairline-strong)",
           background: "#ffffff",
+          boxShadow: "0 1px 2px rgba(15, 23, 42, 0.05), 0 8px 24px -16px rgba(15, 23, 42, 0.16)",
         }}
       >
         <header

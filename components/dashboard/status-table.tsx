@@ -30,19 +30,22 @@ const COLUMNS: StatusColumn[] = [
   { key: "total", label: "Total", tone: null },
 ];
 
+const MONO = { fontFamily: "var(--font-mono-display), ui-monospace, monospace" } as const;
+
 /** A count in the grid. Zero stays grey and flat: on a wide table most cells
  *  are zero, and colouring them would drown the handful that matter. */
 function Count({ value, tone }: { value: number; tone: StatusColumn["tone"] }) {
   if (value === 0) {
-    return <span className="text-[15px] tabular-nums text-ink-subtle/70">0</span>;
+    return <span className="text-[14px] tabular-nums text-ink-subtle/70" style={MONO}>0</span>;
   }
   if (tone === null) {
-    return <span className="text-[15px] font-bold tabular-nums text-ink-strong">{value}</span>;
+    return <span className="text-[14px] font-bold tabular-nums text-ink-strong" style={MONO}>{value}</span>;
   }
   return (
     <span
-      className="inline-flex min-w-9 items-center justify-center rounded-[10px] px-2.5 py-1.5 text-[15px] font-bold tabular-nums"
+      className="inline-flex min-w-8 items-center justify-center rounded-md px-2 py-0.5 text-[14px] font-bold tabular-nums"
       style={{
+        ...MONO,
         color: `var(--color-${tone}-deep)`,
         background: `color-mix(in srgb, var(--color-${tone}) 14%, #ffffff)`,
       }}
@@ -149,68 +152,53 @@ export function StatusTable({
     <SectionHeader
       id="status-by-doer"
       icon={<Users size={18} strokeWidth={2.2} />}
-      tone="slate"
+      tone="blue"
       title={title}
-      subtitle={
-        query.trim() || team ? (
-          <>
-            Showing{" "}
-            <span className="font-bold tabular-nums text-ink-strong">{sorted.length}</span> of{" "}
-            {rows.length} {rows.length === 1 ? "person" : "people"}
-          </>
-        ) : (
-          "Tasks broken down per person"
-        )
-      }
       collapsed={collapsed}
       onToggle={() => setCollapsed((v) => !v)}
       actions={
         <>
           <SectionShareActions title={title} buildReport={buildReport} />
-          <SearchBox value={query} onChange={setQuery} />
           <button
             type="button"
             onClick={() => setTransposed((v) => !v)}
             aria-pressed={transposed}
-            className="inline-flex h-9 items-center gap-1.5 rounded-[10px] border border-hairline-strong bg-white px-3 text-[13.5px] font-semibold text-ink-soft transition-colors hover:border-altus-red hover:text-ink-strong"
+            aria-label="Transpose"
+            title="Transpose"
+            className="inline-flex size-9 items-center justify-center rounded-[10px] border border-hairline-strong bg-white text-ink-strong transition-colors hover:bg-surface-soft aria-pressed:bg-surface-soft"
           >
-            <ArrowLeftRight size={15} strokeWidth={2.2} aria-hidden />
-            Transpose
+            <ArrowLeftRight size={16} strokeWidth={2.2} aria-hidden />
           </button>
         </>
       }
+      trailing={<SearchToggle value={query} onChange={setQuery} />}
     >
       <div
-        className="rounded-section p-4 max-md:p-3"
+        className="rounded-section p-3 max-md:p-2.5"
         style={{
           background: "#ffffff",
-          border: "1px solid color-mix(in srgb, var(--color-altus-red) 22%, transparent)",
+          border: "1px solid var(--color-hairline-strong)",
+          boxShadow: "0 1px 2px rgba(15, 23, 42, 0.05), 0 8px 24px -16px rgba(15, 23, 42, 0.16)",
         }}
       >
         {/* Team tabs */}
-        <div className="nav-scroll -mx-1 mb-4 overflow-x-auto px-1">
-          <div
-            className="inline-flex items-center gap-1 rounded-pill p-1"
-            style={{ background: "#f4f5f7" }}
-            role="tablist"
-            aria-label="Teams"
-          >
+        <div
+          className="mb-2 flex flex-wrap items-center gap-x-1 gap-y-0.5 rounded-xl p-1"
+          style={{ background: "#EEF3FB" }}
+          role="tablist"
+          aria-label="Teams"
+        >
+          <TeamTab compact label="All Employees" count={rows.length} active={team === null} onClick={() => setTeam(null)} />
+          {teams.map(([name, count]) => (
             <TeamTab
-              label="All"
-              count={rows.length}
-              active={team === null}
-              onClick={() => setTeam(null)}
+              compact
+              key={name}
+              label={name}
+              count={count}
+              active={team === name}
+              onClick={() => setTeam(team === name ? null : name)}
             />
-            {teams.map(([name, count]) => (
-              <TeamTab
-                key={name}
-                label={name}
-                count={count}
-                active={team === name}
-                onClick={() => setTeam(team === name ? null : name)}
-              />
-            ))}
-          </div>
+          ))}
         </div>
 
         {sorted.length === 0 ? (
@@ -226,7 +214,7 @@ export function StatusTable({
             <table className="w-full min-w-[880px] border-collapse">
               <thead>
                 <tr className="border-b border-hairline">
-                  <th className="sticky left-0 z-10 bg-white px-4 py-3 text-left">
+                  <th className="sticky left-0 z-10 bg-white px-3 py-2 text-left">
                     <SortButton
                       label="Employee"
                       active={sort.key === "employeeName"}
@@ -235,7 +223,7 @@ export function StatusTable({
                     />
                   </th>
                   {COLUMNS.map((c) => (
-                    <th key={String(c.key)} className="px-4 py-3 text-center whitespace-nowrap">
+                    <th key={String(c.key)} className="px-3 py-2 text-right whitespace-nowrap">
                       <SortButton
                         label={c.label}
                         active={sort.key === c.key}
@@ -262,16 +250,16 @@ export function StatusTable({
                     }}
                     className="status-doer-row cursor-pointer border-b border-hairline last:border-b-0"
                   >
-                    <td className="status-doer-name sticky left-0 z-10 bg-white px-4 py-3 whitespace-nowrap">
+                    <td className="status-doer-name sticky left-0 z-10 bg-white px-3 py-1.5 whitespace-nowrap">
                       <span className="inline-flex items-center gap-3">
-                        <EmployeeAvatar name={r.employeeName} size="sm" />
-                        <span className="text-[15px] font-bold text-ink-strong">
+                        <EmployeeAvatar name={r.employeeName} size="md" />
+                        <span className="text-[14.5px] font-bold text-ink-strong">
                           {r.employeeName}
                         </span>
                       </span>
                     </td>
                     {COLUMNS.map((c) => (
-                      <td key={String(c.key)} className="px-4 py-3 text-center whitespace-nowrap">
+                      <td key={String(c.key)} className="px-3 py-1.5 text-right whitespace-nowrap">
                         <Count value={r[c.key] as number} tone={c.tone} />
                       </td>
                     ))}
@@ -301,11 +289,11 @@ function TransposedGrid({
       <table className="w-full border-collapse" style={{ minWidth: 220 + rows.length * 132 }}>
         <thead>
           <tr className="border-b border-hairline">
-            <th className="sticky left-0 z-10 bg-white px-4 py-3 text-left text-[13.5px] font-bold text-ink-strong">
+            <th className="sticky left-0 z-10 bg-white px-3 py-2 text-left text-[13px] font-bold text-ink-strong">
               Status
             </th>
             {rows.map((r) => (
-              <th key={r.employeeId} className="px-3 py-3 text-center whitespace-nowrap">
+              <th key={r.employeeId} className="px-3 py-2 text-center whitespace-nowrap">
                 <button
                   type="button"
                   onClick={() => onOpen(r.employeeId)}
@@ -323,11 +311,11 @@ function TransposedGrid({
         <tbody>
           {COLUMNS.map((c) => (
             <tr key={String(c.key)} className="border-b border-hairline last:border-b-0">
-              <td className="sticky left-0 z-10 bg-white px-4 py-3 text-[14px] font-bold whitespace-nowrap text-ink-strong">
+              <td className="sticky left-0 z-10 bg-white px-3 py-1.5 text-[13.5px] font-bold whitespace-nowrap text-ink-strong">
                 {c.label}
               </td>
               {rows.map((r) => (
-                <td key={r.employeeId} className="px-3 py-3 text-center">
+                <td key={r.employeeId} className="px-3 py-1.5 text-center">
                   <Count value={r[c.key] as number} tone={c.tone} />
                 </td>
               ))}
@@ -339,7 +327,7 @@ function TransposedGrid({
   );
 }
 
-function SortButton({
+export function SortButton({
   label,
   active,
   dir,
@@ -355,26 +343,28 @@ function SortButton({
     <button
       type="button"
       onClick={onClick}
-      className="inline-flex items-center gap-1.5 text-[13.5px] font-bold whitespace-nowrap transition-colors hover:text-altus-red"
-      style={{ color: active ? "var(--color-altus-red)" : "var(--color-ink-strong)" }}
+      className="inline-flex items-center gap-1.5 text-[13.5px] font-bold whitespace-nowrap text-ink-strong transition-colors hover:text-ink-soft"
       aria-label={`Sort by ${label}`}
     >
       {label}
-      <Icon size={13} strokeWidth={2.4} className={active ? "" : "text-ink-subtle"} aria-hidden />
+      <Icon size={13} strokeWidth={2.4} className={active ? "text-ink-strong" : "text-ink-subtle"} aria-hidden />
     </button>
   );
 }
 
-function TeamTab({
+export function TeamTab({
   label,
   count,
   active,
   onClick,
+  compact = false,
 }: {
   label: string;
   count: number;
   active: boolean;
   onClick: () => void;
+  /** Smaller type and padding, for a strip that spans the card. */
+  compact?: boolean;
 }) {
   return (
     <button
@@ -382,7 +372,9 @@ function TeamTab({
       role="tab"
       aria-selected={active}
       onClick={onClick}
-      className="inline-flex items-center gap-2 rounded-pill px-3.5 py-1.5 text-[13.5px] font-semibold whitespace-nowrap transition-all"
+      className={`inline-flex items-center rounded-pill font-semibold whitespace-nowrap transition-all ${
+        compact ? "gap-1.5 px-2.5 py-1 text-[12px]" : "gap-2 px-3.5 py-1.5 text-[13.5px]"
+      }`}
       style={{
         background: active ? "#ffffff" : "transparent",
         color: active ? "var(--color-ink-strong)" : "var(--color-ink-soft)",
@@ -403,7 +395,7 @@ function TeamTab({
   );
 }
 
-function SearchBox({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+export function SearchBox({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   return (
     <div className="relative flex h-9 min-w-[200px] items-center rounded-[10px] border border-hairline-strong bg-white pl-2.5 pr-1.5 max-lg:min-w-[150px]">
       <Search size={15} className="shrink-0 text-ink-subtle" aria-hidden />
@@ -426,5 +418,32 @@ function SearchBox({ value, onChange }: { value: string; onChange: (v: string) =
         </button>
       )}
     </div>
+  );
+}
+
+/** Search as an icon button that opens into the usual search box. */
+export function SearchToggle({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [open, setOpen] = React.useState(false);
+  if (open || value) {
+    return (
+      <div
+        onBlur={(e) => {
+          if (!value && !e.currentTarget.contains(e.relatedTarget)) setOpen(false);
+        }}
+      >
+        <SearchBox value={value} onChange={onChange} />
+      </div>
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={() => setOpen(true)}
+      aria-label="Search employees"
+      title="Search employees"
+      className="inline-flex size-9 items-center justify-center rounded-[10px] border border-hairline-strong bg-white text-ink-soft transition-colors hover:bg-surface-soft hover:text-ink-strong"
+    >
+      <Search size={16} strokeWidth={2.2} />
+    </button>
   );
 }

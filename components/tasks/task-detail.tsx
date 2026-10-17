@@ -104,14 +104,14 @@ export function TaskDetail({
     <article className="relative">
       {/* Eyebrow row — overdue/due pill + created-ago text + subject chip.
           Matches the design comp where small meta sits ABOVE the title. */}
-      <div className="flex items-center gap-3 mb-5 flex-wrap">
+      <div className="flex items-center gap-2 mb-3 flex-wrap">
         <DuePill dueAt={task.dueAt} overdue={overdue} />
-        <span className="text-[14px] text-ink-subtle">
+        <span className="text-[13px] text-ink-subtle">
           Created {formatDistanceToNow(task.createdAt, { addSuffix: true })}
         </span>
         {subjectChip && (
           <span
-            className="inline-flex items-center px-2.5 py-1 rounded-full text-[12.5px] font-bold uppercase tracking-[0.08em] border"
+            className="inline-flex items-center px-2 py-0.5 rounded-md text-[11.5px] font-bold uppercase tracking-[0.06em] border"
             style={{
               background: "var(--color-surface-soft)",
               color: "var(--color-ink-muted)",
@@ -122,7 +122,7 @@ export function TaskDetail({
           </span>
         )}
         <span
-          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[12.5px] font-bold tracking-[0.08em] uppercase"
+          className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11.5px] font-bold tracking-[0.06em] uppercase"
           style={{
             background: `rgba(${eyebrow.rgb}, 0.10)`,
             color: eyebrow.toneVar,
@@ -196,14 +196,17 @@ export function TaskDetail({
       {/* HEADLINE — the task itself (its description). The biggest element on
           the page; serif, sized to stay legible whether it's a phrase or a
           paragraph. */}
-      <h1
+      <div
+        role="heading"
+        aria-level={1}
         className="text-ink-strong"
         style={{
-          fontFamily: "var(--font-serif)",
-          fontWeight: 500,
-          fontSize: "clamp(21px, 1.9vw, 28px)",
-          lineHeight: 1.3,
+          fontFamily: "var(--font-display), system-ui, sans-serif",
+          fontWeight: 700,
+          fontSize: "clamp(19px, 1.5vw, 22px)",
+          lineHeight: 1.4,
           letterSpacing: "-0.01em",
+          maxWidth: "80ch",
           // Preserve the line breaks the author typed (multi-line descriptions
           // like an imported list of clients/notes) instead of collapsing them
           // into one run-on paragraph — matches the list hover preview. A
@@ -214,17 +217,17 @@ export function TaskDetail({
         }}
       >
         {headline}
-      </h1>
+      </div>
 
       {/* CLIENT — prominent but clearly secondary to the task headline. */}
       {clientName && (
-        <div className="mt-4">
-          <span className="block text-[12px] uppercase tracking-[0.10em] text-ink-subtle font-bold">
+        <div className="mt-3">
+          <span className="block text-[11.5px] uppercase tracking-[0.08em] text-ink-subtle font-bold">
             Client
           </span>
           <span
             className="block text-ink-strong mt-0.5"
-            style={{ fontSize: 18, fontWeight: 700, letterSpacing: "-0.01em" }}
+            style={{ fontSize: 15, fontWeight: 600, letterSpacing: "-0.005em" }}
           >
             {clientName}
           </span>
@@ -232,7 +235,7 @@ export function TaskDetail({
       )}
 
       {/* Attribution strip — created-by / initiator → doer avatars */}
-      <div className="mt-7 flex flex-wrap items-center gap-x-6 gap-y-4">
+      <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-3 pt-4 border-t border-hairline">
         {task.creatorName && (
           <PersonChip
             label="Created by"
@@ -256,7 +259,7 @@ export function TaskDetail({
           header inside the main task card. */}
       {task.notes && (
         <div
-          className="mt-9 rounded-chip px-6 py-5"
+          className="mt-5 rounded-lg px-4 py-3.5"
           style={{
             background: "var(--color-surface-soft)",
             border: "1px solid var(--color-hairline)",
@@ -275,7 +278,7 @@ export function TaskDetail({
           </h2>
           <p
             className="text-ink whitespace-pre-wrap"
-            style={{ fontSize: 17, lineHeight: 1.6 }}
+            style={{ fontSize: 15, lineHeight: 1.6 }}
           >
             {task.notes}
           </p>
@@ -289,7 +292,7 @@ function DuePill({ dueAt, overdue }: { dueAt: Date; overdue: boolean }) {
   const rgb = overdue ? "225, 6, 0" : "100, 116, 139";
   return (
     <span
-      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[14px] tabular-nums"
+      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[13px] tabular-nums"
       style={{
         background: `rgba(${rgb}, 0.08)`,
         color: overdue ? "var(--color-red-deep)" : "var(--color-ink-soft)",
@@ -321,7 +324,7 @@ function PersonChip({
         <span className="block text-[12px] uppercase tracking-[0.10em] text-ink-subtle font-bold">
           {label}
         </span>
-        <span className="block text-ink-strong font-semibold mt-0.5" style={{ fontSize: 15.5 }}>
+        <span className="block text-ink-strong font-semibold mt-0.5" style={{ fontSize: 14.5 }}>
           {name}
           {relative && (
             <span className="ml-1.5 text-ink-subtle font-normal text-[13.5px]">
@@ -352,7 +355,7 @@ function RolePair({
         <span className="block text-[12px] uppercase tracking-[0.10em] text-ink-subtle font-bold">
           {fromLabel}
         </span>
-        <span className="block text-ink-strong font-semibold mt-0.5" style={{ fontSize: 15.5 }}>
+        <span className="block text-ink-strong font-semibold mt-0.5" style={{ fontSize: 14.5 }}>
           {fromName ?? "—"}
         </span>
       </span>
@@ -366,7 +369,7 @@ function RolePair({
         <span className="block text-[12px] uppercase tracking-[0.10em] text-ink-subtle font-bold">
           {toLabel}
         </span>
-        <span className="block text-ink-strong font-semibold mt-0.5" style={{ fontSize: 15.5 }}>
+        <span className="block text-ink-strong font-semibold mt-0.5" style={{ fontSize: 14.5 }}>
           {toName ?? "—"}
         </span>
       </span>

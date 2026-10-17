@@ -38,7 +38,7 @@ export default async function WeeklyGoalsDashboardPage() {
 
   return (
     <>
-      <DashboardHeader generatedAt={new Date()} />
+      <DashboardHeader generatedAt={new Date()} title="WMS · Performance Dashboard" />
       <WeeklyGoalsDashboard
         trend={trend}
         trendScope={me.isAdmin ? "Team" : "Your"}
@@ -47,7 +47,9 @@ export default async function WeeklyGoalsDashboardPage() {
         starOfMonth={starMonth}
         myId={me.id}
       />
-      <DashboardFooter />
+      <div className="[&>footer]:mt-6">
+        <DashboardFooter />
+      </div>
     </>
   );
 }

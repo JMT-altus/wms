@@ -11,6 +11,7 @@ import { motion } from "motion/react";
 export default function AppTemplate({ children }: { children: React.ReactNode }) {
   return (
     <motion.div
+      className="app-page"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.22, ease: [0.2, 0.7, 0.3, 1] }}

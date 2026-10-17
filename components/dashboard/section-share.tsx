@@ -125,7 +125,7 @@ export function SectionShareActions({
         disabled={busy !== null}
         aria-label={`Share ${title} as a PDF on WhatsApp`}
         title="Export PDF to WhatsApp"
-        className="inline-flex size-8 items-center justify-center rounded-[10px] transition-colors hover:bg-surface-soft disabled:opacity-50"
+        className="inline-flex size-9 items-center justify-center rounded-[10px] border border-hairline-strong bg-white transition-colors hover:bg-surface-soft disabled:opacity-50"
         style={{ color: "#25D366" }}
       >
         {busy === "whatsapp" ? (
@@ -143,7 +143,7 @@ export function SectionShareActions({
         disabled={busy !== null}
         aria-label={`Email ${title} as a PDF`}
         title="Email the PDF to me"
-        className="inline-flex size-8 items-center justify-center rounded-[10px] transition-colors hover:bg-surface-soft disabled:opacity-50"
+        className="inline-flex size-9 items-center justify-center rounded-[10px] border border-hairline-strong bg-white transition-colors hover:bg-surface-soft disabled:opacity-50"
         style={{ color: "var(--color-altus-red)" }}
       >
         {busy === "email" ? (

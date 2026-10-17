@@ -1,198 +1,69 @@
-"use client";
-
-import * as React from "react";
 import Link from "next/link";
 import type { Route } from "next";
-import { ArrowUpRight } from "lucide-react";
-import type { NeonKey } from "./kpi-card";
-import { KpiDetailPanel } from "./kpi-detail-panel";
-import type { KpiSet, VelocityPoint, WmsSummary } from "@/lib/types";
-import { SectionHeader } from "./section-header";
+import type { KpiSet, SummaryPillCounts } from "@/lib/types";
 
-interface Entry {
-  key: keyof KpiSet;
+interface Pill {
+  key: string;
   label: string;
-  sublabel: string;
-  neonKey: NeonKey;
+  /** Pill colour; the label and count take a deeper shade of it. */
+  hue: string;
+  deep: string;
   href: Route;
+  value: number;
 }
 
-// One compact card per KPI, in a single row. The first (Total) reads as the
-// anchor; the rest follow in the operational reading order.
-const ITEMS: Entry[] = [
-  { key: "total", label: "Total", sublabel: "All Tasks", neonKey: "total", href: "/tasks" },
-  { key: "needHelp", label: "Need Info", sublabel: "Awaiting info", neonKey: "need-help", href: "/tasks?status=need_info" },
-  { key: "notApproved", label: "Not Approved", sublabel: "Sent Back", neonKey: "not-approved", href: "/tasks?status=not_approved" },
-  { key: "done", label: "Done", sublabel: "Done + Approved", neonKey: "done", href: "/tasks?status=done,approved" },
-  { key: "pending", label: "Pending", sublabel: "In Progress", neonKey: "pending", href: "/tasks?status=initiated,follow_up" },
-  { key: "notStarted", label: "Not Started", sublabel: "Awaiting Pickup", neonKey: "not-started", href: "/tasks?status=not_started" },
-];
-
-export function KpiStrip({
-  kpis,
-  summary,
-  velocity,
-}: {
-  kpis: KpiSet;
-  summary: WmsSummary;
-  /** Daily created/completed history, plotted in the expanded tile's panel. */
-  velocity: VelocityPoint[];
-}) {
-  const [expanded, setExpanded] = React.useState<keyof KpiSet | null>(null);
-  const [collapsed, setCollapsed] = React.useState(false);
-  const active = expanded ? ITEMS.find((i) => i.key === expanded) ?? null : null;
-  const total = kpis.total.current;
+/**
+ * The dashboard's summary strip: one row of colourful filter pills — Total, Not
+ * read and the workflow states — each a link into the matching task list.
+ * Counts come from the figures the dashboard already computes (the KPI set,
+ * plus the few extra status counts in `extra`).
+ */
+export function KpiStrip({ kpis, extra }: { kpis: KpiSet; extra: SummaryPillCounts }) {
+  const pills: Pill[] = [
+    { key: "total", label: "Total", hue: "#64748b", deep: "#334155", href: "/tasks", value: kpis.total.current },
+    { key: "notRead", label: "Not read", hue: "#7c3aed", deep: "#5b21b6", href: "/tasks?unread=1", value: extra.notRead },
+    { key: "notStarted", label: "Not started", hue: "#4f46e5", deep: "#3730a3", href: "/tasks?status=not_started", value: kpis.notStarted.current },
+    { key: "initiated", label: "Initiated", hue: "#f59e0b", deep: "#92400e", href: "/tasks?status=initiated", value: extra.initiated },
+    { key: "followUp", label: "Follow up", hue: "#f97316", deep: "#9a3412", href: "/tasks?status=follow_up", value: extra.followUp },
+    { key: "needInfo", label: "Need info", hue: "#ef4444", deep: "#991b1b", href: "/tasks?status=need_info", value: kpis.needHelp.current },
+    { key: "done", label: "Done", hue: "#059669", deep: "#065f46", href: "/tasks?status=done,approved", value: kpis.done.current },
+    { key: "abandoned", label: "Abandoned", hue: "#0ea5e9", deep: "#075985", href: "/tasks?status=abandoned", value: extra.abandoned },
+  ];
 
   return (
-    <SectionHeader
+    // No section heading: the pills are the summary. The id stays so anything
+    // linking to "task-summary" still lands here.
+    <section
       id="task-summary"
-      title="Task Summary"
-      subtitle={
-        <>
-          <span className="font-bold tabular-nums text-ink-strong">
-            {total.toLocaleString()}
-          </span>{" "}
-          tasks in the current filter
-        </>
-      }
-      collapsed={collapsed}
-      onToggle={() => setCollapsed((v) => !v)}
+      aria-label="Task Summary"
+      className="mx-auto max-w-[1600px] px-8 max-md:px-4 dash-anchor pt-3"
     >
-      {/* All six on one line. They're a single readout — Total and the five
-          states that partition it — and a wrapped row reads as two groups. */}
-      <div
-        className="grid grid-cols-6 gap-3 max-xl:grid-cols-3 max-md:grid-cols-2"
-        role="list"
-      >
-        {ITEMS.map((item) => {
-          const kpi = kpis[item.key];
-          const delta = kpi.current - kpi.previous;
-          const up = delta > 0;
-          const flat = delta === 0;
-          const arrow = up ? "▲" : flat ? "→" : "▼";
-          // Percentage move, which is what you compare a week on: an absolute
-          // "+8" says nothing without knowing it moved from 9 or from 900.
-          // With no previous week there is no percentage to state, so the
-          // count stands in.
-          const deltaText =
-            kpi.previous > 0
-              ? `${Math.abs(Math.round((delta / kpi.previous) * 100))}%`
-              : `${Math.abs(delta)}`;
-          const shareOfTotal =
-            item.key === "done" && total > 0 ? Math.round((kpi.current / total) * 100) : null;
-          const deltaColor = flat
-            ? "var(--color-ink-subtle)"
-            : up
-              ? "var(--color-green-deep)"
-              : "var(--color-red-deep)";
-          const isOpen = expanded === item.key;
-          const neon = `var(--kpi-neon-${item.neonKey})`;
-          const neonDeep = `var(--kpi-neon-${item.neonKey}-deep)`;
-
-          return (
-            <div role="listitem" key={item.key}>
-              <div
-                className="group relative h-full overflow-hidden rounded-2xl transition-all duration-200 hover:-translate-y-1"
-                style={{
-                  background: `linear-gradient(158deg, #ffffff 0%, color-mix(in srgb, rgb(${neon}) 11%, #ffffff) 100%)`,
-                  border: `1px solid ${isOpen ? `rgb(${neonDeep})` : `color-mix(in srgb, rgb(${neon}) 32%, var(--color-hairline-strong))`}`,
-                  boxShadow: isOpen
-                    ? `0 0 0 1px rgb(${neonDeep}), 0 18px 38px -18px rgb(${neon} / 0.72)`
-                    : `0 12px 28px -16px rgb(${neon} / 0.45), 0 1px 2px rgba(15,23,42,0.05)`,
-                }}
+      <div className="flex flex-wrap items-center gap-2" role="list">
+        {pills.map((p) => (
+          <div role="listitem" key={p.key}>
+            <Link
+              href={p.href}
+              aria-label={`${p.label} — view tasks`}
+              className="inline-flex h-7 items-center gap-1.5 rounded-full px-3 outline-none transition-[filter] hover:brightness-95 focus-visible:ring-2 focus-visible:ring-[#0A6CFF]/50"
+              style={{
+                background: `color-mix(in srgb, ${p.hue} 10%, #fff)`,
+                boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${p.hue} 35%, transparent)`,
+              }}
+            >
+              <span aria-hidden className="inline-block size-2 shrink-0 rounded-full" style={{ background: p.hue }} />
+              <span
+                className="font-bold tabular-nums leading-none"
+                style={{ fontFamily: "var(--font-mono-display), ui-monospace, monospace", fontSize: 14, color: p.deep }}
               >
-                {/* top accent rail */}
-                <span
-                  aria-hidden
-                  className="absolute inset-x-0 top-0 h-[4px]"
-                  style={{ background: `linear-gradient(90deg, rgb(${neon}), rgb(${neonDeep}))`, boxShadow: `0 1px 8px rgb(${neon} / 0.55)` }}
-                />
-                <div className="flex items-start justify-between gap-2 px-3.5 pt-3.5 pb-3">
-                  <Link
-                    href={item.href}
-                    className="group/link min-w-0 flex-1 outline-none"
-                    aria-label={`${item.label} — view tasks`}
-                  >
-                    <span
-                      className="flex items-center gap-1 uppercase font-black tracking-[0.07em] leading-none"
-                      style={{ fontSize: 11.5, color: `rgb(${neonDeep})` }}
-                    >
-                      {item.label}
-                      <ArrowUpRight
-                        size={13}
-                        strokeWidth={3}
-                        className="opacity-0 -translate-x-0.5 transition-all group-hover/link:opacity-100 group-hover/link:translate-x-0"
-                      />
-                    </span>
-                    <span
-                      className="block tabular-nums leading-none mt-2.5 text-ink-strong"
-                      style={{
-                        fontFamily: "var(--font-display), system-ui, sans-serif",
-                        fontWeight: 900,
-                        fontSize: 32,
-                        letterSpacing: "-0.02em",
-                      }}
-                    >
-                      {kpi.current.toLocaleString()}
-                    </span>
-                    <span
-                      className="mt-2 inline-flex flex-wrap items-center gap-x-1 tabular-nums font-extrabold"
-                      style={{ fontSize: 11.5, color: deltaColor }}
-                    >
-                      {arrow} {deltaText}
-                      <span className="font-semibold opacity-60">vs last week</span>
-                      {shareOfTotal != null && (
-                        <span className="font-semibold text-ink-subtle">
-                          · {shareOfTotal}% of total
-                        </span>
-                      )}
-                    </span>
-                  </Link>
-
-                  <button
-                    type="button"
-                    onClick={() => setExpanded((cur) => (cur === item.key ? null : item.key))}
-                    aria-expanded={isOpen}
-                    aria-controls="kpi-detail-panel"
-                    className="shrink-0 rounded-[7px] px-2 py-1 text-[10.5px] font-black uppercase tracking-[0.08em] transition-opacity hover:opacity-80"
-                    style={{
-                      color: isOpen ? "#ffffff" : `rgb(${neonDeep})`,
-                      background: isOpen
-                        ? `rgb(${neonDeep})`
-                        : `color-mix(in srgb, rgb(${neon}) 16%, #ffffff)`,
-                    }}
-                  >
-                    {isOpen ? "Hide" : "View"}
-                  </button>
-                </div>
-              </div>
-            </div>
-          );
-        })}
+                {p.value.toLocaleString()}
+              </span>
+              <span className="whitespace-nowrap text-[12px] font-bold leading-none" style={{ color: p.deep }}>
+                {p.label}
+              </span>
+            </Link>
+          </div>
+        ))}
       </div>
-
-      {/* Single per-card detail panel — animates open via the 0fr→1fr grid trick. */}
-      <div
-        id="kpi-detail-panel"
-        className="grid transition-[grid-template-rows] duration-300 ease-out"
-        style={{ gridTemplateRows: active ? "1fr" : "0fr" }}
-      >
-        <div className="overflow-hidden">
-          {active && (
-            <div className="pt-4">
-              <KpiDetailPanel
-                label={active.label}
-                sublabel={active.sublabel}
-                value={kpis[active.key].current}
-                kpi={kpis[active.key]}
-                summary={summary}
-                velocity={velocity}
-                neonDeep={`var(--kpi-neon-${active.neonKey}-deep)`}
-              />
-            </div>
-          )}
-        </div>
-      </div>
-    </SectionHeader>
+    </section>
   );
 }

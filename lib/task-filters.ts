@@ -1,13 +1,17 @@
 import {
   TASK_STATUSES,
   TASK_PRIORITIES,
+  APPROVAL_STATUSES,
   type TaskStatus,
   type TaskPriority,
+  type ApprovalStatus,
 } from "@/db/enums";
+import { isDueBucket } from "@/lib/due-buckets";
 import type { TaskListFilters } from "@/lib/types";
 
 const STATUS_SET = new Set<TaskStatus>(TASK_STATUSES);
 const PRIO_SET = new Set<TaskPriority>(TASK_PRIORITIES);
+const APPROVAL_SET = new Set<ApprovalStatus>(APPROVAL_STATUSES);
 
 /**
  * Departments are admin-managed rows now (/admin/departments), not a fixed
@@ -116,6 +120,10 @@ export function parseTaskFilters(
     priorities,
     subjects: split(get("subj")),
     clients: split(get("client")),
+    approvals: split(get("approval")).filter((a): a is ApprovalStatus =>
+      APPROVAL_SET.has(a as ApprovalStatus),
+    ),
+    dueBucket: isDueBucket(get("due")) ? (get("due") as import("@/lib/due-buckets").DueBucket) : null,
     taskId: typeof id === "string" && id.length > 0 ? id : null,
     archived: archived || wantsArchived,
     assigneeMode,
@@ -142,6 +150,8 @@ export function taskFiltersToSearchString(f: TaskListFilters): string {
   if (f.priorities.length > 0)   sp.set("prio", f.priorities.join(","));
   if (f.subjects.length > 0)     sp.set("subj", f.subjects.join(","));
   if (f.clients.length > 0)      sp.set("client", f.clients.join(","));
+  if (f.approvals && f.approvals.length > 0) sp.set("approval", f.approvals.join(","));
+  if (f.dueBucket)               sp.set("due", f.dueBucket);
   if (f.taskId) sp.set("id", f.taskId);
   return sp.toString();
 }

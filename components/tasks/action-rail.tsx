@@ -191,14 +191,14 @@ export function ActionRail({
   }
 
   return (
-    <div className="px-4 py-4">
+    <div className="px-3 py-3">
       <h2
-        className="px-1 mb-3 text-[12px] uppercase tracking-[0.12em] text-ink-subtle font-bold"
+        className="px-1 mb-2 text-[11.5px] uppercase tracking-[0.1em] text-ink-subtle font-bold"
       >
         Admin & Process Actions
       </h2>
       <RoleBanner role={myRole} adminOverride={adminOverride} />
-      <div className="flex flex-col gap-2">
+      <div className="flex flex-col gap-1.5">
         {visibleCards.map((c, i) => (
           <motion.div
             key={c.key}
@@ -347,7 +347,7 @@ function RoleBanner({
   }
 
   return (
-    <div className="px-1 mb-3 flex flex-col gap-1.5">
+    <div className="px-1 mb-2 flex flex-col gap-1.5">
       {lines.map((l, i) => {
         const palette =
           l.tone === "blue"
@@ -373,7 +373,7 @@ function RoleBanner({
         return (
           <div
             key={i}
-            className="flex items-start gap-2 px-3 py-2.5 rounded-lg"
+            className="flex items-start gap-2 px-2.5 py-2 rounded-lg"
             style={{
               background: palette.bg,
               border: `1px solid ${palette.ring}`,
@@ -452,7 +452,7 @@ function ActionCard({
       style={primaryStyle}
     >
       <span
-        className="inline-flex items-center justify-center w-9 h-9 rounded-lg shrink-0"
+        className="inline-flex items-center justify-center w-8 h-8 rounded-lg shrink-0"
         style={{
           background: primary
             ? "rgba(255, 255, 255, 0.18)"
@@ -468,13 +468,13 @@ function ActionCard({
       <span className="flex-1 min-w-0">
         <span
           className={`block font-semibold ${primary ? "" : "text-ink-strong"}`}
-          style={{ fontSize: 15, letterSpacing: "0.005em" }}
+          style={{ fontSize: 14, letterSpacing: "0.005em" }}
         >
           {label}
         </span>
         <span
           className={`block mt-0.5 ${primary ? "opacity-90" : "text-ink-subtle"}`}
-          style={{ fontSize: 13, lineHeight: 1.45 }}
+          style={{ fontSize: 12.5, lineHeight: 1.4 }}
         >
           {subtext}
         </span>

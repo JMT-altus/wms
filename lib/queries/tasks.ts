@@ -9,6 +9,8 @@ import { employeeIdsInDepartments } from "@/lib/queries/departments";
 import { visibleTaskCondition } from "@/lib/auth/task-visibility";
 import { CACHE_TAGS } from "@/lib/cache-tags";
 import type { TaskListFilters, TaskListRow } from "@/lib/types";
+import { dueBucketRange } from "@/lib/due-buckets";
+import { effectiveDueAtSql } from "@/lib/tasks/effective-due-sql";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
@@ -101,6 +103,26 @@ function statusFilterCondition(statuses: TaskStatus[]) {
   return or(byStatus, inArray(tasks.approvalStatus, verdicts as ApprovalStatus[]));
 }
 
+/**
+ * Initiator Status (the verdict column) and "All Due Dates" for the list views.
+ * Due dates use the EFFECTIVE due date (a rescheduled task counts by its new
+ * date) and only open tasks, the same meaning the dashboard's due filter has.
+ */
+function approvalAndDueConditions(filters: TaskListFilters) {
+  const out = [];
+  if (filters.approvals && filters.approvals.length > 0) {
+    out.push(inArray(tasks.approvalStatus, filters.approvals));
+  }
+  if (filters.dueBucket) {
+    const { from, to } = dueBucketRange(filters.dueBucket, new Date());
+    const eff = effectiveDueAtSql();
+    out.push(inArray(tasks.status, [...PENDING_STATUSES]));
+    if (from) out.push(sql`${eff} >= ${from.toISOString()}::timestamptz`);
+    if (to) out.push(sql`${eff} < ${to.toISOString()}::timestamptz`);
+  }
+  return out;
+}
+
 export async function listTasks(filters: TaskListFilters): Promise<TaskListRow[]> {
   const conditions = [
     eq(tasks.archived, filters.archived),
@@ -115,6 +137,7 @@ export async function listTasks(filters: TaskListFilters): Promise<TaskListRow[]
     conditions.push(lt(tasks.createdAt, new Date(filters.endDate.getTime() + MS_PER_DAY)));
   const statusCond = statusFilterCondition(filters.statuses);
   if (statusCond)                    conditions.push(statusCond);
+  conditions.push(...approvalAndDueConditions(filters));
   // Pool lens vs normal views: `emp=unassigned` shows ONLY ownerless tasks;
   // every other lens HIDES them so the pool never clutters a person's list
   // or the team view. Assigned tasks always have a doer, so IS NOT NULL is a
@@ -306,6 +329,7 @@ export async function listTasksPage(
     conditions.push(lt(tasks.createdAt, new Date(filters.endDate.getTime() + MS_PER_DAY)));
   const statusCond = statusFilterCondition(filters.statuses);
   if (statusCond) conditions.push(statusCond);
+  conditions.push(...approvalAndDueConditions(filters));
   if (filters.doerIds.length > 0) conditions.push(inArray(tasks.doerId, filters.doerIds));
   if (filters.initiatorIds.length > 0)
     conditions.push(inArray(tasks.initiatorId, filters.initiatorIds));
@@ -622,6 +646,7 @@ export async function listTasksForExport(
     conditions.push(lt(tasks.createdAt, new Date(filters.endDate.getTime() + MS_PER_DAY)));
   const statusCond = statusFilterCondition(filters.statuses);
   if (statusCond)                    conditions.push(statusCond);
+  conditions.push(...approvalAndDueConditions(filters));
   // Pool lens vs normal views: `emp=unassigned` shows ONLY ownerless tasks;
   // every other lens HIDES them so the pool never clutters a person's list
   // or the team view. Assigned tasks always have a doer, so IS NOT NULL is a

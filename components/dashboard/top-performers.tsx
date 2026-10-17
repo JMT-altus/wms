@@ -3,17 +3,14 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
-import { Trophy, Crown, ChevronRight, Search, X } from "lucide-react";
+import { Trophy, ChevronRight } from "lucide-react";
 import type { TopPerformer } from "@/lib/types";
 import { EmployeeAvatar } from "@/components/ui/employee-avatar";
 import { SectionHeader } from "./section-header";
 import { SectionShareActions, type SectionReportInput } from "./section-share";
+import { SearchToggle } from "./status-table";
 
 const TITLE = "Top Performers";
-
-/** Medal for the podium. Beyond third there's no medal — a "4th" badge is
- *  just a rank, and the list already numbers those. */
-const MEDALS = ["🥇", "🥈", "🥉"] as const;
 
 function ordinal(n: number): string {
   // 11th/12th/13th are the exceptions to the 1st/2nd/3rd rule.
@@ -84,43 +81,19 @@ export function TopPerformersSection({ performers }: { performers: TopPerformer[
     <SectionHeader
       id="top-performers"
       icon={<Trophy size={18} strokeWidth={2.2} />}
-      tone="amber"
+      tone="blue"
       title={TITLE}
-      subtitle="Ranked by completed tasks — click any member to view their completed task list."
       collapsed={collapsed}
       onToggle={() => setCollapsed((v) => !v)}
-      actions={
-        <>
-          <SectionShareActions title={TITLE} buildReport={buildReport} />
-          <div className="relative flex h-9 min-w-[190px] items-center rounded-[10px] border border-hairline-strong bg-white pl-2.5 pr-1.5 max-lg:min-w-[140px]">
-            <Search size={15} className="shrink-0 text-ink-subtle" aria-hidden />
-            <input
-              type="text"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search performer"
-              aria-label="Search performers"
-              className="min-w-0 flex-1 border-0 bg-transparent px-2 text-[13.5px] text-ink outline-none placeholder:text-ink-subtle"
-            />
-            {query && (
-              <button
-                type="button"
-                onClick={() => setQuery("")}
-                aria-label="Clear search"
-                className="inline-flex size-5 items-center justify-center rounded-full text-ink-subtle transition-colors hover:text-ink-strong"
-              >
-                <X size={13} strokeWidth={2.6} />
-              </button>
-            )}
-          </div>
-        </>
-      }
+      actions={<SectionShareActions title={TITLE} buildReport={buildReport} />}
+      trailing={<SearchToggle value={query} onChange={setQuery} />}
     >
       <div
-        className="rounded-section p-4 max-md:p-3"
+        className="rounded-section p-3 max-md:p-2.5"
         style={{
           background: "#ffffff",
-          border: "1px solid color-mix(in srgb, var(--color-altus-red) 22%, transparent)",
+          border: "1px solid var(--color-hairline-strong)",
+          boxShadow: "0 1px 2px rgba(15, 23, 42, 0.05), 0 8px 24px -16px rgba(15, 23, 42, 0.16)",
         }}
       >
         {filtered.length === 0 ? (
@@ -130,24 +103,27 @@ export function TopPerformersSection({ performers }: { performers: TopPerformer[
               : "Nobody matches your search."}
           </p>
         ) : (
-          <div className="grid grid-cols-[minmax(280px,1fr)_1.7fr] gap-4 max-lg:grid-cols-1">
+          <div className="grid grid-cols-[minmax(260px,420px)_1fr] gap-3 max-lg:grid-cols-1">
             {/* Podium */}
-            <div className="kanban-scroll flex max-h-[560px] flex-col gap-3 overflow-y-auto pr-1">
-              {podium.map((p, i) => (
+            <div className="kanban-scroll flex max-h-[560px] flex-col gap-2.5 overflow-y-auto pr-1">
+              {podium.map((p) => (
                 <PodiumCard
                   key={p.employeeId}
                   performer={p}
-                  medal={i}
                   onOpen={() => router.push(hrefFor(p.employeeId))}
                 />
               ))}
             </div>
 
             {/* Everyone else */}
-            <div className="kanban-scroll flex max-h-[560px] flex-col gap-2.5 overflow-y-auto pr-1">
+            <div
+              className={`kanban-scroll flex max-h-[560px] flex-col gap-2 overflow-y-auto pr-1 ${
+                rest.length === 0 ? "items-center justify-center rounded-lg border border-dashed border-[#d6dbe4] px-4 py-8 max-lg:py-5" : ""
+              }`}
+            >
               {rest.length === 0 ? (
-                <p className="px-2 py-8 text-center text-[13.5px] text-ink-subtle">
-                  No one below the podium in this period.
+                <p className="text-center text-[13px] font-semibold text-ink-subtle">
+                  No one outside the top three yet.
                 </p>
               ) : (
                 rest.map((p) => (
@@ -168,11 +144,9 @@ export function TopPerformersSection({ performers }: { performers: TopPerformer[
 
 function PodiumCard({
   performer: p,
-  medal,
   onOpen,
 }: {
   performer: TopPerformer;
-  medal: number;
   onOpen: () => void;
 }) {
   const pct = onTimePct(p);
@@ -181,47 +155,31 @@ function PodiumCard({
       type="button"
       onClick={onOpen}
       aria-label={`Open ${p.employeeName}'s completed tasks`}
-      className="group w-full rounded-section border border-hairline bg-white p-4 text-left transition-all duration-200 hover:-translate-y-0.5 hover:border-altus-red/40 hover:shadow-lg"
+      className="group w-full rounded-lg border border-hairline-strong bg-white p-3 text-left transition-all duration-200 hover:border-[#9fb2d1] hover:shadow-md"
     >
       <div className="flex items-start gap-3">
-        <EmployeeAvatar name={p.employeeName} size="lg" className="!size-14 !text-[17px]" />
+        <EmployeeAvatar name={p.employeeName} size="lg" className="!size-12 !text-[15px]" />
         <div className="min-w-0 flex-1">
-          <span className="block truncate text-[17px] font-bold text-ink-strong">
-            {p.employeeName}
-          </span>
-          <span className="mt-1.5 flex flex-wrap items-center gap-1.5">
+          <span className="block truncate text-[15px] font-bold text-ink-strong">{p.employeeName}</span>
+          {p.department && (
             <span
-              className="inline-flex items-center gap-1 rounded-pill px-2 py-0.5 text-[11.5px] font-bold"
-              style={{
-                color: "var(--color-amber-deep)",
-                background: "color-mix(in srgb, var(--color-amber) 12%, #ffffff)",
-                border: "1px solid color-mix(in srgb, var(--color-amber) 30%, transparent)",
-              }}
+              className="mt-1 inline-flex items-center rounded-pill px-2 py-0.5 text-[11px] font-semibold text-ink-soft"
+              style={{ background: "#f1f2f4", border: "1px solid var(--color-hairline)" }}
             >
-              {MEDALS[medal] ?? "🏅"} {ordinal(p.rank)}
+              {p.department}
             </span>
-            {p.department && (
-              <span
-                className="inline-flex items-center rounded-pill px-2 py-0.5 text-[11.5px] font-semibold text-ink-soft"
-                style={{ background: "#f1f2f4" }}
-              >
-                {p.department}
-              </span>
-            )}
-          </span>
+          )}
         </div>
-        {/* The crown belongs to first place alone. */}
-        {p.rank === 1 && (
-          <Crown
-            size={20}
-            strokeWidth={2.2}
-            aria-hidden
-            style={{ color: "var(--color-amber)", fill: "var(--color-amber)" }}
-          />
-        )}
+        <span
+          className="shrink-0 rounded-pill px-2 py-0.5 text-[12px] font-bold tabular-nums text-ink-soft"
+          style={{ background: "#EEF2F8" }}
+          title={`${ordinal(p.rank)} by completed tasks`}
+        >
+          #{p.rank}
+        </span>
       </div>
 
-      <hr className="my-3.5 border-hairline" />
+      <hr className="my-2.5 border-hairline" />
 
       <div className="flex items-baseline gap-2">
         <span
@@ -229,7 +187,7 @@ function PodiumCard({
           style={{
             fontFamily: "var(--font-display), system-ui, sans-serif",
             fontWeight: 800,
-            fontSize: 30,
+            fontSize: 24,
             letterSpacing: "-0.02em",
             lineHeight: 1,
           }}
@@ -240,7 +198,7 @@ function PodiumCard({
           Completed
         </span>
       </div>
-      <p className="mt-2 text-[13px] font-bold" style={{ color: "var(--color-green-deep)" }}>
+      <p className="mt-1.5 text-[12.5px] font-bold" style={{ color: "var(--color-green-deep)" }}>
         {pct}% on time{" "}
         <span className="font-semibold text-ink-subtle">
           ({p.onTimeCount}/{p.doneCount})
@@ -258,12 +216,12 @@ function RankRow({ performer: p, onOpen }: { performer: TopPerformer; onOpen: ()
       type="button"
       onClick={onOpen}
       aria-label={`Open ${p.employeeName}'s completed tasks`}
-      className="group flex w-full items-center gap-3 rounded-section border border-hairline bg-white px-3.5 py-3 text-left transition-all duration-200 hover:border-altus-red/40 hover:shadow-md"
+      className="group flex w-full items-center gap-3 rounded-lg border border-hairline-strong bg-white px-3 py-2 text-left transition-all duration-200 hover:border-[#9fb2d1] hover:shadow-md"
     >
       <span className="w-5 shrink-0 text-center text-[13px] font-bold tabular-nums text-ink-soft">
         {p.rank}
       </span>
-      <EmployeeAvatar name={p.employeeName} size="sm" className="!size-9" />
+      <EmployeeAvatar name={p.employeeName} size="sm" className="!size-8" />
       <span className="min-w-0 flex-1">
         <span className="block truncate text-[15px] font-bold text-ink-strong">
           {p.employeeName}

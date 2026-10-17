@@ -36,30 +36,33 @@ export function WeeklyGoalsDashboard(props: Props) {
   const ranking = props.rankings[period];
 
   return (
-    <main className="mx-auto max-w-[1400px] px-12 max-md:px-4 pt-8 pb-24">
-      <header className="mb-7 flex items-start justify-between gap-4 flex-wrap">
+    <main className="wms-fill mx-auto max-w-[1400px] px-8 max-md:px-4 pt-5 pb-12">
+      <header className="mb-4 flex items-center justify-between gap-3 flex-wrap">
         <div>
-          <h1
+          {/* A heading div rather than <h1>: the global h1 rule forces 30–46px. */}
+          <div
+            role="heading"
+            aria-level={1}
             className="text-ink-strong"
             style={{
               fontFamily: "var(--font-display), system-ui, sans-serif",
-              fontWeight: 900,
-              fontSize: "clamp(34px, 3.6vw, 48px)",
-              letterSpacing: "-0.025em",
-              lineHeight: 1,
+              fontWeight: 800,
+              fontSize: 22,
+              letterSpacing: "-0.02em",
+              lineHeight: 1.1,
             }}
           >
             Weekly Goals — Performance
-          </h1>
-          <p className="mt-2 text-ink-muted font-semibold" style={{ fontSize: 17 }}>
+          </div>
+          <p className="mt-0.5 text-ink-muted font-medium" style={{ fontSize: 13 }}>
             % done, week-over-week, and who's leading the pack.
           </p>
         </div>
         <Link
           href={"/weekly-goals" as Route}
-          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-[14.5px] font-bold border border-hairline bg-surface-card text-ink-strong hover:brightness-95 transition-all"
+          className="inline-flex h-8 items-center gap-1.5 px-3 rounded-lg text-[13px] font-semibold border border-[#D6DEEB] bg-white text-[#334155] hover:bg-[#F5F8FE] hover:border-[#B8CCEE] transition-colors"
         >
-          <ArrowLeft size={16} strokeWidth={2.4} />
+          <ArrowLeft size={14} strokeWidth={2.4} />
           Back to Weekly Goals
         </Link>
       </header>
@@ -68,19 +71,19 @@ export function WeeklyGoalsDashboard(props: Props) {
       <StarOfMonth star={props.starOfMonth} />
 
       {/* Performer-of cards ------------------------------------------ */}
-      <div className="mb-8 grid grid-cols-3 gap-4 max-lg:grid-cols-1">
-        <PerformerCard label={PERIOD_LABELS.week} performer={props.performers.week} icon={Crown} tone="amber" />
-        <PerformerCard label={PERIOD_LABELS.month} performer={props.performers.month} icon={Trophy} tone="purple" />
-        <PerformerCard label={PERIOD_LABELS.year} performer={props.performers.year} icon={Award} tone="blue" />
+      <div className="mb-5 grid grid-cols-3 gap-3 max-lg:grid-cols-1">
+        <PerformerCard label={PERIOD_LABELS.week} performer={props.performers.week} icon={Crown} tone="blue" />
+        <PerformerCard label={PERIOD_LABELS.month} performer={props.performers.month} icon={Trophy} tone="indigo" />
+        <PerformerCard label={PERIOD_LABELS.year} performer={props.performers.year} icon={Award} tone="teal" />
       </div>
 
       {/* Week-wise trend --------------------------------------------- */}
-      <section className="mb-8">
-        <h2 className="mb-3 font-black text-ink-strong text-[20px]">
+      <section className="mb-5">
+        <h2 className="mb-2 font-bold text-ink-strong text-[16px]">
           {props.trendScope} average % done — last 8 weeks
         </h2>
-        <div className="rounded-section border border-hairline bg-surface-card p-6">
-          <div className="flex items-end gap-3 h-52">
+        <div className="rounded-xl border border-hairline bg-surface-card p-4">
+          <div className="flex items-end gap-3 h-40">
             {props.trend.map((pt) => (
               <div key={pt.weekStart} className="flex-1 flex flex-col items-center gap-2 min-w-0">
                 <span className="text-[12px] font-black tabular-nums text-ink-soft">
@@ -243,32 +246,32 @@ function PerformerCard({
 }) {
   return (
     <div
-      className="relative bg-surface-card rounded-section overflow-hidden p-6"
+      className="relative bg-surface-card rounded-xl overflow-hidden px-4 pb-3.5 pt-4 pr-14"
       style={{ border: "1px solid var(--color-hairline)", boxShadow: "0 1px 3px rgba(15,23,42,0.04)" }}
     >
       <span
         aria-hidden
         className="absolute inset-x-0 top-0"
         style={{
-          height: 5,
+          height: 3,
           background: `linear-gradient(90deg, var(--color-${tone}), var(--color-${tone}-deep))`,
         }}
       />
       <span
         aria-hidden
-        className="absolute right-5 top-6 inline-flex size-10 items-center justify-center rounded-xl"
+        className="absolute right-3 top-3.5 inline-flex size-8 items-center justify-center rounded-lg"
         style={{
           background: `color-mix(in srgb, var(--color-${tone}) 14%, transparent)`,
           color: `var(--color-${tone}-deep)`,
         }}
       >
-        <Icon size={20} strokeWidth={2.3} />
+        <Icon size={16} strokeWidth={2.3} />
       </span>
       <span
-        className="uppercase font-black tracking-[0.06em] leading-none"
+        className="block uppercase font-bold tracking-[0.05em] leading-snug"
         style={{
           fontFamily: "var(--font-display), system-ui, sans-serif",
-          fontSize: 13,
+          fontSize: 11.5,
           color: `var(--color-${tone}-deep)`,
         }}
       >
@@ -276,15 +279,15 @@ function PerformerCard({
       </span>
       {performer ? (
         <>
-          <span className="block mt-3 font-black text-ink-strong leading-tight" style={{ fontSize: 26 }}>
+          <span className="block mt-1.5 font-extrabold text-ink-strong leading-tight" style={{ fontSize: 18 }}>
             {performer.employeeName}
           </span>
-          <span className="block mt-1 font-bold text-ink-muted text-[14px] tabular-nums">
+          <span className="block mt-0.5 font-semibold text-ink-muted text-[12.5px] tabular-nums">
             {performer.avgPct}% avg · {performer.completed}/{performer.goals} done
           </span>
         </>
       ) : (
-        <span className="block mt-3 font-bold text-ink-muted text-[16px]">No goals yet</span>
+        <span className="block mt-1.5 font-semibold text-ink-muted text-[14px]">No goals yet</span>
       )}
     </div>
   );
@@ -396,19 +399,19 @@ const STAR_DEPARTMENTS: { dept: string; points: string[] }[] = [
 function StarOfMonth({ star }: { star: GlobalRanking | null }) {
   const [open, setOpen] = React.useState(false);
   return (
-    <section className="mb-8 rounded-section overflow-hidden border border-hairline"
-      style={{ background: "linear-gradient(135deg, #1A0F0C 0%, #2A140E 55%, #0B0708 100%)", boxShadow: "0 16px 40px -18px rgba(0,0,0,0.5)" }}>
-      <div className="p-7 max-md:p-5 flex items-start justify-between gap-5 flex-wrap">
+    <section className="mb-5 rounded-xl overflow-hidden border border-hairline"
+      style={{ background: "linear-gradient(135deg, #0B2250 0%, #0A3F9E 55%, #0A6CFF 100%)", boxShadow: "0 8px 20px -12px rgba(10,63,158,0.45)" }}>
+      <div className="px-5 py-3.5 max-md:p-4 flex items-center justify-between gap-4 flex-wrap">
         <div className="min-w-0">
-          <div className="inline-flex items-center gap-2 mb-2" style={{ color: "rgba(255,255,255,0.7)", fontSize: 12, letterSpacing: "0.18em", fontWeight: 800, textTransform: "uppercase" }}>
-            <Crown size={15} style={{ color: "#FFD66B" }} /> Star of the Month
+          <div className="inline-flex items-center gap-2 mb-1" style={{ color: "rgba(255,255,255,0.7)", fontSize: 11, letterSpacing: "0.16em", fontWeight: 800, textTransform: "uppercase" }}>
+            <Crown size={15} style={{ color: "#CFE1FF" }} /> Star of the Month
           </div>
           {star ? (
             <>
-              <div className="text-white font-black" style={{ fontFamily: "var(--font-display), system-ui, sans-serif", fontSize: "clamp(28px,3.2vw,42px)", lineHeight: 1.05 }}>
+              <div className="text-white font-black" style={{ fontFamily: "var(--font-display), system-ui, sans-serif", fontSize: "clamp(20px,2vw,26px)", lineHeight: 1.1 }}>
                 {star.employeeName}
               </div>
-              <div className="mt-1.5 font-bold tabular-nums" style={{ color: "rgba(255,255,255,0.66)", fontSize: 14 }}>
+              <div className="mt-1 font-semibold tabular-nums" style={{ color: "rgba(255,255,255,0.66)", fontSize: 12.5 }}>
                 {star.tasksDone} tasks · {star.goalsDone} goals · {star.onTimePct}% on-time · {star.presentDays}d present · {star.incentivesWon} incentives
               </div>
               <div className="mt-0.5 font-semibold" style={{ color: "rgba(255,255,255,0.4)", fontSize: 12 }}>
@@ -416,24 +419,24 @@ function StarOfMonth({ star }: { star: GlobalRanking | null }) {
               </div>
             </>
           ) : (
-            <div className="text-white/80 font-bold text-[16px] mt-1">No standout yet this month — keep going.</div>
+            <div className="text-white/80 font-semibold text-[14px]">No standout yet this month — keep going.</div>
           )}
         </div>
         <button type="button" onClick={() => setOpen((v) => !v)}
-          className="rounded-full px-4 py-2 text-[13px] font-bold text-white border border-white/20 hover:bg-white/10 transition-colors">
+          className="h-8 rounded-lg px-3 text-[13px] font-semibold text-white border border-white/20 hover:bg-white/10 transition-colors">
           {open ? "Hide framework" : "View framework"}
         </button>
       </div>
       {open && (
         <div className="px-7 max-md:px-5 pb-7"
           style={{ borderTop: "1px solid rgba(255,255,255,0.10)", paddingTop: 20 }}>
-          <div className="mb-2 text-[11px] font-black uppercase tracking-[0.08em]" style={{ color: "#FFD66B" }}>Purpose</div>
+          <div className="mb-2 text-[11px] font-black uppercase tracking-[0.08em]" style={{ color: "#CFE1FF" }}>Purpose</div>
           <p className="mb-6 text-[13.5px] max-w-3xl" style={{ color: "rgba(255,255,255,0.82)", lineHeight: 1.55 }}>{STAR_PURPOSE}</p>
 
           <div className="grid grid-cols-2 max-md:grid-cols-1 gap-5">
             {STAR_FRAMEWORK.map((s) => (
               <div key={s.title}>
-                <h4 className="text-[12px] font-black uppercase tracking-[0.08em] mb-2" style={{ color: "#FFD66B" }}>{s.title}</h4>
+                <h4 className="text-[12px] font-black uppercase tracking-[0.08em] mb-2" style={{ color: "#CFE1FF" }}>{s.title}</h4>
                 <ul className="space-y-1">
                   {s.points.map((p, i) => (
                     <li key={i} className="text-[13px]" style={{ color: "rgba(255,255,255,0.82)" }}>• {p}</li>
@@ -444,7 +447,7 @@ function StarOfMonth({ star }: { star: GlobalRanking | null }) {
           </div>
 
           <div className="mt-7 pt-5" style={{ borderTop: "1px solid rgba(255,255,255,0.10)" }}>
-            <h4 className="text-[12px] font-black uppercase tracking-[0.08em] mb-3" style={{ color: "#FFD66B" }}>Department-specific considerations</h4>
+            <h4 className="text-[12px] font-black uppercase tracking-[0.08em] mb-3" style={{ color: "#CFE1FF" }}>Department-specific considerations</h4>
             <div className="grid grid-cols-3 max-md:grid-cols-1 gap-x-5 gap-y-4">
               {STAR_DEPARTMENTS.map((d) => (
                 <div key={d.dept}>
