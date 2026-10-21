@@ -2,7 +2,7 @@
 
 import { revalidatePath, updateTag } from "next/cache";
 import { CACHE_TAGS } from "@/lib/cache-tags";
-import { eq, inArray, or, sql } from "drizzle-orm";
+import { and, eq, inArray, ne, or, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
   authSessions,
@@ -16,6 +16,7 @@ import {
   tasks,
 } from "@/db/schema";
 import { requireAdmin } from "@/lib/auth/current";
+import { PROTECTED_ATTENDANCE_EVENTS } from "@/lib/attendance/correction/events";
 import { isSuperAdmin } from "@/lib/auth/super-admin";
 import {
   InviteEmployeeSchema,
@@ -137,6 +138,24 @@ async function writeMemberships(
   }
 }
 
+/**
+ * Super-admin account protection. A super-admin account is the root of trust
+ * (only super-admins change admin status and grant sensitive permissions), so
+ * an ordinary admin must not be able to take one over — by resetting its
+ * password, handing out a reset link for it, re-sending its invite, deleting
+ * it, or inviting a reserved super-admin address and signing in with the known
+ * initial password. Both sides are decided on the server: the actor from the
+ * signed session (requireAdmin) and the target from its stored employee row (or,
+ * for an invitation, the address being invited) — through the existing
+ * SUPER_ADMIN_EMAILS mechanism. Nothing the caller sends is trusted.
+ */
+const SUPER_ADMIN_TARGET_REFUSED = "Only a super-admin can do this for a super-admin account.";
+const SUPER_ADMIN_ADDRESS_RESERVED = "This address belongs to a super-admin account. Only a super-admin can invite it.";
+
+function refusesSuperAdminTarget(actorEmail: string, targetEmail: string): string | null {
+  return isSuperAdmin(targetEmail) && !isSuperAdmin(actorEmail) ? SUPER_ADMIN_TARGET_REFUSED : null;
+}
+
 export async function inviteEmployee(input: InviteEmployeeInput): Promise<{
   ok: boolean;
   id?: string;
@@ -153,6 +172,12 @@ export async function inviteEmployee(input: InviteEmployeeInput): Promise<{
   // created / the row is inserted so no orphan account is left behind.
   if (parsed.isAdmin === true && !isSuperAdmin(me.email)) {
     return { ok: false, error: "Only Hetesh or Manan can create an admin." };
+  }
+  // A reserved super-admin address: the new account would be a super-admin,
+  // created with the known initial password. Refused before any lookup,
+  // Firebase account or row is created.
+  if (refusesSuperAdminTarget(me.email, parsed.email)) {
+    return { ok: false, error: SUPER_ADMIN_ADDRESS_RESERVED };
   }
 
   // Case-insensitive dup check — historical imports may have mixed-case
@@ -524,14 +549,16 @@ export async function updateEmployeeAttendanceSchedule(
  * Resend is down or the recipient's domain isn't on Resend's verified
  * sender list yet.
  *
- * Does NOT touch the employees row, does NOT log an audit event — it's
- * a read-only credential-handoff. Admin-only. Returns the link as a
- * raw string so the client can drop it on the clipboard.
+ * Does NOT touch the employees row. Admin-only; for a super-admin account,
+ * super-admins only. Every generated link is audited (who, for whom, when —
+ * never the link itself); if the audit row can't be written, the link is not
+ * returned. Returns the link as a raw string so the client can drop it on
+ * the clipboard.
  */
 export async function getInviteLink(
   employeeId: string,
 ): Promise<{ ok: boolean; link?: string; error?: string }> {
-  await requireAdmin();
+  const me = await requireAdmin();
   const parsedId = EmployeeIdSchema.safeParse(employeeId);
   if (!parsedId.success) {
     return {
@@ -543,6 +570,8 @@ export async function getInviteLink(
     where: eq(employees.id, parsedId.data),
   });
   if (!emp) return { ok: false, error: "Employee not found." };
+  const refused = refusesSuperAdminTarget(me.email, emp.email);
+  if (refused) return { ok: false, error: refused };
   if (!emp.isActive) {
     return { ok: false, error: "Employee is deactivated — reactivate first." };
   }
@@ -557,6 +586,17 @@ export async function getInviteLink(
       emp.email,
       { url: `${siteUrl()}/welcome?intent=invite` },
     );
+    // Audited before the link leaves the server — and never the link itself.
+    try {
+      await db.insert(employeeEvents).values({
+        employeeId: emp.id,
+        actorId: me.id,
+        eventType: "invite_link_generated",
+      });
+    } catch {
+      console.error("[getInviteLink] audit write failed");
+      return { ok: false, error: "The link couldn't be recorded, so it wasn't issued. Please try again." };
+    }
     return { ok: true, link };
   } catch (err: any) {
     return {
@@ -576,6 +616,8 @@ export async function resendInvite(employeeId: string): Promise<{ ok: boolean; e
   }
   const emp = await db.query.employees.findFirst({ where: eq(employees.id, parsedId.data) });
   if (!emp) return { ok: false, error: "Employee not found" };
+  const refused = refusesSuperAdminTarget(me.email, emp.email);
+  if (refused) return { ok: false, error: refused };
   if (emp.joinedAt !== null) return { ok: false, error: "Employee has already joined." };
   try {
     const { error } = await sendCredentialsEmail({
@@ -634,6 +676,9 @@ export async function resetEmployeePassword(
     where: eq(employees.id, parsedId.data),
   });
   if (!emp) return { ok: false, error: "Employee not found." };
+  // Before anything touches Firebase: a super-admin's password is reset by a super-admin only.
+  const refused = refusesSuperAdminTarget(me.email, emp.email);
+  if (refused) return { ok: false, error: refused };
   if (!emp.isActive) return { ok: false, error: "Employee is deactivated — reactivate first." };
   if (!emp.firebaseUid) {
     return { ok: false, error: "This employee has no Firebase account yet — contact support." };
@@ -829,7 +874,24 @@ export interface EmployeeDeletionImpact {
   settingsEventsAsActor: number;
   /** Their own inbox notifications — cascaded. */
   notifications: number;
+  /**
+   * Attendance corrections, admin punch edits/removals and imports this person
+   * recorded for OTHER employees. Deleting would destroy that audit history,
+   * so deletion is refused while this is above zero (deactivate instead).
+   */
+  protectedAttendanceEvents: number;
 }
+
+/** Audit rows written BY `id` about someone else that must outlive `id`. */
+const protectedAttendanceWhere = (id: string) =>
+  and(
+    eq(employeeEvents.actorId, id),
+    ne(employeeEvents.employeeId, id),
+    inArray(employeeEvents.eventType, [...PROTECTED_ATTENDANCE_EVENTS]),
+  );
+
+const PROTECTED_HISTORY_MESSAGE =
+  "This employee recorded attendance corrections, edits or imports for other employees. Deleting them would destroy that audit history, so deletion is blocked. Deactivate the employee instead.";
 
 /**
  * Counts what `deleteEmployee` would destroy. Admin-only. Pure read; no
@@ -851,11 +913,12 @@ export async function getEmployeeDeletionImpact(
       employeeEventsAsActor: 0,
       settingsEventsAsActor: 0,
       notifications: 0,
+      protectedAttendanceEvents: 0,
     };
   }
   const id = parsedId.data;
 
-  const [[t], [te], [eeAbout], [eeActor], [se], [n]] = await Promise.all([
+  const [[t], [te], [eeAbout], [eeActor], [se], [n], [pa]] = await Promise.all([
     db
       .select({ n: sql<number>`count(*)::int` })
       .from(tasks)
@@ -886,6 +949,10 @@ export async function getEmployeeDeletionImpact(
       .select({ n: sql<number>`count(*)::int` })
       .from(notifications)
       .where(eq(notifications.userId, id)),
+    db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(employeeEvents)
+      .where(protectedAttendanceWhere(id)),
   ]);
 
   return {
@@ -896,8 +963,11 @@ export async function getEmployeeDeletionImpact(
     employeeEventsAsActor: Number(eeActor?.n ?? 0),
     settingsEventsAsActor: Number(se?.n ?? 0),
     notifications: Number(n?.n ?? 0),
+    protectedAttendanceEvents: Number(pa?.n ?? 0),
   };
 }
+
+class ProtectedHistoryError extends Error {}
 
 /**
  * Hard-delete an employee and every row that depended on them. Requires the
@@ -932,6 +1002,11 @@ export async function deleteEmployee(
 
   const emp = await db.query.employees.findFirst({ where: eq(employees.id, id) });
   if (!emp) return { ok: false, error: "Employee not found." };
+  // Deleting a super-admin removes its Firebase account and frees the address,
+  // which could then be re-invited with the known initial password — so only a
+  // super-admin may delete one.
+  const refused = refusesSuperAdminTarget(me.email, emp.email);
+  if (refused) return { ok: false, error: refused };
 
   if (
     typeof confirmationEmail !== "string" ||
@@ -959,6 +1034,14 @@ export async function deleteEmployee(
 
   try {
     counts = await db.transaction(async (tx) => {
+      // 0. Attendance history they recorded about others must survive: refuse.
+      //    Checked inside the transaction so a row written meanwhile still counts.
+      const [guard] = await tx
+        .select({ n: sql<number>`count(*)::int` })
+        .from(employeeEvents)
+        .where(protectedAttendanceWhere(id));
+      if (Number(guard?.n ?? 0) > 0) throw new ProtectedHistoryError();
+
       // 1. settings_events authored by them — RESTRICT, must precede employees.
       const seDeleted = await tx
         .delete(settingsEvents)
@@ -1007,6 +1090,7 @@ export async function deleteEmployee(
       };
     });
   } catch (err: any) {
+    if (err instanceof ProtectedHistoryError) return { ok: false, error: PROTECTED_HISTORY_MESSAGE };
     return { ok: false, error: `DB: ${err?.message ?? err}` };
   }
 

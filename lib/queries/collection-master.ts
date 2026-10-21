@@ -1,9 +1,11 @@
 import "server-only";
-import { and, asc, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, ilike, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { collectionMasterCompanies, collectionMasterImports, customerMasters, employees } from "@/db/schema";
 import { exactNameKey } from "@/lib/collections/master/normalize";
 import type { ExistingCompany } from "@/lib/collections/master/plan";
+import type { CapabilityProof } from "@/lib/auth/capability";
+import type { CoordinatorAssignmentInputT } from "@/lib/collections/coordinator";
 
 /**
  * Reads for the Collection Master. Every reader reports a missing table
@@ -122,23 +124,38 @@ export async function getMasterCompany(id: string): Promise<{ storageReady: bool
   }
 }
 
+/**
+ * Marks a change-log row written by a Sales Coordinator assignment in the
+ * Collection Tracker (not a file import). Stored in `column_mapping.source`.
+ */
+export const TRACKER_ASSIGNMENT_SOURCE = "tracker-assignment";
+
 export interface ImportHistoryRow {
   id: string;
   fileName: string | null;
   importedAt: Date;
   importedByName: string | null;
   totals: Record<string, number>;
+  /** "file" for an import, or a coordinator assignment made in the Collection Tracker. */
+  source: "file" | typeof TRACKER_ASSIGNMENT_SOURCE;
 }
 
 export async function listRecentImports(limit = 10): Promise<ImportHistoryRow[]> {
   try {
     const rows = await db
-      .select({ id: collectionMasterImports.id, fileName: collectionMasterImports.fileName, importedAt: collectionMasterImports.importedAt, by: employees.name, totals: collectionMasterImports.totals })
+      .select({ id: collectionMasterImports.id, fileName: collectionMasterImports.fileName, importedAt: collectionMasterImports.importedAt, by: employees.name, totals: collectionMasterImports.totals, mapping: collectionMasterImports.columnMapping })
       .from(collectionMasterImports)
       .leftJoin(employees, eq(employees.id, collectionMasterImports.importedById))
       .orderBy(desc(collectionMasterImports.importedAt))
       .limit(limit);
-    return rows.map((r) => ({ id: r.id, fileName: r.fileName, importedAt: r.importedAt, importedByName: r.by ?? null, totals: (r.totals ?? {}) as Record<string, number> }));
+    return rows.map((r) => ({
+      id: r.id,
+      fileName: r.fileName,
+      importedAt: r.importedAt,
+      importedByName: r.by ?? null,
+      totals: (r.totals ?? {}) as Record<string, number>,
+      source: (r.mapping as { source?: unknown } | null)?.source === TRACKER_ASSIGNMENT_SOURCE ? TRACKER_ASSIGNMENT_SOURCE : "file",
+    }));
   } catch (err) {
     if (isMissingTable(err)) return [];
     throw err;
@@ -156,7 +173,7 @@ export async function listAllMasterCompanies(): Promise<{ storageReady: boolean;
   }
 }
 
-type Reader = Pick<typeof db, "select">;
+type Reader = Pick<typeof db, "select" | "selectDistinct">;
 
 /** Stored companies by name key (for the import plan). */
 export async function loadExistingByKeys(q: Reader, keys: string[]): Promise<Map<string, ExistingCompany>> {
@@ -177,6 +194,83 @@ export async function loadExistingByKeys(q: Reader, keys: string[]): Promise<Map
     for (const r of rows) out.set(r.nameKey, r);
   }
   return out;
+}
+
+/** Coordinator labels already stored (one spelling each), for the import plan. */
+export async function listKnownCoordinatorLabels(q: Reader): Promise<string[]> {
+  const rows = await q
+    .selectDistinct({ label: collectionMasterCompanies.coordinatorLabel })
+    .from(collectionMasterCompanies)
+    .where(isNotNull(collectionMasterCompanies.coordinatorLabel))
+    .orderBy(asc(collectionMasterCompanies.coordinatorLabel));
+  return rows.map((r) => r.label).filter((l): l is string => !!l);
+}
+
+/**
+ * The Sales Coordinators the Tracker may assign: the labels already in the
+ * Collection Master (one spelling each). Never employees or invented names.
+ */
+export async function listCoordinatorOptions(): Promise<{ storageReady: boolean; labels: string[] }> {
+  try {
+    return { storageReady: true, labels: await listKnownCoordinatorLabels(db) };
+  } catch (err) {
+    if (isMissingTable(err)) return { storageReady: false, labels: [] };
+    throw err;
+  }
+}
+
+export type CoordinatorAssignmentOutcome =
+  | { ok: true; changed: boolean; from: string | null; to: string }
+  | { ok: false; reason: "not-found" | "stale" | "unknown-label" };
+
+/**
+ * Set a company's Sales Coordinator (the same `coordinator_label` the import
+ * writes). Needs collection.coordinator.assign — the branded proof can only
+ * come from lib/auth/capability.ts. In one transaction: lock the company row,
+ * check it still has the value the editor saw, check the choice is a label already in
+ * the Collection Master, then update and write a before/after row to the
+ * Collection Master change log (collection_master_imports, marked as a Tracker
+ * assignment). Choosing the current value changes nothing.
+ */
+export async function assignCoordinatorLabel(owner: CapabilityProof<"collection.coordinator.assign">, input: CoordinatorAssignmentInputT): Promise<CoordinatorAssignmentOutcome> {
+  return db.transaction(async (tx) => {
+    const [row] = await tx
+      .select({ id: collectionMasterCompanies.id, coordinatorLabel: collectionMasterCompanies.coordinatorLabel })
+      .from(collectionMasterCompanies)
+      .where(eq(collectionMasterCompanies.id, input.companyId))
+      .for("update");
+    if (!row) return { ok: false, reason: "not-found" } as const;
+    if (row.coordinatorLabel !== input.expected) return { ok: false, reason: "stale" } as const;
+    const known = await listKnownCoordinatorLabels(tx as unknown as typeof db);
+    const label = known.find((l) => l === input.coordinatorLabel);
+    if (!label) return { ok: false, reason: "unknown-label" } as const;
+    if (label === row.coordinatorLabel) return { ok: true, changed: false, from: row.coordinatorLabel, to: label } as const;
+
+    const [log] = await tx
+      .insert(collectionMasterImports)
+      .values({
+        fileName: null,
+        sheetName: null,
+        columnMapping: { source: TRACKER_ASSIGNMENT_SOURCE, field: "coordinatorLabel" },
+        totals: { rows: 1, updated: 1 },
+        changes: [{ companyId: row.id, action: "updated", source: TRACKER_ASSIGNMENT_SOURCE, before: { coordinatorLabel: row.coordinatorLabel }, after: { coordinatorLabel: label } }],
+        importedById: owner.employeeId,
+      })
+      .returning({ id: collectionMasterImports.id });
+    const updated = await tx
+      .update(collectionMasterCompanies)
+      .set({ coordinatorLabel: label, updatedById: owner.employeeId, updatedAt: new Date() })
+      .where(
+        and(
+          eq(collectionMasterCompanies.id, row.id),
+          row.coordinatorLabel === null ? isNull(collectionMasterCompanies.coordinatorLabel) : eq(collectionMasterCompanies.coordinatorLabel, row.coordinatorLabel),
+        ),
+      )
+      .returning({ id: collectionMasterCompanies.id });
+    // The row is locked above, so this can't happen; if it ever does, undo the log row too.
+    if (updated.length !== 1 || !log) throw new Error("coordinator assignment did not apply");
+    return { ok: true, changed: true, from: row.coordinatorLabel, to: label } as const;
+  });
 }
 
 /** Client Master records in the Client Master (stage "complete"), by exact name key → ids. */

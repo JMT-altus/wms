@@ -24,10 +24,18 @@ export interface PartyRow extends CollectionParty {
   nextFollowupDate: string | null;
   /** Most recent first. */
   history: FollowUpEntry[];
+  /** Current Collection Amount Confirmation (newest answer); null = not set. Visible to all Tracker users. */
+  confirmation?: { value: "yes" | "no"; recordedAt: Date; recordedByName: string | null } | null;
+  /** The open escalation awaiting review, if any (who and when — no commitment data). */
+  openEscalation?: { escalatedAt: Date; escalatedByName: string | null } | null;
 }
 
-/** Join the source's parties with their saved follow-ups. */
-export function buildRows(parties: CollectionParty[], followUps: FollowUpEntry[]): PartyRow[] {
+/**
+ * Saved follow-ups grouped by party (partyKey), each list most recent first.
+ * The one matching rule for "which company a comment belongs to" — the Tracker
+ * and the commitments page both use it, so they can never disagree.
+ */
+export function followUpsByParty(followUps: FollowUpEntry[]): Map<string, FollowUpEntry[]> {
   const byParty = new Map<string, FollowUpEntry[]>();
   for (const f of followUps) {
     const k = partyKey(f.partyName);
@@ -35,10 +43,18 @@ export function buildRows(parties: CollectionParty[], followUps: FollowUpEntry[]
     if (list) list.push(f);
     else byParty.set(k, [f]);
   }
+  for (const list of byParty.values()) list.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  return byParty;
+}
+
+/** A party's comments as the Tracker shows them: entries that carry a note, most recent first. */
+export const commentsOf = (history: FollowUpEntry[]): FollowUpEntry[] => history.filter((h) => h.note);
+
+/** Join the source's parties with their saved follow-ups. */
+export function buildRows(parties: CollectionParty[], followUps: FollowUpEntry[]): PartyRow[] {
+  const byParty = followUpsByParty(followUps);
   return parties.map((p) => {
-    const history = [...(byParty.get(partyKey(p.partyName)) ?? [])].sort(
-      (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
-    );
+    const history = [...(byParty.get(partyKey(p.partyName)) ?? [])];
     return {
       ...p,
       history,
@@ -47,9 +63,20 @@ export function buildRows(parties: CollectionParty[], followUps: FollowUpEntry[]
   });
 }
 
+/** Filter value for "no collection person assigned". */
+export const UNASSIGNED_PERSON = "__unassigned__";
+/** How companies with no collection person are labelled in lists, filters and summaries. */
+export const UNASSIGNED_LABEL = "Unassigned";
+
+/**
+ * The collection person shown for a row: the one the loader set from the
+ * Collection Master, else the coordinator label (rows built elsewhere).
+ */
+export const personOf = (r: CollectionParty): string | null => r.collectionPerson ?? r.coordinatorLabel ?? null;
+
 export interface TrackerFilters {
   query: string;
-  collectionPerson: string; // "" = all
+  collectionPerson: string; // "" = all, UNASSIGNED_PERSON = none assigned
   /** "" = all, "none" = no follow-up date set, "due" = date today or earlier. */
   followUp: "" | "none" | "due";
 }
@@ -58,12 +85,12 @@ export function filterRows(rows: PartyRow[], f: TrackerFilters, todayIso: string
   const q = f.query.trim().toLowerCase();
   return rows.filter((r) => {
     if (q) {
-      const hay = [r.partyName, r.collectionPerson ?? "", r.coordinatorLabel ?? "", ...r.history.map((h) => h.note ?? "")]
+      const hay = [r.partyName, personOf(r) ?? "", ...r.history.map((h) => h.note ?? "")]
         .join(" ")
         .toLowerCase();
       if (!hay.includes(q)) return false;
     }
-    if (f.collectionPerson && r.collectionPerson !== f.collectionPerson) return false;
+    if (f.collectionPerson === UNASSIGNED_PERSON ? personOf(r) !== null : f.collectionPerson && personOf(r) !== f.collectionPerson) return false;
     if (f.followUp === "none" && r.nextFollowupDate) return false;
     if (f.followUp === "due" && !(r.nextFollowupDate && r.nextFollowupDate <= todayIso)) return false;
     return true;
@@ -83,7 +110,7 @@ export function sortRows(rows: PartyRow[], key: SortKey, dir: "asc" | "desc"): P
         : key === "credit"
           ? r.credit
           : key === "person"
-            ? (r.collectionPerson?.toLowerCase() ?? null)
+            ? (personOf(r)?.toLowerCase() ?? null)
             : r.nextFollowupDate;
   return [...rows].sort((a, b) => {
     const x = val(a);
@@ -107,32 +134,51 @@ export function topByOutstanding(parties: CollectionParty[], n: number): Collect
 }
 
 /**
+ * Group key for a party: its collection person (the same `personOf` the Tracker
+ * uses), or UNASSIGNED_PERSON. A separate key, so a coordinator literally named
+ * "Unassigned" can never be merged with the unassigned companies.
+ */
+const groupOf = (p: CollectionParty): string => personOf(p) ?? UNASSIGNED_PERSON;
+const labelOf = (key: string): string => (key === UNASSIGNED_PERSON ? UNASSIGNED_LABEL : key);
+/** Totals first, then name; Unassigned after named people on a tie. */
+const byTotalThenName = <T extends { person: string; unassigned?: true }>(t: (x: T) => number) => (a: T, b: T) =>
+  t(b) - t(a) || Number(!!a.unassigned) - Number(!!b.unassigned) || a.person.localeCompare(b.person);
+
+/**
  * One row per collection person: how many parties they hold and the outstanding
  * the source supplied for them (null if it supplied none). Same figures as
- * everywhere else — nothing recalculated.
+ * everywhere else — nothing recalculated. Companies with no collection person
+ * form one "Unassigned" row (marked `unassigned: true`), so every party is
+ * counted exactly once and the rows add up to the whole list.
  */
 export function personSummary(
   parties: CollectionParty[],
-): { person: string; parties: number; total: number | null }[] {
+): { person: string; parties: number; total: number | null; unassigned?: true }[] {
   const m = new Map<string, { parties: number; total: number | null }>();
   for (const p of parties) {
-    if (!p.collectionPerson) continue;
-    const cur = m.get(p.collectionPerson) ?? { parties: 0, total: null };
+    const k = groupOf(p);
+    const cur = m.get(k) ?? { parties: 0, total: null };
     cur.parties += 1;
     if (p.outstanding !== null) cur.total = (cur.total ?? 0) + p.outstanding;
-    m.set(p.collectionPerson, cur);
+    m.set(k, cur);
   }
   return [...m.entries()]
-    .map(([person, v]) => ({ person, ...v }))
-    .sort((a, b) => (b.total ?? -1) - (a.total ?? -1) || a.person.localeCompare(b.person));
+    .map(([k, v]) => ({ person: labelOf(k), ...v, ...(k === UNASSIGNED_PERSON ? { unassigned: true as const } : {}) }))
+    .sort(byTotalThenName((x) => x.total ?? -1));
 }
 
-/** Outstanding per collection person, from the same supplied figures. */
-export function outstandingByPerson(parties: CollectionParty[]): { person: string; total: number }[] {
+/**
+ * Outstanding per collection person, from the same supplied figures; companies
+ * with no collection person are one "Unassigned" entry, counted once.
+ */
+export function outstandingByPerson(parties: CollectionParty[]): { person: string; total: number; unassigned?: true }[] {
   const m = new Map<string, number>();
   for (const p of parties) {
-    if (p.outstanding === null || !p.collectionPerson) continue;
-    m.set(p.collectionPerson, (m.get(p.collectionPerson) ?? 0) + p.outstanding);
+    if (p.outstanding === null) continue;
+    const k = groupOf(p);
+    m.set(k, (m.get(k) ?? 0) + p.outstanding);
   }
-  return [...m.entries()].map(([person, total]) => ({ person, total })).sort((a, b) => b.total - a.total);
+  return [...m.entries()]
+    .map(([k, total]) => ({ person: labelOf(k), total, ...(k === UNASSIGNED_PERSON ? { unassigned: true as const } : {}) }))
+    .sort(byTotalThenName((x) => x.total));
 }

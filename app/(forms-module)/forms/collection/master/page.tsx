@@ -1,8 +1,8 @@
 import Link from "next/link";
 import type { Route } from "next";
-import { requireAdmin } from "@/lib/auth/current";
+import { getCollectionCapabilities, requireCollectionCapability } from "@/lib/auth/capability";
 import { CollectionMasterImport } from "@/components/collections/master/collection-master-import";
-import { listMasterCompanies, listRecentImports } from "@/lib/queries/collection-master";
+import { TRACKER_ASSIGNMENT_SOURCE, listMasterCompanies, listRecentImports } from "@/lib/queries/collection-master";
 import { formatDate } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -28,7 +28,9 @@ export default async function CollectionMasterPage({
 }: {
   searchParams: Promise<{ q?: string; page?: string; coordinator?: string }>;
 }) {
-  await requireAdmin();
+  await requireCollectionCapability("collection.view");
+  // The import panel shows only with collection.master.import; its actions check again.
+  const canImport = (await getCollectionCapabilities())["collection.master.import"];
   const sp = await searchParams;
   const q = (sp.q ?? "").trim().slice(0, 100);
   const page = Math.max(0, (Number.parseInt(sp.page ?? "1", 10) || 1) - 1);
@@ -52,7 +54,7 @@ export default async function CollectionMasterPage({
         </p>
       </header>
 
-      <CollectionMasterImport storageReady={list.storageReady} />
+      {canImport && <CollectionMasterImport storageReady={list.storageReady} />}
 
       <section className="rounded-xl bg-white p-4 max-md:p-3" style={{ border: "1px solid #DCE4F0" }} aria-labelledby="cm-list">
         <div className="flex flex-wrap items-end justify-between gap-3">
@@ -137,13 +139,22 @@ export default async function CollectionMasterPage({
       {imports.length > 0 && (
         <section className="rounded-xl bg-white p-4 max-md:p-3" style={{ border: "1px solid #DCE4F0" }} aria-labelledby="cm-history">
           <h2 id="cm-history" className="text-[15px] font-bold text-ink-strong">
-            Recent imports
+            Recent imports and changes
           </h2>
           <ul className="mt-2 grid gap-1.5 text-[13px]">
             {imports.map((i) => (
               <li key={i.id} className="text-ink-muted">
-                <strong className="text-ink-strong">{i.fileName ?? "Untitled file"}</strong> · {formatDate(i.importedAt)}
-                {i.importedByName ? ` · ${i.importedByName}` : ""} · {i.totals.inserted ?? 0} added, {i.totals.updated ?? 0} updated, {i.totals.rejected ?? 0} rejected
+                {i.source === TRACKER_ASSIGNMENT_SOURCE ? (
+                  <>
+                    <strong className="text-ink-strong">Sales Coordinator set in Collection Tracker</strong> · {formatDate(i.importedAt)}
+                    {i.importedByName ? ` · ${i.importedByName}` : ""}
+                  </>
+                ) : (
+                  <>
+                    <strong className="text-ink-strong">{i.fileName ?? "Untitled file"}</strong> · {formatDate(i.importedAt)}
+                    {i.importedByName ? ` · ${i.importedByName}` : ""} · {i.totals.inserted ?? 0} added, {i.totals.updated ?? 0} updated, {i.totals.rejected ?? 0} rejected
+                  </>
+                )}
               </li>
             ))}
           </ul>

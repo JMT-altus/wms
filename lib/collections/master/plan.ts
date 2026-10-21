@@ -1,9 +1,11 @@
 import { COLLECTION_RULES, type CollectionRules } from "../config";
 import {
   TEXT_LIMIT,
+  coordinatorKey,
   coordinatorLabel,
   displayName,
   exactNameKey,
+  isInvalidCoordinator,
   isUnassignedCoordinator,
   nameKey,
   paymentTermsText,
@@ -55,6 +57,8 @@ export interface FieldChange {
 export interface RowMessage {
   level: "error" | "warning" | "info";
   text: string;
+  /** "client-master": about the Client Master link, not the file's data — the import preview leaves it out. */
+  topic?: "client-master";
 }
 
 export interface PlannedRow {
@@ -89,6 +93,14 @@ export interface PlanSummary {
   clientLinked: number;
   clientAmbiguous: number;
   conflictGroups: number;
+  /** Filled coordinator cells that can't be a name (no letter); imported as unassigned. */
+  invalidCoordinators: number;
+  /** Rows whose coordinator was written in another capitalisation and is shown in the common spelling. */
+  coordinatorSpellingsUnified: number;
+  /** Every coordinator in the file (common spelling) with how many rows name them. */
+  coordinatorLabels: { label: string; rows: number }[];
+  /** Coordinators not already in the Collection Master — check these are real people before importing. */
+  newCoordinatorLabels: string[];
 }
 
 export interface MasterPlan {
@@ -100,6 +112,12 @@ export interface PlanOptions {
   /** Which fields the admin mapped to a column. An unmapped field is never read or changed. */
   mapped: { coordinator: boolean; paymentTerms: boolean };
   rules?: CollectionRules;
+  /**
+   * Coordinator labels already stored in the Collection Master. Their spelling
+   * wins when the file writes the same person in another case, and labels not
+   * among them are listed as new in the preview.
+   */
+  knownCoordinatorLabels?: readonly string[];
 }
 
 export function buildMasterPlan(
@@ -111,9 +129,12 @@ export function buildMasterPlan(
   const rules = opts.rules ?? COLLECTION_RULES;
   const out: PlannedRow[] = [];
 
+  let invalidCoordinators = 0;
   const base = (r: MasterSourceRow): PlannedRow => {
-    const coord = opts.mapped.coordinator ? coordinatorLabel(r.coordinator, rules) : null;
-    return {
+    const invalid = opts.mapped.coordinator && isInvalidCoordinator(r.coordinator, rules);
+    if (invalid) invalidCoordinators++;
+    const coord = opts.mapped.coordinator && !invalid ? coordinatorLabel(r.coordinator, rules) : null;
+    const row: PlannedRow = {
       rowNo: r.rowNo,
       companyName: displayName(r.company),
       nameKey: nameKey(r.company),
@@ -130,6 +151,10 @@ export function buildMasterPlan(
       duplicateOf: null,
       messages: [],
     };
+    if (invalid) {
+      row.messages.push({ level: "warning", text: "The coordinator cell isn't a name (it has no letters) — imported as Unassigned. Check the file." });
+    }
+    return row;
   };
 
   // 1. Row-level validity.
@@ -149,6 +174,41 @@ export function buildMasterPlan(
       valid.push(p);
     }
     out.push(p);
+  }
+
+  // 1b. One spelling per coordinator. The file writes the same person in several
+  //     capitalisations ("MANGESH", "Mangesh", "mangesh"); shown as one person:
+  //     the spelling already stored in the Collection Master, else the one the
+  //     file uses most (ties: the first seen). Never mapped to an employee.
+  const known = new Map<string, string>();
+  for (const l of opts.knownCoordinatorLabels ?? []) {
+    const k = coordinatorKey(l);
+    if (k && !known.has(k)) known.set(k, cleanTextLabel(l));
+  }
+  const spellings = new Map<string, Map<string, number>>();
+  for (const p of valid) {
+    if (p.coordinatorLabel === null) continue;
+    const k = coordinatorKey(p.coordinatorLabel);
+    const m = spellings.get(k) ?? new Map<string, number>();
+    m.set(p.coordinatorLabel, (m.get(p.coordinatorLabel) ?? 0) + 1);
+    spellings.set(k, m);
+  }
+  const canonical = new Map<string, string>();
+  for (const [k, m] of spellings) {
+    let best = "";
+    let bestN = -1;
+    for (const [s, n] of m) if (n > bestN) [best, bestN] = [s, n]; // Map keeps first-seen order for ties
+    canonical.set(k, known.get(k) ?? best);
+  }
+  let coordinatorSpellingsUnified = 0;
+  for (const p of valid) {
+    if (p.coordinatorLabel === null) continue;
+    const c = canonical.get(coordinatorKey(p.coordinatorLabel))!;
+    if (c !== p.coordinatorLabel) {
+      coordinatorSpellingsUnified++;
+      p.messages.push({ level: "info", text: `Coordinator written "${p.coordinatorLabel}" — shown as "${c}" (same person).` });
+      p.coordinatorLabel = c;
+    }
   }
 
   // 2. Rows for the same company (same nameKey) within the file.
@@ -204,7 +264,7 @@ export function buildMasterPlan(
       p.status = "new";
       p.customerMasterId = p.clientMatch === "linked" ? matches[0]! : null;
       if (p.clientMatch === "ambiguous") {
-        p.messages.push({ level: "warning", text: `${matches.length} Client Master records have this exact name, so it is not linked to any.` });
+        p.messages.push({ level: "warning", text: `${matches.length} Client Master records have this exact name, so it is not linked to any.`, topic: "client-master" });
       }
       if (p.coordinatorLabel === null) {
         p.messages.push({
@@ -258,6 +318,14 @@ export function buildMasterPlan(
       clientLinked: fresh.filter((p) => p.clientMatch === "linked").length,
       clientAmbiguous: out.filter((p) => p.clientMatch === "ambiguous" && (p.status === "new" || p.status === "changed" || p.status === "unchanged")).length,
       conflictGroups,
+      invalidCoordinators,
+      coordinatorSpellingsUnified,
+      coordinatorLabels: [...canonical.entries()]
+        .map(([k, label]) => ({ label, rows: [...(spellings.get(k)?.values() ?? [])].reduce((a, b) => a + b, 0) }))
+        .sort((a, b) => b.rows - a.rows || a.label.localeCompare(b.label)),
+      newCoordinatorLabels: [...canonical.entries()].filter(([k]) => !known.has(k)).map(([, l]) => l).sort((a, b) => a.localeCompare(b)),
     },
   };
 }
+
+const cleanTextLabel = (s: string) => s.replace(/\s+/g, " ").trim();

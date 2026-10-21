@@ -13,6 +13,7 @@ import {
   time,
   date,
   uniqueIndex,
+  check,
   doublePrecision,
   real,
   bigint,
@@ -1922,6 +1923,88 @@ export const collectionMasterCompanies = pgTable(
 );
 
 export type CollectionMasterCompany = typeof collectionMasterCompanies.$inferSelect;
+
+/**
+ * Collection commitments (migration 0114) — committed amount + committed date
+ * per Collection Master company, append-only (the newest row is current). Read
+ * and written only with collection.commitments.view / .edit; see lib/auth/capability.ts.
+ */
+export const collectionCommitments = pgTable(
+  "collection_commitments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => collectionMasterCompanies.id, { onDelete: "restrict" }),
+    committedAmount: numeric("committed_amount", { precision: 14, scale: 2 }).notNull(),
+    committedDate: date("committed_date").notNull(),
+    recordedById: uuid("recorded_by_id").references(() => employees.id, { onDelete: "set null" }),
+    recordedAt: timestamp("recorded_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("collection_commitments_company_idx").on(t.companyId, t.recordedAt)],
+);
+
+export type CollectionCommitment = typeof collectionCommitments.$inferSelect;
+
+/**
+ * Collection Amount Confirmation (migration 0115) — append-only "is the
+ * outstanding amount from the approved transaction source correct?" per
+ * Collection Master company. Newest row = current answer; no row = "Not set".
+ */
+export const collectionAmountConfirmations = pgTable(
+  "collection_amount_confirmations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => collectionMasterCompanies.id, { onDelete: "restrict" }),
+    value: text("value").$type<"yes" | "no">().notNull(),
+    recordedById: uuid("recorded_by_id").references(() => employees.id, { onDelete: "set null" }),
+    recordedAt: timestamp("recorded_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("collection_amount_confirmations_company_idx").on(t.companyId, t.recordedAt),
+    check("collection_amount_confirmations_value_check", sql`${t.value} IN ('yes', 'no')`),
+  ],
+);
+
+/**
+ * Escalations for review (migration 0115). At most one OPEN
+ * escalation per company; closing records who/when and leaves the escalation
+ * fields untouched; a later escalation is a new row. Not a commitment.
+ */
+export const collectionEscalations = pgTable(
+  "collection_escalations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => collectionMasterCompanies.id, { onDelete: "restrict" }),
+    status: text("status").$type<"open" | "closed">().notNull().default("open"),
+    /** The confirmation in force when escalated; null = not set. */
+    confirmationAtEscalation: text("confirmation_at_escalation").$type<"yes" | "no">(),
+    escalatedById: uuid("escalated_by_id").references(() => employees.id, { onDelete: "set null" }),
+    escalatedAt: timestamp("escalated_at", { withTimezone: true }).notNull().defaultNow(),
+    closedById: uuid("closed_by_id").references(() => employees.id, { onDelete: "set null" }),
+    closedAt: timestamp("closed_at", { withTimezone: true }),
+  },
+  (t) => [
+    uniqueIndex("collection_escalations_one_open_uq").on(t.companyId).where(sql`${t.status} = 'open'`),
+    index("collection_escalations_company_idx").on(t.companyId, t.escalatedAt),
+    check("collection_escalations_status_check", sql`${t.status} IN ('open', 'closed')`),
+    check(
+      "collection_escalations_confirmation_check",
+      sql`${t.confirmationAtEscalation} IS NULL OR ${t.confirmationAtEscalation} IN ('yes', 'no')`,
+    ),
+    check(
+      "collection_escalations_closed_check",
+      sql`(${t.status} = 'open' AND ${t.closedAt} IS NULL AND ${t.closedById} IS NULL) OR (${t.status} = 'closed' AND ${t.closedAt} IS NOT NULL)`,
+    ),
+  ],
+);
+
+export type CollectionAmountConfirmation = typeof collectionAmountConfirmations.$inferSelect;
+export type CollectionEscalation = typeof collectionEscalations.$inferSelect;
 
 export type LeaveRequest = typeof leaveRequests.$inferSelect;
 export type NewLeaveRequest = typeof leaveRequests.$inferInsert;

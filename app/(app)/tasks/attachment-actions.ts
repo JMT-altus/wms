@@ -227,15 +227,16 @@ export async function getAttachmentUrl(documentId: string): Promise<AttachResult
     where: eq(documents.id, documentId),
     columns: { id: true, storagePath: true, linkUrl: true, taskId: true },
   });
-  if (!doc) return { ok: false, error: "Attachment not found." };
+  // Access to the file follows access to the TASK it belongs to. A document
+  // with no task (a library file, a KYC file, an attachment whose task was
+  // deleted), a task that no longer exists, or one the caller can't see all
+  // get the same answer — before any link is returned or URL signed, and
+  // without revealing which case it was.
+  if (!doc || !doc.taskId || !(await viewableTask(doc.taskId))) {
+    return { ok: false, error: "Attachment not found." };
+  }
   if (doc.linkUrl) return { ok: true, url: doc.linkUrl };
   if (!doc.storagePath) return { ok: false, error: "Attachment has no file." };
-
-  // Re-check against the TASK, not the document: access to the file follows
-  // access to the work it belongs to.
-  if (doc.taskId && !(await viewableTask(doc.taskId))) {
-    return { ok: false, error: "You don't have access to this task." };
-  }
 
   const sb = getSupabaseAdmin();
   const { data, error } = await sb.storage

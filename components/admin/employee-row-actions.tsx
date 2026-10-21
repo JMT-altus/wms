@@ -110,9 +110,11 @@ export function EmployeeRowActions({
 
   const confirmMatches =
     deleteConfirmInput.trim().toLowerCase() === employee.email.toLowerCase();
+  // Attendance history they recorded for others must survive; the server refuses too.
+  const deleteBlocked = (deleteImpact?.ok && deleteImpact.protectedAttendanceEvents > 0) ?? false;
 
   function handleDelete() {
-    if (!confirmMatches) return;
+    if (!confirmMatches || deleteBlocked) return;
     deleteStart(async () => {
       const res = await deleteEmployee(employee.id, deleteConfirmInput);
       if (res.ok) {
@@ -339,7 +341,14 @@ export function EmployeeRowActions({
                   <li className="flex justify-between"><span>Settings events authored</span><span className="tabular-nums font-semibold">{deleteImpact.settingsEventsAsActor}</span></li>
                   <li className="flex justify-between text-[#64748B]"><span>Lifecycle events about them (cascade)</span><span className="tabular-nums">{deleteImpact.employeeEventsAboutThem}</span></li>
                   <li className="flex justify-between text-[#64748B]"><span>Inbox notifications (cascade)</span><span className="tabular-nums">{deleteImpact.notifications}</span></li>
+                  <li className="flex justify-between"><span>Attendance corrections / edits / imports recorded for others (protected)</span><span className="tabular-nums font-semibold">{deleteImpact.protectedAttendanceEvents}</span></li>
                 </ul>
+                {deleteImpact.protectedAttendanceEvents > 0 && (
+                  <p role="alert" className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-2.5 text-[13px] font-semibold text-[#92400E]">
+                    Deletion is blocked: this person recorded attendance corrections, edits or imports for other employees, and
+                    deleting them would destroy that audit history. Use Deactivate instead.
+                  </p>
+                )}
               </div>
             )}
 
@@ -371,7 +380,7 @@ export function EmployeeRowActions({
               <button
                 type="button"
                 onClick={handleDelete}
-                disabled={!confirmMatches || deletePending}
+                disabled={!confirmMatches || deletePending || deleteBlocked}
                 className="rounded-md py-2.5 px-5 text-[14px] font-semibold text-white disabled:opacity-40 disabled:cursor-not-allowed"
                 style={{ background: "linear-gradient(135deg, #0A6CFF, #0751BE)" }}
               >

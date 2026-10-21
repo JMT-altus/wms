@@ -23,6 +23,7 @@ import { pickOutstanding, pickCollection } from "@/lib/outstanding/import-shape"
 import { sheetCsvUrl } from "@/lib/outstanding/import-fetch";
 import { OUTSTANDING_CYCLES, SUBSCRIPTION_FREQUENCIES } from "@/db/enums";
 import { requireAdmin, requireUser } from "@/lib/auth/current";
+import { canAccessModule } from "@/lib/auth/module-access";
 import { rateLimitOrError } from "@/lib/rate-limit";
 import { getSupabaseAdmin, DOCUMENTS_BUCKET } from "@/lib/supabase/admin";
 import { generateSchedule } from "@/lib/outstanding/schedule";
@@ -604,7 +605,16 @@ export interface OutstandingAttachmentView {
   url: string | null;
 }
 
-/** List attachments for an owner with fresh signed download URLs. */
+/**
+ * List attachments for an owner with fresh signed download URLs.
+ *
+ * Outstanding lives in the Sales module, so the caller needs that module's
+ * access (the same rule the Outstanding pages and exports use) — being signed
+ * in isn't enough for a server action, which page guards don't cover. The owner
+ * must be a real contract or collection, and only files stored under the
+ * Outstanding folder for that owner type are signed. Every refusal returns an
+ * empty list, before anything is signed, so it reveals nothing.
+ */
 export async function listOutstandingAttachments(
   ownerType: "contract" | "collection",
   ownerId: string,
@@ -613,9 +623,17 @@ export async function listOutstandingAttachments(
   const limited = rateLimitOrError(me.id, "read");
   if (limited) return [];
 
+  if (ownerType !== "contract" && ownerType !== "collection") return [];
   if (!z.string().uuid().safeParse(ownerId).success) return [];
+  if (!(await canAccessModule("sales"))) return [];
 
-  const rows = await db
+  const owner =
+    ownerType === "contract"
+      ? await db.select({ id: outstandingContracts.id }).from(outstandingContracts).where(eq(outstandingContracts.id, ownerId)).limit(1)
+      : await db.select({ id: outstandingCollections.id }).from(outstandingCollections).where(eq(outstandingCollections.id, ownerId)).limit(1);
+  if (owner.length === 0) return [];
+
+  const found = await db
     .select({
       id: outstandingAttachments.id,
       fileName: outstandingAttachments.fileName,
@@ -627,6 +645,7 @@ export async function listOutstandingAttachments(
     .where(
       sql`${outstandingAttachments.ownerType} = ${ownerType} AND ${outstandingAttachments.ownerId} = ${ownerId}`,
     );
+  const rows = found.filter((r) => r.storagePath.startsWith(`outstanding/${ownerType}/`));
   if (rows.length === 0) return [];
 
   const admin = getSupabaseAdmin();

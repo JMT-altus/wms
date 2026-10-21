@@ -9,8 +9,12 @@
  */
 import * as XLSX from "xlsx";
 import { cleanText } from "./normalize";
+import { COLLECTION_RULES, type CollectionRules } from "../config";
 
 export type MasterField = "company" | "coordinator" | "paymentTerms";
+
+/** How a column with a blank header is labelled ("Unnamed column B"). Shared with the server check. */
+export const UNNAMED_COLUMN_LABEL = "Unnamed column";
 
 export const FIELD_LABELS: Record<MasterField, string> = {
   company: "Company name",
@@ -111,7 +115,7 @@ export function describeColumns(rows: unknown[][], headerRow: number): SheetColu
       index: c,
       letter,
       header: h || null,
-      label: h ? `${letter} · ${h}` : `Unnamed column ${letter}`,
+      label: h ? `${letter} · ${h}` : `${UNNAMED_COLUMN_LABEL} ${letter}`,
       filled,
       topValues: [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([value, count]) => ({ value, count })),
       distinctValues: counts.size,
@@ -136,6 +140,58 @@ export function autoMap(columns: SheetColumn[]): ColumnMapping {
     map[f] = hit ? hit.index : null;
   }
   return map;
+}
+
+export interface CoordinatorSuggestion {
+  /** The column to use, or null when no column — or more than one — qualifies. */
+  index: number | null;
+  /** Why, in words the admin sees next to the mapping. */
+  reason: string;
+}
+
+/**
+ * Find the Sales Coordinator column from its CONTENTS, for files whose header
+ * cell is blank (the company master file is one). Never a fixed position: only
+ * a column WITHOUT a header can be suggested this way — a named column ("City",
+ * "Zone", …) is something else even if its values look like names — and only
+ * by the configured fill / variety / letters thresholds
+ * (COLLECTION_RULES.coordinatorColumnDetection); a single qualifying column is
+ * suggested, otherwise none. Whatever is chosen, the admin must confirm the
+ * coordinator column explicitly (coordinatorConfirmationRequired) and the
+ * server refuses an unconfirmed mapping.
+ */
+export function suggestCoordinatorColumn(
+  read: ReadSheet,
+  mapping: ColumnMapping,
+  rules: CollectionRules = COLLECTION_RULES,
+): CoordinatorSuggestion {
+  if (mapping.coordinator !== null) return { index: mapping.coordinator, reason: "Chosen from the column header." };
+  const { minFillRatio, maxDistinctValues, minLetterRatio } = rules.coordinatorColumnDetection;
+  const body = read.rows.slice(read.headerRow + 1).filter((r) => (r ?? []).some((c) => cleanText(c) !== ""));
+  const total = body.length;
+  if (total === 0) return { index: null, reason: "The sheet has no data rows." };
+  const used = new Set(Object.values(mapping).filter((v): v is number => v !== null));
+  const otherField = (h: string | null) =>
+    !!h && (Object.keys(SYNONYMS) as MasterField[]).some((f) => f !== "coordinator" && SYNONYMS[f].includes(headerKey(h)));
+
+  const qualifying = read.columns.filter((c) => {
+    if (used.has(c.index) || c.header !== null || otherField(c.header)) return false;
+    const values = body.map((r) => cleanText(r?.[c.index])).filter((v) => v !== "");
+    if (values.length / total < minFillRatio) return false;
+    if (new Set(values.map((v) => v.toLowerCase())).size > maxDistinctValues) return false;
+    return values.filter((v) => /\p{L}/u.test(v)).length / values.length >= minLetterRatio;
+  });
+  if (qualifying.length === 1) {
+    const c = qualifying[0]!;
+    return {
+      index: c.index,
+      reason: `${c.label} looks like a list of people: filled on ${c.filled} of ${total} rows with ${c.distinctValues} different values.`,
+    };
+  }
+  if (qualifying.length > 1) {
+    return { index: null, reason: `More than one unnamed column could be the Sales Coordinator (${qualifying.map((c) => c.letter).join(", ")}). Choose it yourself.` };
+  }
+  return { index: null, reason: "No unnamed column looks like a Sales Coordinator list, and no header says Sales Coordinator. Choose it yourself if the file has one." };
 }
 
 export interface MasterSourceRow {
@@ -168,6 +224,33 @@ export function extractRows(read: ReadSheet, mapping: ColumnMapping): MasterSour
 export function unmappedColumns(columns: SheetColumn[], mapping: ColumnMapping): SheetColumn[] {
   const used = new Set(Object.values(mapping).filter((v): v is number => v != null));
   return columns.filter((c) => !used.has(c.index) && c.filled > 0);
+}
+
+/**
+ * Fields whose mapped column the admin must confirm before preview and import:
+ * the Sales Coordinator column ALWAYS (whether matched by header, suggested, or
+ * picked by hand — a wrong column would assign every company to the wrong
+ * person), and any field mapped to a column without a header.
+ * The server applies the same rule (missingColumnConfirmations).
+ */
+export function fieldsNeedingConfirmation(columns: SheetColumn[], mapping: ColumnMapping): MasterField[] {
+  return (Object.keys(mapping) as MasterField[]).filter((f) => {
+    const col = columns.find((c) => c.index === mapping[f]);
+    return !!col && (f === "coordinator" || col.header === null);
+  });
+}
+
+/** Server-side form of the same rule, from the column labels the browser sends. */
+export function missingColumnConfirmations(
+  mapping: Record<MasterField, string | null>,
+  confirmed: Partial<Record<MasterField, boolean>>,
+): MasterField[] {
+  return (Object.keys(mapping) as MasterField[]).filter((f) => {
+    const label = mapping[f];
+    if (label === null) return false;
+    const needs = f === "coordinator" || label.startsWith(UNNAMED_COLUMN_LABEL);
+    return needs && confirmed[f] !== true;
+  });
 }
 
 /** Mapped columns that have no header — each needs the admin's explicit confirmation. */

@@ -3,7 +3,15 @@
 import * as React from "react";
 import { formatInr } from "@/lib/format";
 import { NOT_CONNECTED_MESSAGE } from "@/lib/collections/source";
-import { outstandingByPerson, personSummary, topByOutstanding, type PartyRow } from "@/lib/collections/derive";
+import {
+  UNASSIGNED_LABEL,
+  UNASSIGNED_PERSON,
+  outstandingByPerson,
+  personOf,
+  personSummary,
+  topByOutstanding,
+  type PartyRow,
+} from "@/lib/collections/derive";
 import { HBars } from "@/components/charts/h-bars";
 import { Donut } from "@/components/charts/donut";
 
@@ -37,7 +45,7 @@ export function CollectionDashboard({
   const [person, setPerson] = React.useState("");
 
   const people = React.useMemo(
-    () => [...new Set(rows.map((r) => r.collectionPerson).filter((p): p is string => Boolean(p)))].sort(),
+    () => [...new Set(rows.map(personOf).filter((p): p is string => Boolean(p)))].sort((a, b) => a.localeCompare(b)),
     [rows],
   );
 
@@ -46,7 +54,8 @@ export function CollectionDashboard({
     const q = party.trim().toLowerCase();
     return rows.filter((r) => {
       if (q && !r.partyName.toLowerCase().includes(q)) return false;
-      if (person && r.collectionPerson !== person) return false;
+      // Same person rule as the Tracker (personOf), including Unassigned.
+      if (person === UNASSIGNED_PERSON ? personOf(r) !== null : person && personOf(r) !== person) return false;
       if (from || to) {
         if (!r.nextFollowupDate) return false;
         if (from && r.nextFollowupDate < from) return false;
@@ -59,7 +68,8 @@ export function CollectionDashboard({
   const hasData = connected && scoped.length > 0;
   const allSupplied = hasData && scoped.every((r) => r.outstanding !== null);
   const totalOutstanding = allSupplied ? scoped.reduce((s, r) => s + (r.outstanding ?? 0), 0) : null;
-  const persons = new Set(scoped.map((r) => r.collectionPerson).filter(Boolean)).size;
+  // Real people only — "Unassigned" is not a collection person.
+  const persons = new Set(scoped.map(personOf).filter(Boolean)).size;
 
   const ranked = topByOutstanding(scoped, Number.POSITIVE_INFINITY);
   const top5 = ranked.slice(0, 5);
@@ -93,6 +103,7 @@ export function CollectionDashboard({
               {p}
             </option>
           ))}
+          {rows.some((r) => personOf(r) === null) && <option value={UNASSIGNED_PERSON}>{UNASSIGNED_LABEL}</option>}
         </select>
         {(from || to || party || person) && (
           <button
@@ -160,7 +171,7 @@ export function CollectionDashboard({
             head={["Party name", "Outstanding", "Collection person"]}
             widths={["46%", "24%", "30%"]}
             right={[1]}
-            rows={top10.map((p) => [p.partyName, formatInr(p.outstanding as number), p.collectionPerson ?? DASH])}
+            rows={top10.map((p) => [p.partyName, formatInr(p.outstanding as number), personOf(p) ?? UNASSIGNED_LABEL])}
           />
         </Panel>
 

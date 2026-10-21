@@ -38,8 +38,9 @@ export async function POST(req: Request) {
   // active employee BEFORE issuing the session cookie, and (2) reconcile the
   // employees.firebase_uid column when an existing employee signs in through a
   // different provider (e.g. Google after originally being invited with a
-  // password). setAuthCookies will verify the token a second time when it
-  // mints the cookie; the extra verify on sign-in is acceptable.
+  // password) — a link or re-link requires a verified email (below).
+  // setAuthCookies will verify the token a second time when it mints the
+  // cookie; the extra verify on sign-in is acceptable.
   let decoded;
   try {
     decoded = await getFirebaseAdminAuth().verifyIdToken(idToken);
@@ -71,6 +72,18 @@ export async function POST(req: Request) {
   // clear any admin-reset lockout marker — a successful sign-in means the
   // employee is back in, so the "changed by admin" message must stop showing.
   const needsUidLink = emp.firebaseUid !== decoded.uid;
+  // Linking (or re-linking) a Firebase account to this employee row is what
+  // makes that account the employee from now on — including an admin or
+  // super-admin row. Only an account that has PROVEN it owns the address may
+  // do it; otherwise anyone able to register the address in Firebase without
+  // verifying it could take the row over. Decided from the verified token's
+  // own claim — never from the request body — and before any write, session
+  // row or cookie. Same response as an unknown email, so it reveals nothing.
+  // Sign-ins whose UID already matches are unaffected.
+  if (needsUidLink && decoded.email_verified !== true) {
+    console.warn(`[session] refused to link an unverified Firebase account to employee ${emp.id}`);
+    return NextResponse.json({ error: "not-enrolled" }, { status: 403 });
+  }
   const needsMarkerClear = emp.passwordResetByAdminAt !== null;
   // First-ever sign-in: stamp joinedAt so the admin "Invited/Joined" pill and
   // the pending-invites count stay accurate. This used to be done by the

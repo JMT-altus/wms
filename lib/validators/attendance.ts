@@ -12,7 +12,19 @@ const dateField = z.string().regex(DATE_RE, "Date must be YYYY-MM-DD");
 const timeField = z.string().regex(TIME_RE, "Time must be HH:mm");
 const kindField = z.enum(["in", "out"]);
 
-/** Admin creates/overwrites a single in/out punch for an employee+day. */
+// Every admin change to a recorded punch goes through the shared correction
+// mechanism (lib/attendance/correction/apply.ts): a reason from the existing
+// punch-reason list, an explanation (length rules in correction/plan.ts, checked
+// on the server), and — for anything that touches a stored punch — the snapshot
+// of what the admin saw, so a punch changed meanwhile is never overwritten.
+
+/** Explanation text; its minimum and maximum are enforced by correction/plan.ts. */
+const explanationField = z.string().max(700, "Keep the explanation under 500 characters.");
+const isoField = z.string().refine((s) => !Number.isNaN(Date.parse(s)), "Invalid snapshot.");
+/** loggedAt ISO of the stored IN / OUT the admin saw, or null for "no punch". */
+const snapshotField = z.object({ in: isoField.nullable(), out: isoField.nullable() }).strict();
+
+/** Admin adds (or, when the snapshot shows it, replaces) a single in/out punch. */
 export const AdminUpsertPunch = z
   .object({
     employeeId: z.string().uuid(),
@@ -20,18 +32,35 @@ export const AdminUpsertPunch = z
     kind: kindField,
     timeHHmm: timeField,
     reason: z.enum(PUNCH_REASONS),
+    explanation: explanationField,
+    snapshot: snapshotField,
   })
   .strict();
 export type AdminUpsertPunchInput = z.infer<typeof AdminUpsertPunch>;
 
-/** Admin edits the existing in/out times for an employee+day. At least one of
- *  inHHmm / outHHmm must be supplied. */
+/** Super-admin quick punch (today only, adds a missing punch; reason fixed by the action). */
+export const AdminQuickPunch = z
+  .object({
+    employeeId: z.string().uuid(),
+    logDate: dateField,
+    kind: kindField,
+    timeHHmm: timeField,
+    explanation: explanationField,
+  })
+  .strict();
+export type AdminQuickPunchInput = z.infer<typeof AdminQuickPunch>;
+
+/** Admin sets the in/out times for an employee+day: each supplied side is added
+ *  if missing or changed if stored. At least one of inHHmm / outHHmm. */
 export const AdminEditDayTimes = z
   .object({
     employeeId: z.string().uuid(),
     logDate: dateField,
     inHHmm: timeField.optional(),
     outHHmm: timeField.optional(),
+    reason: z.enum(PUNCH_REASONS),
+    explanation: explanationField,
+    snapshot: snapshotField,
   })
   .strict()
   .refine((v) => v.inHHmm != null || v.outHHmm != null, {
@@ -39,15 +68,26 @@ export const AdminEditDayTimes = z
   });
 export type AdminEditDayTimesInput = z.infer<typeof AdminEditDayTimes>;
 
-/** Admin deletes a single in/out punch for an employee+day. */
+/** Admin removes a single in/out punch — reasoned, explained and audited. */
 export const AdminDeletePunch = z
   .object({
     employeeId: z.string().uuid(),
     logDate: dateField,
     kind: kindField,
+    reason: z.enum(PUNCH_REASONS),
+    explanation: explanationField,
+    snapshot: snapshotField,
   })
   .strict();
 export type AdminDeletePunchInput = z.infer<typeof AdminDeletePunch>;
+
+/** Admin opens one day in the editor (read-only). */
+export const AdminLookupDay = z
+  .object({
+    employeeId: z.string().uuid(),
+    logDate: dateField,
+  })
+  .strict();
 
 /**
  * Admin sets an employee's attendance schedule (Task A5). `weeklyOff` is an

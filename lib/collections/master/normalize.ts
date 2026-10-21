@@ -35,6 +35,19 @@ export function coordinatorLabel(v: unknown, rules: CollectionRules = COLLECTION
   return isUnassignedCoordinator(v, rules) ? null : cleanText(v);
 }
 
+/**
+ * A coordinator cell that is filled, isn't a placeholder, yet can't be a
+ * person's name (no letter at all — "123", "?", "--"). Imported as unassigned
+ * and reported, never stored as a coordinator.
+ */
+export function isInvalidCoordinator(v: unknown, rules: CollectionRules = COLLECTION_RULES): boolean {
+  const s = cleanText(v);
+  return s !== "" && !isUnassignedCoordinator(s, rules) && !/\p{L}/u.test(s);
+}
+
+/** One person whatever the capitalisation: "MANGESH", "Mangesh" and "mangesh" share this key. */
+export const coordinatorKey = (v: string): string => cleanText(v).toLowerCase();
+
 /** Payment terms as written (cleaned), or null for a blank cell — never inferred. */
 export function paymentTermsText(v: unknown): string | null {
   const s = cleanText(v);

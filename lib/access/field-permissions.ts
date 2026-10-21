@@ -10,7 +10,7 @@
  * matrix. The DB adapter lives in lib/auth/field-access.ts.
  */
 
-import { PERMISSION_FIELDS, type PermissionFieldKey } from "@/db/enums";
+import { PERMISSION_FIELDS, permissionFieldDef, type PermissionFieldKey } from "@/db/enums";
 
 export type { PermissionFieldKey };
 
@@ -56,6 +56,14 @@ export interface FieldDecision {
  *
  *   super-admin → per-employee → per-department → admin bypass → org-wide → code default
  *
+ * The two bypasses are skipped for an entry that opts out (adminBypass /
+ * superAdminBypass false) and always for a `sensitive` one — those need an
+ * explicit grant even for admins and super-admins. An explicit deny at the
+ * person or department level always beats the bypasses that remain.
+ *
+ * A `sensitive` entry also has no department layer: person → org-wide →
+ * default.
+ *
  * The admin bypass sits ABOVE the org-wide layer for the same reason it does in
  * the module engine: "everyone" means "the staff default", and an org-wide deny
  * of, say, Average Rate must not lock out the people who administer it. To
@@ -66,15 +74,30 @@ export function resolveFieldAccess(
   subject: FieldSubject,
   grants: ResolvedFieldGrants,
 ): FieldDecision {
-  if (subject.isSuperAdmin) return { allowed: true, source: "super-admin" };
+  // A sensitive entry never takes either bypass, whatever its flags say: it
+  // needs an explicit grant (person, department or org-wide). Unregistered keys
+  // keep the original behaviour (bypasses on, default denied).
+  const def = permissionFieldDef(fieldKey);
+  const sensitive = def?.sensitive === true;
+  const superAdminBypass = !sensitive && def?.superAdminBypass !== false;
+  const adminBypass = !sensitive && def?.adminBypass !== false;
+
+  if (subject.isSuperAdmin && superAdminBypass) return { allowed: true, source: "super-admin" };
 
   const own = grants.employee[fieldKey];
   if (own !== undefined) return { allowed: own, source: "employee" };
 
-  const dept = grants.department[fieldKey];
+  // Sensitive entries have NO department layer: department membership is
+  // managed by any admin (including for themselves), so a department grant
+  // would let an admin give themselves a capability only a super-admin may
+  // grant. Department rows for a sensitive key — allow or deny — are ignored;
+  // grant those to a person or organisation-wide instead. (Consequence: a
+  // department deny no longer narrows an org-wide sensitive grant; a
+  // person-level deny still does.)
+  const dept = sensitive ? undefined : grants.department[fieldKey];
   if (dept !== undefined) return { allowed: dept, source: "department" };
 
-  if (subject.isAdmin) return { allowed: true, source: "admin" };
+  if (subject.isAdmin && adminBypass) return { allowed: true, source: "admin" };
 
   const org = grants.everyone[fieldKey];
   if (org !== undefined) return { allowed: org, source: "everyone" };

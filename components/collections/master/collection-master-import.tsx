@@ -82,6 +82,8 @@ export function CollectionMasterImport({ storageReady }: { storageReady: boolean
   const [wb, setWb] = React.useState<WorkBook | null>(null);
   const [read, setRead] = React.useState<ReadSheet | null>(null);
   const [mapping, setMapping] = React.useState<ColumnMapping>({ company: null, coordinator: null, paymentTerms: null });
+  /** Why the Sales Coordinator column was (or wasn't) picked automatically. */
+  const [coordinatorHint, setCoordinatorHint] = React.useState<string | null>(null);
   const [unnamedOk, setUnnamedOk] = React.useState<Record<MasterField, boolean>>({ company: false, coordinator: false, paymentTerms: false });
   const [readError, setReadError] = React.useState<string | null>(null);
   const [preview, setPreview] = React.useState<MasterPreview | null>(null);
@@ -108,7 +110,13 @@ export function CollectionMasterImport({ storageReady }: { storageReady: boolean
     const w = await lib();
     const r = w.readSheet(book, sheet, headerRow);
     setRead(r);
-    setMapping(w.autoMap(r.columns));
+    // Header text first; for a blank header, the coordinator column is suggested
+    // from its contents (configurable rules) — an unnamed column still needs the
+    // confirmation tick below before anything is imported from it.
+    const auto = w.autoMap(r.columns);
+    const hint = w.suggestCoordinatorColumn(r, auto);
+    setMapping({ ...auto, coordinator: hint.index });
+    setCoordinatorHint(hint.reason);
     setUnnamedOk({ company: false, coordinator: false, paymentTerms: false });
     resetPreview();
   }
@@ -148,7 +156,11 @@ export function CollectionMasterImport({ storageReady }: { storageReady: boolean
 
   const columns = read?.columns ?? [];
   const colOf = (i: number | null) => columns.find((c) => c.index === i) ?? null;
-  const unnamedMapped = FIELDS.filter((f) => colOf(mapping[f])?.header === null);
+  // Same rule as the server: the coordinator column always, and any column without a header.
+  const unnamedMapped = FIELDS.filter((f) => {
+    const c = colOf(mapping[f]);
+    return !!c && (f === "coordinator" || c.header === null);
+  });
   const notImported: SheetColumn[] = columns.filter((c) => !Object.values(mapping).includes(c.index) && c.filled > 0);
   const canCheck = !!read && mapping.company !== null && unnamedMapped.every((f) => unnamedOk[f]);
 
@@ -164,6 +176,8 @@ export function CollectionMasterImport({ storageReady }: { storageReady: boolean
         paymentTerms: mapping.paymentTerms === null ? null : colOf(mapping.paymentTerms)!.label,
       },
       ignoredColumns: notImported.map((c) => ({ column: c.letter, header: c.header, filled: c.filled })),
+      // Sent so the server can refuse an unconfirmed mapping; recorded in the import's audit row.
+      confirmedColumns: Object.fromEntries(unnamedMapped.filter((f) => unnamedOk[f]).map((f) => [f, true as const])),
       rows,
     };
   }
@@ -299,6 +313,7 @@ export function CollectionMasterImport({ storageReady }: { storageReady: boolean
                       return next;
                     });
                     setUnnamedOk((u) => ({ ...u, [f]: false }));
+                    if (f === "coordinator") setCoordinatorHint(v === null ? null : "Chosen by you.");
                     resetPreview();
                   }}
                 >
@@ -313,13 +328,25 @@ export function CollectionMasterImport({ storageReady }: { storageReady: boolean
             ))}
           </div>
 
+          {coordinatorHint && (
+            <p className="mt-2 text-[12.5px] text-ink-muted">
+              <strong className="text-ink-soft">Sales Coordinator:</strong> {coordinatorHint}
+            </p>
+          )}
+
           {unnamedMapped.map((f) => {
             const c = colOf(mapping[f])!;
             return (
               <label key={f} className="mt-3 flex items-start gap-2 rounded-lg px-3 py-2 text-[13px]" style={{ background: "#FFFBEB", border: "1px solid #FCD9A0" }}>
                 <input type="checkbox" className="mt-0.5 size-4" checked={unnamedOk[f]} onChange={(e) => setUnnamedOk((u) => ({ ...u, [f]: e.target.checked }))} />
                 <span>
-                  <strong>{c.label}</strong> has no header. I confirm it holds the <strong>{FIELD_LABELS[f]}</strong>
+                  {c.header === null ? (
+                    <>
+                      <strong>{c.label}</strong> has no header.{" "}
+                    </>
+                  ) : null}
+                  I confirm <strong>{c.label}</strong> holds the <strong>{FIELD_LABELS[f]}</strong>
+                  {f === "coordinator" ? " for every company in this file" : ""}
                   {c.topValues.length > 0 ? ` (e.g. ${c.topValues.slice(0, 3).map((v) => v.value).join(", ")})` : ""}.
                 </span>
               </label>
@@ -356,7 +383,7 @@ export function CollectionMasterImport({ storageReady }: { storageReady: boolean
             </button>
             {!canCheck && (
               <span className="text-[12.5px] text-ink-subtle">
-                {mapping.company === null ? "Choose the company name column." : "Confirm the unnamed column first."}
+                {mapping.company === null ? "Choose the company name column." : "Confirm the highlighted column mapping first."}
               </span>
             )}
           </div>
@@ -382,10 +409,34 @@ export function CollectionMasterImport({ storageReady }: { storageReady: boolean
           </div>
           <p className="mt-2 text-[12.5px] text-ink-muted tabular-nums">
             {preview.summary.rows} rows · {preview.summary.newWithoutCoordinator} new without a coordinator · {preview.summary.placeholderCoordinators} placeholder coordinators (XXX / -) treated as Unassigned ·{" "}
-            {preview.summary.newWithoutPaymentTerms} new without payment terms · {preview.summary.conflictGroups} conflicting duplicate group{preview.summary.conflictGroups === 1 ? "" : "s"} · Client Master: {preview.summary.clientLinked} linked, {preview.summary.clientAmbiguous} ambiguous
+            {preview.summary.newWithoutPaymentTerms} new without payment terms · {preview.summary.conflictGroups} conflicting duplicate group{preview.summary.conflictGroups === 1 ? "" : "s"}
           </p>
+          {preview.summary.coordinatorLabels.length > 0 && (
+            <div className="mt-2 rounded-lg px-3 py-2 text-[12.5px]" style={{ border: "1px solid #E6ECF5", background: "#FAFCFF" }}>
+              <p className="font-bold text-ink-soft">Sales Coordinators in this file (taken as each company&apos;s collection person)</p>
+              <p className="mt-0.5 text-ink-muted">{preview.summary.coordinatorLabels.map((c) => `${c.label} (${c.rows})`).join(" · ")}</p>
+              {preview.summary.newCoordinatorLabels.length > 0 && (
+                <p className="mt-1 font-semibold text-[#B45309]">
+                  Not yet in the Collection Master — check these are real people before importing: {preview.summary.newCoordinatorLabels.join(", ")}
+                </p>
+              )}
+              {preview.summary.coordinatorSpellingsUnified > 0 && (
+                <p className="mt-1 text-ink-muted">
+                  {preview.summary.coordinatorSpellingsUnified} row{preview.summary.coordinatorSpellingsUnified === 1 ? "" : "s"} wrote a coordinator in another capitalisation; shown in one spelling per person.
+                </p>
+              )}
+              {preview.summary.invalidCoordinators > 0 && (
+                <p className="mt-1 font-semibold text-[#B91C1C]">
+                  {preview.summary.invalidCoordinators} coordinator cell{preview.summary.invalidCoordinators === 1 ? " isn't a name" : "s aren't names"} (no letters) — imported as Unassigned; see the rows marked below.
+                </p>
+              )}
+            </div>
+          )}
           {!preview.storageReady && (
-            <p className="mt-2 text-[12.5px] font-semibold text-[#92400E]">Storage isn&apos;t set up, so every company shows as New and nothing can be imported.</p>
+            <p role="status" className="mt-2 text-[12.5px] font-semibold text-[#92400E]">
+              Collection Master storage isn&apos;t set up in this database (migration 0112 hasn&apos;t been applied), so companies already stored can&apos;t be
+              recognised — every row shows as New — and nothing can be imported.
+            </p>
           )}
 
           <div className="mt-3 flex flex-wrap items-center gap-1.5 text-[12.5px]">
@@ -420,10 +471,11 @@ export function CollectionMasterImport({ storageReady }: { storageReady: boolean
           </div>
 
           <div className="mt-2 max-h-[460px] overflow-auto rounded-lg" style={{ border: "1px solid #E6ECF5" }}>
-            <table className="w-full min-w-[860px] border-collapse text-[12.5px]">
+            <table className="w-full min-w-[760px] border-collapse text-[12.5px]">
               <thead className="sticky top-0" style={{ background: "#F5F7FB" }}>
                 <tr className="text-left text-ink-soft">
-                  {["Row", "Company", "Sales Coordinator", "Payment Terms", "Client Master", "Status", "Notes"].map((h) => (
+                  {/* Business data: Company, Sales Coordinator, Payment Terms — the only fields imported. */}
+                  {["Row", "Company", "Sales Coordinator", "Payment Terms", "Status", "Notes"].map((h) => (
                     <th key={h} className="px-3 py-1.5 font-bold">
                       {h}
                     </th>
@@ -501,9 +553,6 @@ function PreviewRow({ r, accepted, onAccept }: { r: PlannedRow; accepted: boolea
       <td className="px-3 py-1.5">{r.coordinatorLabel ?? <span className="text-ink-subtle">Unassigned</span>}</td>
       <td className="px-3 py-1.5">{r.paymentTerms ?? <span className="text-ink-subtle">—</span>}</td>
       <td className="px-3 py-1.5">
-        {r.clientMatch === "linked" ? "Linked" : r.clientMatch === "ambiguous" ? <span className="font-semibold text-[#B45309]">Ambiguous ({r.clientMatchCount})</span> : <span className="text-ink-subtle">—</span>}
-      </td>
-      <td className="px-3 py-1.5">
         <span className="rounded-full px-2 py-0.5 text-[11.5px] font-bold" style={{ background: tone.bg, color: tone.fg }}>
           {STATUS_LABEL[r.status]}
         </span>
@@ -514,7 +563,7 @@ function PreviewRow({ r, accepted, onAccept }: { r: PlannedRow; accepted: boolea
             {c.field === "coordinatorLabel" ? "Coordinator" : "Payment terms"}: {c.from ?? "—"} → {c.to ?? "—"}
           </p>
         ))}
-        {r.messages.map((m, i) => (
+        {r.messages.filter((m) => m.topic !== "client-master").map((m, i) => (
           <p key={i} style={{ color: m.level === "error" ? "#B91C1C" : m.level === "warning" ? "#B45309" : "#475569" }}>
             {m.text}
           </p>

@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { requireAdmin } from "@/lib/auth/current";
 import { getOrgSettings } from "@/lib/queries/org-settings";
+import { getCollectionCapabilities } from "@/lib/auth/capability";
 import { IdleTimerClient } from "@/components/auth/idle-timer-client";
 import { FormsSidebar, FormsMobileNav } from "@/components/forms/forms-sidebar";
 import { DashboardHeader } from "@/components/layout/header";
@@ -21,13 +22,17 @@ import { DashboardHeader } from "@/components/layout/header";
 export default async function FormsLayout({ children }: { children: ReactNode }) {
   const me = await requireAdmin();
   const settings = await getOrgSettings();
+  // Only decides which nav links show; every Collection page and action checks again.
+  const caps = await getCollectionCapabilities();
+  const showCommitments = caps["collection.commitments.view"] || caps["collection.escalation.review"];
+  const showCollection = caps["collection.view"];
 
   return (
     <>
       <IdleTimerClient timeoutMinutes={settings.idleTimeoutMinutes} />
       <div className="min-h-screen flex max-md:block app-wallpaper">
-        <FormsSidebar userName={me.name} />
-        <FormsMobileNav />
+        <FormsSidebar userName={me.name} showCommitments={showCommitments} showCollection={showCollection} />
+        <FormsMobileNav showCommitments={showCommitments} showCollection={showCollection} />
         <div className="flex-1 min-w-0 max-md:flex max-md:flex-col">
           {/* The app's slim header bar, same as every (app) page carries, so
               the search / Live / account cluster is reachable from every

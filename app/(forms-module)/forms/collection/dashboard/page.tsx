@@ -2,6 +2,7 @@ import { CollectionDashboard } from "@/components/collections/collection-dashboa
 import { buildRows } from "@/lib/collections/derive";
 import { loadCollectionParties } from "@/lib/collections/load";
 import { listFollowUps } from "@/lib/queries/collection-followups";
+import { requireCollectionCapability } from "@/lib/auth/capability";
 
 export const dynamic = "force-dynamic";
 
@@ -11,6 +12,8 @@ export const dynamic = "force-dynamic";
  * accounting source connected it renders its empty states — no invented figures.
  */
 export default async function CollectionDashboardPage() {
+  // collection.view, checked before anything is loaded.
+  await requireCollectionCapability("collection.view");
   const [source, followUps] = await Promise.all([loadCollectionParties(), listFollowUps()]);
   const rows = buildRows(source.parties, followUps.entries);
 

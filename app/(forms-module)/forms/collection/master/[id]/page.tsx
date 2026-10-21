@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Route } from "next";
 import { ArrowLeft } from "lucide-react";
-import { requireAdmin } from "@/lib/auth/current";
+import { requireCollectionCapability } from "@/lib/auth/capability";
 import { getMasterCompany } from "@/lib/queries/collection-master";
 import { formatDate } from "@/lib/format";
 
@@ -21,7 +21,7 @@ function Fact({ label, children }: { label: string; children: React.ReactNode })
 
 /** One Collection Master company. Read-only: values change only through an import. */
 export default async function CollectionMasterCompanyPage({ params }: { params: Promise<{ id: string }> }) {
-  await requireAdmin();
+  await requireCollectionCapability("collection.view");
   const { id } = await params;
   if (!UUID.test(id)) notFound();
   const { storageReady, company: c } = await getMasterCompany(id);

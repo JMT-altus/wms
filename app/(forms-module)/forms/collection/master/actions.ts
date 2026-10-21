@@ -5,15 +5,17 @@ import { z } from "zod";
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { collectionMasterCompanies, collectionMasterImports } from "@/db/schema";
-import { requireAdmin } from "@/lib/auth/current";
+import { requireCollectionCapability } from "@/lib/auth/capability";
 import { rateLimitOrError } from "@/lib/rate-limit";
 import { nameKey } from "@/lib/collections/master/normalize";
 import { buildMasterPlan, type MasterPlan, type PlannedRow, type PlanSummary } from "@/lib/collections/master/plan";
-import { isMissingTable, loadClientMasterIndex, loadExistingByKeys } from "@/lib/queries/collection-master";
+import { missingColumnConfirmations } from "@/lib/collections/master/workbook";
+import { isMissingTable, listKnownCoordinatorLabels, loadClientMasterIndex, loadExistingByKeys } from "@/lib/queries/collection-master";
 
 /**
- * Collection Master import. Admin-only (the Forms area is, and the check is
- * repeated here because a page guard does not protect a server action).
+ * Collection Master import. Needs collection.master.import (and, like all of
+ * Forms, an admin) — checked here because a page guard does not protect a
+ * server action.
  *
  * The browser reads the file and sends only the mapped cells. The server never
  * trusts that: it rebuilds the whole plan from the raw cells — cleaning,
@@ -53,7 +55,25 @@ const BaseSchema = z.object({
     .max(200)
     .default([]),
   rows: z.array(RowSchema).min(1, "The file has no rows to import.").max(MAX_ROWS, `Import at most ${MAX_ROWS} rows at a time.`),
+  /**
+   * The admin's explicit confirmation of column meanings: required for the Sales
+   * Coordinator column whenever one is mapped, and for any column without a
+   * header (see missingColumnConfirmations). Checked here, not only in the UI.
+   */
+  confirmedColumns: z
+    .object({ company: z.literal(true).optional(), coordinator: z.literal(true).optional(), paymentTerms: z.literal(true).optional() })
+    .strict()
+    .default({}),
 });
+
+const FIELD_NAMES = { company: "company name", coordinator: "Sales Coordinator", paymentTerms: "payment terms" } as const;
+
+/** Refuse a mapping whose meaning the admin hasn't confirmed. */
+function confirmationError(data: z.output<typeof BaseSchema>): string | null {
+  const missing = missingColumnConfirmations(data.mapping, data.confirmedColumns);
+  if (missing.length === 0) return null;
+  return `Confirm which column holds the ${missing.map((m) => FIELD_NAMES[m]).join(" and the ")} before previewing or importing.`;
+}
 
 const ImportSchema = BaseSchema.extend({
   /** Row numbers of "changed" rows the admin explicitly accepted. */
@@ -64,17 +84,24 @@ const ImportSchema = BaseSchema.extend({
 const STORAGE_NOT_READY =
   "Collection Master storage isn't set up yet (migration 0112 is pending), so nothing can be imported.";
 
+/** Preview and import both need collection.master.import (checked before anything is read). */
 async function guard() {
-  const me = await requireAdmin();
-  const limited = rateLimitOrError(me.id, "write");
-  return { me, limited };
+  const proof = await requireCollectionCapability("collection.master.import");
+  const limited = rateLimitOrError(proof.employeeId, "write");
+  return { me: { id: proof.employeeId }, limited };
 }
 
 const firstError = (e: z.ZodError) => e.issues[0]?.message ?? "Invalid import data.";
 
-function planFor(data: z.output<typeof BaseSchema>, existing: Awaited<ReturnType<typeof loadExistingByKeys>>, clients: Map<string, string[]>): MasterPlan {
+function planFor(
+  data: z.output<typeof BaseSchema>,
+  existing: Awaited<ReturnType<typeof loadExistingByKeys>>,
+  clients: Map<string, string[]>,
+  knownCoordinatorLabels: string[],
+): MasterPlan {
   return buildMasterPlan(data.rows, existing, clients, {
     mapped: { coordinator: data.mapping.coordinator !== null, paymentTerms: data.mapping.paymentTerms !== null },
+    knownCoordinatorLabels,
   });
 }
 
@@ -90,11 +117,15 @@ export async function previewCollectionMaster(raw: unknown): Promise<Result<{ pr
   if (limited) return limited;
   const p = BaseSchema.safeParse(raw);
   if (!p.success) return { ok: false, error: firstError(p.error) };
+  const unconfirmed = confirmationError(p.data);
+  if (unconfirmed) return { ok: false, error: unconfirmed };
   const keys = p.data.rows.map((r) => nameKey(r.company));
   let storageReady = true;
   let existing = new Map() as Awaited<ReturnType<typeof loadExistingByKeys>>;
+  let known: string[] = [];
   try {
     existing = await loadExistingByKeys(db, keys);
+    known = await listKnownCoordinatorLabels(db);
   } catch (err) {
     if (!isMissingTable(err)) {
       console.error("[collection-master] preview read failed", err);
@@ -104,7 +135,7 @@ export async function previewCollectionMaster(raw: unknown): Promise<Result<{ pr
   }
   try {
     const clients = await loadClientMasterIndex(db);
-    const plan = planFor(p.data, existing, clients);
+    const plan = planFor(p.data, existing, clients, known);
     return { ok: true, preview: { storageReady, summary: plan.summary, rows: plan.rows } };
   } catch (err) {
     console.error("[collection-master] preview failed", err);
@@ -138,6 +169,8 @@ export async function importCollectionMaster(raw: unknown): Promise<Result<{ res
   if (limited) return limited;
   const p = ImportSchema.safeParse(raw);
   if (!p.success) return { ok: false, error: firstError(p.error) };
+  const unconfirmed = confirmationError(p.data);
+  if (unconfirmed) return { ok: false, error: unconfirmed };
   const accepted = new Set(p.data.acceptChanges);
   const keys = p.data.rows.map((r) => nameKey(r.company));
 
@@ -151,14 +184,16 @@ export async function importCollectionMaster(raw: unknown): Promise<Result<{ res
         .for("update");
       const existing = await loadExistingByKeys(tx as unknown as typeof db, keys);
       const clients = await loadClientMasterIndex(tx as unknown as typeof db);
-      const plan = planFor(p.data, existing, clients);
+      const known = await listKnownCoordinatorLabels(tx as unknown as typeof db);
+      const plan = planFor(p.data, existing, clients, known);
 
       const [batch] = await tx
         .insert(collectionMasterImports)
         .values({
           fileName: p.data.fileName ?? null,
           sheetName: p.data.sheetName ?? null,
-          columnMapping: p.data.mapping,
+          // Which column fed which field, and which of those the admin confirmed.
+          columnMapping: { ...p.data.mapping, confirmed: p.data.confirmedColumns },
           ignoredColumns: p.data.ignoredColumns,
           importedById: me.id,
         })

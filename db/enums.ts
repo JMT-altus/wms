@@ -821,9 +821,34 @@ export const TALLY_MAPS_TO_LABELS: Record<TallyMapsTo, string> = {
 };
 
 /**
- * Sensitive fields whose edit rights are toggled per person/department in
- * /admin/access-control. Adding one here adds a row to the matrix; the guard
- * is `canEditField()` in lib/access/field-permissions.ts.
+ * One row of the permission matrix (/master-setup/access-control).
+ *
+ *   defaultAllowed    the built-in default when nobody has set anything.
+ *   group             heading the matrix shows the row under; absent = a
+ *                     field-edit right (the original rows).
+ *   sensitive         only super-admins may grant or revoke it, and it is
+ *                     never implied by admin or super-admin status: the person
+ *                     (or their department, or the org-wide row) must be
+ *                     granted it explicitly.
+ *   adminBypass       false = admins don't get it automatically (default true).
+ *   superAdminBypass  false = super-admins don't get it automatically (default true).
+ */
+export interface PermissionFieldDef {
+  key: string;
+  label: string;
+  hint: string;
+  defaultAllowed: boolean;
+  group?: string;
+  sensitive?: boolean;
+  adminBypass?: boolean;
+  superAdminBypass?: boolean;
+}
+
+/**
+ * Sensitive fields and capabilities whose rights are toggled per
+ * person/department in /master-setup/access-control. Adding one here adds a row
+ * to the matrix; the guards are `canEditField()` / `requireCapability()` in
+ * lib/auth/field-access.ts and lib/auth/capability.ts.
  */
 export const PERMISSION_FIELDS = [
   {
@@ -862,8 +887,110 @@ export const PERMISSION_FIELDS = [
     hint: "Create and edit customer masters.",
     defaultAllowed: false,
   },
-] as const;
+  // ── Collections. The Forms area (where Collection lives) is admin-only, so
+  // these refine what an admin may do there. Ordinary operations keep today's
+  // behaviour — every admin, unless denied — and the sensitive ones need an
+  // explicit grant, made by a super-admin.
+  {
+    key: "collection.view",
+    label: "Collections — View",
+    hint: "Open the Collection Dashboard, Tracker and Collection Master.",
+    defaultAllowed: false,
+    group: "Collections",
+  },
+  {
+    key: "collection.master.import",
+    label: "Collections — Import Collection Master",
+    hint: "Preview and import (or re-import) the company master file.",
+    defaultAllowed: false,
+    group: "Collections",
+  },
+  {
+    key: "collection.followup.write",
+    label: "Collections — Follow-ups",
+    hint: "Save next follow-up dates and notes in the Tracker.",
+    defaultAllowed: false,
+    group: "Collections",
+  },
+  {
+    key: "collection.confirmation.set",
+    label: "Collections — Amount confirmation",
+    hint: "Set the Collection Amount Confirmation (Yes / No).",
+    defaultAllowed: false,
+    group: "Collections",
+  },
+  {
+    key: "collection.escalation.create",
+    label: "Collections — Escalate for review",
+    hint: "Escalate a company to the escalation reviewers.",
+    defaultAllowed: false,
+    group: "Collections",
+  },
+  {
+    key: "collection.coordinator.assign",
+    label: "Collections — Assign Sales Coordinator",
+    hint: "Set or correct a company's Sales Coordinator in the Tracker.",
+    defaultAllowed: false,
+    group: "Collections",
+    sensitive: true,
+    adminBypass: false,
+    superAdminBypass: false,
+  },
+  {
+    key: "collection.commitments.view",
+    label: "Collections — View commitments",
+    hint: "See committed amounts and dates.",
+    defaultAllowed: false,
+    group: "Collections",
+    sensitive: true,
+    adminBypass: false,
+    superAdminBypass: false,
+  },
+  {
+    key: "collection.commitments.edit",
+    label: "Collections — Record commitments",
+    hint: "Record a committed amount and date for a company.",
+    defaultAllowed: false,
+    group: "Collections",
+    sensitive: true,
+    adminBypass: false,
+    superAdminBypass: false,
+  },
+  {
+    key: "collection.escalation.review",
+    label: "Collections — Review escalations",
+    hint: "Receive and review open escalations (every holder is a reviewer).",
+    defaultAllowed: false,
+    group: "Collections",
+    sensitive: true,
+    adminBypass: false,
+    superAdminBypass: false,
+  },
+  {
+    key: "collection.escalation.close",
+    label: "Collections — Close escalations",
+    hint: "Close an open escalation.",
+    defaultAllowed: false,
+    group: "Collections",
+    sensitive: true,
+    adminBypass: false,
+    superAdminBypass: false,
+  },
+] as const satisfies readonly PermissionFieldDef[];
 export type PermissionFieldKey = (typeof PERMISSION_FIELDS)[number]["key"];
+
+/** The registry widened to its declared shape, for reading optional metadata. */
+export const PERMISSION_FIELD_DEFS: readonly PermissionFieldDef[] = PERMISSION_FIELDS;
+
+/** Every registered key — anything else is rejected by the grant actions. */
+export const PERMISSION_FIELD_KEYS: ReadonlySet<string> = new Set(PERMISSION_FIELDS.map((f) => f.key));
+
+/** Look up one registered entry (undefined for an unknown key). */
+export const permissionFieldDef = (key: string): PermissionFieldDef | undefined =>
+  PERMISSION_FIELD_DEFS.find((f) => f.key === key);
+
+/** Sensitive keys: explicit grants only, granted and revoked only by super-admins. */
+export const isSensitivePermission = (key: string): boolean => permissionFieldDef(key)?.sensitive === true;
 
 export const SEED_PAYMENT_MODES = [
   "Kotak - Altus",

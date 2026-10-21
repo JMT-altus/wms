@@ -6,6 +6,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { employees, projectNodeAttachments, projectNodes } from "@/db/schema";
 import { requireUser } from "@/lib/auth/current";
+import { canAccessModule } from "@/lib/auth/module-access";
 import { rateLimitOrError } from "@/lib/rate-limit";
 import { getSupabaseAdmin, DOCUMENTS_BUCKET } from "@/lib/supabase/admin";
 
@@ -86,12 +87,21 @@ async function guard(nodeId: string): Promise<Guarded> {
  * Fetched ON OPEN, never with the register: a signed URL costs a round-trip
  * per file, so a page of sixty milestones would spend sixty of them on a
  * column nobody had clicked. The register carries counts only.
+ *
+ * Needs Project module access — the rule the Project Plan layout enforces,
+ * which doesn't cover a server action — and a row that exists. The plan has no
+ * per-row visibility rule (the whole plan is visible to the module), so none is
+ * added here. Only files stored under this row's folder are signed. Refusals
+ * share one answer and happen before anything is signed.
  */
 export async function listPlanAttachments(
   nodeId: string,
 ): Promise<Result<{ files: PlanAttachment[] }>> {
   if (!uuid.safeParse(nodeId).success) return { ok: false, error: "Invalid row id." };
   await requireUser();
+  if (!(await canAccessModule("project"))) return { ok: false, error: "That row no longer exists." };
+  const node = await db.query.projectNodes.findFirst({ where: eq(projectNodes.id, nodeId), columns: { id: true } });
+  if (!node) return { ok: false, error: "That row no longer exists." };
 
   let rows;
   try {
@@ -118,18 +128,22 @@ export async function listPlanAttachments(
   if (rows.length === 0) return { ok: true, files: [] };
 
   const supabase = getSupabaseAdmin();
+  const folder = `project-nodes/${nodeId}/`;
   const files = await Promise.all(
     rows.map(async (r) => {
       let url: string | null = null;
-      try {
-        const { data } = await supabase.storage
-          .from(DOCUMENTS_BUCKET)
-          .createSignedUrl(r.storagePath, SIGNED_URL_TTL_SECONDS);
-        url = data?.signedUrl ?? null;
-      } catch {
-        // A file whose URL could not be minted still LISTS — the row knows it
-        // is there, and a missing link is better than a missing file.
-        url = null;
+      // A path outside this row's folder isn't signed (it still lists, without a link).
+      if (r.storagePath.startsWith(folder)) {
+        try {
+          const { data } = await supabase.storage
+            .from(DOCUMENTS_BUCKET)
+            .createSignedUrl(r.storagePath, SIGNED_URL_TTL_SECONDS);
+          url = data?.signedUrl ?? null;
+        } catch {
+          // A file whose URL could not be minted still LISTS — the row knows it
+          // is there, and a missing link is better than a missing file.
+          url = null;
+        }
       }
       return {
         id: r.id,

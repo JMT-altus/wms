@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, eq, isNull, notInArray, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
   customerMasters,
@@ -12,9 +12,12 @@ import {
   productCategories,
   productSkus,
   products,
+  settingsEvents,
   tallyGroupMappings,
 } from "@/db/schema";
 import { requireAdmin } from "@/lib/auth/current";
+import { isSuperAdmin } from "@/lib/auth/super-admin";
+import { PERMISSION_FIELDS, PERMISSION_FIELD_KEYS, isSensitivePermission } from "@/db/enums";
 import { rateLimitOrError } from "@/lib/rate-limit";
 import {
   CategorySchema,
@@ -317,6 +320,12 @@ export async function deleteIncentiveSlab(id: string): Promise<Result> {
 
 /* ── Field permissions ───────────────────────────────────────────────────── */
 
+/** settings_events scope for every permission-matrix change. */
+const FIELD_ACCESS_SCOPE = "field_access";
+const SUBJECT_TYPES: ReadonlySet<string> = new Set(["everyone", "department", "employee"]);
+const SENSITIVE_ONLY = "Only a super-admin can grant or revoke this permission.";
+const SENSITIVE_NOT_FOR_DEPARTMENTS = "Sensitive permissions can be granted only to a person or organisation-wide, not to a department.";
+
 /**
  * Set one cell of the matrix. `allowed = null` clears the row, which is how a
  * cell returns to "inherit" — absence of a row IS the inherit state, so there
@@ -331,13 +340,29 @@ export async function setFieldPermission(
   const { me, limited } = await guard();
   if (limited) return limited;
 
-  if (typeof fieldKey !== "string" || fieldKey.length === 0 || fieldKey.length > 80) {
-    return { ok: false, error: "Invalid field." };
+  // Only registered permissions — anything else would be a row nothing reads.
+  if (typeof fieldKey !== "string" || !PERMISSION_FIELD_KEYS.has(fieldKey)) {
+    return { ok: false, error: "Unknown permission." };
   }
+  if (!SUBJECT_TYPES.has(subjectType)) return { ok: false, error: "Invalid subject." };
   if (subjectType !== "everyone" && !isUuid(subjectId)) {
     return { ok: false, error: "Invalid subject." };
   }
+  if (allowed !== null && typeof allowed !== "boolean") return { ok: false, error: "Invalid setting." };
+  // Sensitive permissions have no department layer (the resolver ignores it,
+  // because admins manage department membership). No one — super-admins
+  // included — may set one for a department. Clearing a legacy row (null)
+  // stays possible for a super-admin, audited below.
+  if (isSensitivePermission(fieldKey) && subjectType === "department" && allowed !== null) {
+    return { ok: false, error: SENSITIVE_NOT_FOR_DEPARTMENTS };
+  }
+  // Sensitive permissions are granted and revoked by super-admins only — for
+  // anyone, including the caller themselves, however the action is reached.
+  if (isSensitivePermission(fieldKey) && !isSuperAdmin(me.email)) {
+    return { ok: false, error: SENSITIVE_ONLY };
+  }
 
+  const scopedSubjectId = subjectType === "everyone" ? null : subjectId!;
   const where =
     subjectType === "everyone"
       ? and(
@@ -348,20 +373,34 @@ export async function setFieldPermission(
       : and(
           eq(fieldPermissionGrants.fieldKey, fieldKey),
           eq(fieldPermissionGrants.subjectType, subjectType),
-          eq(fieldPermissionGrants.subjectId, subjectId!),
+          eq(fieldPermissionGrants.subjectId, scopedSubjectId!),
         );
 
   try {
-    await db.delete(fieldPermissionGrants).where(where);
-    if (allowed !== null) {
-      await db.insert(fieldPermissionGrants).values({
-        fieldKey,
-        subjectType,
-        subjectId: subjectType === "everyone" ? null : subjectId,
-        allowed,
-        updatedBy: me.id,
+    // The change and its audit row commit together, or neither does.
+    await db.transaction(async (tx) => {
+      const before = await tx
+        .delete(fieldPermissionGrants)
+        .where(where)
+        .returning({ allowed: fieldPermissionGrants.allowed });
+      if (allowed !== null) {
+        await tx.insert(fieldPermissionGrants).values({
+          fieldKey,
+          subjectType,
+          subjectId: scopedSubjectId,
+          allowed,
+          updatedBy: me.id,
+        });
+      }
+      await tx.insert(settingsEvents).values({
+        scope: FIELD_ACCESS_SCOPE,
+        targetId: scopedSubjectId,
+        actorId: me.id,
+        eventType: "updated",
+        fromValue: { fieldKey, subjectType, subjectId: scopedSubjectId, allowed: before[0]?.allowed ?? null },
+        toValue: { fieldKey, subjectType, subjectId: scopedSubjectId, allowed, sensitive: isSensitivePermission(fieldKey) },
       });
-    }
+    });
   } catch (err) {
     return { ok: false, error: dbError(err, "permission") };
   }
@@ -369,24 +408,51 @@ export async function setFieldPermission(
   return { ok: true };
 }
 
-/** Drop every override for one person or department — back to inherited. */
+/**
+ * Drop every override for one person or department — back to inherited.
+ * A super-admin clears everything; anyone else clears only the non-sensitive
+ * rows, so sensitive grants can't be revoked by a non-super-admin this way.
+ */
 export async function clearFieldSubject(
   subjectType: "department" | "employee",
   subjectId: string,
-): Promise<Result> {
+): Promise<Result & { keptSensitive?: number }> {
   if (!isUuid(subjectId)) return { ok: false, error: "Invalid subject." };
-  const { limited } = await guard();
+  if (subjectType !== "department" && subjectType !== "employee") return { ok: false, error: "Invalid subject." };
+  const { me, limited } = await guard();
   if (limited) return limited;
-  await db
-    .delete(fieldPermissionGrants)
-    .where(
-      and(
-        eq(fieldPermissionGrants.subjectType, subjectType),
-        eq(fieldPermissionGrants.subjectId, subjectId),
-      ),
-    );
+  const superAdmin = isSuperAdmin(me.email);
+  const sensitiveKeys = PERMISSION_FIELDS.map((f) => f.key).filter(isSensitivePermission);
+
+  let keptSensitive = 0;
+  try {
+    await db.transaction(async (tx) => {
+      const subject = and(eq(fieldPermissionGrants.subjectType, subjectType), eq(fieldPermissionGrants.subjectId, subjectId));
+      const removed = await tx
+        .delete(fieldPermissionGrants)
+        .where(superAdmin || sensitiveKeys.length === 0 ? subject : and(subject, notInArray(fieldPermissionGrants.fieldKey, sensitiveKeys)))
+        .returning({ fieldKey: fieldPermissionGrants.fieldKey, allowed: fieldPermissionGrants.allowed });
+      if (!superAdmin) {
+        const [kept] = await tx
+          .select({ n: sql<number>`count(*)::int` })
+          .from(fieldPermissionGrants)
+          .where(subject);
+        keptSensitive = kept?.n ?? 0;
+      }
+      await tx.insert(settingsEvents).values({
+        scope: FIELD_ACCESS_SCOPE,
+        targetId: subjectId,
+        actorId: me.id,
+        eventType: "cleared",
+        fromValue: { subjectType, subjectId, grants: removed },
+        toValue: { subjectType, subjectId, level: "inherit", keptSensitive },
+      });
+    });
+  } catch (err) {
+    return { ok: false, error: dbError(err, "permission") };
+  }
   revalidateMasters();
-  return { ok: true };
+  return { ok: true, ...(keptSensitive > 0 ? { keptSensitive } : {}) };
 }
 
 /* ── Tally mapping ───────────────────────────────────────────────────────── */

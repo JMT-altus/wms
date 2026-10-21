@@ -19,6 +19,7 @@ import {
   ClipboardList,
   ArrowLeft,
   Building2,
+  HandCoins,
   type LucideIcon,
 } from "lucide-react";
 // The same brand ramp the Masters rail uses. Imported rather than re-declared
@@ -127,6 +128,29 @@ const NAV: ReadonlyArray<NavItem> = [
   },
 ];
 
+/**
+ * Shown only with collection.commitments.view or collection.escalation.review
+ * (decided on the server); the page and its data check again regardless.
+ */
+const COMMITMENTS_ITEM: NavItem = {
+  href: "/forms/collection/commitments" as Route,
+  label: "Commitments & Escalations",
+  hint: "Restricted: commitments and reviews",
+  icon: HandCoins,
+};
+
+/**
+ * The rail for this person: the Collection screens only with collection.view,
+ * and the restricted page only with its capabilities. Hiding is a courtesy —
+ * every Collection page and action checks on the server.
+ */
+function navFor(showCommitments: boolean, showCollection: boolean): ReadonlyArray<NavItem> {
+  const base = showCollection ? NAV : NAV.filter((i) => !String(i.href).startsWith("/forms/collection/"));
+  if (!showCommitments) return base;
+  const at = base.findIndex((i) => i.href === "/forms/collection/master");
+  return at < 0 ? [...base, COMMITMENTS_ITEM] : [...base.slice(0, at + 1), COMMITMENTS_ITEM, ...base.slice(at + 1)];
+}
+
 /* The Forms accent, taken from the module's own hub tile (see STYLES.forms
    in app/(app)/hub/page.tsx) rather than borrowed from Masters — the tile is
    rose and the rail was blue, so the two read as different products. */
@@ -134,7 +158,16 @@ const ACCENT_FROM = "#FB7185";
 const ACCENT_TO = "#BE123C";
 const ACCENT = `linear-gradient(135deg, ${ACCENT_FROM} 0%, ${ACCENT_TO} 100%)`;
 
-export function FormsSidebar({ userName }: { userName: string }) {
+export function FormsSidebar({
+  userName,
+  showCommitments = false,
+  showCollection = true,
+}: {
+  userName: string;
+  showCommitments?: boolean;
+  showCollection?: boolean;
+}) {
+  const items = navFor(showCommitments, showCollection);
   const pathname = usePathname();
   const collapsed = useRailCollapsed();
 
@@ -190,7 +223,7 @@ export function FormsSidebar({ userName }: { userName: string }) {
         </div>
 
         <nav className="px-3 flex flex-col gap-1 flex-1 overflow-y-auto min-h-0">
-          {NAV.map((item) => {
+          {items.map((item) => {
             const Icon = item.icon;
             const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
             return (
@@ -260,7 +293,8 @@ export function FormsSidebar({ userName }: { userName: string }) {
 }
 
 /** The same links as a scrollable strip, for phones where the rail hides. */
-export function FormsMobileNav() {
+export function FormsMobileNav({ showCommitments = false, showCollection = true }: { showCommitments?: boolean; showCollection?: boolean }) {
+  const items = navFor(showCommitments, showCollection);
   const pathname = usePathname();
   return (
     <div
@@ -274,7 +308,7 @@ export function FormsMobileNav() {
       >
         <ArrowLeft size={16} strokeWidth={2.4} />
       </Link>
-      {NAV.map((item) => {
+      {items.map((item) => {
         const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
         return (
           <Link

@@ -52,8 +52,10 @@ describe("loadCollectionParties", () => {
       expect.objectContaining({ partyName: "Beta", masterId: "m2", coordinatorLabel: null, paymentTerms: "30 days", clientMasterLinked: true, transactions: [] }),
     ]);
     for (const p of s.parties) {
-      expect([p.debit, p.credit, p.outstanding, p.collectionPerson]).toEqual([null, null, null, null]);
+      expect([p.debit, p.credit, p.outstanding]).toEqual([null, null, null]);
     }
+    // The collection person is the Sales Coordinator the master holds (null = unassigned).
+    expect(s.parties.map((p) => p.collectionPerson)).toEqual(["BK", null]);
   });
 
   it("an empty master says so", async () => {

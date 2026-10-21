@@ -1,51 +1,24 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
+import type { Route } from "next";
 import { ArrowDown, ArrowUp, Search } from "lucide-react";
 import { formatInr } from "@/lib/format";
 import { NOT_CONNECTED_MESSAGE, type TransactionSourceInfo } from "@/lib/collections/source";
-import { businessDate, msUntilNextBusinessDay, partyOverdue, type OverdueLevel } from "@/lib/collections/overdue";
-import { filterRows, sortRows, type PartyRow, type SortKey, type TrackerFilters } from "@/lib/collections/derive";
+import { partyOverdue } from "@/lib/collections/overdue";
+import { OverdueBadge, overdueRowStyle, useBusinessToday } from "./overdue-display";
+import { UNASSIGNED_PERSON, filterRows, personOf, sortRows, type PartyRow, type SortKey, type TrackerFilters } from "@/lib/collections/derive";
 import { PartyDetailDialog } from "./party-detail-dialog";
+import { CommentList } from "./comment-list";
+import { ConfirmationControl, EscalateControl } from "./review-controls";
+import { CoordinatorControl } from "./coordinator-control";
 
 const PAGE = 25;
 const CARD = { border: "1px solid var(--color-hairline-strong)", boxShadow: "0 1px 2px rgba(15,23,42,0.05)" } as const;
 const SELECT = "h-8 rounded-lg border border-hairline-strong bg-white px-2.5 text-[13px] text-ink-strong";
 
-/** Row tint, edge and label per overdue level. Colour is never the only signal. */
-const LEVEL_STYLE: Record<Exclude<OverdueLevel, "none">, { bg: string; edge: string; fg: string; label: string }> = {
-  warning: { bg: "#FFFBEB", edge: "#F59E0B", fg: "#92400E", label: "Overdue" },
-  critical: { bg: "#FEF2F2", edge: "#DC2626", fg: "#B91C1C", label: "Overdue" },
-};
-
-/**
- * The business date, rolled over at India midnight while the page stays open,
- * so a row turns yellow/red on the right day without a reload.
- */
-function useBusinessToday(initial: string): string {
-  const [rolled, setRolled] = React.useState<string | null>(null);
-  React.useEffect(() => {
-    let t: ReturnType<typeof setTimeout>;
-    const arm = () => {
-      t = setTimeout(() => {
-        setRolled(businessDate(new Date()));
-        arm();
-      }, msUntilNextBusinessDay(new Date()));
-    };
-    arm();
-    return () => clearTimeout(t);
-  }, []);
-  // YYYY-MM-DD compares as text; the later of the server's date and the rollover wins.
-  return rolled !== null && rolled > initial ? rolled : initial;
-}
-
 const money = (n: number | null) => (n === null ? "—" : formatInr(n));
-/** "10-Nov" — the date-wise note style from the design sketch. */
-const dayDash = (d: Date) => {
-  const day = d.toLocaleDateString("en-GB", { day: "2-digit", timeZone: "Asia/Kolkata" });
-  const mon = d.toLocaleDateString("en-GB", { month: "short", timeZone: "Asia/Kolkata" });
-  return `${day}-${mon}`;
-};
 const short = (iso: string) => {
   const [y, m, d] = iso.split("-").map(Number) as [number, number, number];
   return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-GB", { day: "2-digit", month: "short", timeZone: "UTC" });
@@ -55,7 +28,9 @@ const short = (iso: string) => {
  * The Collection Tracker: one row per party, as listed by the accounting source.
  *
  * It displays what it is given — Debit, Credit and Collection Person arrive on
- * each row and are never calculated or edited here. Next follow-up and Comments
+ * each row and are never calculated here. Only holders of
+ * collection.coordinator.assign can set or correct a Sales Coordinator
+ * (server-checked). Next follow-up and Comments
  * come from the saved follow-up history. With no source connected the table is
  * empty and says so; it never shows invented parties.
  */
@@ -66,6 +41,16 @@ export function CollectionTracker({
   today: initialToday,
   emptyMessage = NOT_CONNECTED_MESSAGE,
   transactionSource,
+  canSeeCommitments = false,
+  canEditCommitments = false,
+  canWriteFollowUps = true,
+  canSetConfirmation = true,
+  canEscalate = true,
+  reviewStorageReady = true,
+  coordinatorEditor,
+  reviewQueue,
+  setupHints = [],
+  setupHref,
 }: {
   rows: PartyRow[];
   connected: boolean;
@@ -75,6 +60,37 @@ export function CollectionTracker({
   emptyMessage?: string;
   /** The transaction source, so the detail can say when none is approved. */
   transactionSource?: TransactionSourceInfo;
+  /** collection.commitments.view — decided on the server from the signed session, like every flag below. */
+  canSeeCommitments?: boolean;
+  /** collection.commitments.edit. */
+  canEditCommitments?: boolean;
+  /** collection.followup.write. */
+  canWriteFollowUps?: boolean;
+  /** collection.confirmation.set. */
+  canSetConfirmation?: boolean;
+  /** collection.escalation.create. */
+  canEscalate?: boolean;
+  /** False while migration 0115 isn't applied: the confirmation/escalation controls are disabled. */
+  reviewStorageReady?: boolean;
+  /**
+   * Given only to holders of collection.coordinator.assign (decided on the
+   * server): lets them set or correct a Sales Coordinator, choosing from these
+   * Collection Master coordinators. Everyone else sees the coordinator as text.
+   */
+  coordinatorEditor?: { options: readonly string[] };
+  /**
+   * Given only to holders of collection.escalation.review (decided on the
+   * server): the number of open escalations and where the review queue is.
+   */
+  reviewQueue?: { openCount: number; href: string };
+  /**
+   * Given only to super-admins (the only people who can grant the sensitive
+   * capabilities): work is waiting that nobody has been granted the capability
+   * to handle. Nothing is granted by showing this.
+   */
+  setupHints?: { id: string; text: string }[];
+  /** Where those capabilities are granted (Field Permissions). */
+  setupHref?: string;
 }) {
   const today = useBusinessToday(initialToday);
   const [filters, setFilters] = React.useState<TrackerFilters>({ query: "", collectionPerson: "", followUp: "" });
@@ -83,7 +99,7 @@ export function CollectionTracker({
   const [openName, setOpenName] = React.useState<string | null>(null);
 
   const people = React.useMemo(
-    () => [...new Set(rows.map((r) => r.collectionPerson).filter((p): p is string => Boolean(p)))].sort(),
+    () => [...new Set(rows.map(personOf).filter((p): p is string => Boolean(p)))].sort((a, b) => a.localeCompare(b)),
     [rows],
   );
   const shown = React.useMemo(
@@ -122,6 +138,39 @@ export function CollectionTracker({
 
   return (
     <div>
+      {reviewQueue && (
+        <div role="note" aria-label="Escalations awaiting review" className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg px-3 py-2.5" style={{ background: "#EEF4FF", border: "1px solid #C9DAFB" }}>
+          <p className="text-[13px] font-semibold text-[#0B4FB8]">
+            {reviewQueue.openCount === 0
+              ? "No escalations are waiting for review."
+              : `${reviewQueue.openCount.toLocaleString("en-IN")} escalation${reviewQueue.openCount === 1 ? " is" : "s are"} waiting for your review.`}
+          </p>
+          <Link href={reviewQueue.href as Route} className="text-[13px] font-bold text-[#0B4FB8] underline-offset-2 hover:underline">
+            Open the review queue
+          </Link>
+        </div>
+      )}
+      {setupHints.length > 0 && (
+        <div role="note" aria-label="Setup needed" className="mb-3 rounded-lg px-3 py-2.5" style={{ background: "#FFFBEB", border: "1px solid #FCD9A0" }}>
+          <p className="text-[13px] font-bold text-[#92400E]">Setup needed (shown to super-admins only)</p>
+          <ul className="mt-1 grid gap-1">
+            {setupHints.map((h) => (
+              <li key={h.id} className="text-[12.5px] text-[#92400E]">
+                {h.text}
+              </li>
+            ))}
+          </ul>
+          {setupHref && (
+            <p className="mt-1.5 text-[12.5px] text-[#92400E]">
+              Grant it in{" "}
+              <Link href={setupHref as Route} className="font-bold underline underline-offset-2">
+                Field Permissions
+              </Link>{" "}
+              → “One person” → pick them → Allow. Sensitive permissions can be granted to a person or organisation-wide, never to a department.
+            </p>
+          )}
+        </div>
+      )}
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <div className="relative">
           <Search size={14} aria-hidden className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-subtle" />
@@ -146,6 +195,7 @@ export function CollectionTracker({
               {p}
             </option>
           ))}
+          {rows.some((r) => r.masterId && personOf(r) === null) && <option value={UNASSIGNED_PERSON}>Unassigned</option>}
         </select>
         <select
           aria-label="Follow-up"
@@ -163,26 +213,29 @@ export function CollectionTracker({
       </div>
 
       <div className="overflow-x-auto rounded-section bg-white" style={CARD}>
-        <table className="w-full min-w-[940px] border-collapse text-[13.5px]">
+        <table className="w-full min-w-[1120px] border-collapse text-[13.5px]">
           <thead style={{ background: "#F5F7FB" }}>
             <tr>
               {th("party", "Party name")}
               {th("debit", "Debit", "right")}
               {th("credit", "Credit", "right")}
-              {th("person", "Collection person")}
-              <th scope="col" className="px-3 py-2 text-left text-[11.5px] font-bold uppercase tracking-[0.06em] text-ink-soft">
-                Sales coordinator
-              </th>
+              {th("person", "Collection person (Sales coordinator)")}
               {th("next", "Next follow-up")}
               <th scope="col" className="px-3 py-2 text-left text-[11.5px] font-bold uppercase tracking-[0.06em] text-ink-soft">
                 Comments
+              </th>
+              <th scope="col" className="px-3 py-2 text-left text-[11.5px] font-bold uppercase tracking-[0.06em] text-ink-soft">
+                Collection Amount Confirmation
+              </th>
+              <th scope="col" className="px-3 py-2 text-left text-[11.5px] font-bold uppercase tracking-[0.06em] text-ink-soft">
+                Escalation
               </th>
             </tr>
           </thead>
           <tbody>
             {slice.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-3 py-10 text-center text-[13.5px] text-ink-muted">
+                <td colSpan={8} className="px-3 py-10 text-center text-[13.5px] text-ink-muted">
                   {!connected
                     ? emptyMessage
                     : rows.length === 0
@@ -193,13 +246,12 @@ export function CollectionTracker({
             ) : (
               slice.map((r) => {
                 const od = partyOverdue(r.transactions, today);
-                const tone = od.level === "none" ? null : LEVEL_STYLE[od.level];
                 return (
                 <tr
                   key={r.partyName}
                   data-overdue={od.level}
-                  className={`border-t border-[#EEF1F6] ${tone ? "" : "hover:bg-[#F7F9FD]"}`}
-                  style={tone ? { background: tone.bg, boxShadow: `inset 3px 0 0 ${tone.edge}` } : undefined}
+                  className={`border-t border-[#EEF1F6] ${od.level !== "none" ? "" : "hover:bg-[#F7F9FD]"}`}
+                  style={overdueRowStyle(od.level)}
                 >
                   <td className="px-3 py-2">
                     <button
@@ -209,32 +261,49 @@ export function CollectionTracker({
                     >
                       {r.partyName}
                     </button>
-                    {tone && (
-                      <span className="ml-2 rounded-full px-1.5 py-0.5 text-[11px] font-bold" style={{ color: tone.fg, border: `1px solid ${tone.edge}` }}>
-                        {tone.label} {od.daysOverdue} day{od.daysOverdue === 1 ? "" : "s"}
-                      </span>
-                    )}
+                    <OverdueBadge level={od.level} daysOverdue={od.daysOverdue} />
                   </td>
                   <td className="px-3 py-2 text-right tabular-nums">{money(r.debit)}</td>
                   <td className="px-3 py-2 text-right tabular-nums">{money(r.credit)}</td>
-                  <td className="px-3 py-2">{r.collectionPerson ?? <span className="text-ink-subtle">—</span>}</td>
-                  <td className="px-3 py-2">{r.coordinatorLabel ?? <span className="text-ink-subtle">Unassigned</span>}</td>
+                  <td className="px-3 py-2">
+                    {coordinatorEditor && r.masterId ? (
+                      <CoordinatorControl
+                        // Remount when the stored value changes, so the cell shows what the server saved.
+                        key={`${r.masterId}:${personOf(r) ?? ""}`}
+                        companyId={r.masterId}
+                        companyName={r.partyName}
+                        current={personOf(r)}
+                        options={coordinatorEditor.options}
+                      />
+                    ) : (
+                      personOf(r) ?? <span className="text-ink-subtle">{r.masterId ? "Unassigned" : "—"}</span>
+                    )}
+                  </td>
                   <td className="px-3 py-2 tabular-nums">
                     {r.nextFollowupDate ? short(r.nextFollowupDate) : <span className="text-ink-subtle">—</span>}
                   </td>
                   <td className="px-3 py-2 text-ink-soft">
-                    {r.history.filter((h) => h.note).length === 0 ? (
-                      <span className="text-ink-subtle">—</span>
+                    <CommentList comments={r.history} />
+                  </td>
+                  <td className="px-3 py-2">
+                    {r.masterId ? (
+                      <ConfirmationControl
+                        companyId={r.masterId}
+                        companyName={r.partyName}
+                        outstanding={r.outstanding}
+                        current={r.confirmation ?? null}
+                        storageReady={reviewStorageReady}
+                        canSet={canSetConfirmation}
+                      />
                     ) : (
-                      <span className="block max-h-[76px] max-w-[340px] overflow-y-auto pr-1" aria-label="Comments, newest first">
-                        {r.history
-                          .filter((h) => h.note)
-                          .map((h) => (
-                            <span key={h.id} className="block truncate" title={h.note ?? undefined}>
-                              <span className="tabular-nums text-ink-subtle">{dayDash(h.createdAt)}</span> — {h.note}
-                            </span>
-                          ))}
-                      </span>
+                      <span className="text-ink-subtle">—</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2">
+                    {r.masterId ? (
+                      <EscalateControl companyId={r.masterId} companyName={r.partyName} open={r.openEscalation ?? null} storageReady={reviewStorageReady} canEscalate={canEscalate} />
+                    ) : (
+                      <span className="text-ink-subtle">—</span>
                     )}
                   </td>
                 </tr>
@@ -275,6 +344,9 @@ export function CollectionTracker({
         today={today}
         storageReady={storageReady}
         transactionSource={transactionSource}
+        canSeeCommitments={canSeeCommitments}
+        canEditCommitments={canEditCommitments}
+        canWriteFollowUps={canWriteFollowUps}
         onClose={() => setOpenName(null)}
       />
     </div>

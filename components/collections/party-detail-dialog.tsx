@@ -10,6 +10,7 @@ import { saveFollowUp } from "@/app/(forms-module)/forms/collection/actions";
 import type { PartyRow } from "@/lib/collections/derive";
 import { NO_TRANSACTION_SOURCE_MESSAGE, type TransactionSourceInfo } from "@/lib/collections/source";
 import { evaluateOverdue } from "@/lib/collections/overdue";
+import { CommitmentSection } from "@/components/collections/commitment-section";
 
 const FIELD = "w-full rounded-lg border border-hairline-strong bg-white px-3 py-2 text-[14px] text-ink-strong";
 
@@ -36,12 +37,21 @@ export function PartyDetailDialog({
   today,
   storageReady,
   transactionSource,
+  canSeeCommitments = false,
+  canEditCommitments = false,
+  canWriteFollowUps = true,
   onClose,
 }: {
   row: PartyRow | null;
   today: string;
   storageReady: boolean;
   transactionSource?: TransactionSourceInfo;
+  /** collection.commitments.view; without it (and without .edit) the section isn't rendered and nothing is fetched. */
+  canSeeCommitments?: boolean;
+  /** collection.commitments.edit: the commitment form. */
+  canEditCommitments?: boolean;
+  /** collection.followup.write: the follow-up form (the action checks again). */
+  canWriteFollowUps?: boolean;
   onClose: () => void;
 }) {
   const router = useRouter();
@@ -121,8 +131,15 @@ export function PartyDetailDialog({
                 {row.masterId ? " The coordinator is the label from the Collection Master, not an employee record." : ""}
               </p>
 
+              {(canSeeCommitments || canEditCommitments) && row.masterId && (
+                <CommitmentSection companyId={row.masterId} companyName={row.partyName} comments={row.history} canView={canSeeCommitments} canEdit={canEditCommitments} />
+              )}
+
               <Transactions row={row} today={today} source={transactionSource} />
 
+              {!canWriteFollowUps ? (
+                <p className="mt-4 border-t border-hairline pt-4 text-[13px] text-ink-subtle">You can view follow-ups but not add them.</p>
+              ) : (
               <div className="mt-4 border-t border-hairline pt-4 grid gap-3">
                 <label className="block text-[13px] font-semibold text-ink-soft">
                   Next follow-up date
@@ -169,6 +186,7 @@ export function PartyDetailDialog({
                   </button>
                 </div>
               </div>
+              )}
 
               <div className="mt-4 border-t border-hairline pt-3">
                 <h3 className="text-[12px] font-bold uppercase tracking-[0.08em] text-ink-subtle">History</h3>

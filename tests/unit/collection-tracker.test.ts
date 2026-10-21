@@ -144,9 +144,16 @@ describe("follow-up validation", () => {
 const insertValues = vi.fn();
 const requireAdmin = vi.fn();
 const loadParties = vi.fn();
+vi.mock("server-only", () => ({}));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/db", () => ({ db: { insert: () => ({ values: (v: unknown) => insertValues(v) }) } }));
-vi.mock("@/lib/auth/current", () => ({ requireAdmin: () => requireAdmin() }));
+vi.mock("@/lib/auth/current", () => ({
+  requireAdmin: () => requireAdmin(),
+  getCurrentEmployee: async () => ({ id: "admin-1", isAdmin: true, isActive: true }),
+}));
+vi.mock("@/lib/auth/field-access", () => ({
+  getMyFieldAccess: async () => Object.fromEntries(["collection.followup.write"].map((k) => [k, { allowed: true, source: "admin" }])),
+}));
 vi.mock("@/lib/rate-limit", () => ({ rateLimitOrError: () => null }));
 vi.mock("@/lib/format", () => ({ localDateString: () => "2026-10-13" }));
 vi.mock("@/lib/collections/load", () => ({
@@ -156,7 +163,7 @@ vi.mock("@/lib/collections/load", () => ({
 describe("saveFollowUp (server action)", () => {
   beforeEach(() => {
     insertValues.mockReset().mockResolvedValue(undefined);
-    requireAdmin.mockReset().mockResolvedValue({ id: "admin-1" });
+    requireAdmin.mockReset().mockResolvedValue({ id: "admin-1", isAdmin: true, isActive: true });
     loadParties.mockReset().mockResolvedValue({ connected: true, parties: [party()] });
   });
   const run = async (input: unknown) => (await import("@/app/(forms-module)/forms/collection/actions")).saveFollowUp(input);

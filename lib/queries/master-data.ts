@@ -1,4 +1,6 @@
 import "server-only";
+import { isSuperAdmin } from "@/lib/auth/super-admin";
+import { isSensitivePermission } from "@/db/enums";
 import { and, asc, desc, eq, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { db } from "@/lib/db";
@@ -374,9 +376,16 @@ export function findOverlappingSlabs(slabs: SlabRow[]): [SlabRow, SlabRow][] {
 /* ── Field permissions ───────────────────────────────────────────────────── */
 
 export interface FieldMatrix {
-  people: { id: string; name: string; email: string; isAdmin: boolean }[];
+  /** isSuperAdmin feeds the matrix's live preview only; the server decides with the same rule. */
+  people: { id: string; name: string; email: string; isAdmin: boolean; isSuperAdmin: boolean }[];
   departments: { id: string; name: string }[];
   grants: { fieldKey: string; subjectType: string; subjectId: string | null; allowed: boolean }[];
+  /**
+   * Department-level rows on SENSITIVE permissions. The resolver ignores them
+   * (sensitive permissions have no department layer) and no new ones can be
+   * written; existing rows are listed for review, never changed or deleted here.
+   */
+  legacyDepartmentSensitiveGrants: { fieldKey: string; departmentId: string; departmentName: string | null; allowed: boolean }[];
 }
 
 export async function getFieldMatrix(): Promise<FieldMatrix> {
@@ -404,13 +413,18 @@ export async function getFieldMatrix(): Promise<FieldMatrix> {
       .from(fieldPermissionGrants),
   ]);
 
+  const departmentList = (departmentRows as unknown as { id: string; name: string }[]).map((d) => ({
+    id: d.id,
+    name: d.name,
+  }));
+  const departmentName = new Map(departmentList.map((d) => [d.id, d.name]));
   return {
-    people,
-    departments: (departmentRows as unknown as { id: string; name: string }[]).map((d) => ({
-      id: d.id,
-      name: d.name,
-    })),
+    people: people.map((p) => ({ ...p, isSuperAdmin: isSuperAdmin(p.email) })),
+    departments: departmentList,
     grants,
+    legacyDepartmentSensitiveGrants: grants
+      .filter((g) => g.subjectType === "department" && g.subjectId !== null && isSensitivePermission(g.fieldKey))
+      .map((g) => ({ fieldKey: g.fieldKey, departmentId: g.subjectId!, departmentName: departmentName.get(g.subjectId!) ?? null, allowed: g.allowed })),
   };
 }
 

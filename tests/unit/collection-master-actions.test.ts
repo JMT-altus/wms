@@ -15,6 +15,7 @@ const h = vi.hoisted(() => ({
   committed: { companies: [] as Record<string, unknown>[], updates: [] as Record<string, unknown>[], imports: [] as Record<string, unknown>[], deletes: 0 },
   transactions: 0,
   locked: false,
+  knownLabels: [] as string[],
 }));
 
 vi.mock("server-only", () => ({}));
@@ -23,8 +24,12 @@ vi.mock("@/lib/rate-limit", () => ({ rateLimitOrError: () => null }));
 vi.mock("@/lib/auth/current", () => ({
   requireAdmin: async () => {
     if (!h.admin) throw new Error("Admin access required");
-    return { id: "admin-1", isAdmin: true };
+    return { id: "admin-1", isAdmin: true, isActive: true };
   },
+  getCurrentEmployee: async () => ({ id: "admin-1", isAdmin: h.admin, isActive: true }),
+}));
+vi.mock("@/lib/auth/field-access", () => ({
+  getMyFieldAccess: async () => Object.fromEntries(["collection.master.import"].map((k) => [k, { allowed: true, source: "admin" }])),
 }));
 vi.mock("@/lib/queries/collection-master", () => ({
   isMissingTable: (e: { code?: string }) => e?.code === "42P01",
@@ -33,6 +38,7 @@ vi.mock("@/lib/queries/collection-master", () => ({
     return h.locked && h.existingInTx ? h.existingInTx : h.existing;
   },
   loadClientMasterIndex: async () => h.clients,
+  listKnownCoordinatorLabels: async () => h.knownLabels,
 }));
 vi.mock("@/lib/db", () => ({
   db: {
@@ -118,6 +124,7 @@ const body = (rows: { rowNo: number; company: string; coordinator?: string; paym
   sheetName: "Sheet1",
   mapping: { company: "Name", coordinator: "Unnamed column B", paymentTerms: "Payment Terms" },
   ignoredColumns: [{ column: "D", header: null, filled: 28 }],
+  confirmedColumns: { coordinator: true },
   rows: rows.map((r) => ({ coordinator: "", paymentTerms: "", ...r })),
   ...over,
 });
@@ -133,6 +140,7 @@ beforeEach(() => {
   h.committed = { companies: [], updates: [], imports: [], deletes: 0 };
   h.transactions = 0;
   h.locked = false;
+  h.knownLabels = [];
 });
 
 describe("access and validation", () => {

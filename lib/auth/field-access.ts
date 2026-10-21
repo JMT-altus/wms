@@ -73,9 +73,9 @@ export async function getFieldAccessFor(
   employee: Employee,
 ): Promise<Record<string, FieldDecision>> {
   const subject = { isAdmin: employee.isAdmin, isSuperAdmin: isSuperAdmin(employee.email) };
-  const grants = subject.isSuperAdmin
-    ? ({ everyone: {}, department: {}, employee: {} } satisfies ResolvedFieldGrants)
-    : await loadFieldGrants(employee);
+  // Loaded for super-admins too: sensitive entries don't take the super-admin
+  // bypass, so their explicit grants must be visible to the resolver.
+  const grants: ResolvedFieldGrants = await loadFieldGrants(employee);
 
   const out: Record<string, FieldDecision> = {};
   for (const f of PERMISSION_FIELDS) out[f.key] = resolveFieldAccess(f.key, subject, grants);

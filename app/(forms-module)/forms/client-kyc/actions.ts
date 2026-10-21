@@ -538,16 +538,27 @@ export async function attachClientKycFile(form: FormData): Promise<AttachResult>
   }
 }
 
-export async function getClientKycAttachmentUrl(documentId: string): Promise<AttachResult> {
-  if (!isUuid(documentId)) return { ok: false, error: "Invalid id." };
+/**
+ * A short-lived download URL for one Client KYC attachment of `customerMasterId`.
+ * The caller must pass the customer the attachment is expected to belong to;
+ * the document must be attached to exactly that customer (and a stored file
+ * must live under that customer's KYC folder) — being an admin alone doesn't
+ * prove which record a document id belongs to. Every mismatch answers "not
+ * found", before any link is returned or URL signed.
+ */
+export async function getClientKycAttachmentUrl(documentId: string, customerMasterId: string): Promise<AttachResult> {
+  if (!isUuid(documentId) || !isUuid(customerMasterId)) return { ok: false, error: "Invalid id." };
   const g = await guard();
   if ("error" in g) return g.error;
 
   const doc = await db.query.documents.findFirst({
-    where: eq(documents.id, documentId),
+    where: and(eq(documents.id, documentId), eq(documents.customerMasterId, customerMasterId)),
     columns: { id: true, storagePath: true, linkUrl: true, customerMasterId: true },
   });
-  if (!doc) return { ok: false, error: "Attachment not found." };
+  if (!doc || doc.customerMasterId !== customerMasterId) return { ok: false, error: "Attachment not found." };
+  if (doc.storagePath && !doc.storagePath.startsWith(`client-kyc/${customerMasterId}/`)) {
+    return { ok: false, error: "Attachment not found." };
+  }
   if (doc.linkUrl) return { ok: true, url: doc.linkUrl };
   if (!doc.storagePath) return { ok: false, error: "Attachment has no file." };
 

@@ -1,7 +1,11 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { refuseUnlessIsolated } from "./_isolated-db";
 
 // Skip the entire suite unless a test DB is configured.
 const TEST_DB = process.env.DATABASE_URL_TEST;
+// Never run against a shared or production database (see ./_isolated-db.ts).
+const refused = TEST_DB ? refuseUnlessIsolated(TEST_DB) : null;
+if (refused) throw new Error(`Integration tests refused: ${refused}`);
 const describeIfDb = TEST_DB ? describe : describe.skip;
 
 // Hoisted so vi.mock's factory (which runs at parse time) can reference it.

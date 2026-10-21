@@ -8,6 +8,11 @@ vi.mock("@/lib/toast", () => ({ fireToast: vi.fn() }));
 vi.mock("@/app/(forms-module)/forms/collection/actions", () => ({
   saveFollowUp: (...a: unknown[]) => saveFollowUp(...a),
 }));
+const commitments = vi.hoisted(() => ({ get: vi.fn(), save: vi.fn() }));
+vi.mock("@/app/(forms-module)/forms/collection/commitments/actions", () => ({
+  getCompanyCommitment: (...a: unknown[]) => commitments.get(...a),
+  saveCompanyCommitment: (...a: unknown[]) => commitments.save(...a),
+}));
 // The charts draw with a measured container; their data handling is what matters here.
 vi.mock("@/components/charts/h-bars", () => ({
   HBars: ({ data }: { data: { label: string; value: number }[] }) => (

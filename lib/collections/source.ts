@@ -16,9 +16,9 @@
  *      incentive engine's invoices nor the Outstanding module is used as a
  *      stand-in. When a source is approved, only that file changes.
  *
- * Two things are still deliberately NOT computed anywhere: `outstanding` (the
- * source supplies it, or it stays null) and `collectionPerson` (the assignment
- * rule is unconfirmed; the master's coordinator label is shown as such).
+ * `outstanding` is deliberately NOT computed anywhere: the source supplies it,
+ * or it stays null. `collectionPerson` is the Sales Coordinator label the
+ * Collection Master holds for the company (a label, never an employee id).
  */
 
 /** One collection record from an approved transaction source. */
@@ -52,6 +52,7 @@ export interface CollectionParty {
   credit: number | null;
   /** Supplied by an approved source, else null. */
   outstanding: number | null;
+  /** The Sales Coordinator label from the Collection Master; null = unassigned. */
   collectionPerson: string | null;
   /** The Collection Master record this party is (absent for legacy callers). */
   masterId?: string;

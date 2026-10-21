@@ -1,8 +1,15 @@
 import { CollectionTracker } from "@/components/collections/collection-tracker";
-import { buildRows } from "@/lib/collections/derive";
+import { buildRows, personOf } from "@/lib/collections/derive";
 import { loadCollectionParties } from "@/lib/collections/load";
 import { listFollowUps } from "@/lib/queries/collection-followups";
 import { localDateString } from "@/lib/format";
+import { getCollectionCapabilities, requireCollectionCapability } from "@/lib/auth/capability";
+import { getCurrentEmployee } from "@/lib/auth/current";
+import { isSuperAdmin } from "@/lib/auth/super-admin";
+import { FIELD_PERMISSIONS_HREF, buildSetupHints } from "@/lib/collections/setup-hints";
+import { capabilityHolders } from "@/lib/queries/collection-setup";
+import { latestConfirmations, openEscalations } from "@/lib/queries/collection-review";
+import { listCoordinatorOptions } from "@/lib/queries/collection-master";
 
 export const dynamic = "force-dynamic";
 
@@ -11,10 +18,51 @@ export const dynamic = "force-dynamic";
  * Collection Master; amounts and due dates only from an approved transaction
  * source (none yet, so none are shown). Follow-up dates and notes come from the
  * saved history.
+ *
+ * Needs collection.view, checked before anything is loaded. Each control is
+ * shown according to its own capability; the server action checks it again.
+ *
+ * Holders of collection.escalation.review also get a link to the review queue,
+ * with the count of open escalations. Super-admins — the only people who can
+ * grant the sensitive capabilities — additionally see a "setup needed" notice
+ * when escalations are waiting or parties are unassigned and nobody has been
+ * granted the capability to handle them. Nothing is ever granted by code.
  */
 export default async function CollectionTrackerPage() {
+  await requireCollectionCapability("collection.view");
+  const caps = await getCollectionCapabilities();
   const [source, followUps] = await Promise.all([loadCollectionParties(), listFollowUps()]);
-  const rows = buildRows(source.parties, followUps.entries);
+  const companyIds = source.parties.map((p) => p.masterId).filter((id): id is string => !!id);
+  // Confirmation (visible to every Tracker user) and open-escalation status, from
+  // the database on every request — never from browser state.
+  // Coordinator choices are read only for holders of collection.coordinator.assign.
+  const [confirmations, escalations, coordinatorOptions] = await Promise.all([
+    latestConfirmations(companyIds),
+    openEscalations(companyIds),
+    caps["collection.coordinator.assign"] ? listCoordinatorOptions() : null,
+  ]);
+  const rows = buildRows(source.parties, followUps.entries).map((r) => {
+    const c = r.masterId ? confirmations.byCompany.get(r.masterId) : undefined;
+    const e = r.masterId ? escalations.byCompany.get(r.masterId) : undefined;
+    return {
+      ...r,
+      confirmation: c ? { value: c.value, recordedAt: c.recordedAt, recordedByName: c.recordedByName } : null,
+      openEscalation: e ? { escalatedAt: e.escalatedAt, escalatedByName: e.escalatedByName } : null,
+    };
+  });
+
+  const openEscalationCount = escalations.byCompany.size;
+  const reviewQueue = caps["collection.escalation.review"] ? { openCount: openEscalationCount, href: "/forms/collection/commitments" } : undefined;
+  // Super-admins only (the existing rule): what to grant, and where, when work is waiting for nobody.
+  const me = await getCurrentEmployee();
+  const setupHints =
+    me && isSuperAdmin(me.email)
+      ? buildSetupHints({
+          openEscalations: openEscalationCount,
+          unassignedParties: rows.filter((r) => r.masterId && personOf(r) === null).length,
+          holders: await capabilityHolders(),
+        })
+      : [];
 
   return (
     <div>
@@ -38,6 +86,18 @@ export default async function CollectionTrackerPage() {
         today={localDateString("Asia/Kolkata")}
         emptyMessage={source.message}
         transactionSource={source.transactions}
+        // Yes/no flags only. Commitment figures are never part of this page's
+        // data; the popup fetches them through a capability-checked action.
+        canSeeCommitments={caps["collection.commitments.view"]}
+        canEditCommitments={caps["collection.commitments.edit"]}
+        canWriteFollowUps={caps["collection.followup.write"]}
+        canSetConfirmation={caps["collection.confirmation.set"]}
+        canEscalate={caps["collection.escalation.create"]}
+        reviewStorageReady={confirmations.storageReady && escalations.storageReady}
+        coordinatorEditor={coordinatorOptions?.storageReady ? { options: coordinatorOptions.labels } : undefined}
+        reviewQueue={reviewQueue}
+        setupHints={setupHints.map((h) => ({ id: h.key, text: h.text }))}
+        setupHref={setupHints.length > 0 ? FIELD_PERMISSIONS_HREF : undefined}
       />
     </div>
   );

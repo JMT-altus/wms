@@ -11,6 +11,30 @@ import { db } from "@/lib/db";
  * convention (empty cell = NULL on restore). Ordered by primary key / first
  * column for stable, diff-friendly output across nightly runs.
  */
+/**
+ * Tables NEVER copied into the general backup, whatever the table listing says.
+ *
+ *   collection_commitments — committed amounts and dates that only the
+ *     holders of collection.commitments.view may see (lib/auth/capability.ts). The general
+ *     Google Sheets backup is readable by whoever has access to that sheet, so
+ *     copying them there would defeat the owner-only rule. If these records
+ *     need their own backup, that is a separate, approved destination.
+ *   collection_escalations — the escalation reviewers' queue (who
+ *     escalated which company, when, and its closing). Kept out of the general
+ *     backup with the commitments it accompanies. (Collection Amount
+ *     Confirmations stay in: every Tracker user can already see them.)
+ *
+ * Enforced twice: listBackupTables() leaves them out, and dumpTable() /
+ * countRows() refuse them, so no caller can export them by naming them.
+ */
+export const BACKUP_EXCLUDED_TABLES: readonly string[] = ["collection_commitments", "collection_escalations"];
+
+export const isBackupExcluded = (table: string): boolean => BACKUP_EXCLUDED_TABLES.includes(table.trim().toLowerCase());
+
+function assertBackupable(table: string): void {
+  if (isBackupExcluded(table)) throw new Error(`Table "${table}" is excluded from the general backup.`);
+}
+
 export interface TableDump {
   table: string;
   headers: string[];
@@ -18,7 +42,7 @@ export interface TableDump {
   rowCount: number;
 }
 
-/** All base tables in `public`, excluding Drizzle's migration bookkeeping. */
+/** All base tables in `public`, excluding Drizzle's migration bookkeeping and BACKUP_EXCLUDED_TABLES. */
 export async function listBackupTables(): Promise<string[]> {
   const rows = (await db.execute(sql`
     SELECT table_name
@@ -28,7 +52,7 @@ export async function listBackupTables(): Promise<string[]> {
       AND table_name NOT LIKE '\\_\\_drizzle%'
     ORDER BY table_name
   `)) as unknown as Array<{ table_name: string }>;
-  return rows.map((r) => r.table_name);
+  return rows.map((r) => r.table_name).filter((t) => !isBackupExcluded(t));
 }
 
 /** Cell-safe string for any SQL value. Objects/arrays (json, text[]) → JSON. */
@@ -45,6 +69,7 @@ export async function dumpTable(
   table: string,
   opts: { limit?: number; offset?: number } = {},
 ): Promise<TableDump> {
+  assertBackupable(table);
   // `table` comes only from listBackupTables() (information_schema), never user
   // input, so identifier interpolation here is safe; still quote it.
   const ident = sql.raw(`"${table.replace(/"/g, '""')}"`);
@@ -74,6 +99,7 @@ async function columnNames(table: string): Promise<string[]> {
 
 /** Row count for a table (cheap; used to decide sharding before dumping). */
 export async function countRows(table: string): Promise<number> {
+  assertBackupable(table);
   const ident = sql.raw(`"${table.replace(/"/g, '""')}"`);
   const [row] = (await db.execute(
     sql`SELECT count(*)::int AS n FROM ${ident}`,

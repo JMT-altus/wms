@@ -1,8 +1,9 @@
 import "server-only";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { documents, employees } from "@/db/schema";
 import { getSupabaseAdmin, DOCUMENTS_BUCKET } from "@/lib/supabase/admin";
+import { canAccessModule } from "@/lib/auth/module-access";
 
 export interface DocumentRow {
   id: string;
@@ -16,8 +17,26 @@ export interface DocumentRow {
   url: string | null;
 }
 
-/** Document library, newest first, each with a fresh signed download URL. */
+/**
+ * How a shared-library document is recognised. The `documents` table also holds
+ * task attachments (`tasks/<taskId>/…`, `task_id`) and Client KYC files
+ * (`client-kyc/<id>/…`, `customer_master_id`), and a task attachment keeps its
+ * path but loses `task_id` when the task is deleted (ON DELETE SET NULL). The
+ * library's only writers (uploadDocument / replaceDocumentFile) store a file
+ * under `<random uuid>/<name>`, and the library never creates link rows. So a
+ * library document is: a FILE, owned by nothing, under a uuid prefix. Anything
+ * else — links, owned rows, orphaned attachments, unknown paths — is excluded
+ * (fail closed).
+ */
+export const LIBRARY_PATH_PATTERN = "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/";
+
+/**
+ * Document library, newest first, each with a fresh signed download URL.
+ * Only library documents (above), and only for someone with access to the
+ * module the library lives in — checked before anything is read or signed.
+ */
 export async function listDocuments(): Promise<DocumentRow[]> {
+  if (!(await canAccessModule("wms"))) return [];
   const rows = await db
     .select({
       id: documents.id,
@@ -32,6 +51,15 @@ export async function listDocuments(): Promise<DocumentRow[]> {
     })
     .from(documents)
     .leftJoin(employees, eq(documents.uploadedById, employees.id))
+    .where(
+      and(
+        isNull(documents.taskId),
+        isNull(documents.customerMasterId),
+        isNull(documents.linkUrl),
+        isNotNull(documents.storagePath),
+        sql`${documents.storagePath} ~ ${LIBRARY_PATH_PATTERN}`,
+      ),
+    )
     .orderBy(desc(documents.createdAt))
     .limit(500);
 

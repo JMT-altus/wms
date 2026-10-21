@@ -2,7 +2,7 @@
 import * as React from "react";
 import { Check, Minus, RotateCcw, ShieldCheck, X } from "lucide-react";
 import { toast } from "sonner";
-import { PERMISSION_FIELDS } from "@/db/enums";
+import { PERMISSION_FIELD_DEFS } from "@/db/enums";
 import type { FieldMatrix } from "@/lib/queries/master-data";
 import {
   FIELD_CODE_DEFAULTS,
@@ -27,7 +27,14 @@ type SubjectType = "everyone" | "department" | "employee";
  * (`resolveFieldAccess`), so what an admin sees here cannot drift from what
  * actually happens on a write.
  */
-export function FieldAccessManager({ matrix }: { matrix: FieldMatrix }) {
+export function FieldAccessManager({
+  matrix,
+  canManageSensitive = false,
+}: {
+  matrix: FieldMatrix;
+  /** True for super-admins: only they may change the rows marked sensitive (the server enforces it). */
+  canManageSensitive?: boolean;
+}) {
   const [subjectType, setSubjectType] = React.useState<SubjectType>("everyone");
   const [subjectId, setSubjectId] = React.useState<string>("");
   const [pending, start] = React.useTransition();
@@ -91,7 +98,7 @@ export function FieldAccessManager({ matrix }: { matrix: FieldMatrix }) {
 
     return resolveFieldAccess(
       fieldKey,
-      { isAdmin: person?.isAdmin ?? false, isSuperAdmin: false },
+      { isAdmin: person?.isAdmin ?? false, isSuperAdmin: person?.isSuperAdmin ?? false },
       { everyone, department, employee },
     );
   }
@@ -204,7 +211,12 @@ export function FieldAccessManager({ matrix }: { matrix: FieldMatrix }) {
                     subjectType as "department" | "employee",
                     activeSubjectId,
                   );
-                  res.ok ? toast.success("Overrides cleared") : toast.error(res.error);
+                  if (!res.ok) toast.error(res.error);
+                  else if (res.keptSensitive)
+                    toast.success(
+                      `Overrides cleared. ${res.keptSensitive} sensitive grant${res.keptSensitive === 1 ? " was" : "s were"} kept — only a super-admin can change ${res.keptSensitive === 1 ? "it" : "them"}.`,
+                    );
+                  else toast.success("Overrides cleared");
                 });
               }}
               className="inline-flex items-center gap-1.5 rounded-pill px-3.5 h-11 text-[14px] font-semibold text-ink-soft bg-surface-soft border border-hairline"
@@ -217,10 +229,33 @@ export function FieldAccessManager({ matrix }: { matrix: FieldMatrix }) {
 
         <p className="mt-3 text-ink-muted" style={{ fontSize: 13 }}>
           Resolution order: <strong>person → department → admin → everyone → built-in default</strong>.
-          Super-admins always have every right. Module-level access (which workspaces someone can
+          Super-admins and admins get rights automatically, except the rows marked <strong>Sensitive</strong>:
+          those need an explicit grant, and only a super-admin can grant or revoke them — to a person or organisation-wide, never to a
+          department. Module-level access (which workspaces someone can
           open at all) lives in <a href="/admin/access" className="font-bold" style={{ color: "#0A6CFF" }}>Access</a>.
         </p>
       </div>
+
+      {matrix.legacyDepartmentSensitiveGrants.length > 0 && (
+        <div role="note" aria-label="Legacy department grants" className="mb-5 rounded-section p-4" style={{ background: "#FFFBEB", border: "1px solid #FCD9A0" }}>
+          <p className="font-bold text-[#92400E]" style={{ fontSize: 13.5 }}>
+            {matrix.legacyDepartmentSensitiveGrants.length} department grant{matrix.legacyDepartmentSensitiveGrants.length === 1 ? "" : "s"} for
+            sensitive permissions {matrix.legacyDepartmentSensitiveGrants.length === 1 ? "is" : "are"} ignored
+          </p>
+          <p className="mt-0.5 text-[#92400E]" style={{ fontSize: 12.5 }}>
+            Sensitive permissions no longer apply through departments. These rows are kept for review and have no effect until a
+            super-admin clears them; grant the permission to the right people directly if they still need it.
+          </p>
+          <ul className="mt-2 grid gap-1" style={{ fontSize: 12.5 }}>
+            {matrix.legacyDepartmentSensitiveGrants.map((g) => (
+              <li key={`${g.fieldKey}:${g.departmentId}`} className="text-ink-strong">
+                <strong>{PERMISSION_FIELD_DEFS.find((d) => d.key === g.fieldKey)?.label ?? g.fieldKey}</strong> —{" "}
+                {g.departmentName ?? "an inactive or removed department"} · {g.allowed ? "Allow" : "Deny"} (ignored)
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {/* Matrix */}
       <div className="rounded-section border border-hairline bg-surface-card overflow-hidden">
@@ -237,19 +272,54 @@ export function FieldAccessManager({ matrix }: { matrix: FieldMatrix }) {
               </tr>
             </thead>
             <tbody>
-              {PERMISSION_FIELDS.map((f) => {
+              {PERMISSION_FIELD_DEFS.map((f, i) => {
                 const level = levelFor(f.key);
                 const eff = effectiveFor(f.key);
+                // Sensitive rows: shown to every admin, changeable only by a super-admin.
+                const locked = f.sensitive === true && !canManageSensitive;
+                // Sensitive permissions have no department layer: no new department
+                // Allow/Deny for anyone. A legacy row (ignored by the resolver) can
+                // only be cleared, by a super-admin, via Inherit.
+                const departmentLocked = f.sensitive === true && subjectType === "department";
+                const legacyHere = departmentLocked && level !== "inherit";
+                const heading = f.group && f.group !== PERMISSION_FIELD_DEFS[i - 1]?.group ? f.group : null;
                 return (
-                  <tr key={f.key} className="border-t" style={{ borderColor: "var(--color-hairline)" }}>
+                  <React.Fragment key={f.key}>
+                  {heading && (
+                    <tr className="border-t" style={{ borderColor: "var(--color-hairline)", background: "var(--color-surface-soft)" }}>
+                      <th colSpan={3} scope="rowgroup" className="px-4 py-2 text-left uppercase tracking-[0.08em] text-ink-subtle" style={{ fontSize: 11, fontWeight: 700 }}>
+                        {heading}
+                      </th>
+                    </tr>
+                  )}
+                  <tr className="border-t" style={{ borderColor: "var(--color-hairline)" }}>
                     <td className="px-4 py-3.5">
                       <p className="font-bold text-ink-strong" style={{ fontSize: 14.5 }}>
                         {f.label}
+                        {f.sensitive && (
+                          <span className="ml-2 rounded-pill px-2 py-0.5 align-middle text-[11px] font-bold" style={{ background: "#FEF3C7", color: "#92400E" }}>
+                            Sensitive
+                          </span>
+                        )}
                       </p>
                       <p className="mt-0.5 text-ink-muted" style={{ fontSize: 12.5 }}>
                         {f.hint} · default{" "}
                         <strong>{FIELD_CODE_DEFAULTS[f.key] ? "allowed" : "denied"}</strong>
+                        {f.sensitive && " · explicit grant only, never automatic for admins or super-admins"}
                       </p>
+                      {departmentLocked ? (
+                        <p className="mt-0.5 font-semibold text-[#92400E]" style={{ fontSize: 12 }}>
+                          Not available for departments — grant sensitive permissions to a person or organisation-wide.
+                          {legacyHere &&
+                            ` This department has a legacy ${level === "allow" ? "Allow" : "Deny"} that is ignored until ${canManageSensitive ? "you clear it (Inherit)" : "a super-admin clears it"}.`}
+                        </p>
+                      ) : (
+                        locked && (
+                          <p className="mt-0.5 font-semibold text-[#92400E]" style={{ fontSize: 12 }}>
+                            Only a super-admin can change this.
+                          </p>
+                        )
+                      )}
                     </td>
                     <td className="px-4 py-3.5">
                       <div className="inline-flex rounded-pill overflow-hidden" style={{ border: "1px solid var(--color-hairline)" }}>
@@ -266,8 +336,14 @@ export function FieldAccessManager({ matrix }: { matrix: FieldMatrix }) {
                             <button
                               key={lv}
                               type="button"
-                              disabled={pending || !subjectReady}
+                              disabled={
+                                pending ||
+                                !subjectReady ||
+                                locked ||
+                                (departmentLocked && !(lv === "inherit" && legacyHere && canManageSensitive))
+                              }
                               onClick={() => apply(f.key, lv)}
+                              aria-label={`${label}: ${f.label}`}
                               aria-pressed={on}
                               className="inline-flex items-center gap-1.5 px-3 py-2 font-bold disabled:opacity-45"
                               style={{
@@ -296,13 +372,14 @@ export function FieldAccessManager({ matrix }: { matrix: FieldMatrix }) {
                         }}
                       >
                         {eff.allowed ? <Check size={12} strokeWidth={3} /> : <X size={12} strokeWidth={3} />}
-                        {eff.allowed ? "Can edit" : "Read only"}
+                        {f.group ? (eff.allowed ? "Allowed" : "Not allowed") : eff.allowed ? "Can edit" : "Read only"}
                       </span>
                       <p className="mt-1 text-ink-subtle" style={{ fontSize: 12 }}>
                         {FIELD_SOURCE_LABEL[eff.source]}
                       </p>
                     </td>
                   </tr>
+                  </React.Fragment>
                 );
               })}
             </tbody>
