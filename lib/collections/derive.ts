@@ -12,8 +12,20 @@ export interface FollowUpEntry {
   /** YYYY-MM-DD, or null for a note-only entry. */
   nextFollowupDate: string | null;
   note: string | null;
+  /** The author's employee id, from the server session at save time; null = not on record (e.g. the employee was removed). */
+  createdById: string | null;
   createdByName: string | null;
+  /** Set by the database clock when the follow-up was saved. */
   createdAt: Date;
+  /**
+   * The author currently holds collection.escalation.review (the escalation
+   * reviewer). Resolved on the server from the permission matrix — never named
+   * in code. Their comments are highlighted for every viewer.
+   */
+  authorIsReviewer?: boolean;
+  /** The latest edit of the note, if any (from the employee_events audit trail). */
+  editedAt?: Date | null;
+  editedByName?: string | null;
 }
 
 /** One key for a party's name, so "ABC Traders " and "abc traders" are the same party. */
@@ -49,6 +61,20 @@ export function followUpsByParty(followUps: FollowUpEntry[]): Map<string, Follow
 
 /** A party's comments as the Tracker shows them: entries that carry a note, most recent first. */
 export const commentsOf = (history: FollowUpEntry[]): FollowUpEntry[] => history.filter((h) => h.note);
+
+/** How many comments the Tracker's Comments column shows before "See all comments". */
+export const TRACKER_COMMENT_LIMIT = 5;
+
+/**
+ * A party's complete comment history for display: entries that carry a note,
+ * each id once, newest first by when the comment was SAVED (`createdAt`, the
+ * database clock) — never by its next follow-up date. Ties keep their order.
+ */
+export function commentHistory<T extends Pick<FollowUpEntry, "id" | "note" | "createdAt">>(history: T[]): T[] {
+  const seen = new Set<string>();
+  const unique = history.filter((h) => h.note && !seen.has(h.id) && seen.add(h.id));
+  return unique.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+}
 
 /** Join the source's parties with their saved follow-ups. */
 export function buildRows(parties: CollectionParty[], followUps: FollowUpEntry[]): PartyRow[] {

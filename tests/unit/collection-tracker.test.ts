@@ -27,6 +27,7 @@ const fu = (over: Partial<FollowUpEntry> = {}): FollowUpEntry => ({
   partyName: "Alpha Traders",
   nextFollowupDate: "2026-11-10",
   note: "Called, will pay",
+  createdById: "emp-admin",
   createdByName: "Admin",
   createdAt: new Date("2026-10-12T10:00:00Z"),
   ...over,
@@ -203,5 +204,30 @@ describe("saveFollowUp (server action)", () => {
     const res = await run({ partyName: "Alpha Traders", note: "x" });
     expect(res.ok).toBe(false);
     expect(res.ok ? "" : res.error).toMatch(/nothing was saved/i);
+  });
+  it("never takes the author or the time from the browser: such fields are rejected and nothing is saved", async () => {
+    for (const extra of [
+      { createdById: "someone-else" },
+      { createdByName: "Someone Else" },
+      { createdAt: "2020-01-01T00:00:00Z" },
+      { userId: "someone-else" },
+    ]) {
+      const res = await run({ partyName: "Alpha Traders", note: "x", ...extra });
+      expect(res.ok).toBe(false);
+    }
+    expect(insertValues).not.toHaveBeenCalled();
+    // A normal save carries ONLY party, date, note and the session's employee id — no timestamp (the database sets it).
+    await run({ partyName: "Alpha Traders", note: "x" });
+    expect(insertValues).toHaveBeenCalledTimes(1);
+    expect(Object.keys(insertValues.mock.calls[0]![0] as object).sort()).toEqual(["createdById", "nextFollowupDate", "note", "partyName"]);
+    expect((insertValues.mock.calls[0]![0] as { createdById: string }).createdById).toBe("admin-1");
+  });
+  it("a database failure returns a fixed message — never the database's own text", async () => {
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    insertValues.mockRejectedValue(Object.assign(new Error('new row for relation "collection_followups" violates check constraint "x" at postgres://u:secret@host/db'), { code: "23514" }));
+    const res = await run({ partyName: "Alpha Traders", note: "x" });
+    expect(res).toEqual({ ok: false, error: "The follow-up could not be saved, so nothing was changed. Please try again." });
+    expect(JSON.stringify(errSpy.mock.calls)).not.toMatch(/secret|collection_followups|violates/);
+    errSpy.mockRestore();
   });
 });

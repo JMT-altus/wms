@@ -1925,6 +1925,66 @@ export const collectionMasterCompanies = pgTable(
 export type CollectionMasterCompany = typeof collectionMasterCompanies.$inferSelect;
 
 /**
+ * Collection balance snapshots (migration 0117) — one row per applied Tally
+ * customer-summary upload, and its Debit / Credit per Collection Master company.
+ * Append-only: the Tracker shows only the LATEST snapshot (never a sum of
+ * several), older ones stay for audit. Customer-level figures only — no
+ * invoices, due dates or statuses. See db/migrations/0117_collection_balances.sql.
+ */
+export const collectionBalanceSnapshots = pgTable(
+  "collection_balance_snapshots",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    fileName: text("file_name"),
+    sheetName: text("sheet_name"),
+    /** SHA-256 of the sheet's cell contents, computed by the server — to warn about re-uploading the same sheet. */
+    fileHash: text("file_hash"),
+    reportTitle: text("report_title"),
+    /** The reporting period printed in the file, when it has one. */
+    periodFrom: date("period_from"),
+    periodTo: date("period_to"),
+    sourceTotalDebit: numeric("source_total_debit", { precision: 16, scale: 2 }),
+    sourceTotalCredit: numeric("source_total_credit", { precision: 16, scale: 2 }),
+    importedTotalDebit: numeric("imported_total_debit", { precision: 16, scale: 2 }).notNull(),
+    importedTotalCredit: numeric("imported_total_credit", { precision: 16, scale: 2 }).notNull(),
+    totals: jsonb("totals").notNull().default({}),
+    uploadedById: uuid("uploaded_by_id").references(() => employees.id, { onDelete: "set null" }),
+    uploadedAt: timestamp("uploaded_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // NULLS FIRST is what plain DESC means in Postgres (and what ORDER BY … DESC wants); drizzle would otherwise emit NULLS LAST.
+    index("collection_balance_snapshots_at_idx").on(t.uploadedAt.desc().nullsFirst()),
+    check("collection_balance_snapshots_period_check", sql`${t.periodFrom} IS NULL OR ${t.periodTo} IS NULL OR ${t.periodFrom} <= ${t.periodTo}`),
+  ],
+);
+
+export const collectionBalanceLines = pgTable(
+  "collection_balance_lines",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    snapshotId: uuid("snapshot_id")
+      .notNull()
+      .references(() => collectionBalanceSnapshots.id, { onDelete: "restrict" }),
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => collectionMasterCompanies.id, { onDelete: "restrict" }),
+    /** The name exactly as the file wrote it ("Particulars"). */
+    sourceName: text("source_name").notNull(),
+    sourceRow: integer("source_row").notNull(),
+    /** NULL = the file left the cell blank. Negative values are kept as written. */
+    debit: numeric("debit", { precision: 14, scale: 2 }),
+    credit: numeric("credit", { precision: 14, scale: 2 }),
+  },
+  (t) => [
+    uniqueIndex("collection_balance_lines_snapshot_company_uq").on(t.snapshotId, t.companyId),
+    index("collection_balance_lines_company_idx").on(t.companyId),
+    check("collection_balance_lines_value_check", sql`${t.debit} IS NOT NULL OR ${t.credit} IS NOT NULL`),
+  ],
+);
+
+export type CollectionBalanceSnapshot = typeof collectionBalanceSnapshots.$inferSelect;
+
+/**
  * Collection commitments (migration 0114) — committed amount + committed date
  * per Collection Master company, append-only (the newest row is current). Read
  * and written only with collection.commitments.view / .edit; see lib/auth/capability.ts.
@@ -1987,9 +2047,19 @@ export const collectionEscalations = pgTable(
     escalatedAt: timestamp("escalated_at", { withTimezone: true }).notNull().defaultNow(),
     closedById: uuid("closed_by_id").references(() => employees.id, { onDelete: "set null" }),
     closedAt: timestamp("closed_at", { withTimezone: true }),
+    /**
+     * Reason for Escalation (migration 0118, prepared for review). Required by the
+     * app for every NEW escalation (trimmed, 1–1,000 characters, validated on the
+     * server); NULL for escalations raised before it existed — never backfilled.
+     */
+    reason: text("reason"),
   },
   (t) => [
     uniqueIndex("collection_escalations_one_open_uq").on(t.companyId).where(sql`${t.status} = 'open'`),
+    check(
+      "collection_escalations_reason_check",
+      sql`${t.reason} IS NULL OR (char_length(${t.reason}) <= 1000 AND ${t.reason} ~ '[^[:space:]]')`,
+    ),
     index("collection_escalations_company_idx").on(t.companyId, t.escalatedAt),
     check("collection_escalations_status_check", sql`${t.status} IN ('open', 'closed')`),
     check(
@@ -2005,6 +2075,77 @@ export const collectionEscalations = pgTable(
 
 export type CollectionAmountConfirmation = typeof collectionAmountConfirmations.$inferSelect;
 export type CollectionEscalation = typeof collectionEscalations.$inferSelect;
+
+/**
+ * Collection coordinator links (migration 0120, prepared for review) — which WMS
+ * login IS which Sales Coordinator label, kept by a super-admin in the Admin Panel.
+ * One row per employee at most; `coordinatorLabel` NULL = explicitly not a Sales
+ * Coordinator; no row = not configured. A label belongs to at most one login.
+ * Never guessed from names, initials or emails.
+ */
+export const collectionCoordinatorLinks = pgTable(
+  "collection_coordinator_links",
+  {
+    employeeId: uuid("employee_id")
+      .primaryKey()
+      .references(() => employees.id, { onDelete: "cascade" }),
+    coordinatorLabel: text("coordinator_label"),
+    setById: uuid("set_by_id").references(() => employees.id, { onDelete: "set null" }),
+    setAt: timestamp("set_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("collection_coordinator_links_label_uq").on(t.coordinatorLabel).where(sql`${t.coordinatorLabel} IS NOT NULL`),
+    check("collection_coordinator_links_label_not_blank_check", sql`${t.coordinatorLabel} IS NULL OR btrim(${t.coordinatorLabel}) <> ''`),
+  ],
+);
+
+export type CollectionCoordinatorLink = typeof collectionCoordinatorLinks.$inferSelect;
+
+/**
+ * Collection closure episodes — the history behind Collection Logs (migration
+ * 0119, prepared for review). One row per episode: closed when the approved
+ * source confirmed the outstanding balance was exactly zero; reopened (never
+ * deleted) when a later approved figure was positive again. At most one OPEN
+ * episode per company. Nothing writes here yet: no outstanding-balance source
+ * is approved, so Collection Logs only reads this table.
+ */
+export const collectionClosures = pgTable(
+  "collection_closures",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => collectionMasterCompanies.id, { onDelete: "restrict" }),
+    closedAt: timestamp("closed_at", { withTimezone: true }).notNull().defaultNow(),
+    closeReason: text("close_reason").$type<"outstanding_zero">().notNull(),
+    closeSourceKey: text("close_source_key").notNull(),
+    closeSourceRef: text("close_source_ref"),
+    finalOutstanding: numeric("final_outstanding", { precision: 16, scale: 2 }).notNull(),
+    finalDebit: numeric("final_debit", { precision: 16, scale: 2 }),
+    finalCredit: numeric("final_credit", { precision: 16, scale: 2 }),
+    asOfDate: date("as_of_date"),
+    closedById: uuid("closed_by_id").references(() => employees.id, { onDelete: "set null" }),
+    reopenedAt: timestamp("reopened_at", { withTimezone: true }),
+    reopenReason: text("reopen_reason").$type<"outstanding_positive">(),
+    reopenSourceRef: text("reopen_source_ref"),
+    reopenedById: uuid("reopened_by_id").references(() => employees.id, { onDelete: "set null" }),
+  },
+  (t) => [
+    uniqueIndex("collection_closures_one_open_uq").on(t.companyId).where(sql`${t.reopenedAt} IS NULL`),
+    index("collection_closures_company_idx").on(t.companyId, t.closedAt.desc().nullsFirst()),
+    index("collection_closures_closed_at_idx").on(t.closedAt.desc().nullsFirst()),
+    check("collection_closures_close_reason_check", sql`${t.closeReason} IN ('outstanding_zero')`),
+    check("collection_closures_source_key_check", sql`btrim(${t.closeSourceKey}) <> ''`),
+    check("collection_closures_zero_check", sql`${t.closeReason} <> 'outstanding_zero' OR ${t.finalOutstanding} = 0`),
+    check("collection_closures_reopen_reason_check", sql`${t.reopenReason} IS NULL OR ${t.reopenReason} IN ('outstanding_positive')`),
+    check(
+      "collection_closures_reopen_check",
+      sql`(${t.reopenedAt} IS NULL AND ${t.reopenReason} IS NULL AND ${t.reopenSourceRef} IS NULL AND ${t.reopenedById} IS NULL) OR (${t.reopenedAt} IS NOT NULL AND ${t.reopenReason} IS NOT NULL AND ${t.reopenedAt} >= ${t.closedAt})`,
+    ),
+  ],
+);
+
+export type CollectionClosure = typeof collectionClosures.$inferSelect;
 
 export type LeaveRequest = typeof leaveRequests.$inferSelect;
 export type NewLeaveRequest = typeof leaveRequests.$inferInsert;

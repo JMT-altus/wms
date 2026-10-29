@@ -57,3 +57,16 @@ describe("general backup exclusions", () => {
     }
   });
 });
+
+describe("balance snapshots stay in the general backup", () => {
+  // Decision (reviewed): Debit / Credit per company is what every Tracker user already sees, unlike the
+  // owner-only commitments and the escalation queue, so these tables are NOT excluded.
+  it("the two balance tables are listed for backup and can be dumped", async () => {
+    h.tables = ["collection_balance_lines", "collection_balance_snapshots", "collection_commitments", "collection_escalations", "employees"];
+    expect(await listBackupTables()).toEqual(["collection_balance_lines", "collection_balance_snapshots", "employees"]);
+    expect(isBackupExcluded("collection_balance_snapshots")).toBe(false);
+    expect(isBackupExcluded("collection_balance_lines")).toBe(false);
+    expect(BACKUP_EXCLUDED_TABLES).toEqual(["collection_commitments", "collection_escalations"]);
+    await expect(countRows("collection_balance_lines")).resolves.not.toThrow();
+  });
+});

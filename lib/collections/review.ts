@@ -40,8 +40,24 @@ export const ConfirmationInput = z
   })
   .strict();
 
-/** Escalating a company for review. The actor comes from the session. */
-export const EscalationInput = z.object({ companyId: z.string().uuid("Choose a company.") }).strict();
+/** Longest Reason for Escalation accepted (characters, after trimming). The database CHECK (0118) uses the same bound. */
+export const ESCALATION_REASON_MAX = 1000;
+export const ESCALATION_REASON_REQUIRED = "Enter a reason for escalation.";
+export const ESCALATION_REASON_TOO_LONG = `The reason can be at most ${ESCALATION_REASON_MAX.toLocaleString("en-IN")} characters.`;
+
+/**
+ * The Reason for Escalation: trimmed, required, at most ESCALATION_REASON_MAX
+ * characters. Shared by the dialog (to tell the user early) and the server action
+ * (which is what decides — a request that skips the dialog is checked the same way).
+ */
+export const EscalationReason = z
+  .string({ message: ESCALATION_REASON_REQUIRED })
+  .trim()
+  .min(1, ESCALATION_REASON_REQUIRED)
+  .max(ESCALATION_REASON_MAX, ESCALATION_REASON_TOO_LONG);
+
+/** Escalating a company for review, with the reason. The actor and the time come from the server. */
+export const EscalationInput = z.object({ companyId: z.string().uuid("Choose a company."), reason: EscalationReason }).strict();
 
 /** Closing one open escalation (owner only). */
 export const CloseEscalationInput = z.object({ escalationId: z.string().uuid("Choose an escalation.") }).strict();

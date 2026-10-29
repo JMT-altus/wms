@@ -3,16 +3,21 @@
 import * as React from "react";
 import Link from "next/link";
 import type { Route } from "next";
-import { ArrowDown, ArrowUp, Search } from "lucide-react";
+import { ArrowDown, ArrowUp, Search, Upload } from "lucide-react";
+import { CenterDialog } from "@/components/ui/center-dialog";
 import { formatInr } from "@/lib/format";
 import { NOT_CONNECTED_MESSAGE, type TransactionSourceInfo } from "@/lib/collections/source";
 import { partyOverdue } from "@/lib/collections/overdue";
 import { OverdueBadge, overdueRowStyle, useBusinessToday } from "./overdue-display";
 import { UNASSIGNED_PERSON, filterRows, personOf, sortRows, type PartyRow, type SortKey, type TrackerFilters } from "@/lib/collections/derive";
 import { PartyDetailDialog } from "./party-detail-dialog";
-import { CommentList } from "./comment-list";
+import { TrackerComments } from "./tracker-comments";
+import { SalespersonScorecard } from "./salesperson-scorecards";
+import type { ScorecardView } from "@/lib/collections/scorecards";
 import { ConfirmationControl, EscalateControl } from "./review-controls";
 import { CoordinatorControl } from "./coordinator-control";
+// Loaded only when Bulk Upload is opened, so the Tracker page itself stays as light as before.
+const TrackerBulkUpload = React.lazy(() => import("./tracker-bulk-upload").then((m) => ({ default: m.TrackerBulkUpload })));
 
 const PAGE = 25;
 const CARD = { border: "1px solid var(--color-hairline-strong)", boxShadow: "0 1px 2px rgba(15,23,42,0.05)" } as const;
@@ -44,8 +49,12 @@ export function CollectionTracker({
   canSeeCommitments = false,
   canEditCommitments = false,
   canWriteFollowUps = true,
+  commentEditorId = null,
+  scorecard,
   canSetConfirmation = true,
   canEscalate = true,
+  canImportBalances = false,
+  balancesProblem,
   reviewStorageReady = true,
   coordinatorEditor,
   reviewQueue,
@@ -66,10 +75,18 @@ export function CollectionTracker({
   canEditCommitments?: boolean;
   /** collection.followup.write. */
   canWriteFollowUps?: boolean;
+  /** The signed-in employee's id when they hold collection.followup.write: their own comments get Edit. */
+  commentEditorId?: string | null;
+  /** The signed-in salesperson's own scorecard (or why there is none), worked out on the server; absent = not shown. */
+  scorecard?: ScorecardView;
   /** collection.confirmation.set. */
   canSetConfirmation?: boolean;
   /** collection.escalation.create. */
   canEscalate?: boolean;
+  /** collection.balances.import. Without it the Bulk Upload button still opens, and explains why nothing can be uploaded. */
+  canImportBalances?: boolean;
+  /** Set (to the database error code) when the uploaded Debit / Credit couldn't be read: a permission or configuration problem. Everything else still works. */
+  balancesProblem?: string;
   /** False while migration 0115 isn't applied: the confirmation/escalation controls are disabled. */
   reviewStorageReady?: boolean;
   /**
@@ -97,6 +114,7 @@ export function CollectionTracker({
   const [sort, setSort] = React.useState<{ key: SortKey; dir: "asc" | "desc" }>({ key: "party", dir: "asc" });
   const [page, setPage] = React.useState(0);
   const [openName, setOpenName] = React.useState<string | null>(null);
+  const [bulkOpen, setBulkOpen] = React.useState(false);
 
   const people = React.useMemo(
     () => [...new Set(rows.map(personOf).filter((p): p is string => Boolean(p)))].sort((a, b) => a.localeCompare(b)),
@@ -150,6 +168,15 @@ export function CollectionTracker({
           </Link>
         </div>
       )}
+      {balancesProblem && (
+        <div role="alert" aria-label="Debit and Credit unavailable" className="mb-3 rounded-lg px-3 py-2.5" style={{ background: "#FEF2F2", border: "1px solid #FCA5A5" }}>
+          <p className="text-[13px] font-bold text-[#B91C1C]">Debit and Credit couldn&apos;t be loaded</p>
+          <p className="mt-0.5 text-[12.5px] text-[#B91C1C]">
+            The uploaded balances are unavailable because of a database permission or configuration problem (code {balancesProblem}), so Debit and Credit are blank. Everything else on this page works.
+            Tell an administrator; the details are in the server log.
+          </p>
+        </div>
+      )}
       {setupHints.length > 0 && (
         <div role="note" aria-label="Setup needed" className="mb-3 rounded-lg px-3 py-2.5" style={{ background: "#FFFBEB", border: "1px solid #FCD9A0" }}>
           <p className="text-[13px] font-bold text-[#92400E]">Setup needed (shown to super-admins only)</p>
@@ -169,6 +196,11 @@ export function CollectionTracker({
               → “One person” → pick them → Allow. Sensitive permissions can be granted to a person or organisation-wide, never to a department.
             </p>
           )}
+        </div>
+      )}
+      {scorecard && (
+        <div className="mb-2 flex justify-end">
+          <SalespersonScorecard view={scorecard} />
         </div>
       )}
       <div className="mb-3 flex flex-wrap items-center gap-2">
@@ -207,10 +239,31 @@ export function CollectionTracker({
           <option value="due">Follow-up due or overdue</option>
           <option value="none">No follow-up date</option>
         </select>
-        <span className="ml-auto text-[12.5px] text-ink-subtle tabular-nums">
+        <button
+          type="button"
+          onClick={() => setBulkOpen(true)}
+          className="ml-auto inline-flex h-8 items-center gap-1.5 rounded-lg border border-hairline-strong bg-white px-2.5 text-[13px] font-semibold text-ink-strong hover:bg-[#F7F9FD]"
+        >
+          <Upload size={14} aria-hidden />
+          Bulk Upload
+        </button>
+        <span className="text-[12.5px] text-ink-subtle tabular-nums">
           {connected ? `${shown.length} part${shown.length === 1 ? "y" : "ies"}` : ""}
         </span>
       </div>
+
+      <CenterDialog
+        open={bulkOpen}
+        title="Bulk Upload"
+        subtitle="Upload the Tally customer summary to fill Debit and Credit for companies already in the Collection Master."
+        onClose={() => setBulkOpen(false)}
+        accentBar="linear-gradient(90deg, #0A6CFF 0%, #0B4FB8 100%)"
+        width={920}
+      >
+        <React.Suspense fallback={<p className="text-[13px] text-ink-subtle">Loading…</p>}>
+          <TrackerBulkUpload canImport={canImportBalances} onClose={() => setBulkOpen(false)} />
+        </React.Suspense>
+      </CenterDialog>
 
       <div className="overflow-x-auto rounded-section bg-white" style={CARD}>
         <table className="w-full min-w-[1120px] border-collapse text-[13.5px]">
@@ -283,7 +336,7 @@ export function CollectionTracker({
                     {r.nextFollowupDate ? short(r.nextFollowupDate) : <span className="text-ink-subtle">—</span>}
                   </td>
                   <td className="px-3 py-2 text-ink-soft">
-                    <CommentList comments={r.history} />
+                    <TrackerComments companyName={r.partyName} history={r.history} editorId={canWriteFollowUps ? commentEditorId : null} />
                   </td>
                   <td className="px-3 py-2">
                     {r.masterId ? (

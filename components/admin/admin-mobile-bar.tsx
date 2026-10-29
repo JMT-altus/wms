@@ -58,6 +58,7 @@ const NAV: ReadonlyArray<NavItem> = [
   { href: "/admin/outstanding-responsibles" as Route, label: "Outstanding Responsibles", icon: UserCog },
   { href: "/admin/holidays" as Route, label: "Holidays", icon: CalendarDays },
   { href: "/admin/attendance-policy" as Route, label: "Attendance Policy", icon: CalendarDays },
+  { href: "/admin/sales-coordinators" as Route, label: "Sales Coordinators", icon: UserCog },
   { href: "/admin/salary-profiles" as Route, label: "Salary Profiles", icon: BadgeIndianRupee },
   { href: "/admin/designations" as Route, label: "Designations", icon: IdCard },
   { href: "/admin/paying-entities" as Route, label: "Paying Entities", icon: Building2 },

@@ -906,6 +906,16 @@ export const PERMISSION_FIELDS = [
     group: "Collections",
   },
   {
+    key: "collection.balances.import",
+    label: "Collections — Import balances",
+    hint: "Upload a Tally customer summary (Debit / Credit) from the Tracker; the latest upload replaces the balances shown.",
+    defaultAllowed: false,
+    group: "Collections",
+    sensitive: true,
+    adminBypass: false,
+    superAdminBypass: false,
+  },
+  {
     key: "collection.followup.write",
     label: "Collections — Follow-ups",
     hint: "Save next follow-up dates and notes in the Tracker.",

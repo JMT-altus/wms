@@ -24,6 +24,34 @@ export const FollowUpInput = z
 
 export type FollowUpInputT = z.infer<typeof FollowUpInput>;
 
+/**
+ * An edit of one comment (a follow-up's note). `expectedNote` is the text the
+ * editor started from: if the stored note has changed since, the edit is
+ * refused instead of overwriting someone else's change. The editor is never
+ * part of the input — the server takes it from the session.
+ */
+export const EditCommentInput = z
+  .object({
+    id: z.string().uuid("That comment could not be found."),
+    expectedNote: z.string().max(2000),
+    note: z.string().trim().min(1, "A comment can't be empty.").max(2000, "Notes are limited to 2,000 characters."),
+  })
+  .strict();
+
+/**
+ * A deletion of one comment. `partyName` is the company the comment is shown
+ * under — the server refuses if the stored comment belongs to another company —
+ * and `expectedNote` is the text the person confirmed deleting. The deleter is
+ * never part of the input.
+ */
+export const DeleteCommentInput = z
+  .object({
+    id: z.string().uuid("That comment could not be found."),
+    partyName: z.string().trim().min(1).max(200),
+    expectedNote: z.string().max(2000),
+  })
+  .strict();
+
 /** A follow-up date can't be in the past: it is when you will next chase. */
 export function followUpDateError(dateIso: string | null | undefined, todayIso: string): string | null {
   if (!dateIso) return null;

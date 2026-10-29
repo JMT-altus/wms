@@ -6,7 +6,7 @@ import { FIELD_CODE_DEFAULTS, resolveFieldAccess, type ResolvedFieldGrants } fro
 // that the original field permissions resolve exactly as before.
 
 const ORDINARY = ["collection.view", "collection.master.import", "collection.followup.write", "collection.confirmation.set", "collection.escalation.create"] as const;
-const SENSITIVE = ["collection.coordinator.assign", "collection.commitments.view", "collection.commitments.edit", "collection.escalation.review", "collection.escalation.close"] as const;
+const SENSITIVE = ["collection.coordinator.assign", "collection.commitments.view", "collection.commitments.edit", "collection.escalation.review", "collection.escalation.close", "collection.balances.import"] as const;
 const ORIGINAL = ["enquiry.quantity", "enquiry.avg_rate", "forecast.quantity", "forecast.avg_rate", "master.product", "master.customer"] as const;
 
 const none = (): ResolvedFieldGrants => ({ everyone: {}, department: {}, employee: {} });
@@ -15,7 +15,7 @@ const admin = { isAdmin: true, isSuperAdmin: false };
 const superAdmin = { isAdmin: true, isSuperAdmin: true };
 
 describe("registry", () => {
-  it("has exactly the ten Collection capabilities, five of them sensitive with both bypasses off", () => {
+  it("has exactly the eleven Collection capabilities, six of them sensitive with both bypasses off", () => {
     const collection = PERMISSION_FIELDS.map((f) => f.key).filter((k) => k.startsWith("collection."));
     expect(collection.sort()).toEqual([...ORDINARY, ...SENSITIVE].sort());
     for (const k of SENSITIVE) {

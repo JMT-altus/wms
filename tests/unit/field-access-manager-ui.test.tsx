@@ -34,11 +34,11 @@ afterEach(() => {
 });
 
 describe("permission matrix — Collections", () => {
-  it("lists the Collection capabilities under their own heading, marking the five sensitive ones", () => {
+  it("lists the Collection capabilities under their own heading, marking the six sensitive ones", () => {
     render(<FieldAccessManager matrix={matrix} />);
     expect(screen.getByRole("rowheader", { name: "Collections" })).toBeTruthy();
-    expect(within(screen.getByRole("table")).getAllByText("Sensitive")).toHaveLength(5);
-    for (const l of ["Collections — Assign Sales Coordinator", "Collections — View commitments", "Collections — Record commitments", "Collections — Review escalations", "Collections — Close escalations"]) {
+    expect(within(screen.getByRole("table")).getAllByText("Sensitive")).toHaveLength(6);
+    for (const l of ["Collections — Assign Sales Coordinator", "Collections — View commitments", "Collections — Record commitments", "Collections — Review escalations", "Collections — Close escalations", "Collections — Import balances"]) {
       expect(within(row(l)).getByText("Sensitive")).toBeTruthy();
     }
     expect(within(row("Collections — Escalate for review")).queryByText("Sensitive")).toBeNull();

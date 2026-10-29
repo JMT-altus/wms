@@ -57,6 +57,7 @@ const fu = (id: string, partyName: string, note: string | null, iso: string, nex
   partyName,
   note,
   nextFollowupDate: next,
+  createdById: `emp-${by.toLowerCase()}`,
   createdByName: by,
   createdAt: new Date(iso),
 });
@@ -109,7 +110,7 @@ describe("company popup", () => {
     const section = await screen.findByRole("region", { name: "Commitment" });
     await within(section).findByText("₹1,25,000");
     const list = within(section).getByLabelText("Tracker comments for Alpha Traders, newest first");
-    expect(list.textContent).toBe("15-Oct — Cheque promised10-Oct — First call — will pay next week");
+    expect(list.textContent).toBe("User: Asha · Date & Time: 15-Oct-2026, 11:30 AM ISTComment: Cheque promisedUser: Asha · Date & Time: 10-Oct-2026, 11:30 AM ISTComment: First call — will pay next week");
     expect(list.textContent).not.toMatch(/Disputed invoice/); // another company's comment
     expect(h.getCommitment).toHaveBeenCalledTimes(1); // comments came with the row — no extra fetch
   });
@@ -131,10 +132,10 @@ describe("company popup", () => {
     expect(within(dialog).queryByText(/₹1,25,000/)).toBeNull();
   });
 
-  it("the Tracker's Comments column is unchanged", () => {
+  it("the Tracker's Comments column shows each comment with its author, user id, date and time (IST)", () => {
     render(<CollectionTracker rows={trackerRows} connected storageReady today="2026-10-19" />);
     const alpha = screen.getByRole("button", { name: "Alpha Traders" }).closest("tr")!;
-    expect(within(alpha).getByLabelText("Comments, newest first").textContent).toBe("15-Oct — Cheque promised10-Oct — First call — will pay next week");
+    expect(within(alpha).getByLabelText("Comments, newest first").textContent).toBe("User: Asha · Date & Time: 15-Oct-2026, 11:30 AM ISTComment: Cheque promisedUser: Asha · Date & Time: 10-Oct-2026, 11:30 AM ISTComment: First call — will pay next week");
   });
 });
 
@@ -179,8 +180,9 @@ describe("commitments page (collection.commitments.view)", () => {
       ["Beta Corp", ["Disputed invoice 114"]],
       ["Gamma Ltd", []],
     ]);
-    // Only note, time and author travel — not the party name or other fields.
-    expect(Object.keys(rows[0]!.comments[0]!).sort()).toEqual(["createdAt", "createdByName", "id", "note"]);
+    // Only note, time and author (id and name) travel — not the party name or other fields.
+    expect(Object.keys(rows[0]!.comments[0]!).sort()).toEqual(["createdAt", "createdById", "createdByName", "id", "note"]);
+    expect(rows[0]!.comments[0]).toMatchObject({ createdById: "emp-asha", createdByName: "Asha" });
   });
 
   it("says so when follow-up storage isn't set up, and still shows commitments", async () => {
@@ -205,13 +207,13 @@ describe("commitments page (collection.commitments.view)", () => {
 
 describe("owner's table", () => {
   const views: CommitmentView[] = [
-    { ...commitment("c1", "Alpha Traders", "Mihir"), comments: [{ id: "a2", note: "Cheque promised", createdAt: new Date("2026-10-15T06:00:00Z"), createdByName: "Asha" }] },
+    { ...commitment("c1", "Alpha Traders", "Mihir"), comments: [{ id: "a2", note: "Cheque promised", createdAt: new Date("2026-10-15T06:00:00Z"), createdById: "emp-asha", createdByName: "Asha" }] },
     { ...commitment("c3", "Gamma Ltd", null), comments: [] },
   ];
   it("shows a Comments column with the company's comments, and a dash when there are none", () => {
     render(<CommitmentsTable rows={views} today="2026-10-19" />);
     expect(screen.getByRole("columnheader", { name: "Comments" })).toBeTruthy();
-    expect(screen.getByLabelText("Comments for Alpha Traders, newest first").textContent).toBe("15-Oct — Cheque promised");
+    expect(screen.getByLabelText("Comments for Alpha Traders, newest first").textContent).toBe("User: Asha · Date & Time: 15-Oct-2026, 11:30 AM ISTComment: Cheque promised");
     const gamma = screen.getByText("Gamma Ltd").closest("tr")!;
     expect(gamma.lastElementChild!.textContent).toBe("—");
   });

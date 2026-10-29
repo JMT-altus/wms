@@ -9,6 +9,7 @@ import { CommentList, type CommentEntry } from "@/components/collections/comment
 import { partyOverdue, type OverdueInput } from "@/lib/collections/overdue";
 import { OverdueBadge, overdueRowStyle, useBusinessToday } from "@/components/collections/overdue-display";
 import { confirmationLabel, type ConfirmationValue } from "@/lib/collections/review";
+import { commentDate, commentTime } from "@/lib/collections/comment-audit";
 import { closeEscalation } from "@/app/(forms-module)/forms/collection/commitments/actions";
 
 /**
@@ -38,6 +39,8 @@ export interface CommitmentView {
     escalatedAt: Date;
     escalatedByName: string | null;
     confirmationAtEscalation: ConfirmationValue | null;
+    /** Reason for Escalation recorded with this escalation; null = raised before reasons were recorded. */
+    reason?: string | null;
   } | null;
 }
 
@@ -48,8 +51,6 @@ const day = (iso: string) => {
   const [y, m, d] = iso.split("-").map(Number) as [number, number, number];
   return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric", timeZone: "UTC" });
 };
-const when = (d: Date) =>
-  d.toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "Asia/Kolkata" });
 const DASH = <span className="text-ink-subtle">—</span>;
 
 /** Pure filter, shared with the tests: search on company, person and comment text, and a person filter. */
@@ -248,8 +249,16 @@ export function CommitmentsTable({
                       {r.escalation ? (
                         <>
                           <span className="block font-semibold text-ink-strong">Open</span>
-                          <span className="block text-ink-muted">
-                            {r.escalation.escalatedByName ?? "Someone"} · {when(r.escalation.escalatedAt)}
+                          <span className="mt-1 block max-w-[320px] rounded-md px-2 py-1.5" style={{ background: "#FFF7ED", border: "1px solid #FED7AA" }} data-escalation-reason>
+                            <span className="block text-[11px] font-bold uppercase tracking-[0.06em] text-[#9A3412]">Reason for Escalation</span>
+                            {r.escalation.reason ? (
+                              <span className="block whitespace-pre-wrap break-words text-[13px] font-semibold text-ink-strong">{r.escalation.reason}</span>
+                            ) : (
+                              <span className="block italic text-ink-subtle">Not recorded (escalated before a reason was required)</span>
+                            )}
+                          </span>
+                          <span className="mt-1 block text-ink-muted">
+                            Escalated by: {r.escalation.escalatedByName ?? "Not on record"} · {commentDate(r.escalation.escalatedAt)} · {commentTime(r.escalation.escalatedAt)}
                           </span>
                           <span className="block text-ink-subtle">Confirmation then: {confirmationLabel(r.escalation.confirmationAtEscalation)}</span>
                           {canClose && <CloseEscalationButton escalationId={r.escalation.id} companyName={r.companyName} />}

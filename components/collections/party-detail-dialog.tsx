@@ -11,6 +11,7 @@ import type { PartyRow } from "@/lib/collections/derive";
 import { NO_TRANSACTION_SOURCE_MESSAGE, type TransactionSourceInfo } from "@/lib/collections/source";
 import { evaluateOverdue } from "@/lib/collections/overdue";
 import { CommitmentSection } from "@/components/collections/commitment-section";
+import { CommentAudit } from "@/components/collections/comment-list";
 
 const FIELD = "w-full rounded-lg border border-hairline-strong bg-white px-3 py-2 text-[14px] text-ink-strong";
 
@@ -196,17 +197,8 @@ export function PartyDetailDialog({
                   <ul className="mt-2 grid gap-2">
                     {row.history.map((h) => (
                       <li key={h.id} className="rounded-lg bg-[#F8FAFD] px-3 py-2 text-[13px]">
-                        <p className="text-ink-subtle tabular-nums">
-                          {h.createdAt.toLocaleDateString("en-GB", {
-                            day: "2-digit",
-                            month: "short",
-                            year: "numeric",
-                            timeZone: "Asia/Kolkata",
-                          })}
-                          {h.createdByName ? ` · ${h.createdByName}` : ""}
-                          {h.nextFollowupDate ? ` · next ${day(h.nextFollowupDate)}` : ""}
-                        </p>
-                        {h.note && <p className="mt-0.5 whitespace-pre-wrap text-ink-strong">{h.note}</p>}
+                        <CommentAudit entry={h} variant="full" />
+                        {h.nextFollowupDate && <p className="mt-0.5 tabular-nums text-ink-subtle">Next follow-up: {day(h.nextFollowupDate)}</p>}
                       </li>
                     ))}
                   </ul>

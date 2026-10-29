@@ -44,6 +44,7 @@ const rows = buildRows(
       partyName: "Alpha Traders",
       nextFollowupDate: "2026-11-10",
       note: "Promised a cheque",
+      createdById: "emp-admin",
       createdByName: "Admin",
       createdAt: new Date("2026-10-12T10:00:00Z"),
     },
@@ -83,20 +84,22 @@ describe("Collection Tracker", () => {
     expect(screen.getByRole("button", { name: "Beta Corp" })).toBeTruthy();
   });
 
-  it("shows every note date-wise, as 10-Nov — text, and keeps earlier ones", () => {
+  it("shows every note with its author, user id, date and time (IST), and keeps earlier ones", () => {
     const many = buildRows(
       [{ partyName: "Alpha Traders", debit: 1, credit: 0, outstanding: 1, collectionPerson: "Asha" }],
       [
-        { id: "n3", partyName: "Alpha Traders", nextFollowupDate: null, note: "Third call", createdByName: "A", createdAt: new Date("2026-11-12T06:00:00Z") },
-        { id: "n2", partyName: "Alpha Traders", nextFollowupDate: null, note: "Second call", createdByName: "A", createdAt: new Date("2026-11-11T06:00:00Z") },
-        { id: "n1", partyName: "Alpha Traders", nextFollowupDate: null, note: "First call", createdByName: "A", createdAt: new Date("2026-11-10T06:00:00Z") },
+        { id: "n3", partyName: "Alpha Traders", nextFollowupDate: null, note: "Third call", createdById: "emp-a", createdByName: "A", createdAt: new Date("2026-11-12T06:00:00Z") },
+        { id: "n2", partyName: "Alpha Traders", nextFollowupDate: null, note: "Second call", createdById: "emp-a", createdByName: "A", createdAt: new Date("2026-11-11T06:00:00Z") },
+        { id: "n1", partyName: "Alpha Traders", nextFollowupDate: null, note: "First call", createdById: "emp-a", createdByName: "A", createdAt: new Date("2026-11-10T06:00:00Z") },
       ],
     );
     render(<CollectionTracker rows={many} connected storageReady today={TODAY} />);
     const cell = screen.getByLabelText("Comments, newest first");
-    expect(cell.textContent).toContain("12-Nov — Third call");
-    expect(cell.textContent).toContain("11-Nov — Second call");
-    expect(cell.textContent).toContain("10-Nov — First call");
+    expect(cell.textContent).toContain("User: A · Date & Time: 12-Nov-2026, 11:30 AM ISTComment: Third call");
+    expect(cell.textContent).toContain("User: A · Date & Time: 11-Nov-2026, 11:30 AM ISTComment: Second call");
+    expect(cell.textContent).toContain("User: A · Date & Time: 10-Nov-2026, 11:30 AM ISTComment: First call");
+    // newest first
+    expect(cell.textContent!.indexOf("Third call")).toBeLessThan(cell.textContent!.indexOf("First call"));
   });
 
   it("opens the party's detail, read-only figures and history, from a click on the name", () => {

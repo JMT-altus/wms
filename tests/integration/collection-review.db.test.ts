@@ -2,9 +2,10 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
-// REAL-POSTGRES tests for migration 0115 (confirmations + escalations) on an
-// in-memory PGlite database built from db/schema.ts plus the review migration's
-// own SQL. No shared or production database can be reached.
+// REAL-POSTGRES tests for migration 0115 (confirmations + escalations) and the
+// escalation reason of migration 0118 (prepared for review) on an in-memory
+// PGlite database built from db/schema.ts plus the migrations' own SQL. No
+// shared or production database can be reached.
 const h = vi.hoisted(() => {
   process.env.DATABASE_URL = "postgres://nobody:nothing@db.invalid:1/never";
   return { db: null as unknown };
@@ -43,6 +44,7 @@ beforeAll(async () => {
   pg = made.pg;
   h.db = made.db;
   await pg.exec(readFileSync(resolve(__dirname, "../../db/migrations/0115_collection_review.sql"), "utf8"));
+  await pg.exec(readFileSync(resolve(__dirname, "../../db/migrations/0118_collection_escalation_reason.sql"), "utf8"));
   const emp = async (name: string) =>
     (await pg.query<{ id: string }>(`insert into employees (name, email, role) values ($1, $2, 'both') returning id`, [name, `${name.toLowerCase()}@example.test`])).rows[0]!.id;
   ACTOR = await emp("Asha");
@@ -77,9 +79,9 @@ describe("Collection Amount Confirmation", () => {
 
 describe("escalations", () => {
   it("records who/when and snapshots the confirmation in force (unset → null)", async () => {
-    const beta = await q.escalateCompany(proof(ACTOR, "collection.escalation.create"), BETA);
+    const beta = await q.escalateCompany(proof(ACTOR, "collection.escalation.create"), BETA, "Customer stopped answering calls.");
     expect(beta.ok).toBe(true);
-    const alpha = await q.escalateCompany(proof(ACTOR, "collection.escalation.create"), ALPHA);
+    const alpha = await q.escalateCompany(proof(ACTOR, "collection.escalation.create"), ALPHA, "Disputes the invoice amount.");
     expect(alpha.ok).toBe(true);
     const open = (await q.openEscalations()).byCompany;
     expect(open.get(BETA)).toMatchObject({ confirmationAtEscalation: null, escalatedByName: "Asha" });
@@ -87,15 +89,16 @@ describe("escalations", () => {
   });
 
   it("allows only one open escalation per company — a repeat is 'already-open', not a second row", async () => {
-    expect(await q.escalateCompany(proof(ACTOR, "collection.escalation.create"), ALPHA)).toEqual({ ok: false, reason: "already-open" });
+    expect(await q.escalateCompany(proof(ACTOR, "collection.escalation.create"), ALPHA, "A second reason")).toEqual({ ok: false, reason: "already-open" });
     expect(await count(`select count(*)::int as n from collection_escalations where company_id = $1`, [ALPHA])).toBe(1);
   });
 
-  it("the reviewers' list joins company and collection person", async () => {
-    const rows = (await q.listOpenEscalationsForReview(reviewer())).rows;
-    expect(rows.map((r) => [r.companyName, r.collectionPerson])).toEqual([
-      ["Beta Corp", null],
-      ["Alpha Traders", "MANGESH"],
+  it("the reviewers' list joins company, collection person and each escalation's own reason", async () => {
+    const list = await q.listOpenEscalationsForReview(reviewer());
+    expect(list.reasonStorageReady).toBe(true);
+    expect(list.rows.map((r) => [r.companyName, r.collectionPerson, r.reason])).toEqual([
+      ["Beta Corp", null, "Customer stopped answering calls."],
+      ["Alpha Traders", "MANGESH", "Disputes the invoice amount."],
     ]);
   });
 
@@ -107,7 +110,7 @@ describe("escalations", () => {
     expect(closed).toMatchObject({ status: "closed", closed_by_id: OWNER, escalated_by_id: ACTOR });
     expect((closed.escalated_at as Date).getTime()).toBe(new Date(before.escalated_at).getTime());
 
-    const again = await q.escalateCompany(proof(ACTOR, "collection.escalation.create"), ALPHA);
+    const again = await q.escalateCompany(proof(ACTOR, "collection.escalation.create"), ALPHA, "Promised date missed again.");
     expect(again.ok).toBe(true);
     expect(again.ok && again.escalationId).not.toBe(before.id);
     expect(await count(`select count(*)::int as n from collection_escalations where company_id = $1`, [ALPHA])).toBe(2);
@@ -120,7 +123,7 @@ describe("escalations", () => {
   });
 });
 
-describe("migration 0115 vs db/schema.ts, and access", () => {
+describe("migrations 0115 + 0118 vs db/schema.ts, and access", () => {
   it("RLS is on for both tables", async () => {
     const r = await pg.query<{ relname: string; rls: boolean }>(`select relname, relrowsecurity as rls from pg_class where relname in ('collection_amount_confirmations','collection_escalations') order by relname`);
     expect(r.rows).toEqual([
@@ -153,5 +156,6 @@ describe("migration 0115 vs db/schema.ts, and access", () => {
     } finally {
       await viaSchema.pg.close();
     }
-  });
+    // Builds a second in-memory database, so it needs more than vitest's 5 s default when the whole suite is running.
+  }, 60_000);
 });

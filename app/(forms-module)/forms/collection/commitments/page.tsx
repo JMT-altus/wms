@@ -41,7 +41,7 @@ export default async function CollectionCommitmentsPage() {
   // reported as "storage not set up" by the loaders themselves. Details are never shown or logged.
   const loaded = await Promise.all([
     viewer ? listOwnerCommitments(viewer) : { storageReady: true, rows: [] },
-    reviewer ? listOpenEscalationsForReview(reviewer) : { storageReady: true, rows: [] },
+    reviewer ? listOpenEscalationsForReview(reviewer) : { storageReady: true, reasonStorageReady: true, rows: [] },
     listFollowUps(),
     loadCollectionParties(),
   ]).catch(() => {
@@ -89,24 +89,27 @@ export default async function CollectionCommitmentsPage() {
     const e = openByCompany.get(id);
     return {
       ...r,
-      // Only what the comments column shows — the note, when, and by whom.
+      // Only what the comments column shows — the note, when, and by whom (employee id and name).
       comments: commentsOf(byParty.get(partyKey(r.companyName)) ?? []).map((h) => ({
         id: h.id,
         note: h.note,
         createdAt: h.createdAt,
+        createdById: h.createdById,
         createdByName: h.createdByName,
       })),
       // Only what the overdue rule reads — not invoice references or amounts.
       due: (dueByCompany.get(id) ?? []).map((t) => ({ dueDate: t.dueDate, status: t.status, outstanding: t.outstanding })),
       confirmation: confirmations.byCompany.get(id)?.value ?? null,
       outstanding: outstandingByCompany.get(id) ?? null,
-      escalation: e ? { id: e.id, escalatedAt: e.escalatedAt, escalatedByName: e.escalatedByName, confirmationAtEscalation: e.confirmationAtEscalation } : null,
+      // The reason travels with ITS escalation (same row, same company) — never from anyone's browser.
+      escalation: e ? { id: e.id, escalatedAt: e.escalatedAt, escalatedByName: e.escalatedByName, confirmationAtEscalation: e.confirmationAtEscalation, reason: e.reason } : null,
     };
   });
 
   const notices = [
     !data.storageReady && "Commitment storage isn't set up yet (migration 0114 is pending).",
     !escalations.storageReady && "Escalation and confirmation storage isn't set up yet (migration 0115 is pending).",
+    reviewer && escalations.storageReady && !escalations.reasonStorageReady && "Escalation reasons aren't available yet (migration 0118 is pending).",
     !followUps.storageReady && "Tracker comments aren't available yet (follow-up storage, migration 0110, is pending).",
   ].filter((n): n is string => Boolean(n));
 

@@ -75,24 +75,32 @@ describe("Collection Amount Confirmation (Tracker)", () => {
   it("is disabled while migration 0115 isn't applied", () => {
     render(<CollectionTracker rows={[party()]} connected storageReady today="2026-10-19" reviewStorageReady={false} />);
     expect(select().disabled).toBe(true);
-    expect((screen.getByRole("button", { name: "Escalate Alpha Traders for review" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "Escalate Alpha Traders to Mihir Sir" }) as HTMLButtonElement).disabled).toBe(true);
   });
 });
 
-describe("Escalate for review (Tracker)", () => {
-  it("escalates through the server and says so only after it succeeds", async () => {
+describe("Escalate to Mihir Sir (Tracker)", () => {
+  const escalateWith = async (reason: string) => {
+    fireEvent.click(screen.getByRole("button", { name: "Escalate Alpha Traders to Mihir Sir" }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.change(within(dialog).getByLabelText(/Reason for Escalation/), { target: { value: reason } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Submit" }));
+    return dialog;
+  };
+
+  it("escalates through the server with the reason, and says so only after it succeeds", async () => {
     a.escalate.mockResolvedValue({ ok: true });
     render(<CollectionTracker rows={[party()]} connected storageReady today="2026-10-19" />);
-    fireEvent.click(screen.getByRole("button", { name: "Escalate Alpha Traders for review" }));
+    await escalateWith("  Customer disputes the invoice amount.  ");
     expect((await screen.findByRole("status")).textContent).toBe("Escalation submitted for review.");
-    expect(a.escalate).toHaveBeenCalledWith({ companyId: CO });
+    expect(a.escalate).toHaveBeenCalledWith({ companyId: CO, reason: "Customer disputes the invoice amount." });
     expect(a.refresh).toHaveBeenCalled();
   });
 
   it("shows the server's duplicate message instead of pretending", async () => {
     a.escalate.mockResolvedValue({ ok: false, error: "This company already has an open escalation awaiting review. Nothing new was created." });
     render(<CollectionTracker rows={[party()]} connected storageReady today="2026-10-19" />);
-    fireEvent.click(screen.getByRole("button", { name: "Escalate Alpha Traders for review" }));
+    await escalateWith("Customer disputes the invoice amount.");
     expect((await screen.findByRole("alert")).textContent).toMatch(/already has an open escalation/);
   });
 
@@ -119,11 +127,11 @@ describe("Commitments & escalations page — escalations", () => {
     amount: null,
     committedDate: null,
     recordedAt: null,
-    comments: [{ id: "c1", note: "Cheque promised", createdAt: new Date("2026-10-15T06:00:00Z"), createdByName: "Asha" }],
+    comments: [{ id: "c1", note: "Cheque promised", createdAt: new Date("2026-10-15T06:00:00Z"), createdById: "emp-asha", createdByName: "Asha" }],
     due: [{ dueDate: "2026-10-17" }],
     confirmation: "no",
     outstanding: null,
-    escalation: { id: "e1", escalatedAt: new Date("2026-10-19T06:00:00Z"), escalatedByName: "Asha", confirmationAtEscalation: null },
+    escalation: { id: "e1", escalatedAt: new Date("2026-10-19T06:00:00Z"), escalatedByName: "Asha", confirmationAtEscalation: null, reason: "Customer disputes the invoice amount." },
   };
 
   it("shows an escalation-only company clearly — no invented commitment, its data, comments and overdue colour", () => {
@@ -134,10 +142,12 @@ describe("Commitments & escalations page — escalations", () => {
     expect(within(row).getAllByText("Not recorded")).toHaveLength(2); // amount and date
     expect(within(row).getByText("No")).toBeTruthy(); // current confirmation
     expect(within(row).getByText("Confirmation then: Not set")).toBeTruthy();
-    expect(within(row).getByText(/Asha · 19 Oct 2026/)).toBeTruthy();
+    expect(within(row).getByText("Escalated by: Asha · 19-Oct-2026 · 11:30 AM IST")).toBeTruthy();
+    expect(within(row).getByText("Reason for Escalation")).toBeTruthy();
+    expect(within(row).getByText("Customer disputes the invoice amount.")).toBeTruthy();
     expect(within(row).getByText("17 Oct 2026")).toBeTruthy(); // the actual due date
     expect(row.getAttribute("data-overdue")).toBe("warning"); // 2 days overdue → yellow, shared rule
-    expect(within(row).getByLabelText("Comments for Alpha Traders, newest first").textContent).toBe("15-Oct — Cheque promised");
+    expect(within(row).getByLabelText("Comments for Alpha Traders, newest first").textContent).toBe("User: Asha · Date & Time: 15-Oct-2026, 11:30 AM ISTComment: Cheque promised");
     expect(screen.getByText(/1 company · ₹0 committed · 1 open escalation/)).toBeTruthy();
   });
 

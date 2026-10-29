@@ -1,5 +1,6 @@
 import "server-only";
 import { listAllMasterCompanies } from "@/lib/queries/collection-master";
+import { loadLatestBalances } from "@/lib/queries/collection-balances";
 import { activeTransactionSource } from "./transactions";
 import {
   type CollectionTransaction,
@@ -11,8 +12,9 @@ import {
 
 /**
  * The Collection screens' one loader. Companies come from the Collection
- * Master; transactions from the active transaction source (none approved yet,
- * so every party's `transactions` is empty and the figures stay null). Both
+ * Master; Debit / Credit from the latest uploaded balance snapshot; transactions
+ * from the active transaction source (none approved yet, so every party's
+ * `transactions` is empty and `outstanding` stays null). Both
  * the Tracker and the Dashboard read through here, so they always agree.
  */
 /**
@@ -38,12 +40,14 @@ export async function loadCollectionParties(): Promise<CollectionSource> {
   }
 
   const byMaster = await loadTransactionsByMaster(master.rows.map((r) => r.id));
+  // Debit / Credit come from the LATEST uploaded balance snapshot only; a company
+  // missing from it stays blank. Outstanding is never worked out from them.
+  const balances = await loadLatestBalances();
 
   const parties: CollectionParty[] = master.rows.map((r) => ({
     partyName: r.companyName,
-    // Figures belong to the transaction source; with none approved they stay unknown.
-    debit: null,
-    credit: null,
+    debit: balances.byCompany.get(r.id)?.debit ?? null,
+    credit: balances.byCompany.get(r.id)?.credit ?? null,
     outstanding: null,
     // The collection person IS the Sales Coordinator the Collection Master holds
     // for the company (imported from the master file); null = unassigned.
@@ -60,5 +64,6 @@ export async function loadCollectionParties(): Promise<CollectionSource> {
     message: parties.length === 0 ? MASTER_EMPTY_MESSAGE : undefined,
     masterReady: true,
     transactions,
+    balances: { status: balances.status, errorCode: balances.errorCode },
   };
 }

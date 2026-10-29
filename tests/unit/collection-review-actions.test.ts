@@ -59,6 +59,7 @@ vi.mock("@/lib/collections/load", () => ({
 vi.mock("@/lib/queries/collection-review", () => ({
   recordConfirmation: (...a: unknown[]) => h.recordConfirmation(...a),
   escalateCompany: (...a: unknown[]) => h.escalateCompany(...a),
+  isMissingColumn: (e: { code?: string } | null) => e?.code === "42703",
   closeEscalationById: (...a: unknown[]) => h.closeEscalationById(...a),
   listOpenEscalationsForReview: (...a: unknown[]) => h.listOpen(...a),
   latestConfirmations: (...a: unknown[]) => h.latest(...a),
@@ -140,32 +141,64 @@ describe("setCollectionConfirmation (collection.confirmation.set)", () => {
 describe("escalateForReview (collection.escalation.create)", () => {
   it("refused without the capability, before anything happens", async () => {
     h.admin = false;
-    await expect(escalateForReview({ companyId: COMPANY })).rejects.toThrow("Forbidden");
+    await expect(escalateForReview({ companyId: COMPANY, reason: "Customer disputes the invoice amount." })).rejects.toThrow("Forbidden");
     h.admin = true;
     h.caps.delete("collection.escalation.create");
-    await expect(escalateForReview({ companyId: COMPANY })).rejects.toThrow("Forbidden");
+    await expect(escalateForReview({ companyId: COMPANY, reason: "Customer disputes the invoice amount." })).rejects.toThrow("Forbidden");
     expect(h.escalateCompany).not.toHaveBeenCalled();
   });
 
   it("escalates a listed company as the signed-in employee — even with no outstanding amount (no commitment is created)", async () => {
     h.outstanding = null;
-    expect(await escalateForReview({ companyId: COMPANY })).toEqual({ ok: true });
-    expect(h.escalateCompany).toHaveBeenCalledWith(proof("emp-asha", "collection.escalation.create"), COMPANY);
+    expect(await escalateForReview({ companyId: COMPANY, reason: "Customer disputes the invoice amount." })).toEqual({ ok: true });
+    expect(h.escalateCompany).toHaveBeenCalledWith(proof("emp-asha", "collection.escalation.create"), COMPANY, "Customer disputes the invoice amount.");
   });
 
   it("a second escalation while one is open is refused with a neutral message (no reviewer named)", async () => {
     h.escalateCompany.mockResolvedValue({ ok: false, reason: "already-open" });
-    const res = await escalateForReview({ companyId: COMPANY });
+    const res = await escalateForReview({ companyId: COMPANY, reason: "Customer disputes the invoice amount." });
     expect(res).toEqual({ ok: false, error: "This company already has an open escalation awaiting review. Nothing new was created." });
   });
 
   it("refuses unknown companies and extra fields, and reports missing storage", async () => {
     h.listed = false;
-    expect((await escalateForReview({ companyId: COMPANY })).ok).toBe(false);
+    expect((await escalateForReview({ companyId: COMPANY, reason: "Customer disputes the invoice amount." })).ok).toBe(false);
     h.listed = true;
-    expect((await escalateForReview({ companyId: COMPANY, escalatedById: "x" })).ok).toBe(false);
+    expect((await escalateForReview({ companyId: COMPANY, reason: "Customer disputes the invoice amount.", escalatedById: "x" })).ok).toBe(false);
     h.escalateCompany.mockRejectedValue(missing);
-    expect(await escalateForReview({ companyId: COMPANY })).toEqual({ ok: false, error: expect.stringMatching(/migration 0115 is pending/) });
+    expect(await escalateForReview({ companyId: COMPANY, reason: "Customer disputes the invoice amount." })).toEqual({ ok: false, error: expect.stringMatching(/migration 0115 is pending/) });
+  });
+
+  it("validates the Reason for Escalation ON THE SERVER, whatever the client sent — nothing is created for an invalid one", async () => {
+    const cases: [unknown, RegExp][] = [
+      [undefined, /Enter a reason for escalation/],
+      [null, /Enter a reason for escalation/],
+      ["", /Enter a reason for escalation/],
+      ["   \n\t  ", /Enter a reason for escalation/],
+      [42, /Enter a reason for escalation/],
+      [["a reason"], /Enter a reason for escalation/],
+      ["x".repeat(1001), /at most 1,000 characters/],
+      ["  " + "x".repeat(1001) + "  ", /at most 1,000 characters/],
+    ];
+    for (const [reason, why] of cases) {
+      const input = reason === undefined ? { companyId: COMPANY } : { companyId: COMPANY, reason };
+      const res = await escalateForReview(input);
+      expect(res.ok).toBe(false);
+      expect(res.ok ? "" : res.error).toMatch(why);
+    }
+    expect(h.escalateCompany).not.toHaveBeenCalled();
+  });
+
+  it("stores the TRIMMED reason; exactly 1,000 characters is accepted", async () => {
+    expect(await escalateForReview({ companyId: COMPANY, reason: "  Promised date missed twice.\n  " })).toEqual({ ok: true });
+    expect(h.escalateCompany.mock.calls[0]![2]).toBe("Promised date missed twice.");
+    expect(await escalateForReview({ companyId: COMPANY, reason: "y".repeat(1000) })).toEqual({ ok: true });
+    expect((h.escalateCompany.mock.calls[1]![2] as string).length).toBe(1000);
+  });
+
+  it("while migration 0118 is not installed, nothing is escalated and the reason is not silently dropped", async () => {
+    h.escalateCompany.mockRejectedValue(Object.assign(new Error('column "reason" of relation "collection_escalations" does not exist'), { code: "42703" }));
+    expect(await escalateForReview({ companyId: COMPANY, reason: "Customer disputes the invoice amount." })).toEqual({ ok: false, error: "Escalation reasons can't be stored yet (migration 0118 is pending), so nothing was escalated." });
   });
 });
 
@@ -234,7 +267,8 @@ describe("pages", () => {
     h.caps.add("collection.escalation.review");
     h.listOpen.mockResolvedValue({
       storageReady: true,
-      rows: [{ id: ESCALATION, companyId: COMPANY, companyName: "Alpha Traders", collectionPerson: "MANGESH", escalatedAt: new Date("2026-10-19T06:00:00Z"), escalatedByName: "Asha", confirmationAtEscalation: null }],
+      reasonStorageReady: true,
+      rows: [{ id: ESCALATION, companyId: COMPANY, companyName: "Alpha Traders", collectionPerson: "MANGESH", escalatedAt: new Date("2026-10-19T06:00:00Z"), escalatedByName: "Asha", confirmationAtEscalation: null, reason: "Customer disputes the invoice amount." }],
     });
     h.latest.mockResolvedValue({ storageReady: true, byCompany: new Map([[COMPANY, { value: "yes", recordedAt: new Date(), recordedByName: "Asha" }]]) });
     const { default: Page } = await import("@/app/(forms-module)/forms/collection/commitments/page");
@@ -250,7 +284,7 @@ describe("pages", () => {
         committedDate: null,
         confirmation: "yes",
         outstanding: 125000,
-        escalation: { id: ESCALATION, escalatedAt: new Date("2026-10-19T06:00:00Z"), escalatedByName: "Asha", confirmationAtEscalation: null },
+        escalation: { id: ESCALATION, escalatedAt: new Date("2026-10-19T06:00:00Z"), escalatedByName: "Asha", confirmationAtEscalation: null, reason: "Customer disputes the invoice amount." },
       }),
     ]);
   });
@@ -364,6 +398,17 @@ describe("pages", () => {
     const second = await Page();
     expect(renderToStaticMarkup(second as ReactElement)).toContain('role="alert"');
     err.mockRestore();
+  });
+
+  it("Review page: while migration 0118 is not installed, reviewers are told reasons aren't available (escalations still listed)", async () => {
+    h.caps.add("collection.escalation.review");
+    h.listOpen.mockResolvedValue({ storageReady: true, reasonStorageReady: false, rows: [{ id: ESCALATION, companyId: COMPANY, companyName: "Alpha Traders", collectionPerson: null, escalatedAt: new Date(), escalatedByName: "Asha", confirmationAtEscalation: null, reason: null }] });
+    const { default: Page } = await import("@/app/(forms-module)/forms/collection/commitments/page");
+    const tree = await Page();
+    expect(JSON.stringify(tree)).toMatch(/Escalation reasons aren.+t available yet \(migration 0118 is pending\)/);
+    expect((findProps(tree, "CommitmentsTable")!.rows as unknown[]).length).toBe(1);
+    h.listOpen.mockResolvedValue({ storageReady: true, reasonStorageReady: true, rows: [] });
+    expect(JSON.stringify(await Page())).not.toMatch(/migration 0118/);
   });
 
   it("Review page: still not found without a view/review capability, and reads nothing", async () => {

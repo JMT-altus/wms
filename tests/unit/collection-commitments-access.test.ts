@@ -211,6 +211,9 @@ vi.mock("@/lib/collections/load", () => ({
   }),
 }));
 vi.mock("@/lib/queries/collection-followups", () => ({ listFollowUps: async () => ({ storageReady: true, entries: [] }) }));
+// The scorecard's login ↔ Sales Coordinator lookup (its own table, no commitment data) — mocked like the other loaders,
+// so the page itself still makes no direct database call here.
+vi.mock("@/lib/collections/salesperson-identity", () => ({ salespersonIdentityFor: async () => ({ status: "unconfigured" }) }));
 vi.mock("@/lib/queries/collection-review", () => ({
   latestConfirmations: async () => ({ storageReady: true, byCompany: new Map() }),
   openEscalations: async () => ({ storageReady: true, byCompany: new Map() }),

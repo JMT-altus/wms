@@ -3,7 +3,10 @@ import { buildRows, personOf } from "@/lib/collections/derive";
 import { loadCollectionParties } from "@/lib/collections/load";
 import { listFollowUps } from "@/lib/queries/collection-followups";
 import { localDateString } from "@/lib/format";
-import { getCollectionCapabilities, requireCollectionCapability } from "@/lib/auth/capability";
+import { getCollectionCapabilities, getCollectionCapability, requireCollectionCapability } from "@/lib/auth/capability";
+import { scorecardFor, type ScorecardView } from "@/lib/collections/scorecards";
+import { salespersonIdentityFor } from "@/lib/collections/salesperson-identity";
+import { escalationCountsForSalesperson } from "@/lib/queries/collection-scorecards";
 import { getCurrentEmployee } from "@/lib/auth/current";
 import { isSuperAdmin } from "@/lib/auth/super-admin";
 import { FIELD_PERMISSIONS_HREF, buildSetupHints } from "@/lib/collections/setup-hints";
@@ -51,6 +54,28 @@ export default async function CollectionTrackerPage() {
     };
   });
 
+  // The signed-in employee's OWN scorecard only. Who they are as a salesperson comes from the verified
+  // session through the super-admin-kept link (salespersonIdentityFor); without one, nothing is computed.
+  // Outstanding only from an approved source (none yet → "not configured"); escalation figures only for
+  // holders of collection.escalation.review, and only for this one salesperson's companies.
+  // If the link can't be read, show the "not configured" state — never anyone's figures, and the Tracker still loads.
+  const identity = await salespersonIdentityFor(await getCurrentEmployee()).catch(() => {
+    console.error("[collection-scorecards] could not read the Sales Coordinator link");
+    return { status: "unconfigured" } as const;
+  });
+  let scorecard: ScorecardView = identity.status === "not-salesperson" ? { status: "not-salesperson" } : { status: "unmapped" };
+  if (identity.status === "linked") {
+    const salesLabel = identity.label;
+    const reviewer = await getCollectionCapability("collection.escalation.review");
+    const own = reviewer
+      ? await escalationCountsForSalesperson(reviewer, salesLabel).catch(() => {
+          console.error("[collection-scorecards] could not count escalations");
+          return "error" as const;
+        })
+      : null;
+    scorecard = { status: "ok", card: scorecardFor(salesLabel, source.parties, source.transactions, own) };
+  }
+
   const openEscalationCount = escalations.byCompany.size;
   const reviewQueue = caps["collection.escalation.review"] ? { openCount: openEscalationCount, href: "/forms/collection/commitments" } : undefined;
   // Super-admins only (the existing rule): what to grant, and where, when work is waiting for nobody.
@@ -91,11 +116,15 @@ export default async function CollectionTrackerPage() {
         canSeeCommitments={caps["collection.commitments.view"]}
         canEditCommitments={caps["collection.commitments.edit"]}
         canWriteFollowUps={caps["collection.followup.write"]}
+        commentEditorId={caps["collection.followup.write"] ? (me?.id ?? null) : null}
         canSetConfirmation={caps["collection.confirmation.set"]}
         canEscalate={caps["collection.escalation.create"]}
+        canImportBalances={caps["collection.balances.import"]}
+        balancesProblem={source.balances?.status === "error" ? (source.balances.errorCode ?? "unknown") : undefined}
         reviewStorageReady={confirmations.storageReady && escalations.storageReady}
         coordinatorEditor={coordinatorOptions?.storageReady ? { options: coordinatorOptions.labels } : undefined}
         reviewQueue={reviewQueue}
+        scorecard={scorecard}
         setupHints={setupHints.map((h) => ({ id: h.key, text: h.text }))}
         setupHref={setupHints.length > 0 ? FIELD_PERMISSIONS_HREF : undefined}
       />

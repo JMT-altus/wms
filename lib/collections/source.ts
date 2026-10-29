@@ -75,6 +75,12 @@ export interface CollectionSource {
   /** Collection Master storage exists (its migration has been applied). */
   masterReady?: boolean;
   transactions?: TransactionSourceInfo;
+  /**
+   * How reading the uploaded Debit / Credit went. "error" = the balance tables
+   * can't be used (permission or configuration): the screens still work, with
+   * blank Debit / Credit, and say so. Absent from older callers.
+   */
+  balances?: { status: "ok" | "not-installed" | "error"; errorCode?: string };
 }
 
 export const NOT_CONNECTED_MESSAGE =
