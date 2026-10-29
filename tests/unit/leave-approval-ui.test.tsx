@@ -178,10 +178,14 @@ describe("server-side authorization (source checks)", () => {
     expect(decide).toContain("checkCanDecide(");
     expect(decide).toContain('eq(leaveRequests.status, "pending")');
   });
-  it("the page renders the approver card for admins only and the pending list for deciders only", () => {
+  it("the Leave page carries no approver card; the admin page does, behind requireAdmin; the pending list needs the view permission", () => {
     const page = readFileSync(resolve(__dirname, "../../app/(app)/attendance/leave/page.tsx"), "utf8");
-    expect(page).toContain("{me.isAdmin && (");
-    expect(page).toContain("{canDecide && (");
-    expect(page).toContain("const canDecide = me.isAdmin || listedApprover;");
+    expect(page).not.toContain("ApproverSettings");
+    const admin = readFileSync(resolve(__dirname, "../../app/(admin)/admin/leave-approvers/page.tsx"), "utf8");
+    expect(admin).toContain("await requireAdmin()");
+    expect(admin).toContain("<ApproverSettings");
+    expect(page).toContain("{caps.view && (");
+    expect(page).toContain("listPendingLeaveFor(caps.view, caps.override)");
+    expect(page).not.toContain("listedApprover");
   });
 });

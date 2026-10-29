@@ -997,6 +997,40 @@ export const PERMISSION_FIELDS = [
     defaultAllowed: false,
     group: "Collections",
   },
+  // ── Leave approvals. Leave requests are personal HR data, so all three need an
+  // explicit grant made by a super-admin; nothing is implied by admin status.
+  // `leave_approvers` only decides where a new request is ROUTED — who may see
+  // and decide is these grants.
+  {
+    key: "leave.approvals.view",
+    label: "Leave approvals — View queue",
+    hint: "Open Leave Approvals and see the pending requests assigned to you.",
+    defaultAllowed: false,
+    group: "Leave approvals",
+    sensitive: true,
+    adminBypass: false,
+    superAdminBypass: false,
+  },
+  {
+    key: "leave.approvals.decide",
+    label: "Leave approvals — Approve or reject",
+    hint: "Approve or reject leave requests assigned to you. Viewing the queue is a separate permission.",
+    defaultAllowed: false,
+    group: "Leave approvals",
+    sensitive: true,
+    adminBypass: false,
+    superAdminBypass: false,
+  },
+  {
+    key: "leave.approvals.override",
+    label: "Leave approvals — Act on any request",
+    hint: "With 'Approve or reject' (and 'View queue'): see and decide pending requests assigned to other approvers, or to nobody. Never your own.",
+    defaultAllowed: false,
+    group: "Leave approvals",
+    sensitive: true,
+    adminBypass: false,
+    superAdminBypass: false,
+  },
 ] as const satisfies readonly PermissionFieldDef[];
 export type PermissionFieldKey = (typeof PERMISSION_FIELDS)[number]["key"];
 

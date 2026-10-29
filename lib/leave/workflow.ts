@@ -78,23 +78,33 @@ export function leaveKindOn(
 
 export interface DecideContext {
   deciderId: string;
-  deciderIsAdmin: boolean;
-  /** The decider has a row in leave_approvers. */
-  deciderIsListedApprover: boolean;
+  /** Holds `leave.approvals.decide` (resolved from the permission matrix on the server). */
+  canDecide: boolean;
+  /** Holds `leave.approvals.override`: may act on requests assigned to someone else, or to nobody. */
+  canOverride: boolean;
   requestEmployeeId: string;
   requestStatus: string;
+  /** Who the request was routed to when it was filed; null = routed to nobody in particular. */
+  requestApproverId: string | null;
 }
 
 /**
  * May this person rule on this request right now?
  *
- * Only listed approvers and admins (the people who could always decide leave).
- * Nobody decides their own request, admin or not. Only a PENDING request can be
- * decided, so a second, conflicting decision is refused.
+ * They must hold the "approve or reject" permission AND the request must be
+ * assigned to them — unless they also hold the explicit override permission.
+ * The override only widens WHICH requests; it is worth nothing without the
+ * permission to decide. Nobody decides their own request, override or not.
+ * Only a PENDING request can be decided, so a second, conflicting decision is
+ * refused.
+ *
+ * Pure: it knows no names, e-mail addresses or ids — only what the caller
+ * resolved from the signed session and the stored request.
  */
 export function checkCanDecide(c: DecideContext): { ok: true } | { ok: false; error: string } {
-  if (!c.deciderIsAdmin && !c.deciderIsListedApprover) {
-    return { ok: false, error: "You are not authorised to decide leave requests." };
+  const assignedToDecider = c.requestApproverId !== null && c.requestApproverId === c.deciderId;
+  if (!c.canDecide || (!assignedToDecider && !c.canOverride)) {
+    return { ok: false, error: "You are not authorised to decide this leave request." };
   }
   if (c.deciderId === c.requestEmployeeId) {
     return { ok: false, error: "You can't decide your own leave request." };
@@ -103,4 +113,20 @@ export function checkCanDecide(c: DecideContext): { ok: true } | { ok: false; er
     return { ok: false, error: `This request has already been ${c.requestStatus}.` };
   }
   return { ok: true };
+}
+
+/** Why a pending request is or isn't routed to the current default approver. */
+export interface RoutingRow {
+  id: string;
+  employeeId: string;
+  approverId: string | null;
+}
+
+/**
+ * The pending requests that are not routed to `defaultApproverId` and could be.
+ * A request the default approver filed themselves stays with the admins (nobody
+ * approves their own leave), and one already routed to the default is left alone.
+ */
+export function requestsToReroute(rows: RoutingRow[], defaultApproverId: string): RoutingRow[] {
+  return rows.filter((r) => r.employeeId !== defaultApproverId && r.approverId !== defaultApproverId);
 }

@@ -1,5 +1,7 @@
 import { getNavCounts } from "@/lib/queries/nav-counts";
 import { getCurrentEmployee } from "@/lib/auth/current";
+import { getHeldCapabilities } from "@/lib/auth/capability";
+import { NAV_REQUIRED_CAPABILITIES } from "@/lib/nav-modules";
 import { MainNav } from "./main-nav";
 
 export async function MainNavServer({ variant }: { variant?: "drawer" } = {}) {
@@ -16,11 +18,13 @@ export async function MainNavServer({ variant }: { variant?: "drawer" } = {}) {
         }
       : undefined,
   );
+  const capabilities = me ? await getHeldCapabilities(NAV_REQUIRED_CAPABILITIES) : [];
   return (
     <MainNav
       activeTasks={activeTasks}
       archivedTasks={archivedTasks}
       isAdmin={Boolean(me?.isAdmin)}
+      capabilities={capabilities}
       variant={variant}
     />
   );

@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 // REAL-POSTGRES tests for attendance corrections, on an in-memory PGlite
@@ -373,6 +375,57 @@ describe("employee deletion keeps attendance audit history", () => {
     await db.insert(schema.employeeEvents).values({ employeeId: EMP, actorId: victim, eventType: "role_changed", toValue: {} });
     const impact = await employeesActions.getEmployeeDeletionImpact(victim);
     expect(impact.protectedAttendanceEvents).toBe(0);
+  });
+});
+
+describe("REST roles vs. row-level security (Postgres privilege level; no PostgREST here)", () => {
+  it("without 0113, Supabase-style default grants let anon/authenticated read and write attendance; with 0113 they can't, and the owner still can", async () => {
+    await pg.exec(`
+      do $$ begin
+        if not exists (select 1 from pg_roles where rolname = 'anon') then create role anon nologin; end if;
+        if not exists (select 1 from pg_roles where rolname = 'authenticated') then create role authenticated nologin; end if;
+        if not exists (select 1 from pg_roles where rolname = 'app_other') then create role app_other nologin; end if;
+      end $$;
+      grant usage on schema public to anon, authenticated, app_other;
+      grant all on table attendance_logs, salary_runs, leave_requests, comp_off_credits, attendance_policy_changes, holidays to anon, authenticated, app_other;
+    `);
+    const asRole = async (role: string, q: string) => {
+      await pg.exec(`set role ${role}`);
+      try {
+        await pg.query(q);
+        return "allowed";
+      } catch (e) {
+        return /permission denied|row-level security/i.test((e as Error).message) ? "denied" : `error: ${(e as Error).message}`;
+      } finally {
+        await pg.exec(`reset role`);
+      }
+    };
+    // Before: exposed.
+    expect(await asRole("anon", `select * from attendance_logs`)).toBe("allowed");
+    expect(await asRole("authenticated", `select * from salary_runs`)).toBe("allowed");
+
+    // Apply the review migration to THIS in-memory database only.
+    await pg.exec(readFileSync(resolve(__dirname, "../../db/migrations/0113_attendance_salary_rls.sql"), "utf8"));
+
+    for (const role of ["anon", "authenticated"]) {
+      expect(await asRole(role, `select * from attendance_logs`)).toBe("denied");
+      expect(await asRole(role, `select * from salary_runs`)).toBe("denied");
+      expect(await asRole(role, `update attendance_logs set note = 'x'`)).toBe("denied");
+      expect(await asRole(role, `insert into leave_requests (employee_id, start_date, end_date) values ('${EMP}', '2026-09-01', '2026-09-01')`)).toBe("denied");
+    }
+    // A role that still has table grants but is neither owner nor BYPASSRLS sees no rows (no policies):
+    await pg.exec(`set role app_other`);
+    const seen = await pg.query(`select count(*)::int as n from attendance_logs`);
+    await pg.exec(`reset role`);
+    expect((seen.rows[0] as { n: number }).n).toBe(0);
+    // ...which is why production's DATABASE_URL role must be the table owner (verified there, read-only, before applying).
+
+    // The owner (the role the app connects as here) keeps working through the app code.
+    const owner = await pg.query(`select count(*)::int as n from attendance_logs`);
+    expect((owner.rows[0] as { n: number }).n).toBeGreaterThan(0);
+    as(ADMIN);
+    const res = await actions.adminEditDayTimes({ employeeId: EMP, logDate: "2026-09-18", inHHmm: "10:00", reason: "forgot", explanation: WHY, snapshot: { in: null, out: null } });
+    expect(res).toEqual({ ok: true });
   });
 });
 

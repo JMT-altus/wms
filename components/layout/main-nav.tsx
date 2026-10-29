@@ -14,6 +14,8 @@ interface Props {
   activeTasks: number;
   archivedTasks: number;
   isAdmin: boolean;
+  /** Permission-matrix keys the signed-in user holds; gates nav items that declare `requires`. */
+  capabilities?: readonly string[];
   variant?: "drawer";
 }
 
@@ -24,7 +26,7 @@ const ICONS: Record<string, typeof LayoutDashboard> = {
   BookOpen, Share2, Gauge, ListChecks, MessageSquare, Settings, Archive,
 };
 
-export function MainNav({ activeTasks, archivedTasks, isAdmin, variant }: Props) {
+export function MainNav({ activeTasks, archivedTasks, isAdmin, capabilities = [], variant }: Props) {
   const pathname = usePathname();
   const activeModule = moduleForPath(pathname);
 
@@ -35,7 +37,7 @@ export function MainNav({ activeTasks, archivedTasks, isAdmin, variant }: Props)
     return true;
   }
 
-  const items = activeModule.items.filter((i) => !i.adminOnly || isAdmin);
+  const items = activeModule.items.filter((i) => (!i.adminOnly || isAdmin) && (!i.requires || capabilities.includes(i.requires)));
 
   return (
     <nav

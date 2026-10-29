@@ -48,11 +48,14 @@ export function AppSidebar({
   activeTasks,
   archivedTasks,
   isAdmin,
+  capabilities = [],
   userMenu,
 }: {
   activeTasks: number;
   archivedTasks: number;
   isAdmin: boolean;
+  /** Permission-matrix keys the signed-in user holds; gates nav items that declare `requires`. */
+  capabilities?: readonly string[];
   /** The signed-in user's menu, rendered into the rail's foot. Passed as a
    *  slot because this is a client component and the menu is a server one. */
   userMenu?: React.ReactNode;
@@ -65,7 +68,7 @@ export function AppSidebar({
   // White-and-blue shell for WMS; the other modules keep the navy rail.
   const light = isLightChrome(pathname);
   const accent = `linear-gradient(135deg, ${mod.accent.from} 0%, ${mod.accent.to} 100%)`;
-  const items = mod.items.filter((i) => !i.adminOnly || isAdmin);
+  const items = mod.items.filter((i) => (!i.adminOnly || isAdmin) && (!i.requires || capabilities.includes(i.requires)));
 
   function isActive(item: ModuleNavItem): boolean {
     if (item.href === "/") return pathname === "/";

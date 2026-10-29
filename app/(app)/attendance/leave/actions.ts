@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray, isNull, ne } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { leaveRequests, leaveApprovers, employees, employeeEvents } from "@/db/schema";
 import type { NotificationKind } from "@/db/schema";
@@ -10,8 +10,9 @@ import { requireAdmin, requireUser } from "@/lib/auth/current";
 import { rateLimitOrError } from "@/lib/rate-limit";
 import { notify } from "@/lib/notifications/dispatch";
 import { daysInDateRange } from "@/lib/attendance/leave-cycle";
-import { getDefaultLeaveApprover, getLeaveBalance, isLeaveApprover } from "@/lib/queries/leave";
-import { checkCanDecide, inclusiveLeaveDays } from "@/lib/leave/workflow";
+import { getDefaultLeaveApprover, getLeaveBalance, listPendingRouting } from "@/lib/queries/leave";
+import { getLeaveCapabilityProofs } from "@/lib/auth/capability";
+import { checkCanDecide, inclusiveLeaveDays, requestsToReroute } from "@/lib/leave/workflow";
 import { localDateString } from "@/lib/format";
 import {
   ApplyForLeave,
@@ -26,10 +27,23 @@ type ActionResult<T = unknown> =
   | { ok: false; error: string };
 
 const PATH = "/attendance/leave";
+const APPROVALS_PATH = "/attendance/leave/approvals";
+const APPROVER_ADMIN_PATH = "/admin/leave-approvers";
 
 /** Today (YYYY-MM-DD) in IST — the org timezone the leave cycle is reckoned in. */
 function todayISO(): string {
   return localDateString("Asia/Kolkata");
+}
+
+/**
+ * A database failure, safely: the details (which can name tables, constraints
+ * or connection settings) go to the server log only; the browser gets a plain
+ * message that says nothing was changed.
+ */
+function dbFailure(where: string, err: unknown): { ok: false; error: string } {
+  const code = (err as { code?: unknown } | null)?.code;
+  console.error(`[leave] ${where} failed${typeof code === "string" ? ` (${code})` : ""}`, err);
+  return { ok: false, error: "Something went wrong and nothing was changed. Please try again." };
 }
 
 /**
@@ -64,11 +78,12 @@ export async function applyForLeave(
   try {
     approver = await getDefaultLeaveApprover();
   } catch (err: unknown) {
-    return { ok: false, error: `DB: ${err instanceof Error ? err.message : String(err)}` };
+    return dbFailure("reading the default approver", err);
   }
-  // No default approver configured: the request is routed to the admins (they
-  // see every pending request), exactly as it is for the approver's own request —
-  // nobody can approve their own leave. Applying never depends on the setting.
+  // No default approver configured — or the default approver applying for
+  // themselves (nobody can approve their own leave): the request is filed with
+  // no approver. Only a reviewer holding the "Act on any request" override can
+  // decide such a request. Applying never depends on the setting.
   const approverId = approver && approver.employeeId !== me.id ? approver.employeeId : null;
 
   let inserted;
@@ -90,9 +105,9 @@ export async function applyForLeave(
     if (code === "23505") {
       return { ok: false, error: "You already have a pending request for these dates." };
     }
-    return { ok: false, error: `DB: ${err instanceof Error ? err.message : String(err)}` };
+    return dbFailure("filing a leave request", err);
   }
-  if (!inserted) return { ok: false, error: "DB: insert returned no row" };
+  if (!inserted) return dbFailure("filing a leave request", new Error("insert returned no row"));
 
   try {
     await db.insert(employeeEvents).values({
@@ -128,6 +143,7 @@ export async function applyForLeave(
   }
 
   revalidatePath(PATH);
+  revalidatePath(APPROVALS_PATH);
   return {
     ok: true,
     id: inserted.id,
@@ -140,8 +156,10 @@ export async function applyForLeave(
 /**
  * A verdict on a pending leave request.
  *
- * Authorised on the server: only a listed approver or an admin, never the
- * requester, and only while the request is still pending — the update itself is
+ * Authorised on the server from the permission matrix, never from the client or
+ * from navigation: the caller must hold "Approve or reject" and the request must
+ * be assigned to them (unless they also hold the explicit "Act on any request"
+ * override), never the requester, and only while the request is still pending — the update itself is
  * conditional on 'pending', so two people deciding at once cannot both win.
  * Rejecting needs a reason. On approving a PAID leave we re-validate the balance
  * (a request filed on the Apply-for-Leave form carries no pay kind and is not
@@ -166,12 +184,14 @@ export async function decideLeave(input: {
   });
   if (!existing) return { ok: false, error: "Leave request not found" };
 
+  const caps = await getLeaveCapabilityProofs();
   const allowed = checkCanDecide({
     deciderId: me.id,
-    deciderIsAdmin: me.isAdmin,
-    deciderIsListedApprover: me.isAdmin ? false : await isLeaveApprover(me.id),
+    canDecide: caps.decide !== null,
+    canOverride: caps.override !== null,
     requestEmployeeId: existing.employeeId,
     requestStatus: existing.status,
+    requestApproverId: existing.approverId,
   });
   if (!allowed.ok) return allowed;
 
@@ -187,40 +207,61 @@ export async function decideLeave(input: {
     }
   }
 
-  let won;
+  // The write re-asserts, atomically, everything the check above relied on: the
+  // request is still pending, is still not the decider's own, and is still
+  // assigned to the decider — or, for an override holder, still assigned to
+  // whoever it was assigned to when checked. A request withdrawn, decided or
+  // re-routed in between matches nothing, so nothing is written. The decision
+  // and its audit row are committed together or not at all.
+  const stillAssigned =
+    caps.override !== null
+      ? existing.approverId === null
+        ? isNull(leaveRequests.approverId)
+        : eq(leaveRequests.approverId, existing.approverId)
+      : eq(leaveRequests.approverId, me.id);
+  let won: { id: string }[];
   try {
-    won = await db
-      .update(leaveRequests)
-      .set({
-        status: parsed.data.verdict,
-        decidedById: me.id,
-        decidedAt: new Date(),
-        decisionNote: parsed.data.note ? parsed.data.note : null,
-      })
-      .where(and(eq(leaveRequests.id, parsed.data.id), eq(leaveRequests.status, "pending")))
-      .returning({ id: leaveRequests.id });
+    won = await db.transaction(async (tx) => {
+      const rows = await tx
+        .update(leaveRequests)
+        .set({
+          status: parsed.data.verdict,
+          decidedById: me.id,
+          decidedAt: new Date(),
+          decisionNote: parsed.data.note ? parsed.data.note : null,
+        })
+        .where(
+          and(
+            eq(leaveRequests.id, parsed.data.id),
+            eq(leaveRequests.status, "pending"),
+            ne(leaveRequests.employeeId, me.id),
+            stillAssigned,
+          ),
+        )
+        .returning({ id: leaveRequests.id });
+      if (rows.length === 0) return rows;
+      await tx.insert(employeeEvents).values({
+        employeeId: existing.employeeId,
+        actorId: me.id,
+        eventType: `leave_${parsed.data.verdict}`,
+        fromValue: { status: existing.status },
+        toValue: {
+          status: parsed.data.verdict,
+          kind: existing.kind,
+          leaveType: existing.leaveType,
+          startDate: existing.startDate,
+          endDate: existing.endDate,
+        },
+        note: parsed.data.note ?? null,
+      });
+      return rows;
+    });
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    return { ok: false, error: `DB: ${msg}` };
+    return dbFailure("recording a leave decision", err);
   }
   if (won.length === 0) {
-    return { ok: false, error: "This request was already decided or cancelled." };
+    return { ok: false, error: "This request was already decided, cancelled or re-routed. Reload to see its current state." };
   }
-
-  await db.insert(employeeEvents).values({
-    employeeId: existing.employeeId,
-    actorId: me.id,
-    eventType: `leave_${parsed.data.verdict}`,
-    fromValue: { status: existing.status },
-    toValue: {
-      status: parsed.data.verdict,
-      kind: existing.kind,
-      leaveType: existing.leaveType,
-      startDate: existing.startDate,
-      endDate: existing.endDate,
-    },
-    note: parsed.data.note ?? null,
-  });
 
   const label = existing.leaveType
     ? `${LEAVE_TYPE_LABELS[existing.leaveType]} leave`
@@ -243,12 +284,17 @@ export async function decideLeave(input: {
   }
 
   revalidatePath(PATH);
+  revalidatePath(APPROVALS_PATH);
   return { ok: true };
 }
 
 /**
- * Admin: who may decide leave, and which of them new requests go to. Replaces
- * the default atomically (there can be only one).
+ * Admin: the leave-approver list used for ROUTING — which listed employee new
+ * requests go to (the default; there can be only one, replaced atomically).
+ * Being listed grants nothing: deciding needs the leave.approvals.*
+ * permissions, granted in Field Permissions. Every change is audited
+ * (employee_events "leave_approver_changed", before → after) in the same
+ * transaction as the change itself.
  */
 export async function setLeaveApprover(input: {
   employeeId: string;
@@ -265,36 +311,137 @@ export async function setLeaveApprover(input: {
   const { employeeId, action } = parsed.data;
 
   try {
-    if (action === "remove") {
-      await db.delete(leaveApprovers).where(eq(leaveApprovers.employeeId, employeeId));
-    } else {
+    if (action !== "remove") {
       const emp = await db.query.employees.findFirst({
         where: eq(employees.id, employeeId),
         columns: { isActive: true },
       });
       if (!emp?.isActive) return { ok: false, error: "Choose an active employee." };
-
-      if (action === "add") {
-        await db
-          .insert(leaveApprovers)
-          .values({ employeeId, createdById: me.id })
-          .onConflictDoNothing();
-      } else {
-        await db.transaction(async (tx) => {
-          await tx.update(leaveApprovers).set({ isDefault: false }).where(eq(leaveApprovers.isDefault, true));
-          await tx
-            .insert(leaveApprovers)
-            .values({ employeeId, isDefault: true, createdById: me.id })
-            .onConflictDoUpdate({ target: leaveApprovers.employeeId, set: { isDefault: true } });
-        });
-      }
     }
+
+    await db.transaction(async (tx) => {
+      const [before] = await tx
+        .select({ isDefault: leaveApprovers.isDefault })
+        .from(leaveApprovers)
+        .where(eq(leaveApprovers.employeeId, employeeId));
+      let previousDefaultId: string | null = null;
+
+      if (action === "remove") {
+        await tx.delete(leaveApprovers).where(eq(leaveApprovers.employeeId, employeeId));
+      } else if (action === "add") {
+        await tx.insert(leaveApprovers).values({ employeeId, createdById: me.id }).onConflictDoNothing();
+      } else {
+        const [prev] = await tx
+          .update(leaveApprovers)
+          .set({ isDefault: false })
+          .where(and(eq(leaveApprovers.isDefault, true), ne(leaveApprovers.employeeId, employeeId)))
+          .returning({ employeeId: leaveApprovers.employeeId });
+        previousDefaultId = prev?.employeeId ?? null;
+        await tx
+          .insert(leaveApprovers)
+          .values({ employeeId, isDefault: true, createdById: me.id })
+          .onConflictDoUpdate({ target: leaveApprovers.employeeId, set: { isDefault: true } });
+      }
+
+      const from = { listed: before !== undefined, isDefault: before?.isDefault ?? false };
+      const to =
+        action === "remove"
+          ? { listed: false, isDefault: false }
+          : action === "add"
+            ? { listed: true, isDefault: before?.isDefault ?? false }
+            : { listed: true, isDefault: true };
+      if (from.listed === to.listed && from.isDefault === to.isDefault && previousDefaultId === null) return; // nothing changed
+      await tx.insert(employeeEvents).values({
+        employeeId,
+        actorId: me.id,
+        eventType: "leave_approver_changed",
+        fromValue: from,
+        toValue: { ...to, action, ...(previousDefaultId ? { previousDefaultId } : {}) },
+      });
+    });
   } catch (err: unknown) {
-    return { ok: false, error: `DB: ${err instanceof Error ? err.message : String(err)}` };
+    return dbFailure("changing the leave approvers", err);
   }
 
   revalidatePath(PATH);
+  revalidatePath(APPROVALS_PATH);
+  revalidatePath(APPROVER_ADMIN_PATH);
   return { ok: true };
+}
+
+/**
+ * Admin: route the pending requests that are not with the current default
+ * approver to them — for the ones filed before the default was set or changed.
+ *
+ * Deliberately a button an admin presses, never something that runs on its own:
+ * it touches only PENDING requests (a decision already made is never changed),
+ * never routes the default approver's own requests to them (those stay with no
+ * approver, decidable only with the override), changes nothing but
+ * `approver_id`, and writes one audit event per request (from → to).
+ */
+export async function reassignPendingLeave(): Promise<
+  ActionResult<{ moved: number; routedTo: string }>
+> {
+  const me = await requireAdmin();
+  const limited = rateLimitOrError(me.id, "write");
+  if (limited) return limited;
+
+  let approver;
+  try {
+    approver = await getDefaultLeaveApprover();
+  } catch (err: unknown) {
+    return dbFailure("reading the default approver", err);
+  }
+  if (!approver) return { ok: false, error: "Set an active default approver first." };
+
+  let moved = 0;
+  try {
+    const todo = requestsToReroute(await listPendingRouting(), approver.employeeId);
+    if (todo.length > 0) {
+      await db.transaction(async (tx) => {
+        const won = await tx
+          .update(leaveRequests)
+          .set({ approverId: approver.employeeId })
+          .where(and(inArray(leaveRequests.id, todo.map((r) => r.id)), eq(leaveRequests.status, "pending")))
+          .returning({ id: leaveRequests.id });
+        const done = new Set(won.map((w) => w.id));
+        const changed = todo.filter((r) => done.has(r.id));
+        if (changed.length > 0) {
+          await tx.insert(employeeEvents).values(
+            changed.map((r) => ({
+              employeeId: r.employeeId,
+              actorId: me.id,
+              eventType: "leave_rerouted",
+              fromValue: { approverId: r.approverId },
+              toValue: { approverId: approver.employeeId },
+            })),
+          );
+        }
+        moved = changed.length;
+      });
+    }
+  } catch (err: unknown) {
+    return dbFailure("re-routing pending leave requests", err);
+  }
+
+  if (moved > 0) {
+    try {
+      await notify({
+        userId: approver.employeeId,
+        kind: "attendance_device" as NotificationKind,
+        title: "Leave requests routed to you",
+        body: `${moved} pending leave request${moved === 1 ? " was" : "s were"} routed to you for approval.`,
+        actorId: me.id,
+      });
+    } catch (err) {
+      console.error("[leave] reroute notification failed", err);
+    }
+  }
+
+  revalidatePath(PATH);
+  revalidatePath(APPROVALS_PATH);
+  revalidatePath(APPROVER_ADMIN_PATH);
+  return { ok: true, moved, routedTo: approver.name };
 }
 
 /**
@@ -346,10 +493,9 @@ export async function adminMarkLeave(input: {
       })
       .returning({ id: leaveRequests.id });
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    return { ok: false, error: `DB: ${msg}` };
+    return dbFailure("recording an admin leave", err);
   }
-  if (!inserted) return { ok: false, error: "DB: insert returned no row" };
+  if (!inserted) return dbFailure("recording an admin leave", new Error("insert returned no row"));
 
   await db.insert(employeeEvents).values({
     employeeId: parsed.data.employeeId,
@@ -364,12 +510,21 @@ export async function adminMarkLeave(input: {
   });
 
   revalidatePath(PATH);
+  revalidatePath(APPROVALS_PATH);
   return { ok: true, id: inserted.id };
 }
 
 /**
- * Cancel a leave request. An employee may cancel their OWN PENDING request;
- * an admin may cancel any request in any state.
+ * Cancel a leave request.
+ *
+ * Your OWN request: only while it is still pending — for everyone, admins
+ * included, so approved leave is never withdrawn through this ordinary path.
+ * Someone else's request: admins only (the existing admin power), in whatever
+ * state it was when they looked, except one already cancelled.
+ *
+ * The update is conditional on exactly what was authorised (the request's
+ * owner and the status that was checked), so a request decided in between is
+ * not cancelled; the cancellation and its audit row commit together.
  */
 export async function cancelLeave(input: {
   id: string;
@@ -388,32 +543,49 @@ export async function cancelLeave(input: {
   });
   if (!existing) return { ok: false, error: "Leave request not found" };
 
-  if (!me.isAdmin) {
-    if (existing.employeeId !== me.id) {
-      return { ok: false, error: "You can only cancel your own requests." };
-    }
-    if (existing.status !== "pending") {
-      return { ok: false, error: "Only pending requests can be cancelled." };
-    }
+  const own = existing.employeeId === me.id;
+  if (!own && !me.isAdmin) {
+    return { ok: false, error: "You can only cancel your own requests." };
+  }
+  if (own && existing.status !== "pending") {
+    return { ok: false, error: "Only pending requests can be cancelled." };
+  }
+  if (existing.status === "cancelled") {
+    return { ok: false, error: "This request is already cancelled." };
   }
 
+  let won: { id: string }[];
   try {
-    await db
-      .update(leaveRequests)
-      .set({ status: "cancelled", decidedById: me.id, decidedAt: new Date() })
-      .where(eq(leaveRequests.id, parsed.data.id));
+    won = await db.transaction(async (tx) => {
+      const rows = await tx
+        .update(leaveRequests)
+        .set({ status: "cancelled", decidedById: me.id, decidedAt: new Date() })
+        .where(
+          and(
+            eq(leaveRequests.id, parsed.data.id),
+            eq(leaveRequests.employeeId, existing.employeeId),
+            eq(leaveRequests.status, existing.status),
+          ),
+        )
+        .returning({ id: leaveRequests.id });
+      if (rows.length === 0) return rows;
+      await tx.insert(employeeEvents).values({
+        employeeId: existing.employeeId,
+        actorId: me.id,
+        eventType: "leave_cancelled",
+        fromValue: { status: existing.status },
+        toValue: { status: "cancelled" },
+      });
+      return rows;
+    });
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    return { ok: false, error: `DB: ${msg}` };
+    return dbFailure("cancelling a leave request", err);
   }
-
-  await db.insert(employeeEvents).values({
-    employeeId: existing.employeeId,
-    actorId: me.id,
-    eventType: "leave_cancelled",
-    fromValue: { status: existing.status },
-  });
+  if (won.length === 0) {
+    return { ok: false, error: "This request changed meanwhile (it may have been decided). Reload to see its current state." };
+  }
 
   revalidatePath(PATH);
+  revalidatePath(APPROVALS_PATH);
   return { ok: true };
 }

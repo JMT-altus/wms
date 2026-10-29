@@ -18,7 +18,7 @@ export default async function AccessControlPage() {
         title="Field Permissions"
         lede={
           <>
-            Who may edit sensitive fields such as quantities and average rates, and who may do what in Collections.{" "}
+            Who may edit sensitive fields such as quantities and average rates, who may do what in Collections, and who may view and decide leave requests.{" "}
             {matrix.people.length} people · {matrix.departments.length} departments · {overrides} override
             {overrides === 1 ? "" : "s"}.
           </>

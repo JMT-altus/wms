@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { checkCanDecide, inclusiveLeaveDays, isRealIsoDate, leaveKindOn, withoutCancelled } from "@/lib/leave/workflow";
+import { checkCanDecide, inclusiveLeaveDays, isRealIsoDate, leaveKindOn, requestsToReroute, withoutCancelled } from "@/lib/leave/workflow";
 import { resolvePolicy } from "@/lib/attendance/policy";
 import { ApplyForLeave, DecideLeave } from "@/lib/validators/leave";
 
@@ -61,33 +61,61 @@ describe("DecideLeave validation", () => {
 });
 
 describe("who may decide", () => {
+  // The decider holds "approve or reject" and the request is assigned to them.
   const base = {
     deciderId: "approver",
-    deciderIsAdmin: false,
-    deciderIsListedApprover: true,
+    canDecide: true,
+    canOverride: false,
     requestEmployeeId: "emp",
     requestStatus: "pending",
+    requestApproverId: "approver" as string | null,
   };
-  it("lets a listed approver decide a pending request", () => {
+  it("lets the assigned approver who holds the decide permission decide a pending request", () => {
     expect(checkCanDecide(base).ok).toBe(true);
   });
-  it("lets an admin decide, as before", () => {
-    expect(checkCanDecide({ ...base, deciderIsListedApprover: false, deciderIsAdmin: true }).ok).toBe(true);
+  it("refuses anyone without the decide permission, whatever the request says", () => {
+    expect(checkCanDecide({ ...base, canDecide: false }).ok).toBe(false);
+    expect(checkCanDecide({ ...base, canDecide: false, canOverride: true }).ok).toBe(false);
   });
-  it("refuses an ordinary employee", () => {
-    const r = checkCanDecide({ ...base, deciderIsListedApprover: false });
-    expect(r.ok).toBe(false);
-  });
-  it("refuses deciding your own request, even for an admin or approver", () => {
-    expect(checkCanDecide({ ...base, requestEmployeeId: "approver" }).ok).toBe(false);
-    expect(checkCanDecide({ ...base, deciderIsAdmin: true, requestEmployeeId: "approver" }).ok).toBe(false);
-  });
-  it("refuses a second, conflicting decision", () => {
-    for (const requestStatus of ["approved", "rejected", "cancelled"]) {
-      const r = checkCanDecide({ ...base, requestStatus });
-      expect(r.ok).toBe(false);
-      expect(r.ok ? "" : r.error).toContain(requestStatus);
+  it("refuses a request assigned to someone else or to nobody — unless they hold the override", () => {
+    for (const requestApproverId of ["someone-else", null]) {
+      expect(checkCanDecide({ ...base, requestApproverId }).ok).toBe(false);
+      expect(checkCanDecide({ ...base, requestApproverId, canOverride: true }).ok).toBe(true);
     }
+  });
+  it("refuses deciding your own request, even with the override", () => {
+    expect(checkCanDecide({ ...base, requestEmployeeId: "approver" }).ok).toBe(false);
+    expect(checkCanDecide({ ...base, requestEmployeeId: "approver", canOverride: true }).ok).toBe(false);
+  });
+  it("refuses a second, conflicting decision, override or not", () => {
+    for (const requestStatus of ["approved", "rejected", "cancelled"]) {
+      for (const canOverride of [false, true]) {
+        const r = checkCanDecide({ ...base, requestStatus, canOverride });
+        expect(r.ok).toBe(false);
+        expect(r.ok ? "" : r.error).toContain(requestStatus);
+      }
+    }
+  });
+  it("knows no identity: the verdict depends only on the flags and ids it is given", () => {
+    const src = readFileSync(resolve(__dirname, "../../lib/leave/workflow.ts"), "utf8");
+    expect(src).not.toMatch(/@[a-z0-9-]+\.[a-z]{2,}/i);
+    expect(src).not.toMatch(/mihir/i);
+    expect(src).not.toMatch(/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/i);
+  });
+});
+
+describe("re-routing pending requests", () => {
+  const rows = [
+    { id: "a", employeeId: "e1", approverId: null },
+    { id: "b", employeeId: "e2", approverId: "old" },
+    { id: "c", employeeId: "e3", approverId: "default" },
+    { id: "d", employeeId: "default", approverId: null },
+  ];
+  it("moves the unrouted and wrongly routed ones, not those already with the default or the default's own", () => {
+    expect(requestsToReroute(rows, "default").map((r) => r.id)).toEqual(["a", "b"]);
+  });
+  it("is empty when nothing needs moving", () => {
+    expect(requestsToReroute([], "default")).toEqual([]);
   });
 });
 

@@ -29,10 +29,13 @@ function prettyDate(iso: string): string {
 export function LeaveList({
   rows,
   mode,
+  canDecide = true,
 }: {
-  rows: LeaveRow[];
+  rows: (LeaveRow & { employeeEmail?: string | null })[];
   /** "mine" → show cancel on own pending; "pending" → admin approve/reject. */
   mode: "mine" | "pending";
+  /** False for a view-only reviewer: the Approve / Reject controls are not drawn (the action refuses anyway). */
+  canDecide?: boolean;
 }) {
   if (rows.length === 0) {
     return (
@@ -46,13 +49,21 @@ export function LeaveList({
   return (
     <ul className="space-y-3">
       {rows.map((r) => (
-        <LeaveCard key={r.id} row={r} mode={mode} />
+        <LeaveCard key={r.id} row={r} mode={mode} canDecide={canDecide} />
       ))}
     </ul>
   );
 }
 
-function LeaveCard({ row, mode }: { row: LeaveRow; mode: "mine" | "pending" }) {
+function LeaveCard({
+  row,
+  mode,
+  canDecide,
+}: {
+  row: LeaveRow & { employeeEmail?: string | null };
+  mode: "mine" | "pending";
+  canDecide: boolean;
+}) {
   const router = useRouter();
   const [note, setNote] = useState("");
   const [pending, startTransition] = useTransition();
@@ -90,7 +101,7 @@ function LeaveCard({ row, mode }: { row: LeaveRow; mode: "mine" | "pending" }) {
   }
 
   const canCancelMine = mode === "mine" && row.status === "pending";
-  const showAdminActions = mode === "pending" && row.status === "pending";
+  const showAdminActions = mode === "pending" && row.status === "pending" && canDecide;
 
   return (
     <li
@@ -125,7 +136,10 @@ function LeaveCard({ row, mode }: { row: LeaveRow; mode: "mine" | "pending" }) {
             </span>
           </p>
           {mode === "pending" && (
-            <p className="text-[13.5px] text-ink-subtle mt-1">{row.employeeName}</p>
+            <p className="text-[13.5px] text-ink-subtle mt-1">
+              {row.employeeName}
+              {row.employeeEmail ? ` · ${row.employeeEmail}` : ""}
+            </p>
           )}
           {row.reason && (
             <p className="text-[13.5px] text-ink-soft mt-1.5" style={{ lineHeight: 1.5 }}>

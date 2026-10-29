@@ -1,6 +1,6 @@
 import "server-only";
 import { LEAVE_KIND_LABELS, LEAVE_TYPE_LABELS } from "@/db/enums";
-import { requireUser } from "@/lib/auth/current";
+import { getLeaveCapabilityProofs } from "@/lib/auth/capability";
 import { listPendingLeaveFor, type LeaveRow } from "@/lib/queries/leave";
 import { PendingLeavePrompt } from "./pending-leave-prompt";
 
@@ -12,9 +12,11 @@ import { PendingLeavePrompt } from "./pending-leave-prompt";
 export async function PendingLeavePromptServer() {
   let pending: LeaveRow[] = [];
   try {
-    const me = await requireUser();
-    // Never prompt someone about their own request.
-    pending = (await listPendingLeaveFor(me.id, me.isAdmin)).filter((r) => r.employeeId !== me.id);
+    // Only for someone who may view the queue (the permission matrix); their own
+    // requests are never in it.
+    const caps = await getLeaveCapabilityProofs();
+    if (!caps.view) return null;
+    pending = await listPendingLeaveFor(caps.view, caps.override);
   } catch (err) {
     console.error("[leave] pending prompt failed", err);
     return null;

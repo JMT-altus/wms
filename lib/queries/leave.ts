@@ -3,6 +3,8 @@ import { and, asc, desc, eq, gte, inArray, lte, type SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { db } from "@/lib/db";
 import { employees, leaveApprovers, leaveRequests } from "@/db/schema";
+import type { CapabilityProof } from "@/lib/auth/capability";
+import { getFieldAccessFor } from "@/lib/auth/field-access";
 import type { LeaveKind, LeaveStatus, LeaveType } from "@/db/enums";
 import {
   leaveCycleFor,
@@ -212,18 +214,63 @@ export async function listMyLeave(employeeId: string): Promise<LeaveRow[]> {
 }
 
 /**
- * Pending requests this person may rule on, oldest-first: an admin sees every
- * pending request (as before); a listed approver sees the ones routed to them.
+ * The pending review queue, oldest start date first.
+ *
+ * Needs the proof that the caller holds `leave.approvals.view` — the queue
+ * can't be read from a path that skipped the check. Without the override proof
+ * it is the requests assigned to the viewer; with it, every pending request.
+ * The viewer's own requests are never in it.
  */
 export async function listPendingLeaveFor(
-  userId: string,
-  isAdmin: boolean,
+  viewer: CapabilityProof<"leave.approvals.view">,
+  override: CapabilityProof<"leave.approvals.override"> | null,
 ): Promise<LeaveRow[]> {
-  if (isAdmin) return listPendingLeave();
-  return selectLeaveRows(
-    and(eq(leaveRequests.status, "pending"), eq(leaveRequests.approverId, userId)),
+  const pending = eq(leaveRequests.status, "pending");
+  const rows = await selectLeaveRows(
+    override ? pending : and(pending, eq(leaveRequests.approverId, viewer.employeeId)),
     "by_start",
   );
+  return rows.filter((r) => r.employeeId !== viewer.employeeId);
+}
+
+/** A pending request as the approver reviews it: the row plus who is asking. */
+export interface ApprovalRow extends LeaveRow {
+  employeeEmail: string | null;
+}
+
+/**
+ * The review queue on the Leave Approvals page: `listPendingLeaveFor` plus the
+ * requester's e-mail, so the reviewer knows exactly who is asking.
+ */
+export async function listPendingApprovalsFor(
+  viewer: CapabilityProof<"leave.approvals.view">,
+  override: CapabilityProof<"leave.approvals.override"> | null,
+): Promise<ApprovalRow[]> {
+  const rows = await listPendingLeaveFor(viewer, override);
+  if (rows.length === 0) return [];
+  const people = await db
+    .select({ id: employees.id, email: employees.email })
+    .from(employees)
+    .where(inArray(employees.id, [...new Set(rows.map((r) => r.employeeId))]));
+  const emailOf = new Map(people.map((p) => [p.id, p.email]));
+  return rows.map((r) => ({ ...r, employeeEmail: emailOf.get(r.employeeId) ?? null }));
+}
+
+/** Active employees an admin can pick as a leave approver, with their e-mail so the right account is chosen. */
+export async function listApproverCandidates(): Promise<{ id: string; name: string; email: string }[]> {
+  return db
+    .select({ id: employees.id, name: employees.name, email: employees.email })
+    .from(employees)
+    .where(eq(employees.isActive, true))
+    .orderBy(asc(employees.name));
+}
+
+/** Who each pending request is routed to (null = the admins) — for re-routing. */
+export async function listPendingRouting(): Promise<{ id: string; employeeId: string; approverId: string | null }[]> {
+  return db
+    .select({ id: leaveRequests.id, employeeId: leaveRequests.employeeId, approverId: leaveRequests.approverId })
+    .from(leaveRequests)
+    .where(eq(leaveRequests.status, "pending"));
 }
 
 export interface LeaveApproverRow {
@@ -274,17 +321,22 @@ export async function getDefaultApproverStatus(): Promise<DefaultApproverStatus>
   return row.isActive ? { state: "ok", name: row.name } : { state: "inactive", name: row.name };
 }
 
-export async function isLeaveApprover(employeeId: string): Promise<boolean> {
-  const row = await db.query.leaveApprovers.findFirst({
-    where: eq(leaveApprovers.employeeId, employeeId),
-    columns: { employeeId: true },
-  });
-  return Boolean(row);
-}
-
-/** All pending leave requests (admin), oldest-first (queue order). */
-export async function listPendingLeave(): Promise<LeaveRow[]> {
-  return selectLeaveRows(eq(leaveRequests.status, "pending"), "by_start");
+/**
+ * Which leave-approval permissions the default approver actually holds, from the
+ * same resolver the permission matrix previews with. Routing a request to
+ * someone who can't see or decide it would strand it, so the settings card
+ * warns. Null when there is no active default.
+ */
+export async function getDefaultApproverAccess(): Promise<{ view: boolean; decide: boolean } | null> {
+  const approver = await getDefaultLeaveApprover();
+  if (!approver) return null;
+  const emp = await db.query.employees.findFirst({ where: eq(employees.id, approver.employeeId) });
+  if (!emp) return null;
+  const access = await getFieldAccessFor(emp);
+  return {
+    view: access["leave.approvals.view"]?.allowed === true,
+    decide: access["leave.approvals.decide"]?.allowed === true,
+  };
 }
 
 /**

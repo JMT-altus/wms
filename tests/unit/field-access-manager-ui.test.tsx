@@ -37,11 +37,28 @@ describe("permission matrix — Collections", () => {
   it("lists the Collection capabilities under their own heading, marking the six sensitive ones", () => {
     render(<FieldAccessManager matrix={matrix} />);
     expect(screen.getByRole("rowheader", { name: "Collections" })).toBeTruthy();
-    expect(within(screen.getByRole("table")).getAllByText("Sensitive")).toHaveLength(6);
+    // 6 Collection capabilities (incl. Import balances) + the 3 Leave approvals ones, all explicit-grant-only.
+    expect(within(screen.getByRole("table")).getAllByText("Sensitive")).toHaveLength(9);
     for (const l of ["Collections — Assign Sales Coordinator", "Collections — View commitments", "Collections — Record commitments", "Collections — Review escalations", "Collections — Close escalations", "Collections — Import balances"]) {
       expect(within(row(l)).getByText("Sensitive")).toBeTruthy();
     }
     expect(within(row("Collections — Escalate for review")).queryByText("Sensitive")).toBeNull();
+  });
+
+  it("lists the Leave approvals capabilities under their own heading, all sensitive, and not for departments", () => {
+    render(<FieldAccessManager matrix={matrix} canManageSensitive />);
+    expect(screen.getByRole("rowheader", { name: "Leave approvals" })).toBeTruthy();
+    for (const l of ["Leave approvals — View queue", "Leave approvals — Approve or reject", "Leave approvals — Act on any request"]) {
+      expect(within(row(l)).getByText("Sensitive")).toBeTruthy();
+      expect(button(l, "Allow").disabled).toBe(false); // a super-admin may grant them to a person
+    }
+    cleanup();
+    const DEPT = "33333333-3333-4333-8333-333333333333";
+    render(<FieldAccessManager matrix={{ ...matrix, departments: [{ id: DEPT, name: "Ops" }] }} canManageSensitive />);
+    fireEvent.click(screen.getByRole("button", { name: "A department" }));
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: DEPT } });
+    expect(within(row("Leave approvals — View queue")).getByText(/Not available for departments/)).toBeTruthy();
+    expect(button("Leave approvals — View queue", "Allow").disabled).toBe(true);
   });
 
   it("for a non-super-admin, sensitive rows are locked (and say why); ordinary rows stay editable", () => {

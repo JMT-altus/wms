@@ -39,6 +39,11 @@ export interface ModuleNavItem {
   label: string;
   icon: string; // lucide-react icon name
   adminOnly?: boolean;
+  /**
+   * Shown only to someone who holds this permission-matrix key (Field
+   * Permissions). Navigation courtesy only — the page and actions check again.
+   */
+  requires?: string;
   /** When true, the pill shows the live active-task count. */
   taskCount?: boolean;
   /** When true, the pill shows the live archived-task count. */
@@ -112,7 +117,8 @@ export const MODULES: ModuleDef[] = [
     accent: { from: "#12B3A0", to: "#0C7C6F", ink: "#0C7C6F" },
     items: [
       { href: "/attendance", label: "Attendance", icon: "CalendarCheck", notMatch: ["/attendance/dashboard", "/attendance/leave"] },
-      { href: "/attendance/leave", label: "Apply for Leave", icon: "CalendarOff" },
+      { href: "/attendance/leave", label: "Apply for Leave", icon: "CalendarOff", notMatch: ["/attendance/leave/approvals"] },
+      { href: "/attendance/leave/approvals", label: "Leave Approvals", icon: "CalendarCheck", requires: "leave.approvals.view" },
       { href: "/attendance/dashboard", label: "Att Report", icon: "CalendarRange", adminOnly: true },
       // DCC — the daily KPI checklist. Sibling routes listed in notMatch so the
       // board pill doesn't stay lit on Team and Ranking, same pattern as Tasks.
@@ -331,3 +337,8 @@ export function moduleForPath(pathname: string): ModuleDef {
   if (pathname === "/") return MODULES[0]!;
   return best;
 }
+
+/** Every permission key a nav item depends on, so the server resolves them once per request. */
+export const NAV_REQUIRED_CAPABILITIES: readonly string[] = [
+  ...new Set(MODULES.flatMap((m) => m.items.flatMap((i) => [i.requires, ...(i.children ?? []).map((c) => c.requires)])).filter((k): k is string => Boolean(k))),
+];

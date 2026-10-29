@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { fireToast } from "@/lib/toast";
 import type { DefaultApproverStatus, LeaveApproverRow } from "@/lib/queries/leave";
-import { setLeaveApprover } from "@/app/(app)/attendance/leave/actions";
+import { reassignPendingLeave, setLeaveApprover } from "@/app/(app)/attendance/leave/actions";
 
 /**
  * Admin only: who may decide leave and who new requests go to. The page renders
@@ -17,10 +17,19 @@ export function ApproverSettings({
   approvers,
   status,
   people,
+  reassignable = 0,
+  defaultName = null,
+  defaultAccess = null,
 }: {
   approvers: LeaveApproverRow[];
   status: DefaultApproverStatus;
-  people: { id: string; name: string }[];
+  /** `email` is shown beside the name so the right account is picked. */
+  people: { id: string; name: string; email?: string | null }[];
+  /** Pending requests that are not routed to the default approver. */
+  reassignable?: number;
+  defaultName?: string | null;
+  /** The default approver's leave-approval permissions (null = unknown / none set). */
+  defaultAccess?: { view: boolean; decide: boolean } | null;
 }) {
   const router = useRouter();
   const [pick, setPick] = useState("");
@@ -39,6 +48,21 @@ export function ApproverSettings({
     });
   }
 
+  function reassign() {
+    startTransition(async () => {
+      const res = await reassignPendingLeave();
+      if (!res.ok) {
+        fireToast({ message: res.error, type: "error" });
+        return;
+      }
+      fireToast({
+        message: res.moved === 0 ? "Nothing needed re-routing." : `${res.moved} pending request${res.moved === 1 ? "" : "s"} routed to ${res.routedTo}.`,
+        type: "success",
+      });
+      router.refresh();
+    });
+  }
+
   const listed = new Set(approvers.map((a) => a.employeeId));
   const candidates = people.filter((p) => !listed.has(p.id));
 
@@ -49,7 +73,7 @@ export function ApproverSettings({
     >
       <h2 className="text-[16px] font-semibold text-ink-strong">Leave approvers</h2>
       <p className="text-[13.5px] text-ink-subtle mt-0.5">
-        New leave applications go to the default approver. Admins can also decide any request.
+        New leave applications are routed to the default approver. Who can see and decide requests is set in Field Permissions (Leave approvals).
       </p>
 
       {status.state !== "ok" && (
@@ -57,6 +81,19 @@ export function ApproverSettings({
           {status.state === "inactive"
             ? `The default approver (${status.name}) is no longer an active employee, so new requests are going to the admins. Choose a new default below.`
             : "No default approver is set, so new requests are going to the admins. Choose one below."}
+        </p>
+      )}
+
+      {status.state === "ok" && defaultAccess && (!defaultAccess.view || !defaultAccess.decide) && (
+        <p role="alert" className="mt-3 rounded-md bg-[#FFFBEB] border border-[#FCD9A0] px-3 py-2 text-[14px] text-[#92400E]">
+          {status.name} is the default approver but{" "}
+          {!defaultAccess.view && !defaultAccess.decide
+            ? "holds neither the “View queue” nor the “Approve or reject” permission"
+            : !defaultAccess.view
+              ? "doesn’t hold the “View queue” permission"
+              : "doesn’t hold the “Approve or reject” permission"}
+          , so requests routed to them can’t be handled. A super-admin grants these under Admin &amp; Master Setup → Field
+          Permissions → Leave approvals.
         </p>
       )}
 
@@ -110,7 +147,7 @@ export function ApproverSettings({
           <option value="">Choose an employee…</option>
           {candidates.map((p) => (
             <option key={p.id} value={p.id}>
-              {p.name}
+              {p.email ? `${p.name} (${p.email})` : p.name}
             </option>
           ))}
         </select>
@@ -124,6 +161,25 @@ export function ApproverSettings({
           {status.state === "ok" ? "Add approver" : "Set as default approver"}
         </button>
       </div>
+
+      {reassignable > 0 && defaultName && (
+        <div className="mt-4 rounded-md bg-[#F8FAFC] border border-hairline px-3 py-3 flex items-center justify-between gap-3 flex-wrap">
+          <p className="text-[13.5px] text-ink-soft">
+            {reassignable} pending request{reassignable === 1 ? " is" : "s are"} not routed to {defaultName}. Decisions already made are never changed.
+          </p>
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() => {
+              if (window.confirm(`Route ${reassignable} pending leave request${reassignable === 1 ? "" : "s"} to ${defaultName}?`)) reassign();
+            }}
+            className="rounded-md px-3.5 py-2 text-[13px] font-semibold text-ink-strong disabled:opacity-50"
+            style={{ border: "1px solid var(--color-hairline)" }}
+          >
+            Route pending to {defaultName}
+          </button>
+        </div>
+      )}
     </section>
   );
 }
