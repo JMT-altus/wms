@@ -49,14 +49,16 @@ vi.mock("@/lib/db", () => {
 });
 vi.mock("@/lib/queries/collection-master", () => ({
   isMissingTable: () => false,
+  TRACKER_BALANCES_SOURCE: "tracker-balances-upload",
   loadExistingByKeys: async (_q: unknown, keys: string[]) => new Map(keys.filter((k) => h.master.has(k)).map((k) => [k, h.master.get(k)!])),
+  loadClientMasterIndex: async () => new Map<string, string[]>(),
 }));
 vi.mock("@/lib/queries/collection-balances", () => ({
   latestBalanceSnapshot: async () => h.latest,
   companyIdsInSnapshot: async () => h.inSnapshot,
 }));
 
-import { importCollectionBalances, previewCollectionBalances } from "@/app/(forms-module)/forms/collection/tracker/bulk-actions";
+import { addMissingBalanceCompanies, importCollectionBalances, previewCollectionBalances } from "@/app/(forms-module)/forms/collection/tracker/bulk-actions";
 import { collectionBalanceLines, collectionBalanceSnapshots } from "@/db/schema";
 
 const company = (id: string, name: string) => h.master.set(name.toLowerCase().replace(/[^a-z0-9]/g, ""), { id, companyName: name, nameKey: name.toLowerCase().replace(/[^a-z0-9]/g, "") });
@@ -271,5 +273,44 @@ describe("importCollectionBalances", () => {
     const r = await go({ expected: { matched: 0, debitPaise: 0, creditPaise: 0 } });
     expect(r).toMatchObject({ ok: false, error: expect.stringMatching(/nothing to import/) });
     expect(h.inserts).toHaveLength(0);
+  });
+});
+
+// The real creation path (unique name key, untouched coordinators, repeat requests, Tracker visibility)
+// runs against a real Postgres in tests/integration/collection-balances-add-companies.db.test.ts.
+// Here: the guards that must hold BEFORE anything is written.
+describe("addMissingBalanceCompanies", () => {
+  const withNew = () => sheetGrid({ extra: [["Brand New Co", "9", ""]], total: ["Grand Total", "309", "50"] });
+  const add = (over: Record<string, unknown> = {}) => addMissingBalanceCompanies({ ...file({ grid: withNew() }), expected: { unmatched: 1 }, confirm: true, ...over });
+
+  it("needs collection.master.import as well as collection.balances.import — refused before anything is read or written", async () => {
+    h.caps = new Set(["collection.balances.import"]); // may upload balances, may not create Master companies
+    await expect(add()).rejects.toThrow("Forbidden");
+    h.caps = new Set(["collection.master.import"]); // may import the Master, may not upload balances
+    await expect(add()).rejects.toThrow("Forbidden");
+    expect(h.inserts).toHaveLength(0);
+    expect(h.touched).toEqual([]);
+  });
+
+  it("requires the explicit confirmation", async () => {
+    h.caps = new Set(["collection.balances.import", "collection.master.import"]);
+    expect(await add({ confirm: undefined })).toMatchObject({ ok: false, error: expect.stringMatching(/confirm/i) });
+    expect(h.inserts).toHaveLength(0);
+  });
+
+  it("refuses when every company is already in the Master, or when the unmatched list changed since the preview — writing nothing", async () => {
+    h.caps = new Set(["collection.balances.import", "collection.master.import"]);
+    expect(await addMissingBalanceCompanies({ ...file(), expected: { unmatched: 1 }, confirm: true })).toMatchObject({ ok: false, error: expect.stringMatching(/nothing to add/) });
+    expect(await add({ expected: { unmatched: 2 } })).toMatchObject({ ok: false, error: expect.stringMatching(/changed since your preview/) });
+    expect(h.inserts).toHaveLength(0);
+  });
+
+  it("the preview never adds anything, whatever the person may do", async () => {
+    h.caps = new Set(["collection.balances.import", "collection.master.import"]);
+    const r = await previewCollectionBalances(file({ grid: withNew() }));
+    if (!r.ok) throw new Error(r.error);
+    expect(r.preview.summary).toMatchObject({ matched: 2, unmatched: 1 });
+    expect(h.inserts).toHaveLength(0);
+    expect(h.touched).toEqual([]);
   });
 });

@@ -4,10 +4,12 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, CheckCircle2, Loader2, UploadCloud, XCircle } from "lucide-react";
 import type { BalanceSheet } from "@/lib/collections/balances/workbook";
-import type { BalanceRowStatus, PlannedBalanceRow } from "@/lib/collections/balances/plan";
+import { missingCompanies, type BalanceRowStatus, type PlannedBalanceRow } from "@/lib/collections/balances/plan";
 import {
+  addMissingBalanceCompanies,
   importCollectionBalances,
   previewCollectionBalances,
+  type AddedCompaniesResult,
   type BalanceImportResult,
   type BalancePreview,
 } from "@/app/(forms-module)/forms/collection/tracker/bulk-actions";
@@ -21,7 +23,10 @@ const formatInr = (n: number) => inr2.format(n);
  * The file is read in this browser. Nothing is written until the person has seen
  * the server's preview — including exactly which earlier upload it replaces —
  * and confirmed. Only companies already in the Collection Master are matched;
- * none is ever created. Debit and Credit are shown as the file has them.
+ * the upload itself never creates one. The preview lists the companies it can't
+ * match, and someone who may also import the Collection Master can add exactly
+ * those as Unassigned (a separate confirmation, then the preview is recomputed).
+ * Debit and Credit are shown as the file has them.
  */
 
 const BTN = "inline-flex h-9 items-center justify-center gap-2 rounded-lg px-4 text-[13.5px] font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-50";
@@ -64,7 +69,16 @@ function Tile({ label, value, tone }: { label: string; value: number; tone?: str
   );
 }
 
-export function TrackerBulkUpload({ canImport, onClose }: { canImport: boolean; onClose: () => void }) {
+export function TrackerBulkUpload({
+  canImport,
+  canAddCompanies = false,
+  onClose,
+}: {
+  canImport: boolean;
+  /** collection.master.import (decided on the server): may add the file's unmatched companies to the Collection Master as Unassigned. */
+  canAddCompanies?: boolean;
+  onClose: () => void;
+}) {
   const router = useRouter();
   const [fileName, setFileName] = React.useState<string | null>(null);
   const [sheet, setSheet] = React.useState<BalanceSheet | null>(null);
@@ -73,11 +87,15 @@ export function TrackerBulkUpload({ canImport, onClose }: { canImport: boolean; 
   const [readError, setReadError] = React.useState<string | null>(null);
   const [preview, setPreview] = React.useState<BalancePreview | null>(null);
   const [confirmed, setConfirmed] = React.useState(false);
-  const [busy, setBusy] = React.useState<"read" | "check" | "import" | null>(null);
+  const [busy, setBusy] = React.useState<"read" | "check" | "add" | "import" | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [result, setResult] = React.useState<BalanceImportResult | null>(null);
   const [filter, setFilter] = React.useState<BalanceRowStatus | "all" | "negative">("all");
   const [page, setPage] = React.useState(0);
+  /** The "add missing companies" step: its own confirmation, error and outcome (kept visible through the re-preview). */
+  const [addConfirmed, setAddConfirmed] = React.useState(false);
+  const [addError, setAddError] = React.useState<string | null>(null);
+  const [added, setAdded] = React.useState<AddedCompaniesResult | null>(null);
 
   if (!canImport) {
     return (
@@ -102,6 +120,9 @@ export function TrackerBulkUpload({ canImport, onClose }: { canImport: boolean; 
     setResult(null);
     setPage(0);
     setFilter("all");
+    setAddConfirmed(false);
+    setAddError(null);
+    setAdded(null);
   }
 
   async function onFile(file: File | undefined) {
@@ -171,6 +192,37 @@ export function TrackerBulkUpload({ canImport, onClose }: { canImport: boolean; 
     }
   }
 
+  /**
+   * Adds the preview's "Not in Master" companies as Unassigned, then previews
+   * again so the match count, totals and rows are recomputed against the updated
+   * Collection Master. The balances themselves are still only written by
+   * "Upload balances" after the usual confirmation.
+   */
+  async function addMissing() {
+    if (!preview) return;
+    setBusy("add");
+    setAddError(null);
+    let ok = false;
+    try {
+      const res = await addMissingBalanceCompanies({
+        ...payload(),
+        expected: { unmatched: preview.summary.unmatched },
+        confirm: addConfirmed ? true : undefined,
+      });
+      if (!res.ok) setAddError(res.error);
+      else {
+        setAdded(res.result);
+        setAddConfirmed(false);
+        ok = true;
+      }
+    } catch {
+      setAddError("The companies could not be added. Preview again to see the current state.");
+    } finally {
+      setBusy(null);
+    }
+    if (ok) await check();
+  }
+
   async function runImport() {
     if (!preview) return;
     setBusy("import");
@@ -197,6 +249,7 @@ export function TrackerBulkUpload({ canImport, onClose }: { canImport: boolean; 
   }
 
   const rows = preview?.rows ?? [];
+  const missing = missingCompanies(rows);
   const shown = rows.filter((r) => (filter === "all" ? true : filter === "negative" ? r.negative : r.status === filter));
   const pages = Math.max(1, Math.ceil(shown.length / PAGE));
   const slice = shown.slice(page * PAGE, page * PAGE + PAGE);
@@ -306,7 +359,10 @@ export function TrackerBulkUpload({ canImport, onClose }: { canImport: boolean; 
               )}
             </p>
             {preview.replacement.sameFileAsPrevious && <p className="mt-1 font-bold text-[#B45309]">This is the same file as the last upload; applying it changes nothing on the Tracker.</p>}
-            <p className="mt-1">Collection persons, follow-ups, comments, commitments, confirmations and escalations are not touched. No company is created.</p>
+            <p className="mt-1">
+              Collection persons, follow-ups, comments, commitments, confirmations and escalations are not touched. The upload itself creates no company; companies not in the Collection
+              Master can be added as Unassigned below, before you confirm.
+            </p>
           </div>
 
           <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
@@ -318,6 +374,73 @@ export function TrackerBulkUpload({ canImport, onClose }: { canImport: boolean; 
             <Tile label="Invalid" value={preview.summary.rejected} tone={preview.summary.rejected ? "#B91C1C" : undefined} />
             <Tile label="Negative" value={preview.summary.negatives} tone={preview.summary.negatives ? "#B45309" : undefined} />
           </div>
+
+          {added && (
+            <p role="status" className="mt-3 flex items-start gap-2 rounded-lg px-3 py-2 text-[13px] font-semibold" style={{ background: "#ECFDF5", border: "1px solid #A7F3D0", color: "#047857" }}>
+              <CheckCircle2 size={15} className="mt-0.5 shrink-0" aria-hidden />
+              <span>
+                {added.created} compan{added.created === 1 ? "y" : "ies"} added to the Collection Master as Unassigned
+                {added.alreadyExisted > 0 ? `, ${added.alreadyExisted} already there` : ""}
+                {added.rejected > 0 ? `, ${added.rejected} rejected` : ""}. The preview below was recomputed against the updated Collection Master.
+                {added.rejected > 0 && (
+                  <span className="mt-1 block font-normal text-[#92400E]">
+                    Rejected: {added.companies.filter((c) => c.outcome === "rejected").map((c) => `${c.name} — ${c.message ?? "not allowed"}`).join("; ")}
+                  </span>
+                )}
+              </span>
+            </p>
+          )}
+
+          {missing.length > 0 && (
+            <section aria-labelledby="bu-missing" className="mt-3 rounded-lg px-3 py-2.5" style={{ background: "#FFFBEB", border: "1px solid #FCD9A0" }}>
+              <h4 id="bu-missing" className="flex items-center gap-2 text-[13.5px] font-bold text-[#92400E]">
+                <AlertTriangle size={15} aria-hidden /> Not in the Collection Master ({missing.length})
+              </h4>
+              <p className="mt-1 text-[12.5px] text-[#92400E]">
+                These companies&apos; Debit and Credit will be skipped: a balance can only be stored against a company that exists in the Collection Master. Names are matched ignoring case,
+                spacing and punctuation, so these are genuinely absent.
+              </p>
+              <ul aria-label="Companies not in the Collection Master" className="mt-2 grid gap-x-4 gap-y-0.5 text-[13px] font-semibold text-ink-strong sm:grid-cols-2">
+                {missing.map((m) => (
+                  <li key={m.nameKey} className="truncate">
+                    {m.name} <span className="font-normal text-ink-subtle tabular-nums">(row {m.rowNo})</span>
+                  </li>
+                ))}
+              </ul>
+              {canAddCompanies ? (
+                <div className="mt-3 border-t pt-2.5" style={{ borderColor: "#FCD9A0" }}>
+                  <label className="flex items-start gap-2 text-[13px] text-ink-strong">
+                    <input type="checkbox" className="mt-0.5 size-4" checked={addConfirmed} disabled={busy !== null} onChange={(e) => setAddConfirmed(e.target.checked)} />
+                    <span>
+                      Add {missing.length === 1 ? "this company" : `these ${missing.length} companies`} to the Collection Master as <strong>Unassigned</strong> (no Sales Coordinator, no payment terms),
+                      named exactly as in the file. Existing companies, their coordinators, follow-ups, comments, commitments, confirmations and escalations are not changed. The balances are
+                      still only saved when you confirm the upload below.
+                    </span>
+                  </label>
+                  {addError && (
+                    <p role="alert" className="mt-2 flex items-start gap-2 text-[13px] font-semibold text-[#B91C1C]">
+                      <XCircle size={15} className="mt-0.5 shrink-0" aria-hidden /> {addError}
+                    </p>
+                  )}
+                  <button
+                    type="button"
+                    className={`${BTN} mt-2`}
+                    style={addConfirmed && busy === null ? PRIMARY : MUTED}
+                    disabled={!addConfirmed || busy !== null}
+                    onClick={() => void addMissing()}
+                  >
+                    {busy === "add" && <Loader2 size={15} className="animate-spin" aria-hidden />}
+                    Add missing companies as unassigned
+                  </button>
+                </div>
+              ) : (
+                <p className="mt-2 text-[12.5px] text-[#92400E]">
+                  Adding companies to the Collection Master needs the &ldquo;Collections — Import Collection Master&rdquo; permission. Ask someone who holds it to add them (here, or through the
+                  Collection Master import), then preview again.
+                </p>
+              )}
+            </section>
+          )}
 
           <div className="mt-3 overflow-x-auto rounded-lg" style={{ border: "1px solid #E6ECF5" }}>
             <table className="w-full min-w-[520px] border-collapse text-[12.5px]">
@@ -426,6 +549,12 @@ export function TrackerBulkUpload({ canImport, onClose }: { canImport: boolean; 
               This will save a new balance snapshot for <strong>{preview.summary.matched}</strong> compan{preview.summary.matched === 1 ? "y" : "ies"} (Debit{" "}
               {money(preview.summary.totals.imported.debit)}, Credit {money(preview.summary.totals.imported.credit)}) and use it on the Tracker in place of the previous one. Rows that are not
               matched, repeated, conflicting or invalid are skipped.
+              {missing.length > 0 && (
+                <strong>
+                  {" "}
+                  {missing.length} compan{missing.length === 1 ? "y is" : "ies are"} not in the Collection Master and will be skipped unless added first (see above).
+                </strong>
+              )}
             </p>
             <label className="mt-2 flex items-start gap-2 text-[13px] text-ink-muted">
               <input type="checkbox" className="mt-0.5 size-4" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} />

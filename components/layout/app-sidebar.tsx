@@ -6,7 +6,7 @@ import Link from "next/link";
 import type { Route } from "next";
 import {
   LayoutDashboard, ListTodo, CalendarDays, FolderKanban, SquareKanban, Target,
-  CalendarCheck, CalendarRange, Award, IndianRupee, Receipt, CalendarOff,
+  CalendarCheck, CalendarRange, Award, IndianRupee, Wallet, Receipt, CalendarOff,
   Contact, Sparkles, GraduationCap, LayoutGrid, Users, ScrollText,
   BookOpen, Share2, Gauge, ListChecks, MessageSquare, Settings, ArrowLeft, Archive,
 } from "lucide-react";
@@ -34,7 +34,7 @@ import { isLightChrome } from "@/lib/chrome-theme";
 
 const ICONS: Record<string, typeof LayoutDashboard> = {
   LayoutDashboard, ListTodo, CalendarDays, FolderKanban, SquareKanban, Target,
-  CalendarCheck, CalendarRange, Award, IndianRupee, Receipt, CalendarOff,
+  CalendarCheck, CalendarRange, Award, IndianRupee, Wallet, Receipt, CalendarOff,
   Contact, Sparkles, GraduationCap, LayoutGrid, Users, ScrollText,
   BookOpen, Share2, Gauge, ListChecks, MessageSquare, Settings, Archive,
 };

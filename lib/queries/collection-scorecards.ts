@@ -11,10 +11,11 @@ const REVIEWER_CAPABILITY = "collection.escalation.review";
 
 /**
  * Escalation figures for ONE salesperson — the companies whose CURRENT Sales
- * Coordinator label is `label` — for holders of collection.escalation.review
- * only (escalation history is theirs to see, as in Collection Logs). The label
- * is the signed-in employee's own, resolved on the server; no other label's
- * figures are read.
+ * Coordinator label is `label`. The caller holds collection.view (the Tracker's
+ * own gate, which already shows those companies' open escalations row by row)
+ * and the label is the signed-in employee's OWN, resolved on the server from the
+ * super-admin-kept link; no other label's figures are read, and only two counts
+ * leave this function — never who escalated or closed what.
  *
  *   escalated          — every escalation record of those companies (each record
  *                        once, open or closed; every escalation goes to the reviewers).
@@ -29,7 +30,7 @@ const REVIEWER_CAPABILITY = "collection.escalation.review";
  * Missing escalation storage reads as no escalations.
  */
 export async function escalationCountsForSalesperson(
-  _viewer: CapabilityProof<"collection.escalation.review">,
+  _viewer: CapabilityProof<"collection.view">,
   label: string,
 ): Promise<OwnEscalationCounts> {
   let rows: { status: string; closedById: string | null; n: number }[];

@@ -38,6 +38,19 @@ export const RunEditSchema = z
 export const GenerateSalarySchema = z
   .object({
     month: z.string().regex(/^\d{4}-\d{2}$/),
+    /**
+     * Also recompute runs already marked disbursed. Off by default: a paid
+     * month's figures are never rewritten by a routine re-run.
+     */
+    includeDisbursed: z.boolean().optional(),
+  })
+  .strict();
+
+/** Regenerate ONE employee's run for a month (admin). */
+export const RecalculateRunSchema = z
+  .object({
+    month: z.string().regex(/^\d{4}-\d{2}$/),
+    employeeId: z.string().uuid(),
   })
   .strict();
 

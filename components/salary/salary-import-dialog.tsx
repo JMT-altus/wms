@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import * as Dialog from "@radix-ui/react-dialog";
 import { Upload, CheckCircle2, Undo2, FileSpreadsheet } from "lucide-react";
 import { fireToast } from "@/lib/toast";
+import { BORDER, NAVY } from "@/components/attendance/overview/theme";
 import {
   previewSalaryImport,
   confirmSalaryImport,
@@ -95,7 +96,8 @@ export function SalaryImportDialog() {
       <Dialog.Trigger asChild>
         <button
           type="button"
-          className="inline-flex items-center gap-1.5 rounded-md border border-hairline bg-surface-card py-2.5 px-4 text-[14px] font-medium text-ink-strong hover:border-hairline-strong transition-colors"
+          className="inline-flex h-10 items-center gap-2 rounded-lg bg-white px-4 text-[13.5px] font-bold transition-colors hover:bg-[#F3F6FA] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0A6CFF]"
+          style={{ border: `1px solid ${BORDER}`, color: NAVY }}
         >
           <Upload size={15} strokeWidth={2.2} />
           Import Salary Log

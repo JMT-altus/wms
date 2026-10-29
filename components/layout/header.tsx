@@ -8,6 +8,7 @@ import { NewTaskTrigger } from "@/components/header/new-task-trigger";
 import { GlobalSearch } from "@/components/header/global-search";
 import { MODULES, moduleIdForPath } from "@/lib/nav-modules";
 import { isLightChrome } from "@/lib/chrome-theme";
+import { splitHeaderTitle } from "@/lib/header-title";
 import { HEADER_VIEW_SLOT_ID } from "@/lib/header-slots";
 
 /**
@@ -27,6 +28,7 @@ export async function DashboardHeader({
   generatedAt: _generatedAt,
   title,
   toolbar = false,
+  fullWidth = false,
 }: {
   generatedAt: Date;
   /** Same right-hand tools as `title` (View slot + icon search) but with no
@@ -36,6 +38,9 @@ export async function DashboardHeader({
    *  right and the page's View selector (portalled in by FilterBar) sits
    *  beside it. Omitted, the header is unchanged. */
   title?: string;
+  /** Line the row up with a full-width page (the Salary pages) instead of the
+   *  1600px content column the WMS list pages use. */
+  fullWidth?: boolean;
 }) {
   // "New Task" belongs to WMS. Employees, Incentive Tracker and Training have
   // nothing to do with tasks, so the button (and the `N` hotkey, which lives
@@ -110,7 +115,7 @@ export async function DashboardHeader({
         <div className={`relative w-full h-[var(--app-header-h)] flex items-center gap-4 2xl:gap-6 max-md:gap-3 max-md:px-4 ${
             // With a page title the row lines up with the page's own content
             // column (same max width and gutter as the filter bar and tabs).
-            rightTools ? "mx-auto max-w-[1600px] px-8" : "px-6"
+            fullWidth ? "px-6 lg:px-8" : rightTools ? "mx-auto max-w-[1600px] px-8" : "px-6"
           }`}>
           {/* LEFT: the phone hamburger, then the global search field. Search
               reads as the header's primary job now that nav lives in the rail,
@@ -126,11 +131,13 @@ export async function DashboardHeader({
             >
               {/* "WMS · Page": the module name a notch stronger than the page. */}
               {/* The separator is whichever of "·" or "▸" the title uses. */}
-              {title.split(/s([·▸])s/).map((part, i) =>
-                i % 2 === 1 ? (
-                  <span key={i} className="mx-1.5 font-semibold opacity-60">{part}</span>
+              {splitHeaderTitle(title).map((part, i) =>
+                part.kind === "separator" ? (
+                  <span key={i} className="mx-1.5 font-semibold opacity-60">{part.text}</span>
                 ) : (
-                  <span key={i} className={i === 0 ? "font-extrabold" : "font-semibold"}>{part}</span>
+                  <span key={i} className={part.kind === "module" ? "font-extrabold" : "font-semibold"}>
+                    {part.text}
+                  </span>
                 ),
               )}
             </div>

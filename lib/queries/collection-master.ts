@@ -130,15 +130,26 @@ export async function getMasterCompany(id: string): Promise<{ storageReady: bool
  */
 export const TRACKER_ASSIGNMENT_SOURCE = "tracker-assignment";
 
+/**
+ * Marks a change-log row written when companies missing from a Tracker Bulk
+ * Upload (Tally balances) were added to the Collection Master as Unassigned.
+ */
+export const TRACKER_BALANCES_SOURCE = "tracker-balances-upload";
+
 export interface ImportHistoryRow {
   id: string;
   fileName: string | null;
   importedAt: Date;
   importedByName: string | null;
   totals: Record<string, number>;
-  /** "file" for an import, or a coordinator assignment made in the Collection Tracker. */
-  source: "file" | typeof TRACKER_ASSIGNMENT_SOURCE;
+  /** "file" for an import, a coordinator assignment made in the Collection Tracker, or companies added from a Tracker Bulk Upload. */
+  source: "file" | typeof TRACKER_ASSIGNMENT_SOURCE | typeof TRACKER_BALANCES_SOURCE;
 }
+
+const sourceOf = (mapping: unknown): ImportHistoryRow["source"] => {
+  const s = (mapping as { source?: unknown } | null)?.source;
+  return s === TRACKER_ASSIGNMENT_SOURCE || s === TRACKER_BALANCES_SOURCE ? s : "file";
+};
 
 export async function listRecentImports(limit = 10): Promise<ImportHistoryRow[]> {
   try {
@@ -154,7 +165,7 @@ export async function listRecentImports(limit = 10): Promise<ImportHistoryRow[]>
       importedAt: r.importedAt,
       importedByName: r.by ?? null,
       totals: (r.totals ?? {}) as Record<string, number>,
-      source: (r.mapping as { source?: unknown } | null)?.source === TRACKER_ASSIGNMENT_SOURCE ? TRACKER_ASSIGNMENT_SOURCE : "file",
+      source: sourceOf(r.mapping),
     }));
   } catch (err) {
     if (isMissingTable(err)) return [];

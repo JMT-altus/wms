@@ -15,5 +15,12 @@ describe("isLightChrome", () => {
   });
   it("is off for the other modules", () => {
     expect(isLightChrome("/attendance/dashboard")).toBe(false);
+    expect(isLightChrome("/reimbursements")).toBe(false);
+  });
+  it("is on for the Salary module — admin runs, My Salary and a statement — and nowhere else in Employees", () => {
+    for (const p of ["/salary", "/salary?month=2026-10", "/my-salary", "/my-salary/statement/abc"]) {
+      expect(isLightChrome(p.split("?")[0]!), p).toBe(true);
+    }
+    expect(isLightChrome("/salary-x")).toBe(false);
   });
 });

@@ -2,7 +2,7 @@ import Link from "next/link";
 import type { Route } from "next";
 import { getCollectionCapabilities, requireCollectionCapability } from "@/lib/auth/capability";
 import { CollectionMasterImport } from "@/components/collections/master/collection-master-import";
-import { TRACKER_ASSIGNMENT_SOURCE, listMasterCompanies, listRecentImports } from "@/lib/queries/collection-master";
+import { TRACKER_ASSIGNMENT_SOURCE, TRACKER_BALANCES_SOURCE, listMasterCompanies, listRecentImports } from "@/lib/queries/collection-master";
 import { formatDate } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -148,6 +148,12 @@ export default async function CollectionMasterPage({
                   <>
                     <strong className="text-ink-strong">Sales Coordinator set in Collection Tracker</strong> · {formatDate(i.importedAt)}
                     {i.importedByName ? ` · ${i.importedByName}` : ""}
+                  </>
+                ) : i.source === TRACKER_BALANCES_SOURCE ? (
+                  <>
+                    <strong className="text-ink-strong">Companies added as Unassigned from Tracker Bulk Upload</strong>
+                    {i.fileName ? ` (${i.fileName})` : ""} · {formatDate(i.importedAt)}
+                    {i.importedByName ? ` · ${i.importedByName}` : ""} · {i.totals.inserted ?? 0} added, {i.totals.alreadyExisted ?? 0} already present, {i.totals.rejected ?? 0} rejected
                   </>
                 ) : (
                   <>

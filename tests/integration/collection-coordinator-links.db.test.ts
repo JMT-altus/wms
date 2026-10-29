@@ -173,31 +173,32 @@ describe("setting a link — super-admins only", () => {
 
 describe("end to end: each login gets only its own scorecard", () => {
   const parties = () => Object.entries({ Alpha: "Gauri", Beta: "Gauri", Gamma: "Savita", Delta: "Owner" }).map(([n, l]) => ({ masterId: CO[n]!, coordinatorLabel: l, outstanding: null }));
-  const PROOF = { employeeId: "x", capability: "collection.escalation.review" } as unknown as CapabilityProof<"collection.escalation.review">;
-  const cardFor = async (who: string, reviewer: boolean) => {
+  const PROOF = { employeeId: "x", capability: "collection.view" } as unknown as CapabilityProof<"collection.view">;
+  const cardFor = async (who: string) => {
     const id = await identity.salespersonIdentityFor(P[who]!);
     if (id.status !== "linked") return id;
-    return scorecardFor(id.label, parties(), { approved: false }, reviewer ? await scoreQ.escalationCountsForSalesperson(PROOF, id.label) : null);
+    return scorecardFor(id.label, parties(), { approved: false }, await scoreQ.escalationCountsForSalesperson(PROOF, id.label));
   };
 
-  it("salespeople see their own clients only", async () => {
-    expect(await cardFor("SalesG", false)).toEqual({ salesperson: "Gauri", clients: 2, outstanding: { status: "not-configured" }, escalations: { status: "restricted" } });
-    expect(await cardFor("SalesS", false)).toEqual({ salesperson: "Savita", clients: 1, outstanding: { status: "not-configured" }, escalations: { status: "restricted" } });
+  it("salespeople see their own clients only, with their own escalation figures (Gauri: one closed by the reviewer; Savita: one still open)", async () => {
+    expect(await cardFor("SalesG")).toEqual({ salesperson: "Gauri", clients: 2, outstanding: { status: "not-configured" }, escalations: { status: "ok", escalated: 1, resolvedByReviewer: 1 } });
+    expect(await cardFor("SalesS")).toEqual({ salesperson: "Savita", clients: 1, outstanding: { status: "not-configured" }, escalations: { status: "ok", escalated: 1, resolvedByReviewer: 0 } });
   });
 
   it("the reviewer-salesperson sees THEIR card (one client) with escalation figures for THEIR clients only", async () => {
-    expect(await cardFor("SuperB", true)).toEqual({ salesperson: "Owner", clients: 1, outstanding: { status: "not-configured" }, escalations: { status: "ok", escalated: 0, resolvedByReviewer: 0 } });
+    expect(await cardFor("SuperB")).toEqual({ salesperson: "Owner", clients: 1, outstanding: { status: "not-configured" }, escalations: { status: "ok", escalated: 0, resolvedByReviewer: 0 } });
   });
 
   it("the admin/system login gets no salesperson card; an unconfigured login gets the configure message state", async () => {
-    expect(await cardFor("SystemAcct", true)).toEqual({ status: "not-salesperson" });
-    expect(await cardFor("PlainAdmin", true)).toEqual({ status: "unconfigured" });
+    expect(await cardFor("SystemAcct")).toEqual({ status: "not-salesperson" });
+    expect(await cardFor("PlainAdmin")).toEqual({ status: "unconfigured" });
   });
 
-  it("without migration 0120 everyone is 'not configured' (nothing guessed), and the admin page says it's not set up", async () => {
+  it("without migration 0120 everyone is 'not-installed' — distinct from 'not configured', since no admin could link them — and the admin page says it's not set up", async () => {
     await pg.exec(`alter table collection_coordinator_links rename to collection_coordinator_links_hidden`);
     try {
-      expect(await identity.salespersonIdentityFor(P.SalesG!)).toEqual({ status: "unconfigured" });
+      expect(await identity.salespersonIdentityFor(P.SalesG!)).toEqual({ status: "not-installed" });
+      expect(await identity.salespersonIdentityFor(P.SuperB!)).toEqual({ status: "not-installed" }); // even a linked login: the link can't be read without the table
       expect((await links.listCoordinatorLinks()).storageReady).toBe(false);
       as("SuperA");
       expect(await set("PlainAdmin", { kind: "none" })).toEqual({ ok: false, error: "Sales Coordinator links aren't set up on this database yet (database update 0120 is needed), so nothing was saved." });

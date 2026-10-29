@@ -2,7 +2,7 @@
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, ListTodo, CalendarDays, FolderKanban, SquareKanban, Target,
-  CalendarCheck, CalendarRange, Award, IndianRupee, Receipt, CalendarOff,
+  CalendarCheck, CalendarRange, Award, IndianRupee, Wallet, Receipt, CalendarOff,
   Contact, Sparkles, GraduationCap, LayoutGrid, Users, ScrollText,
   BookOpen, Share2, Gauge, ListChecks, MessageSquare, Settings, Archive,
 } from "lucide-react";
@@ -21,7 +21,7 @@ interface Props {
 
 const ICONS: Record<string, typeof LayoutDashboard> = {
   LayoutDashboard, ListTodo, CalendarDays, FolderKanban, SquareKanban, Target,
-  CalendarCheck, CalendarRange, Award, IndianRupee, Receipt, CalendarOff,
+  CalendarCheck, CalendarRange, Award, IndianRupee, Wallet, Receipt, CalendarOff,
   Contact, Sparkles, GraduationCap, LayoutGrid, Users, ScrollText,
   BookOpen, Share2, Gauge, ListChecks, MessageSquare, Settings, Archive,
 };

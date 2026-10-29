@@ -28,7 +28,7 @@ const sqlOf = (n: string) => readFileSync(resolve(__dirname, "../../db/migration
 type Pg = Awaited<ReturnType<typeof createTestDb>>["pg"];
 let pg: Pg;
 let q: typeof import("@/lib/queries/collection-scorecards");
-const PROOF = { employeeId: "x", capability: "collection.escalation.review" } as unknown as CapabilityProof<"collection.escalation.review">;
+const PROOF = { employeeId: "x", capability: "collection.view" } as unknown as CapabilityProof<"collection.view">;
 const E: Record<string, string> = {};
 const CO: Record<string, string> = {};
 

@@ -15,7 +15,12 @@ import { collectionCoordinatorLinks, type Employee } from "@/db/schema";
  *   - "linked"          → that label;
  *   - "not-salesperson" → the login was explicitly marked as not a Sales
  *                         Coordinator (an admin or system account);
- *   - "unconfigured"    → no link yet (also while 0120 isn't installed).
+ *   - "unconfigured"    → no link yet: an administrator can add one;
+ *   - "not-installed"   → the link table itself is missing (migration 0120 not
+ *                         applied), so NO administrator can link anyone until it
+ *                         is — reported separately so the user isn't sent to an
+ *                         admin who can't act.
+ * Any other database failure is thrown, never reported as "no link".
  * Never guessed from names, initials or email addresses: labels are first names
  * ("Gauri") while WMS names are often initials ("GR"), and a wrong guess would
  * show one person another person's clients.
@@ -23,7 +28,8 @@ import { collectionCoordinatorLinks, type Employee } from "@/db/schema";
 export type SalespersonIdentity =
   | { status: "linked"; label: string }
   | { status: "not-salesperson" }
-  | { status: "unconfigured" };
+  | { status: "unconfigured" }
+  | { status: "not-installed" };
 
 const isMissingTable = (err: unknown) => {
   const e = err as { code?: string; cause?: { code?: string } } | null;
@@ -41,7 +47,7 @@ export async function salespersonIdentityFor(employee: Pick<Employee, "id"> | nu
     if (!link) return { status: "unconfigured" };
     return link.label ? { status: "linked", label: link.label } : { status: "not-salesperson" };
   } catch (err) {
-    if (isMissingTable(err)) return { status: "unconfigured" };
+    if (isMissingTable(err)) return { status: "not-installed" };
     throw err;
   }
 }

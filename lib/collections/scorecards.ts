@@ -45,9 +45,17 @@ export interface Scorecard {
 
 /**
  * What the Tracker is given: the signed-in salesperson's own card, or why there is none —
- * "unmapped" (no link configured yet) or "not-salesperson" (explicitly not a Sales Coordinator).
+ *   "unmapped"         no link configured yet (an administrator can add one);
+ *   "not-salesperson"  explicitly not a Sales Coordinator;
+ *   "not-installed"    the link table is missing (migration 0120 not applied) — nobody can link anyone yet;
+ *   "unavailable"      the link couldn't be read (a database error) — NOT a missing link.
  */
-export type ScorecardView = { status: "unmapped" } | { status: "not-salesperson" } | { status: "ok"; card: Scorecard };
+export type ScorecardView =
+  | { status: "unmapped" }
+  | { status: "not-salesperson" }
+  | { status: "not-installed" }
+  | { status: "unavailable" }
+  | { status: "ok"; card: Scorecard };
 
 /** One salesperson's escalation figures (counted on the server for that label only). */
 export interface OwnEscalationCounts {

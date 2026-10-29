@@ -4,14 +4,17 @@ import { cleanup, fireEvent, render, screen, within } from "@testing-library/rea
 import { isValidElement, type ReactElement, type ReactNode } from "react";
 
 // The salesperson scorecard: ONLY the signed-in employee's own card, resolved on the server (salespersonIdentityFor) —
-// other salespeople's figures are never computed or sent; unmapped users get a safe empty state; a single card;
-// verified-only outstanding; escalation figures only for reviewers; Bulk Upload kept. Session, grants and queries are
+// other salespeople's figures are never computed or sent; each way the link can be absent (no link, link table not
+// installed, read failure) gets its own safe empty state — a failure is never shown as a missing link; a single card;
+// verified-only outstanding; the salesperson's own escalation figures; Bulk Upload kept. Session, grants and queries are
 // mocked; the real escalation SQL is in tests/integration/collection-scorecards.db.test.ts.
 const h = vi.hoisted(() => ({
   me: null as null | { id: string; email: string; isActive: boolean; isAdmin: boolean; name: string },
   caps: new Set<string>(),
   /** What the super-admin-kept link says the signed-in employee is: a label, "none" (not a Sales Coordinator) or null (not configured). */
   label: null as string | null,
+  /** Simulates the link table being absent (migration 0120 not applied) or the read failing outright. */
+  identity: "ok" as "ok" | "not-installed" | "throws",
   identityArgs: [] as unknown[],
   counts: vi.fn(),
   refresh: vi.fn(),
@@ -35,6 +38,8 @@ vi.mock("@/lib/auth/field-access", () => ({
 vi.mock("@/lib/collections/salesperson-identity", () => ({
   salespersonIdentityFor: async (e: unknown) => {
     h.identityArgs.push(e);
+    if (h.identity === "throws") throw Object.assign(new Error("secret connection detail: password=hunter2"), { cause: { code: "42501" } });
+    if (h.identity === "not-installed") return { status: "not-installed" };
     if (!e || h.label === null) return { status: "unconfigured" };
     return h.label === "none" ? { status: "not-salesperson" } : { status: "linked", label: h.label };
   },
@@ -63,7 +68,15 @@ vi.mock("@/app/(forms-module)/forms/collection/commitments/actions", () => ({ ge
 vi.mock("@/components/collections/tracker-bulk-upload", () => ({ TrackerBulkUpload: () => <p>bulk upload form</p> }));
 
 import { buildScorecards, formatInrTwoDecimals, scorecardFor, verifiedPaise, type EscalationCounts, type ScorecardView } from "@/lib/collections/scorecards";
-import { NOT_SALESPERSON_MESSAGE, SCORECARD_LABELS, SOURCE_NOT_CONFIGURED, SalespersonScorecard, UNMAPPED_MESSAGE } from "@/components/collections/salesperson-scorecards";
+import {
+  NOT_INSTALLED_MESSAGE,
+  NOT_SALESPERSON_MESSAGE,
+  SCORECARD_LABELS,
+  SOURCE_NOT_CONFIGURED,
+  SalespersonScorecard,
+  UNAVAILABLE_MESSAGE,
+  UNMAPPED_MESSAGE,
+} from "@/components/collections/salesperson-scorecards";
 import { CollectionTracker } from "@/components/collections/collection-tracker";
 import { buildRows } from "@/lib/collections/derive";
 
@@ -72,6 +85,7 @@ beforeEach(() => {
   h.me = null;
   h.caps = new Set();
   h.label = null;
+  h.identity = "ok";
   h.identityArgs = [];
   h.counts.mockReset();
   h.refresh.mockReset();
@@ -165,6 +179,25 @@ describe("the one card", () => {
     expect(screen.getByRole("status").textContent).toBe(NOT_SALESPERSON_MESSAGE);
     expect(screen.queryByRole("region", { name: "Your scorecard" })).toBeNull();
   });
+
+  it("link table not installed (migration 0120 missing): names the database update — NOT 'ask an admin to link you', which nobody could do yet", () => {
+    render(<SalespersonScorecard view={{ status: "not-installed" }} />);
+    const s = screen.getByRole("status");
+    expect(s.textContent).toBe(NOT_INSTALLED_MESSAGE);
+    expect(s.getAttribute("data-scorecard-state")).toBe("not-installed");
+    expect(NOT_INSTALLED_MESSAGE).toMatch(/database update 0120/);
+    expect(s.textContent).not.toBe(UNMAPPED_MESSAGE);
+    expect(screen.queryByRole("region", { name: "Your scorecard" })).toBeNull();
+  });
+
+  it("link unreadable (a database error): says so plainly — never 'not linked' — and carries no error detail", () => {
+    render(<SalespersonScorecard view={{ status: "unavailable" }} />);
+    const s = screen.getByRole("status");
+    expect(s.textContent).toBe(UNAVAILABLE_MESSAGE);
+    expect(UNAVAILABLE_MESSAGE).toMatch(/not a missing link/);
+    expect(UNAVAILABLE_MESSAGE).not.toMatch(/SQLSTATE|42|password|postgres/i);
+    expect(screen.queryByRole("region", { name: "Your scorecard" })).toBeNull();
+  });
 });
 
 describe("placement on the Tracker — Bulk Upload and party count kept", () => {
@@ -236,36 +269,53 @@ describe("the Tracker page — the server decides whose card, and sends only tha
     expect(h.counts).not.toHaveBeenCalled();
   });
 
-  it("a mapped user gets exactly ONE card — their own; another salesperson's label never appears in the scorecard payload", async () => {
+  it("a mapped user gets exactly ONE card — their own, with THEIR escalation figures; another salesperson's label never appears in the scorecard payload", async () => {
     signIn();
     h.label = "Gauri";
-    h.caps = new Set(["collection.view"]);
-    const props = await page();
-    expect(props.scorecard).toEqual({ status: "ok", card: { salesperson: "Gauri", clients: 2, outstanding: { status: "not-configured" }, escalations: { status: "restricted" } } });
-    expect(JSON.stringify(props.scorecard)).not.toMatch(/Savita|Secret Gamma|m-c/);
-    expect(h.counts).not.toHaveBeenCalled(); // not a reviewer: escalation figures are not even queried
-  });
-
-  it("a mapped reviewer: escalation figures are queried for THEIR label only, with a capability proof", async () => {
-    signIn();
-    h.label = "Gauri";
-    h.caps = new Set(["collection.view", "collection.escalation.review"]);
+    h.caps = new Set(["collection.view"]); // an ordinary salesperson, not the reviewer
     h.counts.mockResolvedValue({ escalated: 2, resolvedByReviewer: 1 });
     const props = await page();
+    expect(props.scorecard).toEqual({ status: "ok", card: { salesperson: "Gauri", clients: 2, outstanding: { status: "not-configured" }, escalations: { status: "ok", escalated: 2, resolvedByReviewer: 1 } } });
+    expect(JSON.stringify(props.scorecard)).not.toMatch(/Savita|Secret Gamma|m-c/);
+    // Queried once, for THEIR label only, with the Tracker's own capability proof for the signed-in employee.
     expect(h.counts).toHaveBeenCalledTimes(1);
-    expect(h.counts).toHaveBeenCalledWith(expect.objectContaining({ capability: "collection.escalation.review", employeeId: "emp-gauri" }), "Gauri");
-    expect(props.scorecard).toMatchObject({ status: "ok", card: { salesperson: "Gauri", escalations: { status: "ok", escalated: 2, resolvedByReviewer: 1 } } });
+    expect(h.counts).toHaveBeenCalledWith(expect.objectContaining({ capability: "collection.view", employeeId: "emp-gauri" }), "Gauri");
   });
 
   it("a failing escalation query doesn't break the page: 'unavailable', and no details are logged", async () => {
     signIn();
     h.label = "Gauri";
-    h.caps = new Set(["collection.view", "collection.escalation.review"]);
+    h.caps = new Set(["collection.view"]);
     h.counts.mockRejectedValue(new Error("secret connection detail"));
     const log = vi.spyOn(console, "error").mockImplementation(() => {});
     const props = await page();
     expect(props.scorecard).toMatchObject({ card: { escalations: { status: "unavailable" } } });
     expect(JSON.stringify(log.mock.calls)).not.toMatch(/secret connection detail/);
+    log.mockRestore();
+  });
+
+  it("link table not installed (0120 not applied): the 'not-installed' state — NOT 'unmapped' — and nothing is computed", async () => {
+    signIn();
+    h.identity = "not-installed";
+    h.label = "Gauri"; // would be linked if the table existed; irrelevant without it
+    h.caps = new Set(["collection.view"]);
+    const props = await page();
+    expect(props.scorecard).toEqual({ status: "not-installed" });
+    expect(h.counts).not.toHaveBeenCalled();
+  });
+
+  it("the link read fails (any other database error): the 'unavailable' state — NOT 'unmapped'; the Tracker still loads; only the error code is logged", async () => {
+    signIn();
+    h.identity = "throws";
+    h.caps = new Set(["collection.view"]);
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    const props = await page();
+    expect(props.scorecard).toEqual({ status: "unavailable" });
+    expect(props.rows).toHaveLength(3); // the Tracker itself is unaffected
+    expect(h.counts).not.toHaveBeenCalled();
+    const logged = JSON.stringify(log.mock.calls);
+    expect(logged).toMatch(/SQLSTATE 42501/);
+    expect(logged).not.toMatch(/secret connection detail|hunter2/);
     log.mockRestore();
   });
 });

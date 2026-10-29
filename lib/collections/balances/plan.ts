@@ -9,7 +9,9 @@ import { toPaise } from "../money";
  * Rules:
  *   - A row is matched to an EXISTING Collection Master company by `nameKey`
  *     (case, spacing and punctuation ignored). An unmatched name is reported and
- *     skipped; no company is ever created.
+ *     skipped; the upload itself never creates a company. An admin may add the
+ *     unmatched companies to the Collection Master (as Unassigned) in a separate,
+ *     explicitly confirmed step — see missingCompanies — and preview again.
  *   - Debit and Credit are taken exactly as the file has them. A negative value
  *     is kept and flagged, never re-signed. Non-numeric text, more than two
  *     decimals, or both cells blank → the row is rejected.
@@ -149,6 +151,32 @@ const rupees = (p: number) => p / 100;
 const pair = (): PaisePair => ({ debit: 0, credit: 0 });
 const out = (p: PaisePair) => ({ debit: rupees(p.debit), credit: rupees(p.credit) });
 
+export interface MissingCompany {
+  /** The first file row naming this company. */
+  rowNo: number;
+  /** The name exactly as the file has it (cleaned) — what a new Collection Master company would be called. */
+  name: string;
+  nameKey: string;
+}
+
+/**
+ * The companies an upload can't match — one per name key, in file order: what
+ * an admin may add to the Collection Master (as Unassigned) before confirming.
+ * Only clean, unmatched rows qualify: repeats, conflicting duplicates and
+ * invalid rows are never candidates, so nothing doubtful is ever created.
+ * Always the same count as `summary.unmatched`.
+ */
+export function missingCompanies(rows: readonly PlannedBalanceRow[]): MissingCompany[] {
+  const seen = new Set<string>();
+  const out: MissingCompany[] = [];
+  for (const r of rows) {
+    if (r.status !== "unmatched" || seen.has(r.nameKey)) continue;
+    seen.add(r.nameKey);
+    out.push({ rowNo: r.rowNo, name: r.name, nameKey: r.nameKey });
+  }
+  return out;
+}
+
 export function buildBalancePlan(
   input: BalanceInputRow[],
   existing: ReadonlyMap<string, BalanceCompany>,
@@ -231,7 +259,7 @@ export function buildBalancePlan(
     const co = existing.get(r.nameKey);
     if (!co) {
       r.status = "unmatched";
-      r.messages.push({ level: "warning", text: "Not in the Collection Master; skipped. No company is created." });
+      r.messages.push({ level: "warning", text: "Not in the Collection Master; skipped. The upload creates no company — add it as Unassigned first, then preview again." });
     } else {
       r.companyId = co.id;
       r.companyName = co.companyName;

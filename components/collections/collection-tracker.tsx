@@ -54,6 +54,7 @@ export function CollectionTracker({
   canSetConfirmation = true,
   canEscalate = true,
   canImportBalances = false,
+  canAddMasterCompanies = false,
   balancesProblem,
   reviewStorageReady = true,
   coordinatorEditor,
@@ -85,6 +86,8 @@ export function CollectionTracker({
   canEscalate?: boolean;
   /** collection.balances.import. Without it the Bulk Upload button still opens, and explains why nothing can be uploaded. */
   canImportBalances?: boolean;
+  /** collection.master.import: Bulk Upload may add the file's unmatched companies to the Collection Master (as Unassigned) before the balances are confirmed. */
+  canAddMasterCompanies?: boolean;
   /** Set (to the database error code) when the uploaded Debit / Credit couldn't be read: a permission or configuration problem. Everything else still works. */
   balancesProblem?: string;
   /** False while migration 0115 isn't applied: the confirmation/escalation controls are disabled. */
@@ -255,13 +258,13 @@ export function CollectionTracker({
       <CenterDialog
         open={bulkOpen}
         title="Bulk Upload"
-        subtitle="Upload the Tally customer summary to fill Debit and Credit for companies already in the Collection Master."
+        subtitle="Upload the Tally customer summary to fill Debit and Credit for companies in the Collection Master. Companies not in the Master yet can be added as Unassigned before you confirm."
         onClose={() => setBulkOpen(false)}
         accentBar="linear-gradient(90deg, #0A6CFF 0%, #0B4FB8 100%)"
         width={920}
       >
         <React.Suspense fallback={<p className="text-[13px] text-ink-subtle">Loading…</p>}>
-          <TrackerBulkUpload canImport={canImportBalances} onClose={() => setBulkOpen(false)} />
+          <TrackerBulkUpload canImport={canImportBalances} canAddCompanies={canAddMasterCompanies} onClose={() => setBulkOpen(false)} />
         </React.Suspense>
       </CenterDialog>
 

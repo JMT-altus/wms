@@ -9,7 +9,9 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn(), push: 
 vi.mock("@/lib/toast", () => ({ fireToast: vi.fn() }));
 vi.mock("@/app/(app)/salary/actions", () => ({ generateSalary: vi.fn(), setDisbursed: vi.fn() }));
 
-import { SalaryReport } from "@/components/salary/salary-report";
+import { SalaryRunsReport } from "@/components/salary/admin/salary-runs-report";
+import { PayrollCard } from "@/components/salary/admin/payroll-card";
+import { buildPayrollSummary } from "@/lib/salary/payroll";
 import type { SalaryRunRow } from "@/lib/queries/salary";
 
 afterEach(cleanup);
@@ -62,14 +64,19 @@ const row = (over: Partial<SalaryRunRow> = {}): SalaryRunRow => ({
 });
 
 describe("salary report stale indicator", () => {
+  const profiles = [
+    { employeeId: "e1", name: "Alpha One", annualCtc: 600000 },
+    { employeeId: "e2", name: "Beta Two", annualCtc: 600000 },
+  ];
   it("flags the run that needs review and says nothing was recalculated", () => {
+    const rows = [row(), row({ id: "r2", employeeId: "e2", employeeName: "Beta Two" })];
+    const stale = { e1: { status: "stale", savedPayableDays: 30, nowPayableDays: 29.5, savedLateMarks: 0, nowLateMarks: 0 }, e2: { status: "current" } } as const;
+    const summary = buildPayrollSummary(rows, profiles, stale);
     render(
-      <SalaryReport
-        month="2026-08"
-        monthLabel="Aug 2026"
-        rows={[row(), row({ id: "r2", employeeId: "e2", employeeName: "Beta Two" })]}
-        stale={{ e1: { status: "stale", savedPayableDays: 30, nowPayableDays: 29.5, savedLateMarks: 0, nowLateMarks: 0 }, e2: { status: "current" } }}
-      />,
+      <>
+        <PayrollCard s={summary} month="2026-08" monthTitle="Aug 2026" selector={null} />
+        <SalaryRunsReport rows={rows} stale={stale} summary={summary} monthTitle="Aug 2026" />
+      </>,
     );
     expect(screen.getByRole("status").textContent).toMatch(/1 salary run no longer matches the attendance recorded for Aug 2026.*nothing has been recalculated/);
     const alpha = screen.getByText("Alpha One").closest("tr")!;
@@ -79,7 +86,14 @@ describe("salary report stale indicator", () => {
   });
 
   it("shows no banner when every run is current, and works without stale data at all", () => {
-    render(<SalaryReport month="2026-08" monthLabel="Aug 2026" rows={[row()]} />);
+    const rows = [row()];
+    const summary = buildPayrollSummary(rows, profiles);
+    render(
+      <>
+        <PayrollCard s={summary} month="2026-08" monthTitle="Aug 2026" selector={null} />
+        <SalaryRunsReport rows={rows} summary={summary} monthTitle="Aug 2026" />
+      </>,
+    );
     expect(screen.queryByRole("status")).toBeNull();
     expect(screen.queryByText(/Needs review/)).toBeNull();
   });

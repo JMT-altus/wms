@@ -3,9 +3,9 @@ import { buildRows, personOf } from "@/lib/collections/derive";
 import { loadCollectionParties } from "@/lib/collections/load";
 import { listFollowUps } from "@/lib/queries/collection-followups";
 import { localDateString } from "@/lib/format";
-import { getCollectionCapabilities, getCollectionCapability, requireCollectionCapability } from "@/lib/auth/capability";
+import { getCollectionCapabilities, requireCollectionCapability } from "@/lib/auth/capability";
 import { scorecardFor, type ScorecardView } from "@/lib/collections/scorecards";
-import { salespersonIdentityFor } from "@/lib/collections/salesperson-identity";
+import { salespersonIdentityFor, type SalespersonIdentity } from "@/lib/collections/salesperson-identity";
 import { escalationCountsForSalesperson } from "@/lib/queries/collection-scorecards";
 import { getCurrentEmployee } from "@/lib/auth/current";
 import { isSuperAdmin } from "@/lib/auth/super-admin";
@@ -32,7 +32,7 @@ export const dynamic = "force-dynamic";
  * granted the capability to handle them. Nothing is ever granted by code.
  */
 export default async function CollectionTrackerPage() {
-  await requireCollectionCapability("collection.view");
+  const viewer = await requireCollectionCapability("collection.view");
   const caps = await getCollectionCapabilities();
   const [source, followUps] = await Promise.all([loadCollectionParties(), listFollowUps()]);
   const companyIds = source.parties.map((p) => p.masterId).filter((id): id is string => !!id);
@@ -56,24 +56,30 @@ export default async function CollectionTrackerPage() {
 
   // The signed-in employee's OWN scorecard only. Who they are as a salesperson comes from the verified
   // session through the super-admin-kept link (salespersonIdentityFor); without one, nothing is computed.
-  // Outstanding only from an approved source (none yet → "not configured"); escalation figures only for
-  // holders of collection.escalation.review, and only for this one salesperson's companies.
-  // If the link can't be read, show the "not configured" state — never anyone's figures, and the Tracker still loads.
-  const identity = await salespersonIdentityFor(await getCurrentEmployee()).catch(() => {
-    console.error("[collection-scorecards] could not read the Sales Coordinator link");
-    return { status: "unconfigured" } as const;
-  });
-  let scorecard: ScorecardView = identity.status === "not-salesperson" ? { status: "not-salesperson" } : { status: "unmapped" };
+  // Outstanding only from an approved source (none yet → "not configured"); escalation figures for this one
+  // salesperson's companies, with the Tracker's own collection.view proof.
+  // Each way the link can be absent is reported as itself: no link ("unmapped" — an admin can add one), the
+  // link table not installed ("not-installed" — migration 0120 first), or a read failure ("unavailable" —
+  // never shown as a missing link). In every case the Tracker still loads and nobody's figures are shown.
+  let identity: SalespersonIdentity | { status: "unavailable" };
+  try {
+    identity = await salespersonIdentityFor(await getCurrentEmployee());
+  } catch (err) {
+    const e = err as { code?: unknown; cause?: { code?: unknown } } | null;
+    const code = typeof e?.cause?.code === "string" ? e.cause.code : typeof e?.code === "string" ? e.code : "unknown";
+    console.error(`[collection-scorecards] could not read the Sales Coordinator link (SQLSTATE ${code})`);
+    identity = { status: "unavailable" };
+  }
+  let scorecard: ScorecardView;
   if (identity.status === "linked") {
     const salesLabel = identity.label;
-    const reviewer = await getCollectionCapability("collection.escalation.review");
-    const own = reviewer
-      ? await escalationCountsForSalesperson(reviewer, salesLabel).catch(() => {
-          console.error("[collection-scorecards] could not count escalations");
-          return "error" as const;
-        })
-      : null;
+    const own = await escalationCountsForSalesperson(viewer, salesLabel).catch(() => {
+      console.error("[collection-scorecards] could not count escalations");
+      return "error" as const;
+    });
     scorecard = { status: "ok", card: scorecardFor(salesLabel, source.parties, source.transactions, own) };
+  } else {
+    scorecard = identity.status === "unconfigured" ? { status: "unmapped" } : { status: identity.status };
   }
 
   const openEscalationCount = escalations.byCompany.size;
@@ -120,6 +126,7 @@ export default async function CollectionTrackerPage() {
         canSetConfirmation={caps["collection.confirmation.set"]}
         canEscalate={caps["collection.escalation.create"]}
         canImportBalances={caps["collection.balances.import"]}
+        canAddMasterCompanies={caps["collection.master.import"]}
         balancesProblem={source.balances?.status === "error" ? (source.balances.errorCode ?? "unknown") : undefined}
         reviewStorageReady={confirmations.storageReady && escalations.storageReady}
         coordinatorEditor={coordinatorOptions?.storageReady ? { options: coordinatorOptions.labels } : undefined}

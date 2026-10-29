@@ -21,6 +21,19 @@ export const UNAVAILABLE = "Couldn't be loaded";
 export const UNMAPPED_MESSAGE =
   "Your scorecard isn't available yet: an administrator must link your login to your Sales Coordinator name (Admin Panel → Sales Coordinators).";
 export const NOT_SALESPERSON_MESSAGE = "Your login isn't a Sales Coordinator, so there is no salesperson scorecard for it.";
+/** The link table doesn't exist in this database: no administrator can link anyone until database update 0120 is applied. */
+export const NOT_INSTALLED_MESSAGE =
+  "Your scorecard isn't available yet: Sales Coordinator links aren't set up on this database (database update 0120 is needed). Once an administrator has applied it, they can link your login to your Sales Coordinator name (Admin Panel → Sales Coordinators).";
+/** The link couldn't be read — a database error, not a missing link. The reason is logged on the server (code only). */
+export const UNAVAILABLE_MESSAGE =
+  "Your scorecard couldn't be loaded: your Sales Coordinator link couldn't be read just now (a database error, not a missing link). Reload the page; if this keeps happening, tell an administrator.";
+
+const EMPTY_STATE_MESSAGES = {
+  unmapped: UNMAPPED_MESSAGE,
+  "not-salesperson": NOT_SALESPERSON_MESSAGE,
+  "not-installed": NOT_INSTALLED_MESSAGE,
+  unavailable: UNAVAILABLE_MESSAGE,
+} as const;
 
 function Metric({ label, value, muted }: { label: string; value: string; muted?: boolean }) {
   return (
@@ -32,15 +45,18 @@ function Metric({ label, value, muted }: { label: string; value: string; muted?:
 }
 
 export function SalespersonScorecard({ view }: { view: ScorecardView }) {
-  if (view.status === "unmapped" || view.status === "not-salesperson") {
+  if (view.status !== "ok") {
+    const problem = view.status === "not-installed" || view.status === "unavailable";
     return (
       <p
         role="status"
+        data-scorecard-state={view.status}
         data-scorecard-unmapped={view.status === "unmapped" ? "true" : undefined}
         data-scorecard-not-salesperson={view.status === "not-salesperson" ? "true" : undefined}
-        className="w-full rounded-lg border border-hairline bg-white px-3 py-2 text-[12.5px] text-ink-subtle sm:max-w-[440px]"
+        className="w-full rounded-lg border bg-white px-3 py-2 text-[12.5px] sm:max-w-[440px]"
+        style={problem ? { borderColor: "#FCD9A0", background: "#FFFBEB", color: "#92400E" } : undefined}
       >
-        {view.status === "unmapped" ? UNMAPPED_MESSAGE : NOT_SALESPERSON_MESSAGE}
+        {EMPTY_STATE_MESSAGES[view.status]}
       </p>
     );
   }

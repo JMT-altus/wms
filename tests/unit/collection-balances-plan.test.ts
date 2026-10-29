@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildBalancePlan, parseMoney, totalsTolerancePaise, type BalanceCompany } from "@/lib/collections/balances/plan";
+import { buildBalancePlan, missingCompanies, parseMoney, totalsTolerancePaise, type BalanceCompany } from "@/lib/collections/balances/plan";
 import { nameKey } from "@/lib/collections/master/normalize";
 
 const master = (...names: string[]): Map<string, BalanceCompany> => new Map(names.map((n, i) => [nameKey(n), { id: `id-${i + 1}`, companyName: n }]));
@@ -144,5 +144,35 @@ describe("totals verification (rows vs the file's own Grand Total)", () => {
     expect(totalsTolerancePaise(266)).toBe(134);
     expect(verify({ debit: "300.11", credit: "0.05" })).toMatchObject({ status: "ok" }); // 1 paisa off, 2 rows → allowed gap 2
     expect(verify({ debit: "300.14", credit: "0.05" })).toMatchObject({ status: "mismatch" }); // 4 paise
+  });
+});
+
+describe("missingCompanies", () => {
+  it("lists each unmatched company once, by name key, in file order — matched, repeated, conflicting and invalid rows never qualify", () => {
+    const p = buildBalancePlan(
+      [
+        row(1, "Alpha Traders", "100"), // matched
+        row(2, "New Co Pvt. Ltd", "10"), // unmatched
+        row(3, "NEW CO PVT LTD", "10"), // identical repeat of row 2: ignored
+        row(4, "Other One", "5"), // unmatched
+        row(5, "Clash Ltd", "1"), // conflicting duplicate...
+        row(6, "clash ltd", "2"), // ...with different figures: both rejected, not candidates
+        row(7, "", "9"), // invalid: no name
+        row(8, "Bad Money", "abc"), // invalid: unreadable amount
+      ],
+      master("Alpha Traders"),
+      null,
+    );
+    expect(p.summary).toMatchObject({ matched: 1, unmatched: 2, duplicates: 1, conflicts: 2, rejected: 2 });
+    expect(missingCompanies(p.rows)).toEqual([
+      { rowNo: 2, name: "New Co Pvt. Ltd", nameKey: "newcopvtltd" },
+      { rowNo: 4, name: "Other One", nameKey: "otherone" },
+    ]);
+    expect(missingCompanies(p.rows)).toHaveLength(p.summary.unmatched);
+  });
+
+  it("is empty when everything matches", () => {
+    const p = buildBalancePlan([row(1, "Alpha Traders", "100")], master("Alpha Traders"), null);
+    expect(missingCompanies(p.rows)).toEqual([]);
   });
 });

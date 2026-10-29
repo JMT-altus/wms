@@ -219,6 +219,100 @@ export async function listRunsForMonth(month: string): Promise<SalaryRunRow[]> {
   return rows.map(mapRun);
 }
 
+/**
+ * ONE employee's salary runs, newest month first — the My Salary history.
+ * Always filtered by the employee id the caller took from the verified session.
+ */
+export async function listRunsForEmployee(employeeId: string): Promise<SalaryRunRow[]> {
+  const rows = await db
+    .select(RUN_SELECT)
+    .from(salaryRuns)
+    .innerJoin(employees, eq(salaryRuns.employeeId, employees.id))
+    .leftJoin(designations, eq(employees.designationId, designations.id))
+    .leftJoin(payingEntities, eq(employees.payingEntityId, payingEntities.id))
+    .where(eq(salaryRuns.employeeId, employeeId))
+    .orderBy(desc(salaryRuns.month));
+  return rows.map(mapRun);
+}
+
+export interface SalaryMonthTotal {
+  month: string;
+  fy: string;
+  /** Runs stored for the month. */
+  runs: number;
+  /** Sum of the runs' net payable, in rupees (two decimals). */
+  netPayable: number;
+  /** Runs marked disbursed (in full or in part). */
+  disbursed: number;
+  /** Runs seeded from an external salary log. */
+  imported: number;
+}
+
+/**
+ * Every month with at least one salary run, newest first, with the month's
+ * totals — the administrators' history. Summed in the database from the
+ * stored runs; nothing is estimated.
+ */
+export async function listSalaryMonths(): Promise<SalaryMonthTotal[]> {
+  const rows = await db
+    .select({
+      month: salaryRuns.month,
+      fy: sql<string>`min(${salaryRuns.fy})`,
+      runs: sql<number>`count(*)::int`,
+      netPayable: sql<string>`coalesce(sum(${salaryRuns.netPayable}), 0)`,
+      disbursed: sql<number>`count(*) filter (where ${salaryRuns.disbursed})::int`,
+      imported: sql<number>`count(*) filter (where ${salaryRuns.source} <> 'generated')::int`,
+    })
+    .from(salaryRuns)
+    .groupBy(salaryRuns.month)
+    .orderBy(desc(salaryRuns.month));
+  return rows.map((r) => ({
+    month: r.month,
+    fy: r.fy,
+    runs: Number(r.runs),
+    netPayable: Number(r.netPayable),
+    disbursed: Number(r.disbursed),
+    imported: Number(r.imported),
+  }));
+}
+
+/** ONE employee's run for a month, or null when none was generated. */
+export async function getRunForEmployeeMonth(employeeId: string, month: string): Promise<SalaryRunRow | null> {
+  const [row] = await db
+    .select(RUN_SELECT)
+    .from(salaryRuns)
+    .innerJoin(employees, eq(salaryRuns.employeeId, employees.id))
+    .leftJoin(designations, eq(employees.designationId, designations.id))
+    .leftJoin(payingEntities, eq(employees.payingEntityId, payingEntities.id))
+    .where(and(eq(salaryRuns.employeeId, employeeId), eq(salaryRuns.month, month)))
+    .limit(1);
+  return row ? mapRun(row) : null;
+}
+
+export interface EmployeePayProfile {
+  designationName: string | null;
+  payingEntityName: string | null;
+  /** A salary profile with a CTC above zero — the condition for a run to be generated. */
+  hasProfile: boolean;
+}
+
+/** The designation, paying entity and whether a CTC profile exists, for one employee. */
+export async function getEmployeePayProfile(employeeId: string): Promise<EmployeePayProfile> {
+  const [row] = await db
+    .select({ designationName: designations.name, payingEntityName: payingEntities.name, annualCtc: salaryProfiles.annualCtc })
+    .from(employees)
+    .leftJoin(salaryProfiles, eq(salaryProfiles.employeeId, employees.id))
+    .leftJoin(designations, eq(employees.designationId, designations.id))
+    .leftJoin(payingEntities, eq(employees.payingEntityId, payingEntities.id))
+    .where(eq(employees.id, employeeId))
+    .limit(1);
+  return {
+    designationName: row?.designationName ?? null,
+    payingEntityName: row?.payingEntityName ?? null,
+    hasProfile: row?.annualCtc != null && Number(row.annualCtc) > 0,
+  };
+}
+
 /** A single salary run + employee/designation/entity, or null. */
 export async function getRun(runId: string): Promise<SalaryRunRow | null> {
   const [row] = await db
