@@ -2,25 +2,25 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { and, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { attendanceLogs, employeeEvents, employees, type Employee } from "@/db/schema";
+import { type Employee } from "@/db/schema";
 import { requireUser } from "@/lib/auth/current";
 import { getModuleAccessFor } from "@/lib/auth/module-access";
 import { rateLimitOrError } from "@/lib/rate-limit";
 import { localDateString } from "@/lib/format";
-import { formatHHmmInTz, zonedWallClockToUtc } from "@/lib/attendance/zoned-time";
 import { getEmployeeMonthStatus } from "@/lib/queries/attendance-status";
+import { CORRECTION_REASON_CODES, EXPLANATION_MAX, isRealDate, reasonLabel } from "@/lib/attendance/correction/plan";
 import {
-  CORRECTION_REASON_CODES,
-  EXPLANATION_MAX,
-  composeNote,
-  isRealDate,
-  planCorrection,
-  reasonLabel,
-  type ExistingPunch,
-  type PlannedChange,
-} from "@/lib/attendance/correction/plan";
+  applySet,
+  assertNotSelf,
+  correctionFailureMessage,
+  loadCorrectionDay,
+  previewSet,
+  salaryRunNotice,
+  type CorrectionDay,
+  type SalaryRunNotice,
+} from "@/lib/attendance/correction/apply";
+import { ATTENDANCE_CORRECTION_EVENT } from "@/lib/attendance/correction/events";
 
 /**
  * HR → Attendance Correction (power failure / biometric outage).
@@ -30,13 +30,15 @@ import {
  * existing grading applies to the result and nothing is graded here. It never
  * deletes a punch and never makes a time up.
  *
- * Deliberately NOT done here (unlike the existing admin editor): no day-finalised
- * or late-deduction emails. This module does not import the notification code.
+ * Deliberately NOT done here (unlike the admin day editor): no day-finalised or
+ * late-deduction emails. This module does not import the notification code.
  *
- * Every action re-checks HR access on the server. The write and its audit row are
- * one transaction: if the audit can't be written the correction is not saved and
- * success is not reported. Concurrent changes are detected (the browser sends what
- * it saw; the server compares it, under a row lock, with what is stored).
+ * Every action re-checks HR access on the server, and refuses a change to the
+ * signed-in person's own attendance. The write and its audit row are one
+ * transaction (lib/attendance/correction/apply.ts). Concurrent changes are
+ * detected: the browser sends what it saw; the server compares it, under a row
+ * lock, with what is stored. A correction never touches a salary run; when one
+ * exists for the month, the review says so.
  */
 
 type Result<T> = ({ ok: true } & T) | { ok: false; error: string };
@@ -48,11 +50,6 @@ async function requireHr(): Promise<Employee> {
   if (!access.hr?.allowed) throw new Error("Forbidden");
   return me;
 }
-
-class UserError extends Error {}
-
-const CHANGED_MEANWHILE =
-  "This day was changed by someone else after you opened it. Nothing was saved. Reload the day and review it again.";
 
 const ymd = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "The date is not valid.");
 const timeField = z.union([z.string().regex(/^\d{2}:\d{2}$/, "Times must be HH:mm."), z.literal(""), z.null()]).optional();
@@ -105,71 +102,14 @@ export interface ReviewView {
   /** Existing notes that will be kept, with the explanation added after them. */
   keepsNotes: string[];
   warnings: string[];
+  /** A salary run already exists for this month (status only for payroll viewers). */
+  salaryRun: SalaryRunNotice | null;
 }
 
-type Q = Pick<typeof db, "select">;
-
-interface DayContext {
-  emp: { id: string; name: string; email: string; timezone: string; isActive: boolean; joinDay: string };
-  rows: { in: ExistingPunch | null; out: ExistingPunch | null };
-}
-
-async function loadDay(q: Q, employeeId: string, date: string, lock: boolean): Promise<DayContext> {
-  const [e] = await q
-    .select({
-      id: employees.id,
-      name: employees.name,
-      email: employees.email,
-      timezone: employees.timezone,
-      isActive: employees.isActive,
-      joinedAt: employees.joinedAt,
-      createdAt: employees.createdAt,
-    })
-    .from(employees)
-    .where(eq(employees.id, employeeId))
-    .limit(1);
-  if (!e) throw new UserError("That employee was not found.");
-  if (!e.isActive) throw new UserError(`${e.name} is inactive. Attendance can't be corrected for an inactive employee.`);
-  const tz = e.timezone || "Asia/Kolkata";
-
-  const base = q
-    .select({
-      id: attendanceLogs.id,
-      kind: attendanceLogs.kind,
-      loggedAt: attendanceLogs.loggedAt,
-      note: attendanceLogs.note,
-      source: attendanceLogs.source,
-      reason: attendanceLogs.reason,
-    })
-    .from(attendanceLogs)
-    .where(and(eq(attendanceLogs.employeeId, employeeId), eq(attendanceLogs.logDate, date)));
-  const rows = lock ? await base.for("update") : await base;
-
-  const pick = (kind: "in" | "out"): ExistingPunch | null => {
-    const r = rows.find((x) => x.kind === kind);
-    return r
-      ? { id: r.id, time: formatHHmmInTz(r.loggedAt, tz), loggedAt: r.loggedAt.toISOString(), note: r.note, source: r.source, reason: r.reason }
-      : null;
-  };
-  const joinSource = e.joinedAt ?? e.createdAt;
-  return {
-    emp: { id: e.id, name: e.name, email: e.email, timezone: tz, isActive: e.isActive, joinDay: localDateString(tz, joinSource) },
-    rows: { in: pick("in"), out: pick("out") },
-  };
-}
-
-const view = (p: ExistingPunch | null): PunchView | null =>
+const view = (p: CorrectionDay["rows"]["in"]): PunchView | null =>
   p ? { time: p.time, loggedAt: p.loggedAt, source: p.source, reason: p.reason, note: p.note } : null;
 
-function checkSnapshot(rows: DayContext["rows"], snap: { in: string | null; out: string | null }) {
-  for (const kind of ["in", "out"] as const) {
-    const seen = snap[kind] ? new Date(snap[kind]!).toISOString() : null;
-    const now = rows[kind]?.loggedAt ?? null;
-    if (seen !== now) throw new UserError(CHANGED_MEANWHILE);
-  }
-}
-
-async function gradeFor(emp: DayContext["emp"], date: string): Promise<DayGrade | null> {
+async function gradeFor(emp: CorrectionDay["emp"], date: string): Promise<DayGrade | null> {
   try {
     const today = localDateString(emp.timezone);
     if (date > today) return null;
@@ -184,12 +124,13 @@ async function gradeFor(emp: DayContext["emp"], date: string): Promise<DayGrade 
 
 /** Read-only: the employee, the date, and the punches stored for it (with the current grade). */
 export async function lookupDay(raw: unknown): Promise<Result<{ day: DayView }>> {
-  await requireHr();
+  const me = await requireHr();
   const p = LookupSchema.safeParse(raw);
   if (!p.success) return { ok: false, error: firstError(p.error) };
   if (!isRealDate(p.data.date)) return { ok: false, error: "The date is not valid." };
   try {
-    const ctx = await loadDay(db, p.data.employeeId, p.data.date, false);
+    assertNotSelf(me.id, p.data.employeeId);
+    const ctx = await loadCorrectionDay(db, p.data.employeeId, p.data.date, false);
     return {
       ok: true,
       day: {
@@ -200,24 +141,23 @@ export async function lookupDay(raw: unknown): Promise<Result<{ day: DayView }>>
       },
     };
   } catch (err) {
-    if (err instanceof UserError) return { ok: false, error: err.message };
-    console.error("[attendance-correction] lookup failed", err);
-    return { ok: false, error: "Could not load that day. Please try again." };
+    return { ok: false, error: correctionFailureMessage(err, "lookup", "Could not load that day. Please try again.") };
   }
 }
 
-function planFor(ctx: DayContext, d: z.output<typeof ChangeSchema>) {
-  return planCorrection({
-    date: d.date,
-    inTime: d.inTime,
-    outTime: d.outTime,
-    reason: d.reason,
-    explanation: d.explanation,
-    today: localDateString(ctx.emp.timezone),
-    joinDay: ctx.emp.joinDay,
-    existing: ctx.rows,
-  });
-}
+const setInput = (me: Employee, d: z.output<typeof ChangeSchema>) => ({
+  actorId: me.id,
+  employeeId: d.employeeId,
+  date: d.date,
+  inTime: d.inTime,
+  outTime: d.outTime,
+  reason: d.reason,
+  explanation: d.explanation,
+  snapshot: d.snapshot,
+  eventType: ATTENDANCE_CORRECTION_EVENT,
+  via: "hr_attendance_correction",
+  noteLabel: "HR attendance correction",
+});
 
 /** Dry run: validates and shows existing vs proposed. Writes nothing. */
 export async function previewCorrection(raw: unknown): Promise<Result<{ review: ReviewView }>> {
@@ -227,14 +167,12 @@ export async function previewCorrection(raw: unknown): Promise<Result<{ review: 
   const p = ChangeSchema.safeParse(raw);
   if (!p.success) return { ok: false, error: firstError(p.error) };
   try {
-    const ctx = await loadDay(db, p.data.employeeId, p.data.date, false);
-    checkSnapshot(ctx.rows, p.data.snapshot);
-    const plan = planFor(ctx, p.data);
-    if (!plan.ok) return { ok: false, error: plan.error };
+    const plan = await previewSet(setInput(me, p.data));
+    const ctx = plan.day;
 
     const warnings: string[] = [];
     const keepsNotes: string[] = [];
-    for (const c of plan.changes) {
+    for (const c of plan.planned) {
       if (c.existingNote) {
         keepsNotes.push(c.existingNote);
         if (/^Biometric import/.test(c.existingNote)) {
@@ -253,19 +191,19 @@ export async function previewCorrection(raw: unknown): Promise<Result<{ review: 
         employee: { id: ctx.emp.id, name: ctx.emp.name, email: ctx.emp.email },
         date: p.data.date,
         existing: { in: view(ctx.rows.in), out: view(ctx.rows.out) },
-        changes: plan.changes.map((c) => ({ kind: c.kind, action: c.action, from: c.from, to: c.to })),
+        changes: plan.planned.map((c) => ({ kind: c.kind, action: c.action, from: c.from, to: c.to })),
         finalIn: plan.finalIn,
         finalOut: plan.finalOut,
         reason: { code: p.data.reason, label: reasonLabel(p.data.reason) },
         explanation: p.data.explanation.trim(),
         keepsNotes,
         warnings,
+        // Salary is admin-only in WMS, so only admins see the payment status.
+        salaryRun: await salaryRunNotice(p.data.employeeId, p.data.date, me.isAdmin === true),
       },
     };
   } catch (err) {
-    if (err instanceof UserError) return { ok: false, error: err.message };
-    console.error("[attendance-correction] preview failed", err);
-    return { ok: false, error: "Could not check the correction. Please try again." };
+    return { ok: false, error: correctionFailureMessage(err, "preview", "Could not check the correction. Please try again.") };
   }
 }
 
@@ -279,9 +217,6 @@ export interface SavedCorrection {
   grade: DayGrade | null;
 }
 
-const isUniqueViolation = (err: unknown) =>
-  typeof err === "object" && err !== null && ((err as { code?: string }).code === "23505" || /duplicate key|unique constraint/i.test(String((err as Error).message)));
-
 /**
  * Saves the correction: one transaction containing the punch write(s) and the
  * audit row. Refuses (writing nothing) if anything changed since the browser
@@ -294,74 +229,9 @@ export async function saveCorrection(raw: unknown): Promise<Result<{ saved: Save
   const p = SaveSchema.safeParse(raw);
   if (!p.success) return { ok: false, error: firstError(p.error) };
   const d = p.data;
-  const explanation = d.explanation.trim();
 
   try {
-    const out = await db.transaction(async (tx) => {
-      // Lock the day's rows, then compare with what the browser saw.
-      const ctx = await loadDay(tx as unknown as Q, d.employeeId, d.date, true);
-      checkSnapshot(ctx.rows, d.snapshot);
-      const plan = planFor(ctx, d);
-      if (!plan.ok) throw new UserError(plan.error);
-      const tz = ctx.emp.timezone;
-
-      for (const c of plan.changes as PlannedChange[]) {
-        const loggedAt = zonedWallClockToUtc(d.date, c.to, tz);
-        if (c.action === "add") {
-          await tx.insert(attendanceLogs).values({
-            employeeId: d.employeeId,
-            logDate: d.date,
-            kind: c.kind,
-            loggedAt,
-            source: "admin",
-            reason: d.reason,
-            note: explanation,
-            recordedById: me.id,
-            verifyMethod: "none",
-          });
-        } else {
-          const cur = ctx.rows[c.kind]!;
-          const updated = await tx
-            .update(attendanceLogs)
-            .set({
-              loggedAt,
-              source: "admin",
-              reason: d.reason,
-              note: composeNote(c.existingNote, explanation),
-              recordedById: me.id,
-              verifyMethod: "none",
-            })
-            // Only if the punch is still exactly what we locked and compared.
-            .where(and(eq(attendanceLogs.id, cur.id), eq(attendanceLogs.loggedAt, new Date(cur.loggedAt))))
-            .returning({ id: attendanceLogs.id });
-          if (updated.length !== 1) throw new UserError(CHANGED_MEANWHILE);
-        }
-      }
-
-      const label = reasonLabel(d.reason);
-      const summary = plan.changes.map((c) => ({ kind: c.kind, action: c.action, from: c.from, to: c.to }));
-      const was = (x: ExistingPunch | null) =>
-        x ? { time: x.time, loggedAt: x.loggedAt, source: x.source, reason: x.reason, note: x.note } : null;
-      // The audit row is part of the transaction: no audit, no correction.
-      await tx.insert(employeeEvents).values({
-        employeeId: d.employeeId,
-        actorId: me.id,
-        eventType: "attendance_correction",
-        fromValue: { date: d.date, in: was(ctx.rows.in), out: was(ctx.rows.out) },
-        toValue: {
-          date: d.date,
-          reason: d.reason,
-          reasonLabel: label,
-          explanation,
-          changes: summary,
-          finalIn: plan.finalIn,
-          finalOut: plan.finalOut,
-        },
-        note: `HR attendance correction for ${d.date} (${label}): ${explanation}`,
-      });
-
-      return { ctx, plan, summary };
-    });
+    const out = await applySet(setInput(me, d));
 
     revalidatePath("/attendance");
     revalidatePath("/attendance/dashboard");
@@ -371,18 +241,19 @@ export async function saveCorrection(raw: unknown): Promise<Result<{ saved: Save
       ok: true,
       saved: {
         date: d.date,
-        employeeName: out.ctx.emp.name,
-        in: out.plan.finalIn,
-        out: out.plan.finalOut,
-        changes: out.summary,
+        employeeName: out.day.emp.name,
+        in: out.finalIn,
+        out: out.finalOut,
+        // The HR screen only adds or changes, never removes.
+        changes: out.changes.map((c) => ({ kind: c.kind, action: c.action as "add" | "change", from: c.from, to: c.to ?? "" })),
         reason: { code: d.reason, label: reasonLabel(d.reason) },
-        grade: await gradeFor(out.ctx.emp, d.date),
+        grade: await gradeFor(out.day.emp, d.date),
       },
     };
   } catch (err) {
-    if (err instanceof UserError) return { ok: false, error: err.message };
-    if (isUniqueViolation(err)) return { ok: false, error: CHANGED_MEANWHILE };
-    console.error("[attendance-correction] save failed", err);
-    return { ok: false, error: "The correction could not be saved, so nothing was changed. Please try again." };
+    return {
+      ok: false,
+      error: correctionFailureMessage(err, "save", "The correction could not be saved, so nothing was changed. Please try again."),
+    };
   }
 }

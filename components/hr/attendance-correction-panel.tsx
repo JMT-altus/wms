@@ -359,6 +359,20 @@ export function AttendanceCorrectionPanel({ people = [], today }: { people?: Cor
               <AlertTriangle size={14} className="mt-0.5 shrink-0" aria-hidden /> {w}
             </p>
           ))}
+          {review.salaryRun && (
+            <p
+              role="status"
+              className="mt-2 flex items-start gap-2 rounded-lg px-3 py-2 text-[12.5px] font-semibold"
+              style={{ background: "#FFFBEB", border: "1px solid #FCD9A0", color: "#92400E" }}
+            >
+              <AlertTriangle size={14} className="mt-0.5 shrink-0" aria-hidden />
+              <span>
+                A salary run already exists for {review.salaryRun.month}
+                {review.salaryRun.disbursed === undefined ? "" : review.salaryRun.disbursed ? " and has been disbursed" : " (not yet disbursed)"}.
+                This correction will not update that salary run; payroll may need to review the difference.
+              </span>
+            </p>
+          )}
           <p className="mt-2 text-[12px] text-ink-subtle">
             Saved as an admin entry with this reason and explanation, with the previous times kept in the audit history. No emails
             are sent from this panel.

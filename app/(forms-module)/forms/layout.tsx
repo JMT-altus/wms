@@ -26,13 +26,14 @@ export default async function FormsLayout({ children }: { children: ReactNode })
   const caps = await getCollectionCapabilities();
   const showCommitments = caps["collection.commitments.view"] || caps["collection.escalation.review"];
   const showCollection = caps["collection.view"];
+  const showLogs = caps["collection.logs.view"];
 
   return (
     <>
       <IdleTimerClient timeoutMinutes={settings.idleTimeoutMinutes} />
       <div className="min-h-screen flex max-md:block app-wallpaper">
-        <FormsSidebar userName={me.name} showCommitments={showCommitments} showCollection={showCollection} />
-        <FormsMobileNav showCommitments={showCommitments} showCollection={showCollection} />
+        <FormsSidebar userName={me.name} showCommitments={showCommitments} showCollection={showCollection} showLogs={showLogs} />
+        <FormsMobileNav showCommitments={showCommitments} showCollection={showCollection} showLogs={showLogs} />
         <div className="flex-1 min-w-0 max-md:flex max-md:flex-col">
           {/* The app's slim header bar, same as every (app) page carries, so
               the search / Live / account cluster is reachable from every

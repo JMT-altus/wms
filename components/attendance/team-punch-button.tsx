@@ -5,13 +5,16 @@ import { useRouter } from "next/navigation";
 import { Check, X } from "lucide-react";
 import { superAdminQuickPunch } from "@/app/(app)/attendance/actions";
 import { fireToast } from "@/lib/toast";
+import { EXPLANATION_MAX, explanationError } from "@/lib/attendance/correction/plan";
 
 /**
  * Super-admin-only inline "Check in" / "Check out" control on the team
  * attendance list (today only). Collapsed it's a small pill; tapping reveals a
  * time field prefilled with the current time so the super-admin sets the real
- * arrival/leave time, then confirms. Stamps the punch via superAdminQuickPunch
- * (which re-enforces super-admin + today server-side).
+ * arrival/leave time, gives a short explanation (required, as for every admin
+ * attendance change), then confirms. Stamps the punch via superAdminQuickPunch,
+ * which re-enforces super-admin + today + "not your own attendance" server-side
+ * and only ever adds a missing punch.
  */
 export function TeamPunchButton({
   employeeId,
@@ -29,12 +32,14 @@ export function TeamPunchButton({
   const router = useRouter();
   const [open, setOpen] = React.useState(false);
   const [time, setTime] = React.useState("");
+  const [explanation, setExplanation] = React.useState("");
   const [pending, startTransition] = React.useTransition();
 
   const label = kind === "in" ? "Check in" : "Check out";
 
   function begin() {
     setTime(nowInTz(tz));
+    setExplanation("");
     setOpen(true);
   }
 
@@ -43,8 +48,13 @@ export function TeamPunchButton({
       fireToast({ message: "Enter a valid time.", type: "error" });
       return;
     }
+    const why = explanationError("correction", explanation);
+    if (why) {
+      fireToast({ message: why, type: "error" });
+      return;
+    }
     startTransition(async () => {
-      const res = await superAdminQuickPunch({ employeeId, logDate, kind, timeHHmm: time });
+      const res = await superAdminQuickPunch({ employeeId, logDate, kind, timeHHmm: time, explanation });
       if (!res.ok) {
         fireToast({ message: res.error, type: "error" });
         return;
@@ -84,6 +94,21 @@ export function TeamPunchButton({
         }}
         aria-label={`${label} time for ${name}`}
         className="rounded-md border px-2 py-1 text-[13px] tabular-nums bg-white"
+        style={{ borderColor: "var(--color-hairline-strong)" }}
+      />
+      <input
+        type="text"
+        value={explanation}
+        disabled={pending}
+        maxLength={EXPLANATION_MAX}
+        placeholder="Why? (required)"
+        onChange={(e) => setExplanation(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") submit();
+          if (e.key === "Escape") setOpen(false);
+        }}
+        aria-label={`Explanation for ${label.toLowerCase()} for ${name}`}
+        className="w-44 rounded-md border px-2 py-1 text-[13px] bg-white"
         style={{ borderColor: "var(--color-hairline-strong)" }}
       />
       <button

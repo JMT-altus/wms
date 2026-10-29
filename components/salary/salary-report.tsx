@@ -4,15 +4,18 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import type { Route } from "next";
-import { Download, FileText, Sparkles } from "lucide-react";
+import { AlertTriangle, Download, FileText, Sparkles } from "lucide-react";
 import { fireToast } from "@/lib/toast";
 import { generateSalary, setDisbursed } from "@/app/(app)/salary/actions";
 import type { SalaryRunRow } from "@/lib/queries/salary";
+import type { StaleCheck } from "@/lib/salary/stale";
 
 interface Props {
   month: string; // YYYY-MM
   monthLabel: string;
   rows: SalaryRunRow[];
+  /** Per employee id: whether the run still matches current attendance. */
+  stale?: Record<string, StaleCheck>;
 }
 
 const inr = (n: number) =>
@@ -21,7 +24,7 @@ const inr = (n: number) =>
 const days = (n: number) =>
   n.toLocaleString("en-IN", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 
-export function SalaryReport({ month, monthLabel, rows }: Props) {
+export function SalaryReport({ month, monthLabel, rows, stale = {} }: Props) {
   const router = useRouter();
   const [generating, startGenerate] = useTransition();
 
@@ -101,6 +104,26 @@ export function SalaryReport({ month, monthLabel, rows }: Props) {
         </div>
       </header>
 
+      {(() => {
+        const needReview = rows.filter((r) => stale[r.employeeId]?.status === "stale").length;
+        const unknown = rows.filter((r) => stale[r.employeeId]?.status === "unknown").length;
+        if (!needReview && !unknown) return null;
+        return (
+          <p
+            role="status"
+            className="mb-4 flex items-start gap-2 rounded-lg px-4 py-3 text-[14px] font-semibold"
+            style={{ background: "#FFFBEB", border: "1px solid #FCD9A0", color: "#92400E" }}
+          >
+            <AlertTriangle size={16} className="mt-0.5 shrink-0" aria-hidden />
+            <span>
+              {needReview > 0 &&
+                `${needReview} salary ${needReview === 1 ? "run no longer matches" : "runs no longer match"} the attendance recorded for ${monthLabel} (attendance was changed after the run was generated). Review before paying; nothing has been recalculated. `}
+              {unknown > 0 && `${unknown} ${unknown === 1 ? "run" : "runs"} could not be checked against attendance.`}
+            </span>
+          </p>
+        );
+      })()}
+
       {rows.length === 0 ? (
         <div
           className="rounded-section border border-dashed border-hairline-strong bg-surface-card px-6 py-14 text-center"
@@ -148,7 +171,7 @@ export function SalaryReport({ month, monthLabel, rows }: Props) {
             </thead>
             <tbody>
               {rows.map((r, i) => (
-                <SalaryRow key={r.id} row={r} rowIndex={i} />
+                <SalaryRow key={r.id} row={r} rowIndex={i} check={stale[r.employeeId]} />
               ))}
             </tbody>
             <tfoot>
@@ -172,7 +195,34 @@ export function SalaryReport({ month, monthLabel, rows }: Props) {
   );
 }
 
-function SalaryRow({ row, rowIndex }: { row: SalaryRunRow; rowIndex: number }) {
+function StaleBadge({ check }: { check: StaleCheck | undefined }) {
+  if (check?.status === "stale") {
+    const parts = [
+      check.savedPayableDays !== check.nowPayableDays ? `payable days ${days(check.savedPayableDays)} → ${days(check.nowPayableDays)}` : "",
+      check.savedLateMarks !== check.nowLateMarks ? `late marks ${check.savedLateMarks} → ${check.nowLateMarks}` : "",
+    ].filter(Boolean);
+    return (
+      <span
+        className="ml-2 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11.5px] font-bold"
+        style={{ background: "#FEF3C7", color: "#92400E" }}
+        title={`Attendance changed after this run was generated: ${parts.join(", ")}. The run has not been recalculated.`}
+      >
+        <AlertTriangle size={11} aria-hidden /> Needs review
+        <span className="sr-only">: {parts.join(", ")}</span>
+      </span>
+    );
+  }
+  if (check?.status === "unknown") {
+    return (
+      <span className="ml-2 rounded-full px-2 py-0.5 text-[11.5px] font-bold" style={{ background: "#F1F5F9", color: "#475569" }}>
+        Not checked
+      </span>
+    );
+  }
+  return null;
+}
+
+function SalaryRow({ row, rowIndex, check }: { row: SalaryRunRow; rowIndex: number; check?: StaleCheck }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const monthlyCtc = row.annualCtc / 12;
@@ -204,6 +254,7 @@ function SalaryRow({ row, rowIndex }: { row: SalaryRunRow; rowIndex: number }) {
     >
       <td className="px-4 py-3.5 text-ink-strong font-medium whitespace-nowrap">
         {row.employeeName}
+        <StaleBadge check={check} />
       </td>
       <td className="px-4 py-3.5 text-ink-soft whitespace-nowrap">
         {row.designationName ?? "—"}

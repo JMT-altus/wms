@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import type {
   RegistrationResponseJSON,
   AuthenticationResponseJSON,
@@ -13,11 +13,9 @@ import { db } from "@/lib/db";
 import {
   attendanceLogs,
   employees,
-  employeeEvents,
   type Employee,
   type NotificationKind,
 } from "@/db/schema";
-import type { PunchReason } from "@/db/enums";
 import { requireUser, requireAdmin } from "@/lib/auth/current";
 import { isSuperAdmin } from "@/lib/auth/super-admin";
 import { rateLimitOrError } from "@/lib/rate-limit";
@@ -33,9 +31,26 @@ import {
 } from "@/lib/attendance/punch-notify";
 import {
   AdminUpsertPunch,
+  AdminQuickPunch,
   AdminEditDayTimes,
   AdminDeletePunch,
+  AdminLookupDay,
 } from "@/lib/validators/attendance";
+import {
+  applyDelete,
+  applySet,
+  assertNotSelf,
+  correctionFailureMessage,
+  loadCorrectionDay,
+  salaryRunNotice,
+  type SalaryRunNotice,
+} from "@/lib/attendance/correction/apply";
+import { ADMIN_REASON_CODES } from "@/lib/attendance/correction/plan";
+import {
+  ADMIN_PUNCH_DELETE_EVENT,
+  ADMIN_PUNCH_EDIT_EVENT,
+  ADMIN_PUNCH_UPSERT_EVENT,
+} from "@/lib/attendance/correction/events";
 import {
   listCredentials,
   mintRegistrationOptions,
@@ -225,69 +240,21 @@ export async function startBiometricPunch(): Promise<
 // Admin punch management (Attendance Phase A, Task A4)
 //
 // Admins can backfill, correct, or remove an employee's in/out punches — the
-// escape hatch the self-only `punchAttendance` deliberately lacks. Every write
-// carries `source:"admin"`, a `reason`, the acting admin (`recordedById`), and
-// an immutable `employee_events` audit row, so a corrected log stays honest.
+// escape hatch the self-only `punchAttendance` deliberately lacks. Every change
+// goes through the shared correction mechanism (lib/attendance/correction/
+// apply.ts), the same one HR → Attendance Correction uses:
+//   - a reason (the existing punch-reason list) and an explanation;
+//   - nobody changes their own attendance;
+//   - the day's punches are locked and compared with what the admin saw, so a
+//     punch changed meanwhile is never silently overwritten;
+//   - the change and its `employee_events` audit row (with the full previous
+//     punch) commit or roll back together;
+//   - failures show a generic message; details are logged on the server.
+// The day-finalised / late-deduction emails these actions have always sent are
+// unchanged: they fire once, only after the change has committed.
 // ════════════════════════════════════════════════════════════════════════════
 
-/**
- * Build a timestamptz for `${ymd} ${hhmm}` interpreted as wall-clock time in
- * `tz` (e.g. an admin types 10:30 for an employee in Asia/Kolkata → the UTC
- * instant that reads 10:30 there). Mirrors how `punchAttendance`/`logDate`
- * pin everything to the employee's own timezone rather than the server's UTC.
- */
-function zonedWallClockToUtc(ymd: string, hhmm: string, tz: string): Date {
-  const dParts = ymd.split("-").map((n) => parseInt(n, 10));
-  const tParts = hhmm.split(":").map((n) => parseInt(n, 10));
-  const y = dParts[0] ?? 1970;
-  const mo = dParts[1] ?? 1;
-  const d = dParts[2] ?? 1;
-  const h = tParts[0] ?? 0;
-  const mi = tParts[1] ?? 0;
-  // Treat the wall-clock fields as if they were UTC, then correct by the zone's
-  // offset at that instant. One iteration is exact except across the rare DST
-  // boundary; India (the only configured tz) has no DST, so this is exact.
-  const asUtc = Date.UTC(y, mo - 1, d, h, mi, 0);
-  const offsetMs = tzOffsetMs(new Date(asUtc), tz);
-  return new Date(asUtc - offsetMs);
-}
-
-/** Offset (ms) of `tz` from UTC at instant `at` (positive east of UTC). */
-function tzOffsetMs(at: Date, tz: string): number {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: tz,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-  }).formatToParts(at);
-  const get = (t: string) => Number(parts.find((p) => p.type === t)?.value);
-  let hour = get("hour");
-  if (hour === 24) hour = 0; // some engines emit 24 for midnight
-  const asUtc = Date.UTC(
-    get("year"),
-    get("month") - 1,
-    get("day"),
-    hour,
-    get("minute"),
-    get("second"),
-  );
-  return asUtc - at.getTime();
-}
-
-/** Load the target employee's timezone (defaulting to IST), or null if gone. */
-async function targetTz(employeeId: string): Promise<string | null> {
-  const [row] = await db
-    .select({ timezone: employees.timezone })
-    .from(employees)
-    .where(eq(employees.id, employeeId))
-    .limit(1);
-  if (!row) return null;
-  return row.timezone || "Asia/Kolkata";
-}
+const ADMIN_SAVE_FAILED = "The attendance change could not be saved, so nothing was changed. Please try again.";
 
 /** Load the notify-relevant slice of the target employee (for Task A8 admin
  *  triggers). Returns null if the employee is gone. */
@@ -311,15 +278,67 @@ async function targetForNotify(employeeId: string): Promise<{
   return { ...row, timezone: row.timezone || "Asia/Kolkata" };
 }
 
+/**
+ * The emails an admin add/edit has always triggered: the check-out half-day /
+ * late-waived email when the day is now complete, and the every-3rd-late
+ * deduction alert. Called exactly once per successful action, after commit.
+ * Best-effort, as before (the notify helpers swallow their own failures).
+ */
+async function notifyAfterAdminChange(employeeId: string, logDate: string): Promise<void> {
+  const target = await targetForNotify(employeeId);
+  if (target) {
+    await notifyOnDayFinalized(target, logDate);
+    await notifyAdminLateDeduction(target, logDate);
+  }
+}
+
 function revalidateAttendanceAdmin(): void {
   revalidatePath("/attendance/dashboard");
   revalidatePath("/attendance/manage");
 }
 
+export interface AdminDayView {
+  employeeName: string;
+  date: string;
+  /** What is stored now; `loggedAt` is the snapshot to send back with a change. */
+  punches: {
+    in: { time: string; loggedAt: string } | null;
+    out: { time: string; loggedAt: string } | null;
+  };
+  /** A salary run already exists for this month (admins may see its status). */
+  salaryRun: SalaryRunNotice | null;
+}
+
+/** Read-only: the stored punches for one day, for the admin day editor. */
+export async function adminLookupDay(input: unknown): Promise<ActionResult<{ day: AdminDayView }>> {
+  const me = await requireAdmin();
+  const parsed = AdminLookupDay.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
+  }
+  const { employeeId, logDate } = parsed.data;
+  try {
+    assertNotSelf(me.id, employeeId);
+    const day = await loadCorrectionDay(db, employeeId, logDate, false);
+    const side = (p: typeof day.rows.in) => (p ? { time: p.time, loggedAt: p.loggedAt } : null);
+    return {
+      ok: true,
+      day: {
+        employeeName: day.emp.name,
+        date: logDate,
+        punches: { in: side(day.rows.in), out: side(day.rows.out) },
+        salaryRun: await salaryRunNotice(employeeId, logDate, true),
+      },
+    };
+  } catch (err) {
+    return { ok: false, error: correctionFailureMessage(err, "admin lookup", "Could not load that day. Please try again.") };
+  }
+}
+
 /**
- * Create or overwrite a single in/out punch for an employee+day. Upsert on the
- * (employee, day, kind) unique index: a second admin punch of the same kind
- * updates the time/reason rather than failing.
+ * Add a single in/out punch for an employee+day — or replace it, but only when
+ * the snapshot shows the admin saw the punch being replaced. Never a silent
+ * overwrite.
  */
 export async function adminUpsertPunch(
   input: unknown,
@@ -332,93 +351,40 @@ export async function adminUpsertPunch(
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
   }
-  return upsertPunchCore(me.id, parsed.data);
-}
-
-/**
- * Shared upsert body for admin-recorded punches: writes the in/out punch as
- * `source:"admin"` (`verifyMethod:"none"`, no biometric/geofence), audits it,
- * fires the day-finalized / late-deduction emails when the day is now
- * complete, and revalidates. Called by `adminUpsertPunch` (any admin, via the
- * dashboard day-detail dialog) and `superAdminQuickPunch` (super-admins,
- * inline on the team list).
- */
-async function upsertPunchCore(
-  meId: string,
-  {
-    employeeId,
-    logDate,
-    kind,
-    timeHHmm,
-    reason,
-  }: {
-    employeeId: string;
-    logDate: string;
-    kind: "in" | "out";
-    timeHHmm: string;
-    reason: PunchReason;
-  },
-): Promise<ActionResult> {
-  const tz = await targetTz(employeeId);
-  if (!tz) return { ok: false, error: "Employee not found." };
-  const loggedAt = zonedWallClockToUtc(logDate, timeHHmm, tz);
-
+  const d = parsed.data;
   try {
-    await db
-      .insert(attendanceLogs)
-      .values({
-        employeeId,
-        logDate,
-        kind,
-        loggedAt,
-        source: "admin",
-        reason,
-        recordedById: meId,
-        verifyMethod: "none",
-      })
-      .onConflictDoUpdate({
-        target: [
-          attendanceLogs.employeeId,
-          attendanceLogs.logDate,
-          attendanceLogs.kind,
-        ],
-        set: {
-          loggedAt,
-          source: "admin",
-          reason,
-          recordedById: meId,
-          verifyMethod: "none",
-        },
-      });
+    await applySet({
+      actorId: me.id,
+      employeeId: d.employeeId,
+      date: d.logDate,
+      ...(d.kind === "in" ? { inTime: d.timeHHmm } : { outTime: d.timeHHmm }),
+      reason: d.reason,
+      explanation: d.explanation,
+      allowedReasons: ADMIN_REASON_CODES,
+      snapshot: d.snapshot,
+      eventType: ADMIN_PUNCH_UPSERT_EVENT,
+      via: "admin_day_editor",
+      noteLabel: "Admin attendance punch",
+    });
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    return { ok: false, error: `DB: ${msg}` };
+    return { ok: false, error: correctionFailureMessage(err, "admin upsert", ADMIN_SAVE_FAILED) };
   }
-
-  await auditPunch(meId, employeeId, "attendance_punch_upsert", {
-    logDate,
-    kind,
-    timeHHmm,
-    reason,
-  });
-  // If this upsert finalized the day (both in + out now present), fire the
-  // same waived/half-day email an organic check-out would. Best-effort.
-  const target = await targetForNotify(employeeId);
-  if (target) {
-    await notifyOnDayFinalized(target, logDate);
-    await notifyAdminLateDeduction(target, logDate);
-  }
+  await notifyAfterAdminChange(d.employeeId, d.logDate);
   revalidateAttendanceAdmin();
   return { ok: true };
 }
 
 /**
- * Inline team-list quick punch — super-admins (Hetesh / Manan) only, TODAY
- * only. Stamps an employee's in/out for the current day at a super-admin-typed
- * time. The reason is fixed to "correction" so the UI stays decoupled from the
- * reason enum; everything else (audit, emails, source:"admin") flows through
- * `upsertPunchCore`. Guarded on BOTH super-admin and today so a crafted call
- * for another admin or a past date is refused.
+ * Inline team-list quick punch — super-admins only (lib/auth/super-admin.ts),
+ * TODAY only. Records a MISSING in/out for the current day at a
+ * super-admin-typed time; it never replaces a recorded punch (that is done in
+ * the day editor). The reason is fixed to "correction" so the UI stays
+ * decoupled from the reason enum; an explanation is still required. Guarded on
+ * super-admin and today so a crafted call for another day is refused.
+ *
+ * "Today" is the EMPLOYEE's today, in the employee's timezone — the same
+ * timezone the punch time is interpreted in (lib/attendance/correction/apply.ts)
+ * — never the acting super-admin's, which may differ.
  */
 export async function superAdminQuickPunch(
   input: unknown,
@@ -430,28 +396,49 @@ export async function superAdminQuickPunch(
   const limited = rateLimitOrError(me.id, "write");
   if (limited) return limited;
 
-  // Inject the fixed reason before parsing the strict schema (the client only
-  // sends employeeId / logDate / kind / timeHHmm).
-  const withReason =
-    typeof input === "object" && input !== null
-      ? { ...(input as Record<string, unknown>), reason: "correction" }
-      : input;
-  const parsed = AdminUpsertPunch.safeParse(withReason);
+  const parsed = AdminQuickPunch.safeParse(input);
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
   }
+  const d = parsed.data;
 
-  const tz = me.timezone || "Asia/Kolkata";
-  if (parsed.data.logDate !== localDateString(tz)) {
+  let target;
+  try {
+    target = await db.query.employees.findFirst({ where: eq(employees.id, d.employeeId), columns: { timezone: true } });
+  } catch (err) {
+    console.error("[attendance] quick punch: employee lookup failed", err);
+    return { ok: false, error: ADMIN_SAVE_FAILED };
+  }
+  if (!target) return { ok: false, error: "Employee not found." };
+  const tz = target.timezone || "Asia/Kolkata";
+  if (d.logDate !== localDateString(tz)) {
     return { ok: false, error: "Quick punch is for today only." };
   }
-  return upsertPunchCore(me.id, parsed.data);
+  try {
+    await applySet({
+      actorId: me.id,
+      employeeId: d.employeeId,
+      date: d.logDate,
+      ...(d.kind === "in" ? { inTime: d.timeHHmm } : { outTime: d.timeHHmm }),
+      reason: "correction",
+      explanation: d.explanation,
+      allowedReasons: ADMIN_REASON_CODES,
+      snapshot: "add-only",
+      eventType: ADMIN_PUNCH_UPSERT_EVENT,
+      via: "super_admin_quick_punch",
+      noteLabel: "Super-admin quick punch",
+    });
+  } catch (err) {
+    return { ok: false, error: correctionFailureMessage(err, "quick punch", ADMIN_SAVE_FAILED) };
+  }
+  await notifyAfterAdminChange(d.employeeId, d.logDate);
+  revalidateAttendanceAdmin();
+  return { ok: true };
 }
 
 /**
- * Edit the existing in/out punch times for an employee+day. Only the supplied
- * side(s) are touched; a missing punch row is left as-is (use `adminUpsertPunch`
- * to create one). The reason on the existing rows is preserved.
+ * Set the in/out times for an employee+day in one atomic change: each supplied
+ * side is added if missing or changed if stored (and still as the admin saw it).
  */
 export async function adminEditDayTimes(
   input: unknown,
@@ -464,57 +451,35 @@ export async function adminEditDayTimes(
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
   }
-  const { employeeId, logDate, inHHmm, outHHmm } = parsed.data;
-
-  const tz = await targetTz(employeeId);
-  if (!tz) return { ok: false, error: "Employee not found." };
-
+  const d = parsed.data;
   try {
-    if (inHHmm) {
-      await db
-        .update(attendanceLogs)
-        .set({ loggedAt: zonedWallClockToUtc(logDate, inHHmm, tz) })
-        .where(
-          and(
-            eq(attendanceLogs.employeeId, employeeId),
-            eq(attendanceLogs.logDate, logDate),
-            eq(attendanceLogs.kind, "in"),
-          ),
-        );
-    }
-    if (outHHmm) {
-      await db
-        .update(attendanceLogs)
-        .set({ loggedAt: zonedWallClockToUtc(logDate, outHHmm, tz) })
-        .where(
-          and(
-            eq(attendanceLogs.employeeId, employeeId),
-            eq(attendanceLogs.logDate, logDate),
-            eq(attendanceLogs.kind, "out"),
-          ),
-        );
-    }
+    await applySet({
+      actorId: me.id,
+      employeeId: d.employeeId,
+      date: d.logDate,
+      inTime: d.inHHmm ?? null,
+      outTime: d.outHHmm ?? null,
+      reason: d.reason,
+      explanation: d.explanation,
+      allowedReasons: ADMIN_REASON_CODES,
+      snapshot: d.snapshot,
+      eventType: ADMIN_PUNCH_EDIT_EVENT,
+      via: "admin_day_editor",
+      noteLabel: "Admin attendance edit",
+    });
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    return { ok: false, error: `DB: ${msg}` };
+    return { ok: false, error: correctionFailureMessage(err, "admin edit", ADMIN_SAVE_FAILED) };
   }
-
-  await auditPunch(me.id, employeeId, "attendance_punch_edit", {
-    logDate,
-    inHHmm: inHHmm ?? null,
-    outHHmm: outHHmm ?? null,
-  });
-  // Re-grade the (now edited) day and fire waived/half-day if it applies.
-  const target = await targetForNotify(employeeId);
-  if (target) {
-    await notifyOnDayFinalized(target, logDate);
-    await notifyAdminLateDeduction(target, logDate);
-  }
+  await notifyAfterAdminChange(d.employeeId, d.logDate);
   revalidateAttendanceAdmin();
   return { ok: true };
 }
 
-/** Delete a single in/out punch for an employee+day. */
+/**
+ * Remove a single in/out punch for an employee+day — with a reason and an
+ * explanation, the full previous punch kept in the audit row, in the same
+ * transaction. No emails (as before: removing a punch never sent any).
+ */
 export async function adminDeletePunch(
   input: unknown,
 ): Promise<ActionResult> {
@@ -526,49 +491,24 @@ export async function adminDeletePunch(
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
   }
-  const { employeeId, logDate, kind } = parsed.data;
-
+  const d = parsed.data;
   try {
-    await db
-      .delete(attendanceLogs)
-      .where(
-        and(
-          eq(attendanceLogs.employeeId, employeeId),
-          eq(attendanceLogs.logDate, logDate),
-          eq(attendanceLogs.kind, kind),
-        ),
-      );
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    return { ok: false, error: `DB: ${msg}` };
-  }
-
-  await auditPunch(me.id, employeeId, "attendance_punch_delete", {
-    logDate,
-    kind,
-  });
-  revalidateAttendanceAdmin();
-  return { ok: true };
-}
-
-
-/** Append an immutable `employee_events` audit row for an admin punch change.
- *  Best-effort: a failed audit write must never roll back the data change. */
-async function auditPunch(
-  actorId: string,
-  employeeId: string,
-  eventType: string,
-  detail: Record<string, unknown>,
-): Promise<void> {
-  try {
-    await db.insert(employeeEvents).values({
-      employeeId,
-      actorId,
-      eventType,
-      toValue: detail,
-      note: `Admin ${eventType} ${JSON.stringify(detail)}`,
+    await applyDelete({
+      actorId: me.id,
+      employeeId: d.employeeId,
+      date: d.logDate,
+      kind: d.kind,
+      reason: d.reason,
+      explanation: d.explanation,
+      allowedReasons: ADMIN_REASON_CODES,
+      snapshot: d.snapshot,
+      eventType: ADMIN_PUNCH_DELETE_EVENT,
+      via: "admin_day_editor",
+      noteLabel: "Admin punch removal",
     });
   } catch (err) {
-    console.error("[attendance] admin punch audit write failed", err);
+    return { ok: false, error: correctionFailureMessage(err, "admin delete", "The punch could not be removed, so nothing was changed. Please try again.") };
   }
+  revalidateAttendanceAdmin();
+  return { ok: true };
 }

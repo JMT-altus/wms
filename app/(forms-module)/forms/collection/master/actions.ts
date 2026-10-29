@@ -75,11 +75,33 @@ function confirmationError(data: z.output<typeof BaseSchema>): string | null {
   return `Confirm which column holds the ${missing.map((m) => FIELD_NAMES[m]).join(" and the ")} before previewing or importing.`;
 }
 
+/** One field change exactly as the preview showed it: the stored value it replaces and the new value. */
+const AcceptedChangeSchema = z.object({
+  field: z.enum(["coordinatorLabel", "paymentTerms"]),
+  from: z.string().max(1000).nullable(),
+  to: z.string().max(1000).nullable(),
+});
+
 const ImportSchema = BaseSchema.extend({
-  /** Row numbers of "changed" rows the admin explicitly accepted. */
-  acceptChanges: z.array(z.number().int().min(1)).max(MAX_ROWS).default([]),
+  /**
+   * The "changed" rows the admin explicitly accepted, each with the exact
+   * change the preview showed. A row number alone proves nothing: at
+   * confirmation the stored values must still be what the preview compared
+   * against, and the change must be the same, or nothing is imported.
+   */
+  acceptChanges: z
+    .array(z.object({ rowNo: z.number().int().min(1), changes: z.array(AcceptedChangeSchema).min(1).max(2) }))
+    .max(MAX_ROWS)
+    .default([])
+    .refine((a) => new Set(a.map((c) => c.rowNo)).size === a.length, "Each row can be accepted only once."),
   confirm: z.literal(true, { message: "Review the preview and confirm the import first." }),
 });
+
+/** Same fields, same stored ("from") and new ("to") values, in any order. */
+const sameChanges = (a: readonly z.output<typeof AcceptedChangeSchema>[], b: readonly z.output<typeof AcceptedChangeSchema>[]) => {
+  const key = (c: z.output<typeof AcceptedChangeSchema>) => JSON.stringify([c.field, c.from, c.to]);
+  return a.length === b.length && JSON.stringify(a.map(key).sort()) === JSON.stringify(b.map(key).sort());
+};
 
 const STORAGE_NOT_READY =
   "Collection Master storage isn't set up yet (migration 0112 is pending), so nothing can be imported.";
@@ -171,7 +193,7 @@ export async function importCollectionMaster(raw: unknown): Promise<Result<{ res
   if (!p.success) return { ok: false, error: firstError(p.error) };
   const unconfirmed = confirmationError(p.data);
   if (unconfirmed) return { ok: false, error: unconfirmed };
-  const accepted = new Set(p.data.acceptChanges);
+  const accepted = new Map(p.data.acceptChanges.map((a) => [a.rowNo, a.changes]));
   const keys = p.data.rows.map((r) => nameKey(r.company));
 
   try {
@@ -186,6 +208,16 @@ export async function importCollectionMaster(raw: unknown): Promise<Result<{ res
       const clients = await loadClientMasterIndex(tx as unknown as typeof db);
       const known = await listKnownCoordinatorLabels(tx as unknown as typeof db);
       const plan = planFor(p.data, existing, clients, known);
+
+      // Every accepted row must still be exactly the change the admin saw: a
+      // "changed" row whose stored values (re-read under the lock above) and
+      // new values match the preview. Anything else — edited meanwhile, no
+      // longer a change, or not in this file — aborts before anything is written.
+      const byRow = new Map(plan.rows.map((r) => [r.rowNo, r]));
+      for (const [rowNo, expected] of accepted) {
+        const now = byRow.get(rowNo);
+        if (!now || now.status !== "changed" || !sameChanges(now.changes, expected)) throw new StaleError(now?.companyName ?? `row ${rowNo}`);
+      }
 
       const [batch] = await tx
         .insert(collectionMasterImports)
@@ -266,7 +298,7 @@ export async function importCollectionMaster(raw: unknown): Promise<Result<{ res
             .set(set)
             .where(and(eq(collectionMasterCompanies.id, ex.id), coordSame, termsSame))
             .returning({ id: collectionMasterCompanies.id });
-          if (upd.length === 0) throw new StaleError("stale");
+          if (upd.length === 0) throw new StaleError(r.companyName);
           totals.updated++;
           changes.push({
             companyId: ex.id,
@@ -293,7 +325,10 @@ export async function importCollectionMaster(raw: unknown): Promise<Result<{ res
     return { ok: true, result };
   } catch (err) {
     if (err instanceof StaleError) {
-      return { ok: false, error: "A company you accepted a change for was edited by someone else meanwhile. Nothing was imported — preview again." };
+      return {
+        ok: false,
+        error: `A company you accepted a change for (${err.message}) no longer matches the preview — someone edited it meanwhile. Nothing was imported — preview again.`,
+      };
     }
     if (isMissingTable(err)) return { ok: false, error: STORAGE_NOT_READY };
     console.error("[collection-master] import failed", err);

@@ -46,6 +46,30 @@ const SourceSchema = z.object({
 });
 const LookupSchema = z.object({ sources: z.array(SourceSchema).min(1).max(MAX_ITEMS) });
 
+/** The Postgres error code. Drizzle wraps driver errors (DrizzleQueryError), so the code may sit on `cause`. */
+const pgCode = (err: unknown): string | undefined => {
+  const e = err as { code?: unknown; cause?: { code?: unknown } } | null;
+  const code = typeof e?.code === "string" ? e.code : e?.cause?.code;
+  return typeof code === "string" ? code : undefined;
+};
+/** Postgres "undefined_table": migration 0111 has not been applied to this database. */
+const isMissingTable = (err: unknown) => pgCode(err) === "42P01";
+
+/**
+ * Server-side diagnostics without personal data. A DrizzleQueryError's message
+ * carries the query parameters (codes, names in the file, employee ids), so only
+ * the Postgres code and the driver's own message are logged.
+ */
+function logDbFailure(what: string, err: unknown) {
+  const e = err as { name?: string; message?: string; cause?: { message?: string } } | null;
+  console.error(`[attendance-import] ${what} failed`, {
+    code: pgCode(err) ?? null,
+    error: e?.cause?.message ?? (e?.name === "DrizzleQueryError" ? "query failed" : (e?.message ?? String(err))),
+  });
+}
+
+const NOT_SET_UP = "the saved-matches table is not installed on this database yet; database update 0111 is needed";
+
 /** Read-only: which of these file rows can be pre-selected, and why not for the rest. */
 export async function lookupSavedMappings(raw: unknown): Promise<Result<{ suggestions: Record<string, Suggestion> }>> {
   await requireAdmin();
@@ -54,29 +78,34 @@ export async function lookupSavedMappings(raw: unknown): Promise<Result<{ sugges
 
   const codes = [...new Set(parsed.data.sources.map((s) => usableCode(s.code)).filter((c): c is string => !!c))];
   const saved = new Map<string, SavedMapping>();
-  if (codes.length > 0) {
-    const rows = await db
-      .select({
-        code: biometricEmployeeMap.biometricCode,
-        employeeId: biometricEmployeeMap.employeeId,
-        nameInFile: biometricEmployeeMap.nameInFile,
-        confirmedAt: biometricEmployeeMap.confirmedAt,
-      })
-      .from(biometricEmployeeMap)
-      .where(inArray(biometricEmployeeMap.biometricCode, codes));
-    for (const r of rows) {
-      saved.set(r.code, { code: r.code, employeeId: r.employeeId, nameInFile: r.nameInFile, confirmedAt: r.confirmedAt.toISOString() });
-    }
-  }
-
   const targets = new Map<string, MappingTarget>();
-  const ids = [...new Set([...saved.values()].map((s) => s.employeeId))];
-  if (ids.length > 0) {
-    const rows = await db
-      .select({ id: employees.id, name: employees.name, email: employees.email, isActive: employees.isActive })
-      .from(employees)
-      .where(inArray(employees.id, ids));
-    for (const r of rows) targets.set(r.id, r);
+  try {
+    if (codes.length > 0) {
+      const rows = await db
+        .select({
+          code: biometricEmployeeMap.biometricCode,
+          employeeId: biometricEmployeeMap.employeeId,
+          nameInFile: biometricEmployeeMap.nameInFile,
+          confirmedAt: biometricEmployeeMap.confirmedAt,
+        })
+        .from(biometricEmployeeMap)
+        .where(inArray(biometricEmployeeMap.biometricCode, codes));
+      for (const r of rows) {
+        saved.set(r.code, { code: r.code, employeeId: r.employeeId, nameInFile: r.nameInFile, confirmedAt: r.confirmedAt.toISOString() });
+      }
+    }
+
+    const ids = [...new Set([...saved.values()].map((s) => s.employeeId))];
+    if (ids.length > 0) {
+      const rows = await db
+        .select({ id: employees.id, name: employees.name, email: employees.email, isActive: employees.isActive })
+        .from(employees)
+        .where(inArray(employees.id, ids));
+      for (const r of rows) targets.set(r.id, r);
+    }
+  } catch (err) {
+    logDbFailure("loading biometric mappings", err);
+    return { ok: false, error: isMissingTable(err) ? NOT_SET_UP : "the database could not be read" };
   }
 
   return { ok: true, suggestions: resolveSavedMappings(parsed.data.sources, saved, targets) };
@@ -114,7 +143,8 @@ export interface SaveMappingsResult {
 type Outcome = "unchanged" | "created" | "confirmed" | "changed";
 
 const isUniqueViolation = (err: unknown) =>
-  typeof err === "object" && err !== null && ((err as { code?: string }).code === "23505" || /duplicate key|unique constraint/i.test(String((err as Error).message)));
+  pgCode(err) === "23505" ||
+  /duplicate key|unique constraint/i.test(`${(err as Error | null)?.message ?? ""} ${(err as { cause?: Error } | null)?.cause?.message ?? ""}`);
 
 /**
  * Saves matches an admin has reviewed. All-or-nothing, in one transaction.
@@ -270,7 +300,8 @@ export async function saveConfirmedMappings(
     if (isUniqueViolation(err)) {
       return { ok: false, error: "Another change to these matches happened at the same moment. Reload the page and try again." };
     }
-    console.error("[attendance-import] saving biometric mappings failed", err);
+    logDbFailure("saving biometric mappings", err);
+    if (isMissingTable(err)) return { ok: false, error: `The matches could not be saved because ${NOT_SET_UP}. Nothing was changed.` };
     return { ok: false, error: "The matches could not be saved. Nothing was changed." };
   }
 }

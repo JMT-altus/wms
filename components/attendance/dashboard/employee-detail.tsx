@@ -12,9 +12,15 @@ import {
 } from "@/app/(app)/attendance/dashboard/actions";
 import {
   adminEditDayTimes,
-  adminUpsertPunch,
   adminDeletePunch,
+  adminLookupDay,
+  type AdminDayView,
 } from "@/app/(app)/attendance/actions";
+import {
+  EXPLANATION_MAX,
+  PUNCH_REASON_LABELS,
+  explanationError,
+} from "@/lib/attendance/correction/plan";
 import { adminMarkLeave } from "@/app/(app)/attendance/leave/actions";
 import { fireToast } from "@/lib/toast";
 import {
@@ -37,13 +43,6 @@ const MONTH_LABELS = [
   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
 ];
 const WEEKDAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-
-const REASON_LABELS: Record<PunchReason, string> = {
-  client_visit: "Client visit",
-  wfh: "Work from home",
-  forgot: "Forgot to punch",
-  correction: "Correction",
-};
 
 /** "YYYY-MM-DD" → "06 · Sat" using the row's own weekday (no tz drift). */
 function dayLabel(row: DayRow): string {
@@ -344,9 +343,12 @@ export function EmployeeDetailDialog({
 }
 
 /**
- * Inline editor for one day. Handles three operations against the audited admin
- * actions: edit existing in/out times, add a missing punch with a reason, and
- * delete a punch. On success it calls onDone() which re-fetches + refreshes.
+ * Inline editor for one day. Every operation — editing or adding times, and
+ * removing a punch — needs a reason and an explanation, and goes through the
+ * audited correction mechanism on the server. The stored punches are loaded
+ * fresh when the row opens; that snapshot is sent back so a punch changed by
+ * someone else meanwhile is refused instead of overwritten. On success it calls
+ * onDone(), which re-fetches + refreshes.
  */
 function EditRow({
   employeeId,
@@ -363,12 +365,36 @@ function EditRow({
   onCancel: () => void;
   onDone: () => void | Promise<void>;
 }) {
+  const [stored, setStored] = useState<AdminDayView | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [inVal, setInVal] = useState(day.inAt ?? "");
   const [outVal, setOutVal] = useState(day.outAt ?? "");
   const [reason, setReason] = useState<PunchReason>("correction");
+  const [explanation, setExplanation] = useState("");
 
-  const hadIn = day.inAt != null;
-  const hadOut = day.outAt != null;
+  useEffect(() => {
+    let cancelled = false;
+    adminLookupDay({ employeeId, logDate: day.logDate })
+      .then((res) => {
+        if (cancelled) return;
+        if (res.ok) {
+          setStored(res.day);
+          setInVal(res.day.punches.in?.time ?? "");
+          setOutVal(res.day.punches.out?.time ?? "");
+        } else setLoadError(res.error);
+      })
+      .catch(() => {
+        if (!cancelled) setLoadError("Could not load that day. Please try again.");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [employeeId, day.logDate]);
+
+  const snapshot = stored
+    ? { in: stored.punches.in?.loggedAt ?? null, out: stored.punches.out?.loggedAt ?? null }
+    : null;
+  const whyNot = !snapshot ? "Loading the stored punches…" : explanationError(reason, explanation);
 
   async function run(fn: () => Promise<{ ok: boolean; error?: string }>, okMsg: string) {
     setBusy(true);
@@ -380,15 +406,14 @@ function EditRow({
       } else {
         fireToast({ message: res.error ?? "Could not save.", type: "error" });
       }
-    } catch (e) {
-      fireToast({ message: (e as Error).message ?? "Could not save.", type: "error" });
+    } catch {
+      fireToast({ message: "Could not save. Please try again.", type: "error" });
     } finally {
       setBusy(false);
     }
   }
 
-  /** Save the times. Existing punches are edited; newly-supplied punches that
-   *  didn't exist before are created via upsert (carrying the reason). */
+  /** Save the times in one change: supplied sides are added or corrected. */
   async function save() {
     const wantIn = inVal.trim();
     const wantOut = outVal.trim();
@@ -404,57 +429,41 @@ function EditRow({
       fireToast({ message: "Enter a check-in or check-out time.", type: "error" });
       return;
     }
-
-    // Edit side(s) that already existed.
-    const editIn = hadIn && wantIn ? wantIn : undefined;
-    const editOut = hadOut && wantOut ? wantOut : undefined;
-    // Create side(s) that are newly supplied (no prior punch).
-    const addIn = !hadIn && wantIn ? wantIn : undefined;
-    const addOut = !hadOut && wantOut ? wantOut : undefined;
-
-    await run(async () => {
-      if (editIn || editOut) {
-        const res = await adminEditDayTimes({
+    if (!snapshot || whyNot) {
+      fireToast({ message: whyNot ?? "Loading the stored punches…", type: "error" });
+      return;
+    }
+    await run(
+      () =>
+        adminEditDayTimes({
           employeeId,
           logDate: day.logDate,
-          ...(editIn ? { inHHmm: editIn } : {}),
-          ...(editOut ? { outHHmm: editOut } : {}),
-        });
-        if (!res.ok) return res;
-      }
-      if (addIn) {
-        const res = await adminUpsertPunch({
-          employeeId,
-          logDate: day.logDate,
-          kind: "in",
-          timeHHmm: addIn,
+          ...(wantIn ? { inHHmm: wantIn } : {}),
+          ...(wantOut ? { outHHmm: wantOut } : {}),
           reason,
-        });
-        if (!res.ok) return res;
-      }
-      if (addOut) {
-        const res = await adminUpsertPunch({
-          employeeId,
-          logDate: day.logDate,
-          kind: "out",
-          timeHHmm: addOut,
-          reason,
-        });
-        if (!res.ok) return res;
-      }
-      return { ok: true };
-    }, "Attendance updated.");
+          explanation,
+          snapshot,
+        }),
+      "Attendance updated.",
+    );
   }
 
   async function del(kind: "in" | "out") {
+    if (!snapshot || whyNot) {
+      fireToast({ message: whyNot ?? "Loading the stored punches…", type: "error" });
+      return;
+    }
+    const label = kind === "in" ? "check-in" : "check-out";
+    if (!window.confirm(`Remove the ${label} for ${day.logDate}? The removal and your explanation are kept in the audit history.`)) return;
     await run(
-      () => adminDeletePunch({ employeeId, logDate: day.logDate, kind }),
+      () => adminDeletePunch({ employeeId, logDate: day.logDate, kind, reason, explanation, snapshot }),
       kind === "in" ? "Check-in removed." : "Check-out removed.",
     );
   }
 
-  // Reason only matters when we're adding a brand-new punch.
-  const addingNew = (!hadIn && inVal.trim()) || (!hadOut && outVal.trim());
+  const hadIn = stored ? stored.punches.in != null : day.inAt != null;
+  const hadOut = stored ? stored.punches.out != null : day.outAt != null;
+  const run_ = stored?.salaryRun ?? null;
 
   return (
     <tr
@@ -468,43 +477,71 @@ function EditRow({
         {dayLabel(day)}
       </td>
       <td className="px-3 py-3 align-top">
-        <TimeInput value={inVal} onChange={setInVal} disabled={busy} label="Check-in" />
+        <TimeInput value={inVal} onChange={setInVal} disabled={busy || !stored} label="Check-in" />
         {hadIn && (
-          <DeleteLink disabled={busy} onClick={() => del("in")} />
+          <DeleteLink disabled={busy || !!whyNot} onClick={() => del("in")} />
         )}
       </td>
       <td className="px-3 py-3 align-top">
-        <TimeInput value={outVal} onChange={setOutVal} disabled={busy} label="Check-out" />
+        <TimeInput value={outVal} onChange={setOutVal} disabled={busy || !stored} label="Check-out" />
         {hadOut && (
-          <DeleteLink disabled={busy} onClick={() => del("out")} />
+          <DeleteLink disabled={busy || !!whyNot} onClick={() => del("out")} />
         )}
       </td>
       <td className="px-3 py-3 align-top" colSpan={2}>
-        {addingNew && (
-          <label className="block">
-            <span className="block text-[10px] uppercase tracking-wide font-bold text-ink-subtle mb-1">
-              Reason (new punch)
-            </span>
-            <select
-              value={reason}
-              disabled={busy}
-              onChange={(e) => setReason(e.target.value as PunchReason)}
-              className="rounded-md border border-hairline bg-surface-card px-2 py-1.5 text-[13px] font-semibold text-ink-strong"
-            >
-              {PUNCH_REASONS.map((r) => (
-                <option key={r} value={r}>
-                  {REASON_LABELS[r]}
-                </option>
-              ))}
-            </select>
-          </label>
+        {loadError ? (
+          <p role="alert" className="text-[12.5px] font-semibold text-[#B91C1C]">
+            {loadError}
+          </p>
+        ) : (
+          <div className="grid gap-1.5">
+            <label className="block">
+              <span className="block text-[10px] uppercase tracking-wide font-bold text-ink-subtle mb-1">
+                Reason
+              </span>
+              <select
+                value={reason}
+                disabled={busy}
+                aria-label="Reason"
+                onChange={(e) => setReason(e.target.value as PunchReason)}
+                className="rounded-md border border-hairline bg-surface-card px-2 py-1.5 text-[13px] font-semibold text-ink-strong"
+              >
+                {PUNCH_REASONS.map((r) => (
+                  <option key={r} value={r}>
+                    {PUNCH_REASON_LABELS[r]}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block">
+              <span className="block text-[10px] uppercase tracking-wide font-bold text-ink-subtle mb-1">
+                Explanation (required)
+              </span>
+              <textarea
+                value={explanation}
+                disabled={busy}
+                maxLength={EXPLANATION_MAX}
+                aria-label="Explanation"
+                rows={2}
+                onChange={(e) => setExplanation(e.target.value)}
+                className="w-full min-w-[180px] rounded-md border border-hairline bg-surface-card px-2 py-1.5 text-[13px] text-ink-strong"
+              />
+            </label>
+            {whyNot && explanation && <span className="text-[11.5px] text-ink-subtle">{whyNot}</span>}
+            {run_ && (
+              <p role="status" className="rounded-md px-2 py-1.5 text-[12px] font-semibold" style={{ background: "#FFFBEB", color: "#92400E" }}>
+                Salary for {run_.month} has already been {run_.disbursed ? "generated and disbursed" : "generated"}. This change
+                will not update that salary run; payroll may need to review it.
+              </p>
+            )}
+          </div>
         )}
       </td>
       <td className="px-3 py-3 align-top" colSpan={2}>
         <div className="flex items-center justify-end gap-1.5">
           <button
             type="button"
-            disabled={busy}
+            disabled={busy || !!whyNot || !!loadError}
             onClick={save}
             className="inline-flex items-center gap-1.5 rounded-md bg-altus-red py-1.5 px-3 text-[12px] font-bold text-white disabled:opacity-60 transition-opacity"
           >

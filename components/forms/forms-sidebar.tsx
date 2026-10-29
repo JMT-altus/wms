@@ -20,6 +20,7 @@ import {
   ArrowLeft,
   Building2,
   HandCoins,
+  Archive,
   type LucideIcon,
 } from "lucide-react";
 // The same brand ramp the Masters rail uses. Imported rather than re-declared
@@ -139,16 +140,25 @@ const COMMITMENTS_ITEM: NavItem = {
   icon: HandCoins,
 };
 
+/** Shown only with collection.logs.view (decided on the server); the page checks again regardless. */
+const LOGS_ITEM: NavItem = {
+  href: "/forms/collection/logs" as Route,
+  label: "Collection Logs",
+  hint: "Closed collections and their history",
+  icon: Archive,
+};
+
 /**
  * The rail for this person: the Collection screens only with collection.view,
- * and the restricted page only with its capabilities. Hiding is a courtesy —
+ * and the restricted pages only with their capabilities. Hiding is a courtesy —
  * every Collection page and action checks on the server.
  */
-function navFor(showCommitments: boolean, showCollection: boolean): ReadonlyArray<NavItem> {
+export function navFor(showCommitments: boolean, showCollection: boolean, showLogs = false): ReadonlyArray<NavItem> {
   const base = showCollection ? NAV : NAV.filter((i) => !String(i.href).startsWith("/forms/collection/"));
-  if (!showCommitments) return base;
+  const extra = [showCommitments && COMMITMENTS_ITEM, showLogs && LOGS_ITEM].filter((i): i is NavItem => Boolean(i));
+  if (extra.length === 0) return base;
   const at = base.findIndex((i) => i.href === "/forms/collection/master");
-  return at < 0 ? [...base, COMMITMENTS_ITEM] : [...base.slice(0, at + 1), COMMITMENTS_ITEM, ...base.slice(at + 1)];
+  return at < 0 ? [...base, ...extra] : [...base.slice(0, at + 1), ...extra, ...base.slice(at + 1)];
 }
 
 /* The Forms accent, taken from the module's own hub tile (see STYLES.forms
@@ -162,12 +172,14 @@ export function FormsSidebar({
   userName,
   showCommitments = false,
   showCollection = true,
+  showLogs = false,
 }: {
   userName: string;
   showCommitments?: boolean;
   showCollection?: boolean;
+  showLogs?: boolean;
 }) {
-  const items = navFor(showCommitments, showCollection);
+  const items = navFor(showCommitments, showCollection, showLogs);
   const pathname = usePathname();
   const collapsed = useRailCollapsed();
 
@@ -293,8 +305,16 @@ export function FormsSidebar({
 }
 
 /** The same links as a scrollable strip, for phones where the rail hides. */
-export function FormsMobileNav({ showCommitments = false, showCollection = true }: { showCommitments?: boolean; showCollection?: boolean }) {
-  const items = navFor(showCommitments, showCollection);
+export function FormsMobileNav({
+  showCommitments = false,
+  showCollection = true,
+  showLogs = false,
+}: {
+  showCommitments?: boolean;
+  showCollection?: boolean;
+  showLogs?: boolean;
+}) {
+  const items = navFor(showCommitments, showCollection, showLogs);
   const pathname = usePathname();
   return (
     <div

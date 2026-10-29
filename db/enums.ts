@@ -986,6 +986,17 @@ export const PERMISSION_FIELDS = [
     adminBypass: false,
     superAdminBypass: false,
   },
+  {
+    // Ordinary (like collection.view): the log itself holds only what Tracker
+    // users already see — company, dates, source and final figures. Restricted
+    // history inside a log (commitments, escalations) keeps its own sensitive
+    // capability; holding this one never reveals it.
+    key: "collection.logs.view",
+    label: "Collections — View Collection Logs",
+    hint: "Open Collection Logs: companies whose collection was closed, with their history (read-only).",
+    defaultAllowed: false,
+    group: "Collections",
+  },
 ] as const satisfies readonly PermissionFieldDef[];
 export type PermissionFieldKey = (typeof PERMISSION_FIELDS)[number]["key"];
 

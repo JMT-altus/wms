@@ -5,6 +5,7 @@ import { SalaryImportDialog } from "@/components/salary/salary-import-dialog";
 import { requireAdmin } from "@/lib/auth/current";
 import { localDateString } from "@/lib/format";
 import { listRunsForMonth } from "@/lib/queries/salary";
+import { staleChecksForMonth } from "@/lib/queries/salary-stale";
 import { monthLabel } from "@/lib/salary/period";
 
 export const dynamic = "force-dynamic";
@@ -26,6 +27,8 @@ export default async function SalaryPage({ searchParams }: PageProps) {
       : localDateString("Asia/Kolkata").slice(0, 7);
 
   const rows = await listRunsForMonth(month);
+  // Read-only: flags runs whose attendance inputs changed after generation.
+  const stale = await staleChecksForMonth(month, rows);
 
   return (
     <>
@@ -34,7 +37,7 @@ export default async function SalaryPage({ searchParams }: PageProps) {
         <div className="mb-4 flex justify-end">
           <SalaryImportDialog />
         </div>
-        <SalaryReport month={month} monthLabel={monthLabel(month)} rows={rows} />
+        <SalaryReport month={month} monthLabel={monthLabel(month)} rows={rows} stale={stale} />
       </main>
       <DashboardFooter />
     </>

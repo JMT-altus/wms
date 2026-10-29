@@ -212,7 +212,7 @@ describe("import", () => {
       { rowNo: 3, company: "Beta", coordinator: "GR" },
       { rowNo: 4, company: "Gamma", coordinator: "BH" },
     ];
-    const res = await importCollectionMaster({ ...body(rows), acceptChanges: [4], confirm: true });
+    const res = await importCollectionMaster({ ...body(rows), acceptChanges: [{ rowNo: 4, changes: [{ field: "coordinatorLabel", from: "GR", to: "BH" }] }], confirm: true });
     if (!res.ok) throw new Error(res.error);
     expect(res.result.totals).toMatchObject({ inserted: 0, updated: 1, unchanged: 1, keptExisting: 1 });
     expect(res.result.rows.map((r) => r.outcome)).toEqual(["unchanged", "kept-existing", "updated"]);
@@ -235,10 +235,105 @@ describe("import", () => {
   it("an accepted change whose row was edited meanwhile rolls back the whole import", async () => {
     h.existing = new Map([["alpha", stored("Alpha", "alpha", "BK", null)]]);
     h.staleUpdate = true;
-    const res = await importCollectionMaster({ ...body([{ rowNo: 2, company: "Alpha", coordinator: "GR" }, { rowNo: 3, company: "New Co" }]), acceptChanges: [2], confirm: true });
+    const res = await importCollectionMaster({
+      ...body([{ rowNo: 2, company: "Alpha", coordinator: "GR" }, { rowNo: 3, company: "New Co" }]),
+      acceptChanges: [{ rowNo: 2, changes: [{ field: "coordinatorLabel", from: "BK", to: "GR" }] }],
+      confirm: true,
+    });
     expect(res).toEqual({ ok: false, error: expect.stringMatching(/Nothing was imported/) });
     expect(h.committed.companies).toEqual([]);
     expect(h.committed.imports).toEqual([]);
+  });
+
+  describe("stale-preview protection: an accepted row must still be exactly what the preview showed", () => {
+    const accept = (rowNo: number, from: string | null, to: string | null) => [{ rowNo, changes: [{ field: "coordinatorLabel" as const, from, to }] }];
+    const file = () => body([{ rowNo: 2, company: "Alpha", coordinator: "GR" }, { rowNo: 3, company: "New Co" }]);
+    const nothingWritten = () => {
+      expect(h.committed.companies).toEqual([]);
+      expect(h.committed.updates).toEqual([]);
+      expect(h.committed.imports).toEqual([]);
+    };
+
+    it("REGRESSION: preview BK→GR accepted, someone sets MX meanwhile → refused, MX is not overwritten, nothing imported", async () => {
+      h.existing = new Map([["alpha", stored("Alpha", "alpha", "BK", null)]]);
+      const preview = await previewCollectionMaster(file());
+      if (!preview.ok) throw new Error(preview.error);
+      const seen = preview.preview.rows.find((r) => r.rowNo === 2)!;
+      expect(seen.changes).toEqual([{ field: "coordinatorLabel", from: "BK", to: "GR" }]);
+      h.existingInTx = new Map([["alpha", stored("Alpha", "alpha", "MX", null)]]); // the value read under the lock
+      const res = await importCollectionMaster({ ...file(), acceptChanges: [{ rowNo: 2, changes: seen.changes }], confirm: true });
+      expect(res).toEqual({ ok: false, error: expect.stringMatching(/\(Alpha\) no longer matches the preview.*Nothing was imported — preview again/) });
+      nothingWritten();
+    });
+
+    it("an accepted row that is no longer a change (someone already set the same value) is refused, not silently dropped", async () => {
+      h.existing = new Map([["alpha", stored("Alpha", "alpha", "BK", null)]]);
+      h.existingInTx = new Map([["alpha", stored("Alpha", "alpha", "GR", null)]]);
+      expect((await importCollectionMaster({ ...file(), acceptChanges: accept(2, "BK", "GR"), confirm: true })).ok).toBe(false);
+      nothingWritten();
+    });
+
+    it("the same row number with a different expected change (a forged or out-of-date acceptance) is refused", async () => {
+      h.existing = new Map([["alpha", stored("Alpha", "alpha", "BK", null)]]);
+      expect((await importCollectionMaster({ ...file(), acceptChanges: accept(2, "XX", "GR"), confirm: true })).ok).toBe(false);
+      expect((await importCollectionMaster({ ...file(), acceptChanges: accept(2, "BK", "ZZ"), confirm: true })).ok).toBe(false);
+      nothingWritten();
+    });
+
+    it("an accepted row number that isn't a row of this file is refused", async () => {
+      h.existing = new Map([["alpha", stored("Alpha", "alpha", "BK", null)]]);
+      expect((await importCollectionMaster({ ...file(), acceptChanges: accept(99, "BK", "GR"), confirm: true })).ok).toBe(false);
+      nothingWritten();
+    });
+
+    it("all accepted rows are checked before anything is written: one stale row out of two refuses both", async () => {
+      h.existing = new Map([
+        ["alpha", stored("Alpha", "alpha", "BK", null)],
+        ["beta", stored("Beta", "beta", "BK", null)],
+      ]);
+      h.existingInTx = new Map([
+        ["alpha", stored("Alpha", "alpha", "BK", null)],
+        ["beta", stored("Beta", "beta", "MX", null)],
+      ]);
+      const res = await importCollectionMaster({
+        ...body([{ rowNo: 2, company: "Alpha", coordinator: "GR" }, { rowNo: 3, company: "Beta", coordinator: "GR" }]),
+        acceptChanges: [...accept(2, "BK", "GR"), ...accept(3, "BK", "GR")],
+        confirm: true,
+      });
+      expect(res).toEqual({ ok: false, error: expect.stringMatching(/\(Beta\)/) });
+      nothingWritten();
+    });
+
+    it("an unchanged acceptance is still applied (the fix doesn't block valid imports); both fields at once must match", async () => {
+      h.existing = new Map([["alpha", stored("Alpha", "alpha", "BK", "30 days")]]);
+      const res = await importCollectionMaster({
+        ...body([{ rowNo: 2, company: "Alpha", coordinator: "GR", paymentTerms: "45 days" }]),
+        acceptChanges: [{ rowNo: 2, changes: [{ field: "paymentTerms", from: "30 days", to: "45 days" }, { field: "coordinatorLabel", from: "BK", to: "GR" }] }],
+        confirm: true,
+      });
+      if (!res.ok) throw new Error(res.error);
+      expect(h.committed.updates.filter((u) => !("batch" in u))).toEqual([expect.objectContaining({ coordinatorLabel: "GR", paymentTerms: "45 days" })]);
+      // Only one of the two changes accepted → no longer the change the preview showed → refused.
+      h.committed = { companies: [], updates: [], imports: [], deletes: 0 };
+      const partial = await importCollectionMaster({
+        ...body([{ rowNo: 2, company: "Alpha", coordinator: "GR", paymentTerms: "45 days" }]),
+        acceptChanges: accept(2, "BK", "GR"),
+        confirm: true,
+      });
+      expect(partial.ok).toBe(false);
+      nothingWritten();
+    });
+
+    it("the old row-number-only payload and duplicate acceptances are rejected by the server", async () => {
+      h.existing = new Map([["alpha", stored("Alpha", "alpha", "BK", null)]]);
+      expect((await importCollectionMaster({ ...file(), acceptChanges: [2], confirm: true })).ok).toBe(false);
+      expect(await importCollectionMaster({ ...file(), acceptChanges: [...accept(2, "BK", "GR"), ...accept(2, "BK", "GR")], confirm: true })).toEqual({
+        ok: false,
+        error: "Each row can be accepted only once.",
+      });
+      expect(h.transactions).toBe(0);
+      nothingWritten();
+    });
   });
 
   it("a company created by someone else meanwhile is reported, not overwritten", async () => {

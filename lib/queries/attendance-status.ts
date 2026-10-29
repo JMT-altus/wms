@@ -1,5 +1,5 @@
 import "server-only";
-import { and, between, eq } from "drizzle-orm";
+import { and, between, eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { attendanceLogs, employees, type OrgSettings } from "@/db/schema";
 import { getOrgSettings } from "@/lib/queries/org-settings";
@@ -18,6 +18,7 @@ import {
   type CompOffRangeMaps,
 } from "@/lib/queries/comp-off";
 import type { AttendanceCode } from "@/db/enums";
+import { effectiveJoinDay } from "@/lib/attendance/join-day";
 
 /**
  * Month-status query layer (Attendance Phase A, Task A3).
@@ -303,7 +304,23 @@ interface EmpSlice {
   createdAt: Date;
   attLateAfter: string | null;
   attEarlyBefore: string | null;
+  /** The employee's first recorded attendance date (YYYY-MM-DD) up to the graded month's end, or null. See effectiveJoinDay. */
+  firstLogDate?: string | null;
 }
+
+/**
+ * The employee's first recorded attendance date on or before `until`, as
+ * YYYY-MM-DD text — a correlated subquery on `employees`, so it costs no extra
+ * round trip and uses the (employee_id, log_date) index. Bounding it by the
+ * graded month's end gives exactly the same grading as the unbounded first date.
+ *
+ * The outer reference is spelled out ("employees"."id"): in a single-table
+ * select Drizzle renders `${employees.id}` unqualified, as "id", which inside
+ * this subquery would mean attendance_logs.id and never match.
+ */
+const OUTER_EMPLOYEE_ID = sql`${sql.identifier("employees")}.${sql.identifier("id")}`;
+const firstLogDateUntil = (until: string) =>
+  sql<string | null>`(select min(${attendanceLogs.logDate})::text from ${attendanceLogs} where ${attendanceLogs.employeeId} = ${OUTER_EMPLOYEE_ID} and ${attendanceLogs.logDate} <= ${until})`;
 
 /**
  * Grade one employee's month given their already-folded punches. Pure of the
@@ -324,9 +341,11 @@ function gradeMonth(
   const tz = emp.timezone || "Asia/Kolkata";
 
   const { first, last } = monthBounds(year, month);
-  // The employee's local join day. Fall back to createdAt if joinedAt is null.
+  // The employee's local join day: the account's (joinedAt — first sign-in —
+  // else createdAt), or their first recorded attendance if that is earlier
+  // (e.g. imported history). Days before it are "not joined".
   const joinSource = emp.joinedAt ?? emp.createdAt;
-  const joinDay = dateInTz(joinSource, tz);
+  const joinDay = effectiveJoinDay(dateInTz(joinSource, tz), emp.firstLogDate);
 
   const days: DayRow[] = [];
   const summary = emptySummary();
@@ -422,6 +441,7 @@ export async function getEmployeeMonthStatus(
   month: number,
   refTodayISO: string,
 ): Promise<EmployeeMonthStatus> {
+  const { first, last } = monthBounds(year, month);
   const [org, emp] = await Promise.all([
     getOrgSettings(),
     db
@@ -433,6 +453,7 @@ export async function getEmployeeMonthStatus(
         createdAt: employees.createdAt,
         attLateAfter: employees.attLateAfter,
         attEarlyBefore: employees.attEarlyBefore,
+        firstLogDate: firstLogDateUntil(last),
       })
       .from(employees)
       .where(eq(employees.id, employeeId))
@@ -445,7 +466,6 @@ export async function getEmployeeMonthStatus(
   }
 
   const tz = emp.timezone || "Asia/Kolkata";
-  const { first, last } = monthBounds(year, month);
   const rows = await db
     .select({
       kind: attendanceLogs.kind,
@@ -526,6 +546,7 @@ export async function getMonthDashboard(
         createdAt: employees.createdAt,
         attLateAfter: employees.attLateAfter,
         attEarlyBefore: employees.attEarlyBefore,
+        firstLogDate: firstLogDateUntil(last),
       })
       .from(employees)
       .where(eq(employees.isActive, true))

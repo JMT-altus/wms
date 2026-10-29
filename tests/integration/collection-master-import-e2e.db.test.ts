@@ -173,10 +173,35 @@ describe("with migration 0112 applied on its own", () => {
     expect((await companies()).find((c) => c.company_name === "Alpha Traders")!.coordinator_label).toBe("MANGESH");
     expect((await companies()).find((c) => c.company_name === "Beta Corp")!.payment_terms).toBe("Advance");
 
-    const accepted = await master.importCollectionMaster({ ...changed, acceptChanges: [2], confirm: true });
+    const preview = await master.previewCollectionMaster(changed);
+    if (!preview.ok) throw new Error(preview.error);
+    const row2 = preview.preview.rows.find((r) => r.rowNo === 2)!;
+    expect(row2.changes).toEqual([{ field: "coordinatorLabel", from: "MANGESH", to: "Gauri" }]);
+    const accepted = await master.importCollectionMaster({ ...changed, acceptChanges: [{ rowNo: 2, changes: row2.changes }], confirm: true });
     if (!accepted.ok) throw new Error(accepted.error);
     expect(accepted.result.totals.updated).toBe(1);
     expect((await companies()).find((c) => c.company_name === "Alpha Traders")!.coordinator_label).toBe("Gauri");
+  });
+
+  it("REGRESSION: a value changed between preview and confirmation is never overwritten — the whole import is refused", async () => {
+    // Preview: the admin sees Alpha Traders Gauri → Ravi and accepts it.
+    const file = body([["Alpha Traders", "Ravi", "30 days"], ["Epsilon New Co", "Ravi", ""]]);
+    const preview = await master.previewCollectionMaster(file);
+    if (!preview.ok) throw new Error(preview.error);
+    const seen = preview.preview.rows.find((r) => r.rowNo === 2)!;
+    expect(seen.changes).toEqual([{ field: "coordinatorLabel", from: "Gauri", to: "Ravi" }]);
+
+    // Meanwhile someone else assigns MANGESH to Alpha Traders (test database only).
+    await pg.query(`update collection_master_companies set coordinator_label = 'MANGESH' where company_name = 'Alpha Traders'`);
+    const before = await companies();
+    const importsBefore = (await pg.query<{ n: number }>(`select count(*)::int as n from collection_master_imports`)).rows[0]!.n;
+
+    const res = await master.importCollectionMaster({ ...file, acceptChanges: [{ rowNo: 2, changes: seen.changes }], confirm: true });
+    expect(res).toEqual({ ok: false, error: expect.stringMatching(/Alpha Traders.*no longer matches the preview.*Nothing was imported/) });
+    // MANGESH is still there; the new company in the same file was not created; no audit batch was left behind.
+    expect(await companies()).toEqual(before);
+    expect((await companies()).find((c) => c.company_name === "Alpha Traders")!.coordinator_label).toBe("MANGESH");
+    expect((await pg.query<{ n: number }>(`select count(*)::int as n from collection_master_imports`)).rows[0]!.n).toBe(importsBefore);
   });
 
   it("import requires an explicit confirmation and a confirmed coordinator column", async () => {

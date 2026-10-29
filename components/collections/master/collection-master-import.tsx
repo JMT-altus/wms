@@ -207,7 +207,12 @@ export function CollectionMasterImport({ storageReady }: { storageReady: boolean
     setBusy("import");
     setError(null);
     try {
-      const res = await importCollectionMaster({ ...(await payload()), acceptChanges: [...accept], confirm: confirmed ? true : undefined });
+      // Each accepted row goes back with the exact change the preview showed, so
+      // the server can refuse it if the stored values changed in the meantime.
+      const acceptChanges = (preview?.rows ?? [])
+        .filter((r) => accept.has(r.rowNo))
+        .map((r) => ({ rowNo: r.rowNo, changes: r.changes.map(({ field, from, to }) => ({ field, from, to })) }));
+      const res = await importCollectionMaster({ ...(await payload()), acceptChanges, confirm: confirmed ? true : undefined });
       if (!res.ok) setError(res.error);
       else {
         setResult(res.result);
