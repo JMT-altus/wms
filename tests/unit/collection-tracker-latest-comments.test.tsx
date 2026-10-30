@@ -4,9 +4,9 @@ import { act, cleanup, fireEvent, render, screen, within } from "@testing-librar
 import { isValidElement, type ReactElement, type ReactNode } from "react";
 
 // The Tracker's Comments column, end to end on the client, plus the page's server-side gate:
-//   - the latest five comments of EACH company are shown in full in its row (no inner scroll box hiding some);
-//   - "See all comments" (more than five) opens that company's complete history;
-//   - fewer than five → all of them; none → "No comments yet";
+//   - only the latest comment of EACH company is shown in full in its row (no inner scroll box);
+//   - "See all comments" (more than one) opens that company's complete history;
+//   - exactly one → that one, no button; none → "No comments yet";
 //   - a refresh after adding / editing shows the new state; companies never mix;
 //   - without collection.view the page refuses before any comment is read.
 // The comments come with the page (the server loads every follow-up once); nothing is fetched when the dialog opens.
@@ -87,31 +87,36 @@ beforeEach(() => {
   h.refresh.mockReset();
 });
 
-describe("the latest five comments of each company, directly in its row", () => {
-  it("exactly five, newest first by full timestamp, ALL visible — no inner scroll box", () => {
+describe("the latest comment of each company, directly in its row", () => {
+  it("exactly one — the newest by full timestamp — visible; the count says how many there are in all", () => {
     renderTracker([...ALPHA, ...BETA, ...GAMMA]);
     const alpha = row("Alpha Traders");
-    expect(notesIn(alpha)).toEqual(["a7", "a6", "a5", "a4", "a3"]);
-    expect(alpha.querySelectorAll('[data-comment-audit="compact"]')).toHaveLength(5);
-    expect(within(alpha).getByText("Latest 5 of 7")).toBeTruthy();
+    expect(notesIn(alpha)).toEqual(["a7"]);
+    expect(alpha.querySelectorAll('[data-comment-audit="compact"]')).toHaveLength(1);
+    expect(within(alpha).getByText("Latest of 7")).toBeTruthy();
     const list = within(alpha).getByLabelText("Comments, newest first");
-    expect(list.className).not.toMatch(/max-h-/); // no height cap, so nothing is hidden behind a scroll
+    expect(list.className).not.toMatch(/max-h-/); // no height cap
+    // Two comments: the newest in the row, the count and the button for the rest.
+    const beta = row("Beta Corp");
+    expect(notesIn(beta)).toEqual(["b2"]);
+    expect(within(beta).getByText("Latest of 2")).toBeTruthy();
+    expect(within(beta).getByRole("button", { name: "See all 2 comments for Beta Corp" })).toBeTruthy();
   });
 
-  it("the same for the signed-in author's view with Edit buttons", () => {
+  it("the same for the signed-in author's view: one comment, one Edit button", () => {
     renderTracker([...ALPHA], { canWriteFollowUps: true, commentEditorId: "emp-1" });
     const alpha = row("Alpha Traders");
-    expect(notesIn(alpha)).toEqual(["a7", "a6", "a5", "a4", "a3"]);
-    expect(within(alpha).getAllByRole("button", { name: /Edit your comment/ })).toHaveLength(5);
+    expect(notesIn(alpha)).toEqual(["a7"]);
+    expect(within(alpha).getAllByRole("button", { name: /Edit your comment/ })).toHaveLength(1);
     expect(within(alpha).getByLabelText("Comments, newest first").className).not.toMatch(/max-h-/);
   });
 
-  it("fewer than five: all of them, and no 'See all comments'", () => {
-    renderTracker([...ALPHA, ...BETA]);
+  it("exactly one comment: it is shown, with no 'See all comments' and no count", () => {
+    renderTracker([...ALPHA, BETA[0]!]);
     const beta = row("Beta Corp");
-    expect(notesIn(beta)).toEqual(["b2", "b1"]);
+    expect(notesIn(beta)).toEqual(["b2"]);
     expect(within(beta).queryByRole("button", { name: /See all/ })).toBeNull();
-    expect(within(beta).queryByText(/Latest 5 of/)).toBeNull();
+    expect(within(beta).queryByText(/Latest/)).toBeNull();
   });
 
   it("no comments (none, or only date-only follow-ups): a clear empty state", () => {
@@ -135,10 +140,14 @@ describe("See all comments", () => {
     fireEvent.click(within(row("Alpha Traders")).getByRole("button", { name: "See all 7 comments for Alpha Traders" }));
     const dialog = screen.getByRole("dialog", { name: "All comments" });
     const list = within(dialog).getByRole("list", { name: "All comments for Alpha Traders, newest first" });
-    expect(notesIn(list)).toEqual(["a7", "a6", "a5", "a4", "a3", "a2", "a1"]);
+    expect(notesIn(list)).toEqual(["a7", "a6", "a5", "a4", "a3", "a2", "a1"]); // the latest once, then the rest, nothing repeated
     expect(dialog.textContent).not.toMatch(/Beta Corp/);
     expect(h.listFollowUps).not.toHaveBeenCalled();
     expect(h.edit).not.toHaveBeenCalled();
+    // Closing returns to the single-comment row, unchanged.
+    fireEvent.click(within(dialog).getAllByRole("button", { name: "Close" })[1]!);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(notesIn(row("Alpha Traders"))).toEqual(["a7"]);
   });
 
   it("is enabled for every Tracker viewer — read-only or author — and is never disabled", () => {
@@ -152,29 +161,42 @@ describe("See all comments", () => {
 });
 
 describe("refresh after adding or editing a comment", () => {
-  it("a newly added comment appears first and the count updates; the oldest of the five drops off", () => {
+  it("a newly added comment replaces the shown one and the count updates", () => {
     const view = renderTracker([...ALPHA]);
     view.rerender(<CollectionTracker rows={rowsOf([...ALPHA, c("a8", "Alpha Traders", "2026-10-28T09:00:00Z")])} connected storageReady today={TODAY} />);
     const alpha = row("Alpha Traders");
-    expect(notesIn(alpha)).toEqual(["a8", "a7", "a6", "a5", "a4"]);
-    expect(within(alpha).getByText("Latest 5 of 8")).toBeTruthy();
+    expect(notesIn(alpha)).toEqual(["a8"]);
+    expect(within(alpha).getByText("Latest of 8")).toBeTruthy();
   });
 
-  it("an edit shows the new text in place (same position — ordering is by when it was first saved), with the Edited mark", async () => {
+  it("an edit of the shown comment shows the new text in place (ordering is by when it was first saved), with the Edited mark", async () => {
     h.edit.mockResolvedValue({ ok: true });
     const view = renderTracker([...ALPHA], { canWriteFollowUps: true, commentEditorId: "emp-1" });
-    fireEvent.click(within(row("Alpha Traders")).getAllByRole("button", { name: /Edit your comment/ })[1]!); // a6
-    fireEvent.change(screen.getByRole("textbox", { name: /Edit comment/ }), { target: { value: "Alpha Traders note a6 (corrected)" } });
+    fireEvent.click(within(row("Alpha Traders")).getByRole("button", { name: /Edit your comment/ })); // a7, the one shown
+    fireEvent.change(screen.getByRole("textbox", { name: /Edit comment/ }), { target: { value: "Alpha Traders note a7 (corrected)" } });
     await act(async () => fireEvent.click(screen.getByRole("button", { name: "Save" })));
-    expect(h.edit).toHaveBeenCalledWith({ id: "a6", expectedNote: "Alpha Traders note a6", note: "Alpha Traders note a6 (corrected)" });
+    expect(h.edit).toHaveBeenCalledWith({ id: "a7", expectedNote: "Alpha Traders note a7", note: "Alpha Traders note a7 (corrected)" });
     expect(h.refresh).toHaveBeenCalledTimes(1);
     // the server's refreshed data:
-    const edited = ALPHA.map((e) => (e.id === "a6" ? { ...e, note: "Alpha Traders note a6 (corrected)", editedAt: new Date("2026-10-28T10:00:00Z"), editedByName: "Asha" } : e));
+    const edited = ALPHA.map((e) => (e.id === "a7" ? { ...e, note: "Alpha Traders note a7 (corrected)", editedAt: new Date("2026-10-28T10:00:00Z"), editedByName: "Asha" } : e));
     view.rerender(<CollectionTracker rows={rowsOf(edited)} connected storageReady today={TODAY} canWriteFollowUps commentEditorId="emp-1" />);
     const alpha = row("Alpha Traders");
-    expect(notesIn(alpha)).toEqual(["a7", "a6", "a5", "a4", "a3"]);
-    expect(alpha.textContent).toContain("Alpha Traders note a6 (corrected)");
+    expect(notesIn(alpha)).toEqual(["a7"]);
+    expect(alpha.textContent).toContain("Alpha Traders note a7 (corrected)");
     expect(within(alpha).getByText(/Edited 28-Oct-2026/)).toBeTruthy();
+  });
+
+  it("an older comment is still editable and deletable by its author from the full history", () => {
+    renderTracker([...ALPHA], { canWriteFollowUps: true, commentEditorId: "emp-1" });
+    fireEvent.click(within(row("Alpha Traders")).getByRole("button", { name: /See all 7 comments/ }));
+    const dialog = screen.getByRole("dialog", { name: "All comments" });
+    expect(within(dialog).getAllByRole("button", { name: /Edit your comment/ })).toHaveLength(7);
+    expect(within(dialog).getAllByRole("button", { name: /Delete your comment/ })).toHaveLength(7);
+    cleanup();
+    // A reader without followup.write gets no Edit or Delete anywhere.
+    renderTracker([...ALPHA]);
+    fireEvent.click(within(row("Alpha Traders")).getByRole("button", { name: /See all 7 comments/ }));
+    expect(screen.queryByRole("button", { name: /Edit your comment|Delete your comment/ })).toBeNull();
   });
 });
 

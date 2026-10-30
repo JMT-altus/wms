@@ -62,8 +62,12 @@ export function followUpsByParty(followUps: FollowUpEntry[]): Map<string, Follow
 /** A party's comments as the Tracker shows them: entries that carry a note, most recent first. */
 export const commentsOf = (history: FollowUpEntry[]): FollowUpEntry[] => history.filter((h) => h.note);
 
-/** How many comments the Tracker's Comments column shows before "See all comments". */
-export const TRACKER_COMMENT_LIMIT = 5;
+/**
+ * How many comments the Tracker's Comments column shows before "See all
+ * comments": the single latest one. The complete history (already loaded with
+ * the row) opens from the button.
+ */
+export const TRACKER_COMMENT_LIMIT = 1;
 
 /**
  * A party's complete comment history for display: entries that carry a note,

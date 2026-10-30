@@ -7,6 +7,8 @@ vi.mock("next/cache", () => ({
 
 // Tier-3 — actions.ts now imports getStatusDisplayMap (server-only).
 vi.mock("server-only", () => ({}));
+// No compulsory weekly Bulk Upload task here: the guard says "not protected" (its own tests are in collection-weekly-upload-guards.test.ts).
+vi.mock("@/lib/collections/weekly-upload/server", () => ({ isProtectedWeeklyTask: async () => false, protectedWeeklyTaskIds: async () => new Set(), PROTECTED_TASK_MESSAGE: "protected" }));
 vi.mock("@/lib/queries/status-display", () => ({
   getStatusDisplayMap: vi.fn(async () => ({})),
 }));

@@ -2102,6 +2102,59 @@ export const collectionCoordinatorLinks = pgTable(
 export type CollectionCoordinatorLink = typeof collectionCoordinatorLinks.$inferSelect;
 
 /**
+ * Collection Tracker weekly Bulk Upload (migration 0121, prepared for review).
+ *
+ * The Tally customer summary must be uploaded every week. One row of settings
+ * (id = 1) names the responsible employee and the due weekday — chosen by an
+ * administrator in Admin & Master Setup, never by code — and one row per
+ * reporting week (keyed by its Monday, IST) points at the ordinary `tasks` row
+ * that is that week's compulsory task. The week row also holds which balance
+ * snapshot completed it and when each reminder went out, so a retried
+ * scheduler run can neither create a second task nor send a reminder twice.
+ * See lib/collections/weekly-upload/.
+ */
+export const collectionWeeklyUploadSettings = pgTable(
+  "collection_weekly_upload_settings",
+  {
+    id: integer("id").primaryKey().default(1),
+    assigneeId: uuid("assignee_id").references(() => employees.id, { onDelete: "set null" }),
+    /** ISO weekday the upload is due, 1 = Monday … 7 = Sunday. */
+    dueDow: integer("due_dow").notNull().default(5),
+    setById: uuid("set_by_id").references(() => employees.id, { onDelete: "set null" }),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    check("collection_weekly_upload_settings_single_row", sql`${t.id} = 1`),
+    check("collection_weekly_upload_settings_due_dow_check", sql`${t.dueDow} BETWEEN 1 AND 7`),
+  ],
+);
+
+export const collectionWeeklyUploadTasks = pgTable(
+  "collection_weekly_upload_tasks",
+  {
+    /** The reporting week's Monday (IST), yyyy-mm-dd. The stable week id. */
+    weekStart: date("week_start").primaryKey(),
+    taskId: uuid("task_id")
+      .notNull()
+      .unique()
+      .references(() => tasks.id, { onDelete: "restrict" }),
+    assigneeId: uuid("assignee_id").references(() => employees.id, { onDelete: "set null" }),
+    dueAt: timestamp("due_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    completedSnapshotId: uuid("completed_snapshot_id").references(() => collectionBalanceSnapshots.id, { onDelete: "set null" }),
+    completedById: uuid("completed_by_id").references(() => employees.id, { onDelete: "set null" }),
+    notifiedAssignedAt: timestamp("notified_assigned_at", { withTimezone: true }),
+    notifiedDueTodayAt: timestamp("notified_due_today_at", { withTimezone: true }),
+    notifiedOverdueAt: timestamp("notified_overdue_at", { withTimezone: true }),
+    notifiedCompletedAt: timestamp("notified_completed_at", { withTimezone: true }),
+  },
+  (t) => [index("collection_weekly_upload_tasks_open_idx").on(t.dueAt).where(sql`${t.completedAt} IS NULL`)],
+);
+
+export type CollectionWeeklyUploadTask = typeof collectionWeeklyUploadTasks.$inferSelect;
+
+/**
  * Collection closure episodes — the history behind Collection Logs (migration
  * 0119, prepared for review). One row per episode: closed when the approved
  * source confirmed the outstanding balance was exactly zero; reopened (never

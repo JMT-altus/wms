@@ -23,15 +23,21 @@ import { MODULES, type ModuleId } from "@/lib/nav-modules";
 
 export const dynamic = "force-dynamic";
 
+/**
+ * How one tile looks: a pastel card, a tinted icon chip, and the module's
+ * accent for the icon and the Enter button text. Soft, low-saturation tints
+ * so the nine cards read as one calm set rather than nine colours.
+ */
 type Style = {
   Icon: typeof LayoutGrid;
-  bg: string;
-  ink: string;
-  title: string;
-  btn: string;
-  /** Coloured drop-shadow + hover ring, tuned to the module accent. */
-  glow: string;
-  ring: string;
+  /** Card background — a very light pastel. */
+  card: string;
+  /** Icon chip background — the same hue, a little stronger. */
+  chip: string;
+  /** Icon colour and the Enter button's text colour. */
+  accent: string;
+  /** Card border, tinted toward the accent. */
+  border: string;
 };
 
 /**
@@ -48,104 +54,26 @@ type Style = {
  * the tile is admin-gated for now rather than opened to everyone sight unseen.
  */
 const STYLES: Record<ModuleId | "admin" | "forms", Style> = {
-  wms: {
-    Icon: LayoutGrid,
-    bg: "linear-gradient(150deg, #f4f8ff 0%, #dfeaff 55%, #cfe0ff 100%)",
-    ink: "#1e4fa8",
-    title: "#0A47B3",
-    btn: "linear-gradient(135deg, #0A6CFF, #0047B3)",
-    glow: "rgba(10, 108, 255, 0.45)",
-    ring: "rgba(10, 108, 255, 0.55)",
-  },
-  employees: {
-    Icon: Users,
-    bg: "linear-gradient(150deg, #f0fdf6 0%, #dcf6e6 55%, #c7efd6 100%)",
-    ink: "#1f7a4d",
-    title: "#15803d",
-    btn: "linear-gradient(135deg, #22b563, #15803d)",
-    glow: "rgba(34, 181, 99, 0.42)",
-    ring: "rgba(34, 181, 99, 0.55)",
-  },
-  sales: {
-    Icon: TrendingUp,
-    bg: "linear-gradient(150deg, #f3f4ff 0%, #e6e6ff 55%, #d8d8ff 100%)",
-    ink: "#4a45b8",
-    title: "#4338CA",
-    btn: "linear-gradient(135deg, #6366F1, #4338CA)",
-    glow: "rgba(99, 102, 241, 0.42)",
-    ring: "rgba(99, 102, 241, 0.55)",
-  },
-  training: {
-    Icon: GraduationCap,
-    bg: "linear-gradient(150deg, #effbfd 0%, #d9f0f7 55%, #c8e9f6 100%)",
-    ink: "#0b7c8a",
-    title: "#0B7C8A",
-    btn: "linear-gradient(135deg, #10b7c9, #0b7c8a)",
-    glow: "rgba(16, 183, 201, 0.42)",
-    ring: "rgba(16, 183, 201, 0.55)",
-  },
-  // The Masters module — WMS blue on a cooler, deeper card so it reads as the
-  // reference-data half of the same family rather than a fifth colour.
-  masters: {
-    Icon: Boxes,
-    bg: "linear-gradient(150deg, #eef4ff 0%, #dce8ff 55%, #c8dcff 100%)",
-    ink: "#1c3f7d",
-    title: "#0A3B8C",
-    btn: "linear-gradient(135deg, #0A6CFF 0%, #0EA5B7 58%, #12B3A0 100%)",
-    glow: "rgba(14, 165, 183, 0.42)",
-    ring: "rgba(14, 165, 183, 0.55)",
-  },
-  // Violet → indigo, the one accent not already spoken for by another module.
-  targets: {
-    Icon: Target,
-    bg: "linear-gradient(150deg, #f6f3ff 0%, #ebe4ff 55%, #ded2ff 100%)",
-    ink: "#5b3fa8",
-    title: "#5B21B6",
-    btn: "linear-gradient(135deg, #7C3AED, #4F46E5)",
-    glow: "rgba(124, 58, 237, 0.42)",
-    ring: "rgba(124, 58, 237, 0.55)",
-  },
-  // The Project Plan module's own red. Distinct from the rose Forms tile,
-  // which is admin-only and rarely on screen beside it.
-  project: {
-    Icon: Waypoints,
-    bg: "linear-gradient(150deg, #fff5f4 0%, #ffe4e1 55%, #f8c8c7 100%)",
-    ink: "#8e0a05",
-    title: "#A80400",
-    btn: "linear-gradient(135deg, #E10600, #A80400)",
-    glow: "rgba(225, 6, 0, 0.42)",
-    ring: "rgba(225, 6, 0, 0.55)",
-  },
-  // Fuchsia — the one accent family left over, distinct from the violet Targets
-  // tile and the rose Forms tile beside it.
-  hr: {
-    Icon: BriefcaseBusiness,
-    bg: "linear-gradient(150deg, #fef4ff 0%, #fae5fd 55%, #f3d0fb 100%)",
-    ink: "#86198f",
-    title: "#A21CAF",
-    btn: "linear-gradient(135deg, #D946EF, #A21CAF)",
-    glow: "rgba(217, 70, 239, 0.40)",
-    ring: "rgba(217, 70, 239, 0.55)",
-  },
-  admin: {
-    Icon: DatabaseZap,
-    bg: "linear-gradient(150deg, #fff8f0 0%, #ffeede 55%, #ffe2c9 100%)",
-    ink: "#9a4b12",
-    title: "#B45309",
-    btn: "linear-gradient(135deg, #f59e0b, #b45309)",
-    glow: "rgba(245, 158, 11, 0.42)",
-    ring: "rgba(245, 158, 11, 0.55)",
-  },
-  // Rose — the one accent family not already spoken for by another tile.
-  forms: {
-    Icon: FileText,
-    bg: "linear-gradient(150deg, #fff1f3 0%, #ffe1e6 55%, #ffd0d9 100%)",
-    ink: "#a8264a",
-    title: "#BE123C",
-    btn: "linear-gradient(135deg, #FB7185, #BE123C)",
-    glow: "rgba(244, 63, 94, 0.42)",
-    ring: "rgba(244, 63, 94, 0.55)",
-  },
+  // Soft blue.
+  wms: { Icon: LayoutGrid, card: "#F2F7FE", chip: "#DCE9FC", accent: "#1D5FD1", border: "rgba(29,95,209,0.14)" },
+  // Soft mint green.
+  employees: { Icon: Users, card: "#F1FBF5", chip: "#D7F3E3", accent: "#1F8A55", border: "rgba(31,138,85,0.14)" },
+  // Soft lavender.
+  sales: { Icon: TrendingUp, card: "#F5F3FE", chip: "#E4DEFB", accent: "#6143CE", border: "rgba(97,67,206,0.14)" },
+  // Soft cyan.
+  training: { Icon: GraduationCap, card: "#F0FAFB", chip: "#D6F0F4", accent: "#0E7C8C", border: "rgba(14,124,140,0.14)" },
+  // Soft blue-grey, the reference-data half of the WMS family.
+  masters: { Icon: Boxes, card: "#F3F6FA", chip: "#DFE7F1", accent: "#2F5A8C", border: "rgba(47,90,140,0.14)" },
+  // Soft blue-grey.
+  targets: { Icon: Target, card: "#F2F6FB", chip: "#DCE6F3", accent: "#2C5E9E", border: "rgba(44,94,158,0.14)" },
+  // Soft blue.
+  project: { Icon: Waypoints, card: "#F1F6FD", chip: "#DAE7F9", accent: "#2457A6", border: "rgba(36,87,166,0.14)" },
+  // Soft lavender-blue.
+  hr: { Icon: BriefcaseBusiness, card: "#F3F5FD", chip: "#E0E5FA", accent: "#4A56B8", border: "rgba(74,86,184,0.14)" },
+  // Soft beige.
+  admin: { Icon: DatabaseZap, card: "#FBF7EE", chip: "#F3E8CF", accent: "#9A6A12", border: "rgba(154,106,18,0.16)" },
+  // Soft pink.
+  forms: { Icon: FileText, card: "#FDF2F6", chip: "#F8DCE7", accent: "#B8325F", border: "rgba(184,50,95,0.14)" },
 };
 
 /** One tile on the hub grid — a module, or the admin-only masters entry. */
@@ -166,6 +94,10 @@ function greetingForHour(hour: number): { hello: string; line: string } {
     return { hello: "Good Evening", line: "Strong finish to the day. You've got this." };
   return { hello: "Good Evening", line: "Wrapping up late? Thank you for your dedication." };
 }
+
+const NAVY = "#12284A";
+const BLUE = "#1A6BE0";
+const MUTED = "#5B6B82";
 
 export default async function HubPage({
   searchParams,
@@ -238,14 +170,24 @@ export default async function HubPage({
   );
   const { hello, line } = greetingForHour(istHour);
 
+  // Columns: one on phones, two on tablets, four on laptops, five on wide
+  // desktops; fewer tiles never stretch across more columns than they fill.
+  const gridCols =
+    tiles.length >= 5
+      ? "sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5"
+      : tiles.length === 4
+        ? "sm:grid-cols-2 lg:grid-cols-4"
+        : tiles.length === 3
+          ? "sm:grid-cols-2 lg:grid-cols-3"
+          : tiles.length === 2
+            ? "sm:grid-cols-2"
+            : "";
+  const gridMaxWidth = tiles.length >= 5 ? 1320 : tiles.length === 4 ? 1080 : tiles.length === 3 ? 820 : tiles.length === 2 ? 560 : 300;
+
   return (
-    // `header-dark` flips the ink tokens to white for everything below, so the
-    // greeting and body copy follow the canvas instead of being restyled one
-    // by one; `header-navy` is the same scope the app header uses, which
-    // styles the search chip and its kbd hint for a navy surface.
     <div
-      className="header-dark header-navy relative min-h-[100svh] overflow-hidden"
-      style={{ background: "linear-gradient(168deg, #02203f 0%, #04305e 46%, #063f70 100%)" }}
+      className="relative min-h-[100svh] overflow-hidden"
+      style={{ background: "linear-gradient(180deg, #EEF5FD 0%, #E3EEFA 55%, #DCE9F7 100%)" }}
     >
       {/* Approvers: a reminder of leave requests waiting on them. Streams in on
           its own so it never holds up the hub, and renders nothing for anyone
@@ -253,141 +195,57 @@ export default async function HubPage({
       <Suspense fallback={null}>
         <PendingLeavePromptServer />
       </Suspense>
-      {/* ── Aurora backdrop — slow-drifting colour glows + a dot mesh, so the
-             launcher reads as a living, premium canvas rather than flat white. */}
+
+      {/* Soft light — two faint washes so the canvas isn't flat, nothing that competes with the cards. */}
       <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
         <div
-          className="hub-blob-1 absolute rounded-full"
-          style={{ width: "44vw", height: "44vw", minWidth: 460, minHeight: 460, left: "-12%", top: "-18%", background: "radial-gradient(circle, rgba(10,108,255,0.46), transparent 66%)", filter: "blur(64px)" }}
+          className="absolute rounded-full"
+          style={{ width: "60vw", height: "60vw", minWidth: 520, minHeight: 520, left: "-18%", top: "-32%", background: "radial-gradient(circle, rgba(255,255,255,0.75), transparent 68%)" }}
         />
         <div
-          className="hub-blob-2 absolute rounded-full"
-          style={{ width: "40vw", height: "40vw", minWidth: 440, minHeight: 440, right: "-10%", top: "-8%", background: "radial-gradient(circle, rgba(23,182,160,0.40), transparent 66%)", filter: "blur(66px)" }}
-        />
-        <div
-          className="hub-blob-3 absolute rounded-full"
-          style={{ width: "40vw", height: "40vw", minWidth: 420, minHeight: 420, left: "32%", bottom: "-26%", background: "radial-gradient(circle, rgba(124,58,237,0.32), transparent 66%)", filter: "blur(74px)" }}
-        />
-        {/* the canvas sweep — see .hub-canvas-shine in globals.css */}
-        <div className="hub-canvas-shine" />
-
-        {/* fine dot mesh, faded toward the edges */}
-        <div
-          className="absolute inset-0"
-          style={{
-            backgroundImage: "radial-gradient(rgba(255,255,255,0.09) 1px, transparent 1px)",
-            backgroundSize: "26px 26px",
-            maskImage: "radial-gradient(ellipse 85% 72% at 50% 26%, black 22%, transparent 82%)",
-            WebkitMaskImage: "radial-gradient(ellipse 85% 72% at 50% 26%, black 22%, transparent 82%)",
-          }}
+          className="absolute rounded-full"
+          style={{ width: "56vw", height: "56vw", minWidth: 480, minHeight: 480, right: "-20%", bottom: "-34%", background: "radial-gradient(circle, rgba(176,206,240,0.55), transparent 68%)" }}
         />
       </div>
 
       <div className="relative z-10 flex min-h-[100svh] flex-col">
-        {/* Top bar — the company on the left, actions + identity on the right.
-            The left slot used to hold a clock/connection pill, which said
-            nothing the OS clock doesn't; the mark and the company name earn it
-            instead. The hub is the one screen with no rail to carry them. */}
-        <header className="mx-auto w-full max-w-[1440px] px-8 max-md:px-4 pt-5 flex items-center justify-between gap-4">
-          <div className="flex flex-col items-start gap-1.5">
-            {/* The mark, glowing against the navy the same way the eyebrow's
-                copy of it does. Decorative — the name below says it in words. */}
+        {/* Top bar — the mark and the brand label on the left, the avatar menu on the right. */}
+        <header className="mx-auto w-full max-w-[1320px] px-8 max-md:px-4 pt-5 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="/logo-mark.png"
-              alt=""
-              className="block h-auto shrink-0"
-              style={{
-                width: 56,
-                filter:
-                  "drop-shadow(0 0 10px rgba(255,255,255,0.5)) drop-shadow(0 4px 10px rgba(10,108,255,0.5))",
-              }}
-            />
-            {/* Same glassy pill the hero eyebrow wears, minus the mark —
-                the mark already sits directly above it here. */}
-            <div
-              className="inline-flex items-center rounded-full px-4 py-1.5"
-              style={{
-                background: "rgba(255,255,255,0.07)",
-                border: "1px solid rgba(255,255,255,0.16)",
-                boxShadow:
-                  "0 10px 24px -12px rgba(10,108,255,0.5), inset 0 1px 0 rgba(255,255,255,0.18)",
-                backdropFilter: "blur(8px)",
-                WebkitBackdropFilter: "blur(8px)",
-              }}
+            <img src="/logo-mark.png" alt="" className="block h-auto shrink-0" style={{ width: 40 }} />
+            <span
+              className="whitespace-nowrap"
+              style={{ fontFamily: "var(--font-mono-display), ui-monospace, monospace", fontSize: 10.5, fontWeight: 700, letterSpacing: "0.16em", color: MUTED }}
             >
-              <span
-                className="whitespace-nowrap"
-                style={{
-                  fontFamily: "var(--font-mono-display), ui-monospace, monospace",
-                  fontSize: 10.5,
-                  fontWeight: 800,
-                  letterSpacing: "0.18em",
-                  color: "#8FC2FF",
-                }}
-              >
-                JMT DRIVE SOLUTIONS · WORKSPACES
-              </span>
-            </div>
+              JMT DRIVE SOLUTIONS | WORKHUB
+            </span>
           </div>
           <div className="flex items-center gap-3">
             {/* The same avatar menu as the app header — Admin panel, Profile &
                 preferences, Index/Documents and Sign out, all reachable without
-                first entering a module. It carries Sign out, so the standalone
-                HubSignOut button it replaced would have been a second,
-                redundant affordance. Search and the notification bell were
-                dropped from this bar; both live in the app header, one click
-                inside any module. The unread dot rides the avatar again. */}
-            <UserMenuServer tone="dark" />
+                first entering a module. The unread dot rides the avatar. */}
+            <UserMenuServer tone="light" />
           </div>
         </header>
 
-        {/* Hero greeting */}
-        <div className="mx-auto w-full max-w-[1440px] px-8 max-md:px-4 text-center mt-5 mb-5 max-md:mt-5 max-md:mb-6">
-          <h1
-            style={{ fontFamily: "var(--font-display), var(--font-sans), sans-serif", fontWeight: 800, fontSize: "clamp(38px, 4.6vw, 56px)", lineHeight: 1.0, letterSpacing: "-0.035em" }}
-          >
-            <span
-              style={{ color: "#ffffff", textShadow: "0 1px 0 rgba(0,0,0,0.25), 0 10px 30px rgba(0,0,0,0.35)" }}
-            >
-              {hello},{" "}
-            </span>
-            <span className="brand-wordmark-deep">{firstName}</span>
+        {/* Welcome */}
+        <div className="mx-auto w-full max-w-[1320px] px-8 max-md:px-4 text-center mt-8 mb-8 max-md:mt-6 max-md:mb-6">
+          <h1 style={{ fontFamily: "var(--font-display), var(--font-sans), sans-serif", color: NAVY }}>
+            {hello},{" "}
+            <span style={{ color: BLUE }}>{firstName}</span>
           </h1>
-
-          {/* Elegant gradient divider */}
-          <div
-            aria-hidden
-            className="mx-auto mt-4 rounded-full"
-            style={{
-              width: 72,
-              height: 4,
-              background: "linear-gradient(90deg, #0a6cff, #1f9fe0, #12b6a0)",
-              boxShadow: "0 6px 16px -4px rgba(10,108,255,0.5)",
-            }}
-          />
-
-          <p
-            className="mt-4 mx-auto font-semibold"
-            style={{ fontSize: 17, lineHeight: 1.5, letterSpacing: "-0.005em", color: "rgba(255,255,255,0.72)", maxWidth: 560 }}
-          >
+          <p className="mt-3 mx-auto" style={{ fontSize: 15.5, lineHeight: 1.5, color: MUTED, maxWidth: 560 }}>
             {line}
           </p>
         </div>
 
         {/* Access notice — set when the layout guard bounced a direct URL hit. */}
         {deniedModule && (
-          <div className="mx-auto w-full max-w-[1440px] px-8 max-md:px-4 mb-5">
+          <div className="mx-auto w-full max-w-[1320px] px-8 max-md:px-4 mb-6">
             <div
-              className="mx-auto flex items-center gap-3 rounded-2xl px-5 py-3.5"
-              style={{
-                maxWidth: 620,
-                background: "rgba(255,255,255,0.72)",
-                border: "1px solid rgba(220,38,38,0.22)",
-                boxShadow: "0 14px 30px -18px rgba(220,38,38,0.45), inset 0 1px 0 rgba(255,255,255,0.9)",
-                backdropFilter: "blur(8px)",
-                WebkitBackdropFilter: "blur(8px)",
-              }}
+              className="mx-auto flex items-center gap-3 rounded-xl px-5 py-3.5"
+              style={{ maxWidth: 620, background: "#FFFFFF", border: "1px solid rgba(220,38,38,0.22)", boxShadow: "0 10px 24px -16px rgba(220,38,38,0.35)" }}
             >
               <Lock size={18} strokeWidth={2.4} style={{ color: "#b91c1c", flexShrink: 0 }} />
               <p className="text-[14.5px] font-semibold" style={{ color: "#7f1d1d", lineHeight: 1.45 }}>
@@ -399,140 +257,63 @@ export default async function HubPage({
         )}
 
         {/* Module tiles — only the ones this person may open. */}
-        <div
-          className={`mx-auto w-full px-8 max-md:px-4 pb-2 grid gap-6 max-md:gap-5 grid-cols-1 lg:flex-1 lg:content-center ${
-            tiles.length >= 5
-              ? "sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5"
-              : tiles.length === 4
-                ? "sm:grid-cols-2 xl:grid-cols-4"
-                : tiles.length === 3
-                  ? "sm:grid-cols-2 xl:grid-cols-3"
-                  : tiles.length === 2
-                    ? "sm:grid-cols-2"
-                    : ""
-          }`}
-          style={{
-            maxWidth:
-              tiles.length >= 5
-                ? 1680
-                : tiles.length === 4
-                  ? 1440
-                  : tiles.length === 3
-                    ? 1140
-                    : tiles.length === 2
-                      ? 800
-                      : 420,
-          }}
-        >
-          {tiles.map((m, i) => {
+        <div className={`mx-auto w-full px-8 max-md:px-4 pb-4 grid gap-5 max-md:gap-4 grid-cols-1 ${gridCols}`} style={{ maxWidth: gridMaxWidth }}>
+          {tiles.map((m) => {
             const s = STYLES[m.key as ModuleId | "admin" | "forms"];
             const Icon = s.Icon;
             return (
               <Link
                 key={m.key}
                 href={m.href as Route}
-                className="hub-tile-shine metal-edge group relative flex flex-col overflow-hidden rounded-[24px] p-6 transition-transform duration-300 ease-out hover:-translate-y-2"
+                className="group relative flex flex-col rounded-2xl p-5 transition-[transform,box-shadow,border-color] duration-200 ease-out hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1A6BE0]/50"
                 style={{
-                  // The tile IS the module's colour now — the pale wash (s.bg)
-                  // read as nine near-white cards, so the palette only showed
-                  // up in the Enter buttons. Everything on top flips to white
-                  // ink; the Enter button inverts to a white chip so it still
-                  // separates from the card it sits on.
-                  background: s.btn,
-                  // Staggered so the row catches the light in sequence rather
-                  // than every tile flashing at once — see .hub-tile-shine.
-                  ["--tile-shine-delay" as string]: `${i * 0.35}s`,
-                  border: "1px solid transparent",
-                  boxShadow: `0 40px 70px -26px ${s.glow}, 0 22px 40px -22px rgba(15,23,42,0.22), 0 8px 16px -10px rgba(15,23,42,0.14), 0 1px 2px rgba(15,23,42,0.06), inset 0 2px 0 rgba(255,255,255,0.95), inset 0 -10px 24px -12px rgba(15,23,42,0.10)`,
-                  minHeight: 178,
+                  background: s.card,
+                  border: `1px solid ${s.border}`,
+                  boxShadow: "0 1px 2px rgba(18,40,74,0.04), 0 8px 20px -14px rgba(18,40,74,0.18)",
+                  // Tall enough for the longest title + three-line tagline, so every card in the grid is the same height.
+                  minHeight: 224,
                 }}
               >
-                {/* glass sheen across the top */}
-                <span aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-1/2" style={{ background: "linear-gradient(180deg, rgba(255,255,255,0.22), rgba(255,255,255,0) 100%)" }} />
-                {/* hover glow ring — fades in on hover (kept off the base card so
-                    the resting state stays clean). */}
-                <span
-                  aria-hidden
-                  className="pointer-events-none absolute inset-0 rounded-[24px] opacity-0 transition-opacity duration-300 group-hover:opacity-100"
-                  style={{ boxShadow: `0 0 0 1.5px ${s.ring}, 0 34px 74px -30px ${s.glow}` }}
-                />
-                {/* faded decorative glyph */}
-                <Icon
-                  aria-hidden
-                  size={158}
-                  strokeWidth={1.5}
-                  className="pointer-events-none absolute -right-7 -bottom-7 opacity-[0.16] transition-transform duration-500 group-hover:scale-110 group-hover:rotate-3"
-                  style={{ color: "#ffffff" }}
-                />
-                {/* icon chip — frosted glass */}
-                <span
-                  className="relative grid place-items-center rounded-2xl transition-transform duration-300 group-hover:scale-105"
-                  style={{
-                    width: 54,
-                    height: 54,
-                    background: "rgba(255,255,255,0.72)",
-                    backdropFilter: "blur(6px)",
-                    WebkitBackdropFilter: "blur(6px)",
-                    border: "1px solid rgba(255,255,255,0.9)",
-                    boxShadow: `0 14px 26px -10px ${s.glow}, 0 6px 12px -6px rgba(15,23,42,0.18), inset 0 1px 0 rgba(255,255,255,1), inset 0 -3px 8px -3px rgba(15,23,42,0.08)`,
-                  }}
-                >
-                  <Icon size={27} strokeWidth={2.2} style={{ color: s.ink }} />
+                {/* hover: a slightly deeper shadow, no glow */}
+                <span aria-hidden className="pointer-events-none absolute inset-0 rounded-2xl opacity-0 transition-opacity duration-200 group-hover:opacity-100" style={{ boxShadow: "0 14px 30px -16px rgba(18,40,74,0.28), 0 0 0 1px rgba(26,107,224,0.18)" }} />
+
+                {/* icon chip */}
+                <span className="relative grid place-items-center rounded-xl" style={{ width: 42, height: 42, background: s.chip }}>
+                  <Icon size={21} strokeWidth={2.1} style={{ color: s.accent }} />
                 </span>
 
-                <h2
-                  className="relative mt-4"
-                  style={{ fontFamily: "var(--font-display), var(--font-sans), sans-serif", fontWeight: 800, fontSize: 28, letterSpacing: "-0.02em", color: "#ffffff", textShadow: "0 1px 2px rgba(6,20,44,0.28)" }}
-                >
+                <h2 className="relative mt-3.5" style={{ fontFamily: "var(--font-sans), system-ui, sans-serif", fontWeight: 700, fontSize: 16.5, lineHeight: 1.25, letterSpacing: "-0.01em", color: NAVY }}>
                   {m.label}
                 </h2>
-                <p className="relative mt-2 font-semibold" style={{ fontSize: 15, lineHeight: 1.5, letterSpacing: "-0.003em", color: "rgba(255,255,255,0.88)", maxWidth: 260 }}>
+                <p className="relative mt-1.5" style={{ fontSize: 12.5, lineHeight: 1.5, color: MUTED }}>
                   {m.tagline}
                 </p>
 
                 <div className="relative mt-auto pt-4">
                   <span
-                    className="inline-flex items-center gap-2 rounded-xl px-5 py-3 transition-[filter,box-shadow,transform] duration-300 group-hover:brightness-105 group-hover:-translate-y-0.5"
-                    style={{
-                      background: "#ffffff",
-                      color: s.title,
-                      fontSize: 14.5,
-                      fontWeight: 700,
-                      boxShadow: `0 3px 0 rgba(6,20,44,0.22), 0 14px 24px -8px rgba(6,20,44,0.35), inset 0 -2px 6px -2px rgba(6,20,44,0.10)`,
-                      lineHeight: 1,
-                    }}
+                    className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 transition-[box-shadow,background-color] duration-200 group-hover:shadow-md"
+                    style={{ background: "#FFFFFF", color: NAVY, fontSize: 12.5, fontWeight: 600, border: "1px solid rgba(18,40,74,0.10)", boxShadow: "0 1px 2px rgba(18,40,74,0.06)", lineHeight: 1 }}
                   >
                     Enter
-                    <ArrowRight size={16} strokeWidth={2.6} className="transition-transform group-hover:translate-x-1" />
+                    <ArrowRight size={13} strokeWidth={2.4} className="transition-transform duration-200 group-hover:translate-x-0.5" />
                   </span>
                 </div>
               </Link>
             );
           })}
-
         </div>
 
         {tiles.length === 0 && (
-          <div className="mx-auto w-full max-w-[1440px] px-8 max-md:px-4 lg:flex-1 lg:flex lg:items-center lg:justify-center">
+          <div className="mx-auto w-full max-w-[1320px] px-8 max-md:px-4 lg:flex-1 lg:flex lg:items-center lg:justify-center">
             <div
-              className="mx-auto rounded-[24px] px-8 py-12 text-center"
-              style={{
-                maxWidth: 520,
-                background: "rgba(255,255,255,0.7)",
-                border: "1px solid rgba(255,255,255,0.8)",
-                boxShadow: "0 30px 60px -30px rgba(15,23,42,0.28), inset 0 1px 0 rgba(255,255,255,0.95)",
-                backdropFilter: "blur(8px)",
-                WebkitBackdropFilter: "blur(8px)",
-              }}
+              className="mx-auto rounded-2xl px-8 py-12 text-center"
+              style={{ maxWidth: 520, background: "#FFFFFF", border: "1px solid rgba(18,40,74,0.10)", boxShadow: "0 12px 30px -20px rgba(18,40,74,0.25)" }}
             >
               <Lock size={30} strokeWidth={2.2} style={{ color: "#64748b" }} className="mx-auto" />
-              <p
-                className="mt-4 text-ink-strong"
-                style={{ fontFamily: "var(--font-serif)", fontStyle: "italic", fontSize: 24, letterSpacing: "-0.015em" }}
-              >
+              <p className="mt-4" style={{ fontFamily: "var(--font-serif)", fontStyle: "italic", fontSize: 24, letterSpacing: "-0.015em", color: NAVY }}>
                 No workspaces yet
               </p>
-              <p className="mt-2 text-[14.5px] text-ink-subtle" style={{ lineHeight: 1.55 }}>
+              <p className="mt-2 text-[14.5px]" style={{ lineHeight: 1.55, color: MUTED }}>
                 Your account doesn&rsquo;t have access to any module right now. An admin can
                 grant it from the Access page.
               </p>
@@ -540,27 +321,14 @@ export default async function HubPage({
           </div>
         )}
 
-        {/* Subtle platform credit — the tasteful home for a "powered by" line. */}
-        <footer className="shrink-0 pb-6 pt-2 max-md:pb-5">
-          <div className="flex items-center justify-center gap-3.5 opacity-80">
-            <span
-              style={{
-                fontFamily: "var(--font-mono-display), ui-monospace, monospace",
-                fontSize: 12,
-                fontWeight: 700,
-                letterSpacing: "0.22em",
-                color: "rgba(15,23,42,0.42)",
-              }}
-            >
+        {/* Subtle platform credit. */}
+        <footer className="mt-auto shrink-0 pb-6 pt-6 max-md:pb-5">
+          <div className="flex items-center justify-center gap-3 opacity-70">
+            <span style={{ fontFamily: "var(--font-mono-display), ui-monospace, monospace", fontSize: 11, fontWeight: 700, letterSpacing: "0.22em", color: MUTED }}>
               POWERED BY
             </span>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="/altus-corp-logo.png"
-              alt="Altus Corp"
-              className="w-auto"
-              style={{ height: 44, display: "block", filter: "drop-shadow(0 3px 7px rgba(15,23,42,0.16))" }}
-            />
+            <img src="/altus-corp-logo.png" alt="Altus Corp" className="w-auto" style={{ height: 36, display: "block" }} />
           </div>
         </footer>
       </div>

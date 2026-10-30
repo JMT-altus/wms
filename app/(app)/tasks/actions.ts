@@ -36,6 +36,7 @@ import {
 } from "@/lib/validators/task";
 import { taskEvents, taskAudience, clients, subjects, employees } from "@/db/schema";
 import { isSuperAdmin } from "@/lib/auth/super-admin";
+import { isProtectedWeeklyTask, protectedWeeklyTaskIds, PROTECTED_TASK_MESSAGE } from "@/lib/collections/weekly-upload/server";
 import { CreateClientSchema } from "@/lib/validators/client";
 import { CreateSubjectSchema } from "@/lib/validators/subject";
 import { requireUser } from "@/lib/auth/current";
@@ -118,6 +119,8 @@ export async function archiveTask(
   }
   const limited = rateLimitOrError(me.id, "write");
   if (limited) return limited;
+  // The compulsory weekly Bulk Upload task stays in sight until its upload is confirmed.
+  if (await isProtectedWeeklyTask(taskId)) return { ok: false, error: PROTECTED_TASK_MESSAGE };
   try {
     const found = await db.transaction(async (tx) => {
       const updated = await tx
@@ -161,6 +164,9 @@ export async function deleteTask(
   }
   const limited = rateLimitOrError(me.id, "write");
   if (limited) return limited;
+  // The compulsory weekly Bulk Upload task is never deleted (the database
+  // refuses too: the week row references it ON DELETE RESTRICT).
+  if (await isProtectedWeeklyTask(taskId)) return { ok: false, error: PROTECTED_TASK_MESSAGE };
 
   // Grab the calendar pointers before the row (and its columns) are gone.
   const doomed = await db.query.tasks.findFirst({
@@ -463,9 +469,12 @@ export async function bulkSetStatus(
     .where(inArray(tasks.id, ids));
 
   // Honour the transition matrix per task; silently skip rows this actor's
-  // role can't move (reported back as `skipped`).
+  // role can't move (reported back as `skipped`). A compulsory weekly Bulk
+  // Upload task is skipped for the closing statuses, as in the single path.
+  const protectedIds = ["done", "abandoned", "cancelled", "transferred"].includes(status) ? await protectedWeeklyTaskIds(rows.map((r) => r.id)) : new Set<string>();
   const prevStatus = new Map(rows.map((r) => [r.id, r.status]));
   const allowed = rows
+    .filter((r) => !protectedIds.has(r.id))
     .filter((r) => {
       const role: ActorRole = me.isAdmin
         ? "admin"
@@ -575,7 +584,9 @@ export async function bulkReassignDoer(
     .from(tasks)
     .where(inArray(tasks.id, ids));
   const prev = new Map(rows.map((r) => [r.id, r.doerId]));
-  const changed = rows.filter((r) => r.doerId !== doerId).map((r) => r.id);
+  // The weekly Bulk Upload task follows its configured assignee, not a bulk reassign.
+  const protectedIds = await protectedWeeklyTaskIds(rows.map((r) => r.id));
+  const changed = rows.filter((r) => r.doerId !== doerId && !protectedIds.has(r.id)).map((r) => r.id);
   if (changed.length === 0) return { ok: true, updated: 0, skipped: ids.length };
 
   try {
@@ -772,7 +783,8 @@ export async function bulkArchive(taskIds: string[]): Promise<BulkResult> {
     .select({ id: tasks.id })
     .from(tasks)
     .where(and(inArray(tasks.id, ids), eq(tasks.archived, false)));
-  const toArchive = rows.map((r) => r.id);
+  const protectedIds = await protectedWeeklyTaskIds(rows.map((r) => r.id));
+  const toArchive = rows.map((r) => r.id).filter((id) => !protectedIds.has(id));
   if (toArchive.length === 0) return { ok: true, updated: 0, skipped: ids.length };
 
   try {
@@ -805,14 +817,18 @@ export async function bulkDelete(taskIds: string[]): Promise<BulkResult> {
   if (limited) return limited;
 
   // Capture calendar pointers before the rows (and their columns) are gone.
-  const doomed = await db
-    .select({
-      id: tasks.id,
-      googleEventId: tasks.googleEventId,
-      googleSyncedDoerId: tasks.googleSyncedDoerId,
-    })
-    .from(tasks)
-    .where(inArray(tasks.id, ids));
+  // A compulsory weekly Bulk Upload task is left out (never deleted).
+  const protectedIds = await protectedWeeklyTaskIds(ids);
+  const doomed = (
+    await db
+      .select({
+        id: tasks.id,
+        googleEventId: tasks.googleEventId,
+        googleSyncedDoerId: tasks.googleSyncedDoerId,
+      })
+      .from(tasks)
+      .where(inArray(tasks.id, ids))
+  ).filter((d) => !protectedIds.has(d.id));
   if (doomed.length === 0) return { ok: true, updated: 0, skipped: ids.length };
 
   try {
@@ -1523,6 +1539,12 @@ export async function reassignTask(
   if (parsed.newDoerId === current.doerId) {
     // No-op: assigning to the same doer.
     return { ok: true };
+  }
+
+  // The weekly Bulk Upload task follows the employee configured in Admin &
+  // Master Setup, not a reassign on the task.
+  if (await isProtectedWeeklyTask(taskId)) {
+    return { ok: false, error: "forbidden", message: PROTECTED_TASK_MESSAGE };
   }
 
   const expectedDate = new Date(expectedUpdatedAt);

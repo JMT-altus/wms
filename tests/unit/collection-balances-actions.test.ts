@@ -12,6 +12,7 @@ const h = vi.hoisted(() => ({
   inSnapshot: new Set<string>(),
   master: new Map<string, { id: string; companyName: string; nameKey: string }>(),
   snapSeq: 0,
+  weeklyComplete: vi.fn(async () => ({ status: "completed" })),
 }));
 
 vi.mock("server-only", () => ({}));
@@ -62,6 +63,11 @@ vi.mock("@/lib/queries/collection-balances", () => ({
   latestBalanceSnapshot: async () => h.latest,
   companyIdsInSnapshot: async () => h.inSnapshot,
 }));
+// The weekly compulsory task's completion hook (its rules have their own tests): here we only
+// check WHEN the import calls it, and with what.
+vi.mock("@/lib/collections/weekly-upload/server", () => ({
+  completeWeeklyUploadAfterImport: (...x: unknown[]) => (h.weeklyComplete as unknown as (...a: unknown[]) => unknown)(...x),
+}));
 
 import { addMissingBalanceCompanies, importCollectionBalances, previewCollectionBalances } from "@/app/(forms-module)/forms/collection/tracker/bulk-actions";
 import { collectionBalanceLines, collectionBalanceSnapshots } from "@/db/schema";
@@ -105,8 +111,65 @@ beforeEach(() => {
   h.inSnapshot = new Set();
   h.master = new Map();
   h.snapSeq = 0;
+  h.weeklyComplete.mockClear();
   company("co-1", "Alpha Traders");
   company("co-2", "Beta Works");
+});
+
+describe("the weekly compulsory task", () => {
+  it("is completed only by a confirmed, written import — with the snapshot id, the file's period and the session's employee", async () => {
+    const r = await go();
+    expect(r.ok).toBe(true);
+    expect(h.weeklyComplete).toHaveBeenCalledTimes(1);
+    expect(h.weeklyComplete).toHaveBeenCalledWith({
+      id: (r as { result: { snapshotId: string } }).result.snapshotId,
+      periodTo: "2026-10-19", // read by the SERVER from the grid
+      uploadedAt: expect.any(Date),
+      uploadedById: "emp-1",
+    });
+  });
+
+  it("a preview never completes it", async () => {
+    expect((await previewCollectionBalances(file())).ok).toBe(true);
+    expect(h.weeklyComplete).not.toHaveBeenCalled();
+  });
+
+  it("a refused upload (missing confirmation, mismatched totals, stale preview, nothing matched) never completes it", async () => {
+    expect((await go({ confirm: undefined })).ok).toBe(false);
+    expect((await go({ grid: sheetGrid({ total: ["Grand Total", "999", "50"] }) })).ok).toBe(false);
+    expect((await go({ previousSnapshotId: "00000000-0000-4000-8000-000000000999" })).ok).toBe(false);
+    h.master = new Map();
+    expect((await go()).ok).toBe(false);
+    expect(h.weeklyComplete).not.toHaveBeenCalled();
+    expect(h.inserts).toHaveLength(0);
+  });
+
+  it("a failed write transaction never completes it", async () => {
+    const original = (await import("@/lib/db")).db.transaction;
+    const dbMod = await import("@/lib/db");
+    (dbMod.db as { transaction: unknown }).transaction = async () => {
+      throw new Error("connection reset");
+    };
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      expect((await go()).ok).toBe(false);
+      expect(h.weeklyComplete).not.toHaveBeenCalled();
+    } finally {
+      (dbMod.db as { transaction: unknown }).transaction = original;
+      err.mockRestore();
+    }
+  });
+
+  it("without the Bulk Upload permission nothing reaches it", async () => {
+    h.caps = new Set(["collection.view"]);
+    await expect(go()).rejects.toThrow("Forbidden");
+    expect(h.weeklyComplete).not.toHaveBeenCalled();
+  });
+
+  it("the completion hook can't fail the upload: the import still reports success", async () => {
+    h.weeklyComplete.mockResolvedValueOnce({ status: "error" });
+    expect((await go()).ok).toBe(true);
+  });
 });
 
 // Bulk Upload is controlled by ONE registry entry, collection.balances.import

@@ -10,6 +10,7 @@ import { rateLimitOrError } from "@/lib/rate-limit";
 import { notify } from "@/lib/notifications/dispatch";
 import { taskLabel } from "@/lib/tasks/set-status";
 import { pickEffectiveDue } from "@/lib/tasks/effective-due";
+import { isProtectedWeeklyTask, PROTECTED_TASK_MESSAGE } from "@/lib/collections/weekly-upload/server";
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -45,6 +46,8 @@ export async function abandonTask(
   }
   const limited = rateLimitOrError(me.id, "write");
   if (limited) return limited;
+  // The compulsory weekly Bulk Upload task never goes to the bin.
+  if (await isProtectedWeeklyTask(taskId)) return { ok: false, error: PROTECTED_TASK_MESSAGE };
 
   const note = reason?.trim() || null;
   const now = new Date();

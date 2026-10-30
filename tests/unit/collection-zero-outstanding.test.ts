@@ -109,9 +109,15 @@ describe("no code path writes a closure or moves a company to Collection Logs", 
     }
   });
 
-  it("no scheduled job handles collections", () => {
+  it("no scheduled job closes collections — the one Collection cron only keeps the weekly Bulk Upload task and its reminders", () => {
     const crons = (JSON.parse(read("vercel.json")) as { crons: { path: string }[] }).crons.map((c) => c.path);
-    expect(crons.some((p) => /collect|closure/i.test(p))).toBe(false);
+    const WEEKLY_UPLOAD_CRON = "/api/cron/collection-weekly-upload";
+    expect(crons).toContain(WEEKLY_UPLOAD_CRON);
+    expect(crons.filter((p) => p !== WEEKLY_UPLOAD_CRON).some((p) => /collect|closure/i.test(p))).toBe(false);
+    // That job creates the week's task, completes it from a confirmed upload and reminds the assignee. It never names the closures table or module.
+    for (const f of ["app/api/cron/collection-weekly-upload/route.ts", "lib/collections/weekly-upload/service.ts", "lib/queries/collection-weekly-upload.ts"]) {
+      expect(read(f).includes(CLOSURES_SYMBOL) || read(f).includes(CLOSURES_TABLE), f).toBe(false);
+    }
   });
 
   it("closing an escalation only closes that escalation — it is not a case closure", () => {

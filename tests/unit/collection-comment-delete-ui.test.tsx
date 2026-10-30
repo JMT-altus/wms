@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 
 // Delete beside Edit on the Tracker's comments: only on your own comments, a confirmation first, one request at a
-// time, the reason shown on a refusal or failure, and a refreshed list (and "Latest 5 of N") after success. The
+// time, the reason shown on a refusal or failure, and a refreshed list (and "Latest of N") after success. The
 // server's checks are tested in tests/integration/collection-comment-delete.db.test.ts.
 const h = vi.hoisted(() => ({ edit: vi.fn(), del: vi.fn(), refresh: vi.fn(), toast: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: h.refresh }) }));
@@ -44,10 +44,13 @@ describe("visibility", () => {
     expect(screen.queryByRole("button", { name: /Delete your comment/ })).toBeNull();
   });
 
-  it("the comment layout is unchanged: header format and the reviewer's yellow", () => {
+  it("the comment layout is unchanged: header format in the row, and the reviewer's yellow in the full history", () => {
     renderAs("me");
     const mine = screen.getByText(/Note c7/).closest("[data-comment-audit]")!;
     expect(mine.textContent).toBe("User: Name me · Date & Time: 07-Oct-2026, 11:30 AM ISTComment: Note c7");
+    // Only the latest comment is in the row; the reviewer's (c6) is in "See all comments".
+    expect(screen.queryByText(/Note c6/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "See all 7 comments for Alpha Traders" }));
     expect(screen.getByText(/Note c6/).closest("[data-comment-audit]")!.className).toContain(REVIEWER_COMMENT_CLASS);
   });
 });
@@ -77,13 +80,13 @@ describe("deleting", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
-  it("after the refresh the list and the count follow the server: 'Latest 5 of 7' → 'Latest 5 of 6', the deleted one gone", () => {
+  it("after the refresh the list and the count follow the server: 'Latest of 7' → 'Latest of 6', the deleted one gone", () => {
     const view = renderAs("me");
-    expect(screen.getByText("Latest 5 of 7")).toBeTruthy();
+    expect(screen.getByText("Latest of 7")).toBeTruthy();
     view.rerender(<TrackerComments companyName="Alpha Traders" history={SEVEN.slice(1)} editorId="me" />);
-    expect(screen.getByText("Latest 5 of 6")).toBeTruthy();
+    expect(screen.getByText("Latest of 6")).toBeTruthy();
     expect(screen.queryByText(/Note c7/)).toBeNull();
-    expect(screen.getByText(/Note c2/)).toBeTruthy(); // the next-newest moves into the five
+    expect(screen.getByText(/Note c6/)).toBeTruthy(); // the next-newest becomes the one shown
   });
 
   it("one request at a time: a double click sends one; both buttons are disabled and say 'Deleting…' meanwhile", async () => {

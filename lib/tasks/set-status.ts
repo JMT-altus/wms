@@ -6,6 +6,15 @@ import { canTransitionTo, type ActorRole } from "@/lib/auth/status-transitions";
 import { notifyManyForTask } from "@/lib/notifications/dispatch";
 import { getStatusDisplayMap } from "@/lib/queries/status-display";
 import { archiveIfApproved } from "@/lib/tasks/auto-archive";
+import { isProtectedWeeklyTask, PROTECTED_TASK_MESSAGE } from "@/lib/collections/weekly-upload/server";
+
+/**
+ * Statuses a compulsory weekly Bulk Upload task can't be given by hand: it is
+ * completed by a confirmed upload, and it is never given up, cancelled or
+ * handed over through the task itself. Everything else (in progress, follow-up,
+ * on hold …) stays available to the doer.
+ */
+const WEEKLY_TASK_BLOCKED_STATUSES: ReadonlySet<TaskStatus> = new Set<TaskStatus>(["done", "abandoned", "cancelled", "transferred"]);
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -82,6 +91,12 @@ export async function applyTaskStatusChange(
 
   if (!canTransitionTo(current.status, status, role)) {
     return { ok: false, error: "forbidden" };
+  }
+
+  // The weekly Bulk Upload task is closed by the upload itself, for everyone —
+  // admins included — on every client (this core serves the mobile API too).
+  if (WEEKLY_TASK_BLOCKED_STATUSES.has(status) && (await isProtectedWeeklyTask(taskId))) {
+    return { ok: false, error: "forbidden", message: PROTECTED_TASK_MESSAGE };
   }
 
   const expectedDate = new Date(expectedUpdatedAt);

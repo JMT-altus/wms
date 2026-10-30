@@ -6,6 +6,7 @@ import Link from "next/link";
 import type { Route } from "next";
 import {
   Boxes,
+  CalendarCheck2,
   Contact,
   Library,
   KeyRound,
@@ -86,6 +87,12 @@ const NAV: ReadonlyArray<NavItem> = [
     label: "Tally Data Import",
     hint: "Excel / CSV from Tally",
     icon: FileUp,
+  },
+  {
+    href: "/master-setup/collection-weekly-upload" as Route,
+    label: "Weekly Bulk Upload",
+    hint: "Collection Tracker weekly task",
+    icon: CalendarCheck2,
   },
 ];
 

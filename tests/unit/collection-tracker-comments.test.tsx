@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 
-// The Tracker's Comments column: the latest five comments per company, and
+// The Tracker's Comments column: only the latest comment per company, and
 // "See all comments" for that company's complete history. Display only — the
 // history is what the Tracker page already loaded for the row.
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
@@ -72,17 +72,19 @@ describe("commentHistory", () => {
 });
 
 describe("Tracker Comments column", () => {
-  it("shows exactly the five newest comments, newest first, with their existing author/date/time", () => {
+  it("shows only the single newest comment (by when it was saved), with its existing author/date/time; the rest stay hidden", () => {
     render(<CollectionTracker rows={rows} connected storageReady today={TODAY} />);
     const alpha = row("Alpha Traders");
-    expect(TRACKER_COMMENT_LIMIT).toBe(5);
-    expect(notesIn(alpha)).toEqual(["a8", "a7", "a6", "a5", "a4"]);
-    expect(alpha.querySelectorAll('[data-comment-audit="compact"]')).toHaveLength(5);
+    expect(TRACKER_COMMENT_LIMIT).toBe(1);
+    expect(notesIn(alpha)).toEqual(["a8"]);
+    expect(alpha.querySelectorAll('[data-comment-audit="compact"]')).toHaveLength(1);
     expect(alpha.textContent).toContain("User: Asha · Date & Time: 08-Oct-2026, 11:30 AM ISTComment: Alpha Traders note a8");
-    expect(within(alpha).getByText("Latest 5 of 8")).toBeTruthy();
+    // The count is the real total, not what is visible.
+    expect(within(alpha).getByText("Latest of 8")).toBeTruthy();
+    expect(alpha.textContent).not.toMatch(/note a[1-7]\b/);
   });
 
-  it("offers 'See all comments' only when there are more than five — a real, labelled, focusable button", () => {
+  it("offers 'See all comments' whenever there is more than one — a real, labelled, focusable button", () => {
     render(<CollectionTracker rows={rows} connected storageReady today={TODAY} />);
     const btn = within(row("Alpha Traders")).getByRole("button", { name: "See all 8 comments for Alpha Traders" });
     expect(btn.tagName).toBe("BUTTON");
@@ -90,8 +92,10 @@ describe("Tracker Comments column", () => {
     expect(btn.textContent).toBe("See all comments →");
     btn.focus();
     expect(document.activeElement).toBe(btn);
-    expect(within(row("Beta Corp")).queryByRole("button", { name: /See all/ })).toBeNull();
-    expect(notesIn(row("Beta Corp"))).toEqual(["b2", "b1"]);
+    // Two comments: the latest in the row, the other behind the button.
+    expect(notesIn(row("Beta Corp"))).toEqual(["b2"]);
+    expect(within(row("Beta Corp")).getByRole("button", { name: "See all 2 comments for Beta Corp" })).toBeTruthy();
+    expect(within(row("Beta Corp")).getByText("Latest of 2")).toBeTruthy();
   });
 
   it("the dialog shows that company's complete history — all, newest first, none missing or repeated, no other company's", () => {
@@ -102,6 +106,9 @@ describe("Tracker Comments column", () => {
     const list = within(dialog).getByRole("list", { name: "All comments for Alpha Traders, newest first" });
     expect(notesIn(list)).toEqual(["a8", "a7", "a6", "a5", "a4", "a3", "a2", "a1"]);
     expect(list.querySelectorAll('[data-comment-audit="full"]')).toHaveLength(8);
+    // The latest comment (already in the row) appears exactly once in the history.
+    expect(notesIn(list).filter((id) => id === "a8")).toHaveLength(1);
+    expect(new Set(notesIn(list)).size).toBe(8);
     expect(dialog.textContent).not.toMatch(/Beta Corp/);
     // Same full format as the party's History: labelled user and date & time together; no user id.
     expect(within(list.querySelectorAll("li")[7] as HTMLElement).getByText("01-Oct-2026, 11:30 AM IST")).toBeTruthy();
@@ -112,12 +119,11 @@ describe("Tracker Comments column", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
-  it("exactly five: all five shown, no button; none: 'No comments yet', no button", () => {
-    const five = ALPHA.slice(0, 5);
-    render(<TrackerComments companyName="Alpha Traders" history={five} />);
-    expect(notesIn(document.body)).toEqual(["a8", "a6", "a5", "a3", "a1"]);
+  it("exactly one: that comment, no button, no count; none: 'No comments yet', no button", () => {
+    render(<TrackerComments companyName="Alpha Traders" history={[ALPHA[0]!]} />);
+    expect(notesIn(document.body)).toEqual(["a3"]);
     expect(screen.queryByRole("button")).toBeNull();
-    expect(screen.queryByText(/Latest 5 of/)).toBeNull();
+    expect(screen.queryByText(/Latest/)).toBeNull();
     cleanup();
     render(<TrackerComments companyName="Alpha Traders" history={[ALPHA[8]!]} />); // a follow-up date without a note is not a comment
     expect(document.body.textContent).toBe("No comments yet");

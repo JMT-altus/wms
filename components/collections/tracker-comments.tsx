@@ -9,10 +9,11 @@ import { fireToast } from "@/lib/toast";
 import { TRACKER_COMMENT_LIMIT, commentHistory } from "@/lib/collections/derive";
 
 /**
- * The Collection Tracker's Comments cell for one company: its latest five
- * comments (newest first, by when they were saved), all five shown in full in
- * the row, and — only when there are more — "See all comments", which opens
- * that company's complete history. No comments → "No comments yet".
+ * The Collection Tracker's Comments cell for one company: only its latest
+ * comment (by when it was saved — TRACKER_COMMENT_LIMIT), shown in full in the
+ * row, and — only when there are more — "See all comments", which opens that
+ * company's complete history, newest first, the latest included once. No
+ * comments → "No comments yet".
  *
  * Everything shown is the company's own follow-up history, which the Tracker
  * page already loaded on the server for this row. When `editorId` is set (the
@@ -39,7 +40,7 @@ export function TrackerComments({
       {more && (
         <div className="mb-0.5 flex items-center justify-between gap-2">
           <span className="text-[11px] font-semibold text-ink-subtle tabular-nums">
-            Latest {TRACKER_COMMENT_LIMIT} of {all.length}
+            {TRACKER_COMMENT_LIMIT === 1 ? `Latest of ${all.length}` : `Latest ${TRACKER_COMMENT_LIMIT} of ${all.length}`}
           </span>
           <button
             type="button"
@@ -52,7 +53,7 @@ export function TrackerComments({
           </button>
         </div>
       )}
-      {/* The latest five are shown in full — no inner scroll box hiding some of them. The full history is in "See all comments". */}
+      {/* The latest comment is shown in full — no inner scroll box. The full history is in "See all comments". */}
       {all.length === 0 ? (
         <span className="text-ink-subtle" data-comments-empty="true">
           No comments yet
@@ -206,7 +207,7 @@ function EditComment({ entry, companyName }: { entry: CommentEntry; companyName:
  * Delete one of your own comments, after a confirmation. One request at a time
  * (the button and the dialog are disabled while it runs); a refusal or failure is
  * shown in the dialog and nothing changes; success closes it, says so and
- * refreshes the list (and its "Latest 5 of N" count) from the server. The server
+ * refreshes the list (and its "Latest of N" count) from the server. The server
  * checks the author, the company and the permissions again, and the deletion is
  * soft: the comment and its history stay in the records.
  */

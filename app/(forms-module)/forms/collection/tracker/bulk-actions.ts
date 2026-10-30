@@ -14,6 +14,7 @@ import { GRID_LIMITS, parseBalanceRows, type BalanceSheet } from "@/lib/collecti
 import { buildBalancePlan, missingCompanies, type BalanceCompany, type BalancePlan, type BalanceSummary, type PlannedBalanceRow } from "@/lib/collections/balances/plan";
 import { TRACKER_BALANCES_SOURCE, isMissingTable, loadClientMasterIndex, loadExistingByKeys } from "@/lib/queries/collection-master";
 import { companyIdsInSnapshot, latestBalanceSnapshot } from "@/lib/queries/collection-balances";
+import { completeWeeklyUploadAfterImport } from "@/lib/collections/weekly-upload/server";
 
 /**
  * Tracker Bulk Upload — Tally customer summary (Debit / Credit per company).
@@ -207,6 +208,7 @@ export async function importCollectionBalances(raw: unknown): Promise<Result<{ r
   if (!read.ok) return read;
   const { derived } = read;
 
+  let uploadedAt = new Date();
   try {
     const result = await db.transaction(async (tx) => {
       // One upload at a time, so "the newest snapshot" is well defined while we check and write.
@@ -252,8 +254,9 @@ export async function importCollectionBalances(raw: unknown): Promise<Result<{ r
           },
           uploadedById: me.id,
         })
-        .returning({ id: collectionBalanceSnapshots.id });
+        .returning({ id: collectionBalanceSnapshots.id, uploadedAt: collectionBalanceSnapshots.uploadedAt });
       const snapshotId = snap!.id;
+      uploadedAt = snap!.uploadedAt ?? uploadedAt;
 
       for (let i = 0; i < plan.toWrite.length; i += 500) {
         await tx.insert(collectionBalanceLines).values(
@@ -277,6 +280,10 @@ export async function importCollectionBalances(raw: unknown): Promise<Result<{ r
 
     revalidatePath("/forms/collection/tracker");
     revalidatePath("/forms/collection/dashboard");
+    // The snapshot is committed: this upload completes the week's compulsory
+    // task (see lib/collections/weekly-upload). Only here — never after a
+    // preview, a refusal or a failed transaction — and it can't fail the upload.
+    await completeWeeklyUploadAfterImport({ id: result.snapshotId, periodTo: derived.sheet.periodTo, uploadedAt, uploadedById: me.id });
     return { ok: true, result };
   } catch (err) {
     if (err instanceof RefusedError) return { ok: false, error: err.message };
