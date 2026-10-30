@@ -7,6 +7,7 @@ import { ArrowDown, ArrowUp, Search, Upload } from "lucide-react";
 import { CenterDialog } from "@/components/ui/center-dialog";
 import { formatInr } from "@/lib/format";
 import { NOT_CONNECTED_MESSAGE, type TransactionSourceInfo } from "@/lib/collections/source";
+import { hiddenZeroBalanceNote } from "@/lib/collections/balances/visibility";
 import { partyOverdue } from "@/lib/collections/overdue";
 import { OverdueBadge, overdueRowStyle, useBusinessToday } from "./overdue-display";
 import { UNASSIGNED_PERSON, filterRows, personOf, sortRows, type PartyRow, type SortKey, type TrackerFilters } from "@/lib/collections/derive";
@@ -56,6 +57,7 @@ export function CollectionTracker({
   canImportBalances = false,
   canAddMasterCompanies = false,
   balancesProblem,
+  hiddenZeroBalance = 0,
   reviewStorageReady = true,
   coordinatorEditor,
   reviewQueue,
@@ -84,12 +86,19 @@ export function CollectionTracker({
   canSetConfirmation?: boolean;
   /** collection.escalation.create. */
   canEscalate?: boolean;
-  /** collection.balances.import. Without it the Bulk Upload button still opens, and explains why nothing can be uploaded. */
+  /**
+   * collection.balances.import ("Collection Tracker — Bulk Upload"), decided on
+   * the server from the signed session. Without it neither the Bulk Upload
+   * button nor its dialog is rendered; the preview and import server actions
+   * refuse without it as well.
+   */
   canImportBalances?: boolean;
   /** collection.master.import: Bulk Upload may add the file's unmatched companies to the Collection Master (as Unassigned) before the balances are confirmed. */
   canAddMasterCompanies?: boolean;
   /** Set (to the database error code) when the uploaded Debit / Credit couldn't be read: a permission or configuration problem. Everything else still works. */
   balancesProblem?: string;
+  /** How many Collection Master companies the loader left out because their Debit and Credit are both zero in the latest upload. */
+  hiddenZeroBalance?: number;
   /** False while migration 0115 isn't applied: the confirmation/escalation controls are disabled. */
   reviewStorageReady?: boolean;
   /**
@@ -180,6 +189,11 @@ export function CollectionTracker({
           </p>
         </div>
       )}
+      {hiddenZeroBalance > 0 && (
+        <p aria-label="Companies not listed" className="mb-3 rounded-lg border border-hairline bg-[#F8FAFD] px-3 py-2 text-[12.5px] text-ink-subtle">
+          {hiddenZeroBalanceNote(hiddenZeroBalance)}
+        </p>
+      )}
       {setupHints.length > 0 && (
         <div role="note" aria-label="Setup needed" className="mb-3 rounded-lg px-3 py-2.5" style={{ background: "#FFFBEB", border: "1px solid #FCD9A0" }}>
           <p className="text-[13px] font-bold text-[#92400E]">Setup needed (shown to super-admins only)</p>
@@ -242,31 +256,36 @@ export function CollectionTracker({
           <option value="due">Follow-up due or overdue</option>
           <option value="none">No follow-up date</option>
         </select>
-        <button
-          type="button"
-          onClick={() => setBulkOpen(true)}
-          className="ml-auto inline-flex h-8 items-center gap-1.5 rounded-lg border border-hairline-strong bg-white px-2.5 text-[13px] font-semibold text-ink-strong hover:bg-[#F7F9FD]"
-        >
-          <Upload size={14} aria-hidden />
-          Bulk Upload
-        </button>
-        <span className="text-[12.5px] text-ink-subtle tabular-nums">
+        {/* Only for holders of collection.balances.import; nobody else gets the button or the dialog. */}
+        {canImportBalances && (
+          <button
+            type="button"
+            onClick={() => setBulkOpen(true)}
+            className="ml-auto inline-flex h-8 items-center gap-1.5 rounded-lg border border-hairline-strong bg-white px-2.5 text-[13px] font-semibold text-ink-strong hover:bg-[#F7F9FD]"
+          >
+            <Upload size={14} aria-hidden />
+            Bulk Upload
+          </button>
+        )}
+        <span className={`text-[12.5px] text-ink-subtle tabular-nums${canImportBalances ? "" : " ml-auto"}`}>
           {connected ? `${shown.length} part${shown.length === 1 ? "y" : "ies"}` : ""}
         </span>
       </div>
 
-      <CenterDialog
-        open={bulkOpen}
-        title="Bulk Upload"
-        subtitle="Upload the Tally customer summary to fill Debit and Credit for companies in the Collection Master. Companies not in the Master yet can be added as Unassigned before you confirm."
-        onClose={() => setBulkOpen(false)}
-        accentBar="linear-gradient(90deg, #0A6CFF 0%, #0B4FB8 100%)"
-        width={920}
-      >
-        <React.Suspense fallback={<p className="text-[13px] text-ink-subtle">Loading…</p>}>
-          <TrackerBulkUpload canImport={canImportBalances} canAddCompanies={canAddMasterCompanies} onClose={() => setBulkOpen(false)} />
-        </React.Suspense>
-      </CenterDialog>
+      {canImportBalances && (
+        <CenterDialog
+          open={bulkOpen}
+          title="Bulk Upload"
+          subtitle="Upload the Tally customer summary to fill Debit and Credit for companies in the Collection Master. Companies not in the Master yet can be added as Unassigned before you confirm."
+          onClose={() => setBulkOpen(false)}
+          accentBar="linear-gradient(90deg, #0A6CFF 0%, #0B4FB8 100%)"
+          width={920}
+        >
+          <React.Suspense fallback={<p className="text-[13px] text-ink-subtle">Loading…</p>}>
+            <TrackerBulkUpload canImport={canImportBalances} canAddCompanies={canAddMasterCompanies} onClose={() => setBulkOpen(false)} />
+          </React.Suspense>
+        </CenterDialog>
+      )}
 
       <div className="overflow-x-auto rounded-section bg-white" style={CARD}>
         <table className="w-full min-w-[1120px] border-collapse text-[13.5px]">

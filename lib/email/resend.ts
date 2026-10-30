@@ -75,7 +75,43 @@ function getResend(): Resend | null {
   return cached;
 }
 
-const FROM = process.env.RESEND_FROM_EMAIL || "JMT Drive Solutions Dashboard <onboarding@resend.dev>";
+/**
+ * The sender, read from `RESEND_FROM_EMAIL` at call time. There is no
+ * hard-coded fallback on purpose: Resend accepts a `from` only on a domain
+ * the account has verified (or its `resend.dev` sandbox address, which may
+ * send to the account owner alone), so a silent default would just move the
+ * failure to the recipient. Unset means "email is not configured" — callers
+ * report that the way they report a missing API key.
+ */
+function fromAddress(): string | null {
+  const v = process.env.RESEND_FROM_EMAIL?.trim();
+  return v ? v : null;
+}
+
+const FROM_MISSING = "RESEND_FROM_EMAIL not set";
+
+/** True for Resend's sandbox sender (`…@resend.dev`), which delivers only to the account owner's address. */
+export function isSandboxSender(from: string | null | undefined): boolean {
+  return /@resend\.dev\s*>?\s*$/i.test(from ?? "");
+}
+
+/**
+ * Resend's own error text, made actionable where it matters. The sandbox
+ * restriction ("You can only send testing emails to your own email address …
+ * verify a domain …") is the one administrators meet first: say what it is
+ * and what fixes it — a verified domain and a `from` on it — rather than
+ * echoing the API's wording. Everything else passes through unchanged.
+ */
+export function describeResendError(message: string): string {
+  if (/testing emails to your own email address|verify a domain/i.test(message)) {
+    const owner = message.match(/\(([^)\s]+@[^)\s]+)\)/)?.[1];
+    return (
+      `Resend is in testing mode — the sender domain isn't verified, so it only delivers to the Resend account owner${owner ? ` (${owner})` : ""}. ` +
+      "Verify your domain at resend.com/domains and set RESEND_FROM_EMAIL to an address on that domain."
+    );
+  }
+  return message;
+}
 
 const SUBJECT_MAX = 80;
 
@@ -135,8 +171,10 @@ export async function sendInviteEmail(args: {
   try {
     const resend = getResend();
     if (!resend) return { id: null, error: "RESEND_API_KEY not set" };
+    const from = fromAddress();
+    if (!from) return { id: null, error: FROM_MISSING };
     const { data, error } = await resend.emails.send({
-      from: FROM,
+      from,
       to: args.email,
       subject: `You've been invited to JMT Drive Solutions Dashboard`,
       react: InviteEmail({
@@ -145,7 +183,7 @@ export async function sendInviteEmail(args: {
         link:        args.inviteLink,
       }),
     });
-    if (error) return { id: null, error: error.message };
+    if (error) return { id: null, error: describeResendError(error.message) };
     return { id: data?.id ?? null, error: null };
   } catch (err) {
     return { id: null, error: errorMessage(err) };
@@ -160,8 +198,10 @@ export async function sendResetPasswordEmail(args: {
   try {
     const resend = getResend();
     if (!resend) return { id: null, error: "RESEND_API_KEY not set" };
+    const from = fromAddress();
+    if (!from) return { id: null, error: FROM_MISSING };
     const { data, error } = await resend.emails.send({
-      from: FROM,
+      from,
       to: args.email,
       subject: `Reset your JMT Drive Solutions password`,
       react: ResetPasswordEmail({
@@ -169,7 +209,7 @@ export async function sendResetPasswordEmail(args: {
         recipientName: args.recipientName,
       }),
     });
-    if (error) return { id: null, error: error.message };
+    if (error) return { id: null, error: describeResendError(error.message) };
     return { id: data?.id ?? null, error: null };
   } catch (err) {
     return { id: null, error: errorMessage(err) };
@@ -186,8 +226,10 @@ export async function sendCredentialsEmail(args: {
   try {
     const resend = getResend();
     if (!resend) return { id: null, error: "RESEND_API_KEY not set" };
+    const from = fromAddress();
+    if (!from) return { id: null, error: FROM_MISSING };
     const { data, error } = await resend.emails.send({
-      from: FROM,
+      from,
       to: args.email,
       subject: `Your JMT Drive Solutions Dashboard login details`,
       react: CredentialsInviteEmail({
@@ -198,7 +240,7 @@ export async function sendCredentialsEmail(args: {
         loginUrl: args.loginUrl,
       }),
     });
-    if (error) return { id: null, error: error.message };
+    if (error) return { id: null, error: describeResendError(error.message) };
     return { id: data?.id ?? null, error: null };
   } catch (err) {
     return { id: null, error: errorMessage(err) };
@@ -212,13 +254,15 @@ export async function sendPasswordChangedByAdminEmail(args: {
   try {
     const resend = getResend();
     if (!resend) return { id: null, error: "RESEND_API_KEY not set" };
+    const from = fromAddress();
+    if (!from) return { id: null, error: FROM_MISSING };
     const { data, error } = await resend.emails.send({
-      from: FROM,
+      from,
       to: args.email,
       subject: `Your JMT Drive Solutions password was reset by an administrator`,
       react: AdminResetPasswordEmail({ recipientName: args.recipientName }),
     });
-    if (error) return { id: null, error: error.message };
+    if (error) return { id: null, error: describeResendError(error.message) };
     return { id: data?.id ?? null, error: null };
   } catch (err) {
     return { id: null, error: errorMessage(err) };
@@ -280,6 +324,8 @@ export async function sendNotificationEmail(
 ): Promise<void> {
   const resend = getResend();
   if (!resend) return;
+  const from = fromAddress();
+  if (!from) return;
 
   // The dispatcher hands us the row by primary key fields only.  We
   // need a couple of joined facts to render: recipient identity, actor
@@ -307,7 +353,7 @@ export async function sendNotificationEmail(
   if (!template) return;
 
   await resend.emails.send({
-    from: FROM,
+    from,
     to: recipient.email,
     subject: clampSubject(n.title),
     react: template,
@@ -330,9 +376,11 @@ export async function sendDigestEmail(
   try {
     const resend = getResend();
     if (!resend) return { id: null, error: null };
+    const from = fromAddress();
+    if (!from) return { id: null, error: null };
 
     const { data, error } = await resend.emails.send({
-      from: FROM,
+      from,
       to: args.recipient.email,
       subject: clampSubject(digestSubject(args.pendingTasks.length)),
       react: DailyDigestEmail({
@@ -341,7 +389,7 @@ export async function sendDigestEmail(
         siteUrl:       args.siteUrl ?? "",
       }),
     });
-    if (error) return { id: null, error: error.message };
+    if (error) return { id: null, error: describeResendError(error.message) };
     return { id: data?.id ?? null, error: null };
   } catch (err) {
     return { id: null, error: errorMessage(err) };
@@ -364,8 +412,10 @@ export async function sendWeeklyGoalsMondayEmail(args: {
   try {
     const resend = getResend();
     if (!resend) return { id: null, error: null };
+    const from = fromAddress();
+    if (!from) return { id: null, error: null };
     const { data, error } = await resend.emails.send({
-      from: FROM,
+      from,
       to: args.recipient.email,
       subject: clampSubject(
         args.goals.length > 0
@@ -379,7 +429,7 @@ export async function sendWeeklyGoalsMondayEmail(args: {
         siteUrl: args.siteUrl ?? "",
       }),
     });
-    if (error) return { id: null, error: error.message };
+    if (error) return { id: null, error: describeResendError(error.message) };
     return { id: data?.id ?? null, error: null };
   } catch (err) {
     return { id: null, error: errorMessage(err) };
@@ -396,8 +446,10 @@ export async function sendWeeklyGoalsFillReminderEmail(args: {
   try {
     const resend = getResend();
     if (!resend) return { id: null, error: null };
+    const from = fromAddress();
+    if (!from) return { id: null, error: null };
     const { data, error } = await resend.emails.send({
-      from: FROM,
+      from,
       to: args.recipient.email,
       subject: clampSubject("Update your % done before the week closes — JMT Drive Solutions"),
       react: WeeklyGoalsFillReminderEmail({
@@ -407,7 +459,7 @@ export async function sendWeeklyGoalsFillReminderEmail(args: {
         siteUrl: args.siteUrl ?? "",
       }),
     });
-    if (error) return { id: null, error: error.message };
+    if (error) return { id: null, error: describeResendError(error.message) };
     return { id: data?.id ?? null, error: null };
   } catch (err) {
     return { id: null, error: errorMessage(err) };
@@ -424,8 +476,10 @@ export async function sendWeeklyGoalsIncompleteEmail(args: {
   try {
     const resend = getResend();
     if (!resend) return { id: null, error: null };
+    const from = fromAddress();
+    if (!from) return { id: null, error: null };
     const { data, error } = await resend.emails.send({
-      from: FROM,
+      from,
       to: args.recipient.email,
       subject: clampSubject(
         `${args.unmarkedCount} weekly ${args.unmarkedCount === 1 ? "goal" : "goals"} still unmarked — JMT Drive Solutions`,
@@ -437,7 +491,7 @@ export async function sendWeeklyGoalsIncompleteEmail(args: {
         siteUrl: args.siteUrl ?? "",
       }),
     });
-    if (error) return { id: null, error: error.message };
+    if (error) return { id: null, error: describeResendError(error.message) };
     return { id: data?.id ?? null, error: null };
   } catch (err) {
     return { id: null, error: errorMessage(err) };
@@ -723,10 +777,12 @@ export async function sendSectionReportEmail(args: {
   try {
     const resend = getResend();
     if (!resend) return { id: null, error: "RESEND_API_KEY not set" };
+    const from = fromAddress();
+    if (!from) return { id: null, error: FROM_MISSING };
     const greeting = args.recipientName ? `Hi ${args.recipientName},` : "Hi,";
     const lines = [args.subtitle, args.context].filter(Boolean).join(" · ");
     const { data, error } = await resend.emails.send({
-      from: FROM,
+      from,
       to: args.to,
       subject: clampSubject(`${args.title} — WMS dashboard report`),
       html: `<p>${greeting}</p>
@@ -735,7 +791,7 @@ ${lines ? `<p style="color:#475569">${lines}</p>` : ""}
 <p style="color:#94a3b8;font-size:12px">Sent from the JMT Drive Solutions dashboard.</p>`,
       attachments: [{ filename: args.filename, content: args.pdf.toString("base64") }],
     });
-    if (error) return { id: null, error: error.message };
+    if (error) return { id: null, error: describeResendError(error.message) };
     return { id: data?.id ?? null, error: null };
   } catch (err) {
     return { id: null, error: errorMessage(err) };

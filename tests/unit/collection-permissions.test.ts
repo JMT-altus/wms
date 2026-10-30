@@ -34,7 +34,21 @@ describe("registry", () => {
   });
 
   it("holds no email, employee id or name — only keys, labels and rules", () => {
-    expect(JSON.stringify(PERMISSION_FIELDS)).not.toMatch(/@|mihir|[0-9a-f]{8}-[0-9a-f]{4}/i);
+    expect(JSON.stringify(PERMISSION_FIELDS)).not.toMatch(/@|mihir|bhavisha|[0-9a-f]{8}-[0-9a-f]{4}/i);
+  });
+
+  it("the Tracker's Bulk Upload is one clearly labelled, sensitive entry: collection.balances.import", () => {
+    expect(permissionFieldDef("collection.balances.import")).toMatchObject({
+      label: "Collection Tracker — Bulk Upload",
+      group: "Collections",
+      sensitive: true,
+      adminBypass: false,
+      superAdminBypass: false,
+      defaultAllowed: false,
+    });
+    expect(permissionFieldDef("collection.balances.import")!.hint).toMatch(/Bulk Upload in the Collection Tracker/);
+    // No second key for the same feature.
+    expect(PERMISSION_FIELDS.filter((f) => /bulk|balances/i.test(f.key + f.label))).toHaveLength(1);
   });
 });
 

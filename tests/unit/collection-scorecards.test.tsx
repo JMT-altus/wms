@@ -203,7 +203,8 @@ describe("the one card", () => {
 describe("placement on the Tracker — Bulk Upload and party count kept", () => {
   const rows = buildRows([{ partyName: "Alpha", debit: null, credit: null, outstanding: null, collectionPerson: "Gauri", coordinatorLabel: "Gauri", masterId: "m-a" }], []);
   it("one card directly above the row with Bulk Upload and the party count, both still working", async () => {
-    render(<CollectionTracker rows={rows} connected storageReady today="2026-10-28" scorecard={{ status: "ok", card: scorecardFor("Gauri", [p("m-a", "Gauri")], undefined, null) }} />);
+    // Bulk Upload is rendered only for a holder of collection.balances.import.
+    render(<CollectionTracker rows={rows} connected storageReady today="2026-10-28" canImportBalances scorecard={{ status: "ok", card: scorecardFor("Gauri", [p("m-a", "Gauri")], undefined, null) }} />);
     expect(screen.getAllByRole("region", { name: "Your scorecard" })).toHaveLength(1);
     const card = screen.getByRole("region", { name: "Your scorecard" });
     const bulk = screen.getByRole("button", { name: /Bulk Upload/ });

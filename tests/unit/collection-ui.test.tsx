@@ -289,17 +289,50 @@ describe("Collection Tracker with the Collection Master", () => {
     expect(within(screen.getByRole("button", { name: "Beta Corp" }).closest("tr")!).getByText("Unassigned")).toBeTruthy();
   });
 
-  it("a click shows the name, coordinator and payment terms, and says no transaction source is approved", () => {
+  it("a click shows the name, coordinator and payment terms, with no transaction text while no source is approved", () => {
     render(<CollectionTracker rows={masterRows} connected storageReady today={TODAY} transactionSource={NO_SOURCE} />);
     fireEvent.click(screen.getByRole("button", { name: "Alpha Traders" }));
     const dialog = screen.getByRole("dialog");
     expect(within(dialog).getByRole("heading", { name: "Alpha Traders" })).toBeTruthy();
     expect(within(dialog).getByText("Sales coordinator").nextSibling!.textContent).toBe("BK");
     expect(within(dialog).getByText("Payment terms").nextSibling!.textContent).toBe("30 days");
-    expect(within(dialog).getByText(NO_TRANSACTION_SOURCE_MESSAGE)).toBeTruthy();
+    // The popup carries no transaction section or placeholder text until there are transactions to show.
+    expect(within(dialog).queryByText(NO_TRANSACTION_SOURCE_MESSAGE)).toBeNull();
+    expect(within(dialog).queryByRole("region", { name: "Transactions" })).toBeNull();
+    expect(dialog.textContent).not.toMatch(/transaction/i);
     // No amount is shown for a company whose figures nobody supplied.
     expect(within(dialog).getByText("Debit amount").nextSibling!.textContent).toBe("—");
     expect(within(dialog).queryByText(/₹/)).toBeNull();
+    // Everything else is still there: figures note, follow-up form and history.
+    expect(within(dialog).getByText(/can't be edited here/)).toBeTruthy();
+    expect(within(dialog).getByLabelText(/Next follow-up date/)).toBeTruthy();
+    expect(within(dialog).getByRole("button", { name: "Save follow-up" })).toBeTruthy();
+    expect(within(dialog).getByRole("heading", { name: "History" })).toBeTruthy();
+  });
+
+  it("with an approved source, the company's transactions (and their overdue badges) still show in the popup", () => {
+    const withTx = buildRows(
+      [
+        {
+          partyName: "Alpha Traders", debit: null, credit: null, outstanding: null, collectionPerson: null, masterId: "m1",
+          transactions: [{ id: "t1", collectionMasterId: "m1", reference: "INV-1", amount: 500, outstanding: 500, dueDate: "2026-10-10", status: null }],
+        },
+        { partyName: "Beta Corp", debit: null, credit: null, outstanding: null, collectionPerson: null, masterId: "m2", transactions: [] },
+      ],
+      [],
+    );
+    render(<CollectionTracker rows={withTx} connected storageReady today={TODAY} transactionSource={{ key: "test", label: "Test", approved: true }} />);
+    fireEvent.click(screen.getByRole("button", { name: "Alpha Traders" }));
+    let dialog = screen.getByRole("dialog");
+    const tx = within(dialog).getByRole("region", { name: "Transactions" });
+    expect(within(tx).getByText("INV-1")).toBeTruthy();
+    expect(within(tx).getByText("Overdue 3 days")).toBeTruthy();
+    fireEvent.click(within(dialog).getAllByRole("button", { name: "Close" })[0]!);
+    // A company with none shows no transaction section or placeholder either.
+    fireEvent.click(screen.getByRole("button", { name: "Beta Corp" }));
+    dialog = screen.getByRole("dialog");
+    expect(within(dialog).queryByRole("region", { name: "Transactions" })).toBeNull();
+    expect(dialog.textContent).not.toMatch(/No transactions from/);
   });
 
   it("an unassigned company with no terms says so plainly", () => {
@@ -338,6 +371,17 @@ describe("Collection Tracker with the Collection Master", () => {
     expect(level("No Due Date")).toBe("none");
     // Colour is never the only signal.
     expect(within(screen.getByRole("button", { name: "Two Days" }).closest("tr")!).getByText("Overdue 2 days")).toBeTruthy();
+  });
+
+  it("says how many zero-balance companies the loader left out, and nothing when none were", () => {
+    const { unmount } = render(<CollectionTracker rows={masterRows} connected storageReady today={TODAY} transactionSource={NO_SOURCE} hiddenZeroBalance={3} />);
+    const note = screen.getByLabelText("Companies not listed");
+    expect(note.textContent).toMatch(/^3 companies with ₹0 Debit and ₹0 Credit in the latest upload aren't listed\./);
+    expect(note.textContent).toMatch(/stay in the Collection Master/);
+    expect(screen.getAllByRole("row")).toHaveLength(3); // the listed companies are unaffected
+    unmount();
+    render(<CollectionTracker rows={masterRows} connected storageReady today={TODAY} transactionSource={NO_SOURCE} />);
+    expect(screen.queryByLabelText("Companies not listed")).toBeNull();
   });
 
   it("shows the loader's reason when the master is empty or not set up", () => {

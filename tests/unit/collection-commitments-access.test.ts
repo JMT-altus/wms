@@ -288,4 +288,21 @@ describe("tracker page payload", () => {
     const withAssign = findProps(await Page(), "CollectionTracker")!;
     expect(withAssign.coordinatorEditor).toEqual({ options: [] });
   });
+
+  it("Bulk Upload (canImportBalances) follows collection.balances.import alone — decided from the session, revocation seen on the next request", async () => {
+    const { default: Page } = await import("@/app/(forms-module)/forms/collection/tracker/page");
+    otherAdmin(); // every ordinary Collection capability, no Bulk Upload grant
+    const without = findProps(await Page(), "CollectionTracker")!;
+    expect(without.canImportBalances).toBe(false);
+    // The other Tracker controls are unaffected by that.
+    expect(without.canWriteFollowUps).toBe(true);
+    expect(without.canSetConfirmation).toBe(true);
+    expect(without.canEscalate).toBe(true);
+    expect(without.canAddMasterCompanies).toBe(true);
+    h.caps.add("collection.balances.import"); // the super-admin granted it to this person
+    expect(findProps(await Page(), "CollectionTracker")!.canImportBalances).toBe(true);
+    h.caps.delete("collection.balances.import"); // and revoked it
+    expect(findProps(await Page(), "CollectionTracker")!.canImportBalances).toBe(false);
+    expect(h.dbCalls).toEqual([]);
+  });
 });

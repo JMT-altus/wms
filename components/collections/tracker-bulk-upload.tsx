@@ -97,12 +97,14 @@ export function TrackerBulkUpload({
   const [addError, setAddError] = React.useState<string | null>(null);
   const [added, setAdded] = React.useState<AddedCompaniesResult | null>(null);
 
+  // Defence in depth only: the Tracker does not render Bulk Upload at all without
+  // collection.balances.import, and the server actions refuse without it too.
   if (!canImport) {
     return (
       <div>
         <p role="status" className="flex items-start gap-2 rounded-lg px-3 py-2.5 text-[13.5px] font-semibold" style={{ background: "#FFFBEB", border: "1px solid #FCD9A0", color: "#92400E" }}>
           <AlertTriangle size={15} className="mt-0.5 shrink-0" aria-hidden />
-          You don&apos;t have permission to upload balances. This needs the &ldquo;Collections — Import balances&rdquo; permission, which a super-admin grants in Field Permissions.
+          You don&apos;t have permission to upload balances. This needs the &ldquo;Collection Tracker — Bulk Upload&rdquo; permission, which a super-admin grants in Field Permissions.
         </p>
         <div className="mt-4 flex justify-end">
           <button type="button" className={BTN} style={MUTED} onClick={onClose}>

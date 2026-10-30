@@ -176,6 +176,12 @@ async function main() {
     check("RESEND_FROM_EMAIL", process.env.RESEND_FROM_EMAIL, (v) =>
       /<.+@.+>/.test(v) || /^.+@.+$/.test(v) ? null : "expected \"Name <addr@domain>\" or addr@domain"),
   ]);
+  if (/@resend\.dev\s*>?\s*$/i.test(process.env.RESEND_FROM_EMAIL ?? "")) {
+    console.log(
+      "  !  RESEND_FROM_EMAIL is Resend's sandbox sender (resend.dev): emails reach ONLY the Resend account owner's address.\n" +
+        "     Invites to employees will fail until a domain is verified at resend.com/domains and this is set to an address on it.",
+    );
+  }
 
   // ─── Site URL ────────────────────────────────────────────────────
   header("Site");

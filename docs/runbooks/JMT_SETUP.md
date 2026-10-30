@@ -63,7 +63,13 @@ bottom. Every credential goes into `.env.local` (copy from `.env.local.example`)
 2. **Domains → Add** `jmtdrives.com` and add the shown DNS records (SPF/DKIM) at
    your registrar. Wait for "Verified".
 3. Set `RESEND_FROM_EMAIL="JMT Drive Solutions <noreply@jmtdrives.com>"`.
-   (Until the domain verifies you may use `onboarding@resend.dev` for testing.)
+   (Until the domain verifies you may use `onboarding@resend.dev` for testing —
+   but Resend then delivers ONLY to the account owner's own address; invites to
+   anyone else fail with "You can only send testing emails to your own email
+   address". `RESEND_FROM_EMAIL` is required: without it no email is sent.)
+4. Check delivery without touching the database:
+   `pnpm tsx --env-file=.env.local scripts/smoke-test-invite-email.ts <address>`
+   — sends the real invite template (with a placeholder instead of a password).
 
 ## 5. Fill in secrets & verify
 

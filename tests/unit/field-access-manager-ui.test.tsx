@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 
 // The permission matrix (/master-setup/access-control) with the Collection
 // capabilities: grouped, sensitive rows marked, and those rows changeable only
@@ -37,12 +37,47 @@ describe("permission matrix — Collections", () => {
   it("lists the Collection capabilities under their own heading, marking the six sensitive ones", () => {
     render(<FieldAccessManager matrix={matrix} />);
     expect(screen.getByRole("rowheader", { name: "Collections" })).toBeTruthy();
-    // 6 Collection capabilities (incl. Import balances) + the 3 Leave approvals ones, all explicit-grant-only.
+    // 6 Collection capabilities (incl. the Tracker's Bulk Upload) + the 3 Leave approvals ones, all explicit-grant-only.
     expect(within(screen.getByRole("table")).getAllByText("Sensitive")).toHaveLength(9);
-    for (const l of ["Collections — Assign Sales Coordinator", "Collections — View commitments", "Collections — Record commitments", "Collections — Review escalations", "Collections — Close escalations", "Collections — Import balances"]) {
+    for (const l of ["Collections — Assign Sales Coordinator", "Collections — View commitments", "Collections — Record commitments", "Collections — Review escalations", "Collections — Close escalations", "Collection Tracker — Bulk Upload"]) {
       expect(within(row(l)).getByText("Sensitive")).toBeTruthy();
     }
     expect(within(row("Collections — Escalate for review")).queryByText("Sensitive")).toBeNull();
+  });
+
+  it("Collection Tracker — Bulk Upload: a super-admin grants and revokes it per person through the matrix; nobody else can", async () => {
+    const LABEL = "Collection Tracker — Bulk Upload";
+    const asha = matrix.people[0]!; // an admin, not a super-admin
+    // A plain admin sees the row but cannot change it — not even for themselves.
+    render(<FieldAccessManager matrix={matrix} canManageSensitive={false} />);
+    fireEvent.click(screen.getByRole("button", { name: "One person" }));
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: asha.id } });
+    expect(within(row(LABEL)).getByText(/Bulk Upload in the Collection Tracker/)).toBeTruthy();
+    expect(button(LABEL, "Allow").disabled).toBe(true);
+    expect(within(row(LABEL)).getByText("Not allowed")).toBeTruthy();
+    cleanup();
+
+    // A super-admin: pick the person, Allow → the grant is saved for that person by the registry key.
+    a.set.mockResolvedValue({ ok: true });
+    render(<FieldAccessManager matrix={matrix} canManageSensitive />);
+    fireEvent.click(screen.getByRole("button", { name: "One person" }));
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: asha.id } });
+    expect(within(row(LABEL)).getByText("Not allowed")).toBeTruthy(); // admin status implies nothing
+    // The buttons are disabled while a save is in flight, so wait for each one to settle.
+    const settled = () => waitFor(() => expect(button(LABEL, "Inherit").disabled).toBe(false));
+    fireEvent.click(button(LABEL, "Allow"));
+    expect(a.set).toHaveBeenLastCalledWith("collection.balances.import", "employee", asha.id, true);
+    expect(within(row(LABEL)).getByText("Allowed")).toBeTruthy();
+    await settled();
+    // Revoke: Inherit clears the row (back to the default, denied) …
+    fireEvent.click(button(LABEL, "Inherit"));
+    expect(a.set).toHaveBeenLastCalledWith("collection.balances.import", "employee", asha.id, null);
+    expect(within(row(LABEL)).getByText("Not allowed")).toBeTruthy();
+    await settled();
+    // … and Deny records an explicit refusal.
+    fireEvent.click(button(LABEL, "Deny"));
+    expect(a.set).toHaveBeenLastCalledWith("collection.balances.import", "employee", asha.id, false);
+    expect(within(row(LABEL)).getByText("Not allowed")).toBeTruthy();
   });
 
   it("lists the Leave approvals capabilities under their own heading, all sensitive, and not for departments", () => {

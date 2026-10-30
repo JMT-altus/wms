@@ -32,10 +32,27 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("Bulk Upload button (Tracker)", () => {
-  it("is visible and, without the capability, opens a dialog that explains why nothing can be uploaded", async () => {
+  it("without the capability (collection.balances.import) there is no Bulk Upload button and no dialog — the rest of the Tracker is unchanged", () => {
     render(<CollectionTracker rows={rows} connected storageReady today="2026-10-19" />);
-    fireEvent.click(screen.getByRole("button", { name: "Bulk Upload" }));
-    expect((await screen.findByRole("status")).textContent).toMatch(/don.t have permission/);
+    expect(screen.queryByRole("button", { name: /Bulk Upload/ })).toBeNull();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.queryByText(/Upload the Tally customer summary/)).toBeNull();
+    expect(document.querySelector('input[type="file"]')).toBeNull();
+    // The list, its count, the search and the filters are all still there.
+    expect(screen.getByText("Alpha Traders")).toBeTruthy();
+    expect(screen.getByText("1 party")).toBeTruthy();
+    expect(screen.getByRole("searchbox", { name: /search/i })).toBeTruthy();
+    expect(screen.getByRole("combobox", { name: "Follow-up" })).toBeTruthy();
+    cleanup();
+    // An explicit false (what the page sends a non-holder) is the same as absent.
+    render(<CollectionTracker rows={rows} connected storageReady today="2026-10-19" canImportBalances={false} canAddMasterCompanies />);
+    expect(screen.queryByRole("button", { name: /Bulk Upload/ })).toBeNull();
+  });
+
+  it("the dialog body itself still refuses when rendered without the capability (defence in depth)", () => {
+    render(<TrackerBulkUpload canImport={false} onClose={() => {}} />);
+    expect(screen.getByRole("status").textContent).toMatch(/don.t have permission/);
+    expect(screen.getByRole("status").textContent).toMatch(/Collection Tracker — Bulk Upload/);
     expect(document.querySelector('input[type="file"]')).toBeNull();
     expect(screen.queryByRole("button", { name: "Preview upload" })).toBeNull();
   });

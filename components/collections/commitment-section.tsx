@@ -5,8 +5,9 @@ import { formatInrExact } from "@/lib/collections/money";
 import { getCompanyCommitment, saveCompanyCommitment } from "@/app/(forms-module)/forms/collection/commitments/actions";
 import type { Commitment } from "@/lib/queries/collection-commitments";
 import { CommentList, type CommentEntry } from "@/components/collections/comment-list";
+import { POPUP_HEADING, POPUP_SECTION, POPUP_VALUE } from "@/components/collections/popup-style";
 
-const FIELD = "w-full rounded-lg border border-hairline-strong bg-white px-3 py-2 text-[14px] text-ink-strong";
+const FIELD = "w-full rounded-lg border border-hairline-strong bg-white px-2.5 py-1.5 text-[13.5px] text-ink-strong";
 const day = (iso: string) => {
   const [y, m, d] = iso.split("-").map(Number) as [number, number, number];
   return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric", timeZone: "UTC" });
@@ -96,37 +97,37 @@ export function CommitmentSection({
   }
 
   return (
-    <section className="mt-4 border-t border-hairline pt-3" aria-label="Commitment">
-      <h3 className="text-[12px] font-bold uppercase tracking-[0.08em] text-ink-subtle">Commitment (restricted)</h3>
+    <section className={POPUP_SECTION} aria-label="Commitment">
+      <h3 className={POPUP_HEADING}>Commitment (restricted)</h3>
       {state.loading ? (
-        <p className="mt-2 text-[13px] text-ink-subtle">Loading…</p>
+        <p className="mt-1.5 text-[12.5px] text-ink-subtle">Loading…</p>
       ) : state.error ? (
-        <p role="alert" className="mt-2 text-[13px] text-[#B91C1C]">{state.error}</p>
+        <p role="alert" className="mt-1.5 text-[12.5px] text-[#B91C1C]">{state.error}</p>
       ) : !state.storageReady ? (
-        <p className="mt-2 text-[13px] text-[#92400E]">Commitment storage isn&apos;t set up yet (migration 0114 is pending).</p>
+        <p className="mt-1.5 text-[12.5px] text-[#92400E]">Commitment storage isn&apos;t set up yet (migration 0114 is pending).</p>
       ) : !canView ? (
-        <p className="mt-2 text-[13px] text-ink-subtle">You can record a commitment but not view recorded ones.</p>
+        <p className="mt-1.5 text-[12.5px] text-ink-subtle">You can record a commitment but not view recorded ones.</p>
       ) : (
-        <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-[13.5px]">
-          <div>
-            <dt className="text-[11.5px] font-bold uppercase tracking-[0.08em] text-ink-subtle">Committed amount</dt>
-            <dd className="mt-0.5 font-semibold text-ink-strong tabular-nums">{state.commitment ? formatInrExact(state.commitment.amount) : "Not recorded"}</dd>
+        <dl className="mt-1.5 grid grid-cols-2 gap-x-4 gap-y-1 text-[13.5px]">
+          <div className="min-w-0">
+            <dt className={POPUP_HEADING}>Committed amount</dt>
+            <dd className={POPUP_VALUE}>{state.commitment ? formatInrExact(state.commitment.amount) : "Not recorded"}</dd>
           </div>
-          <div>
-            <dt className="text-[11.5px] font-bold uppercase tracking-[0.08em] text-ink-subtle">Committed date</dt>
-            <dd className="mt-0.5 font-semibold text-ink-strong tabular-nums">{state.commitment ? day(state.commitment.committedDate) : "Not recorded"}</dd>
+          <div className="min-w-0">
+            <dt className={POPUP_HEADING}>Committed date</dt>
+            <dd className={POPUP_VALUE}>{state.commitment ? day(state.commitment.committedDate) : "Not recorded"}</dd>
           </div>
         </dl>
       )}
-      <div className="mt-3">
-        <p className="text-[11.5px] font-bold uppercase tracking-[0.08em] text-ink-subtle">Tracker comments</p>
-        <div className="mt-0.5 text-[13px] text-ink-soft">
+      <div className="mt-2">
+        <p className={POPUP_HEADING}>Tracker comments</p>
+        <div className="mt-0.5 text-[12.5px] text-ink-soft">
           <CommentList comments={comments} className="max-h-[96px]" label={`Tracker comments for ${companyName}, newest first`} />
         </div>
       </div>
       {canEdit && !state.loading && !state.error && state.storageReady && (
-        <div className="mt-3 grid grid-cols-[1fr_1fr_auto] items-end gap-2">
-          <label className="block text-[12.5px] font-semibold text-ink-soft">
+        <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end">
+          <label className="block min-w-0 text-[12.5px] font-semibold text-ink-soft">
             New committed amount (₹)
             <input
               type="text"
@@ -138,7 +139,7 @@ export function CommitmentSection({
               aria-label={`Committed amount for ${companyName}`}
             />
           </label>
-          <label className="block text-[12.5px] font-semibold text-ink-soft">
+          <label className="block min-w-0 text-[12.5px] font-semibold text-ink-soft">
             Committed date
             <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={`${FIELD} mt-1 tabular-nums`} aria-label={`Committed date for ${companyName}`} />
           </label>
@@ -146,7 +147,7 @@ export function CommitmentSection({
             type="button"
             onClick={save}
             disabled={saving}
-            className="h-10 rounded-lg px-4 text-[13.5px] font-semibold text-white disabled:opacity-50"
+            className="h-8 rounded-lg px-3.5 text-[13px] font-semibold text-white disabled:opacity-50"
             style={{ background: "#0A6CFF" }}
           >
             {saving ? "Saving…" : "Record"}
@@ -154,7 +155,7 @@ export function CommitmentSection({
         </div>
       )}
       {formError && (
-        <p role="alert" className="mt-2 text-[13px] text-[#B91C1C]">
+        <p role="alert" className="mt-1.5 text-[12.5px] text-[#B91C1C]">
           {formError}
         </p>
       )}

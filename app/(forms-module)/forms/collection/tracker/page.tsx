@@ -34,7 +34,12 @@ export const dynamic = "force-dynamic";
 export default async function CollectionTrackerPage() {
   const viewer = await requireCollectionCapability("collection.view");
   const caps = await getCollectionCapabilities();
-  const [source, followUps] = await Promise.all([loadCollectionParties(), listFollowUps()]);
+  // The Tracker's default list leaves out companies whose Debit and Credit are
+  // both zero in the active balance snapshot (they stay in the Collection
+  // Master; the next confirmed upload decides again). Everything on this page —
+  // search, pages, the count, the scorecard, the setup hints — is built from
+  // this same visible set.
+  const [source, followUps] = await Promise.all([loadCollectionParties({ hideZeroBalance: true }), listFollowUps()]);
   const companyIds = source.parties.map((p) => p.masterId).filter((id): id is string => !!id);
   // Confirmation (visible to every Tracker user) and open-escalation status, from
   // the database on every request — never from browser state.
@@ -128,6 +133,7 @@ export default async function CollectionTrackerPage() {
         canImportBalances={caps["collection.balances.import"]}
         canAddMasterCompanies={caps["collection.master.import"]}
         balancesProblem={source.balances?.status === "error" ? (source.balances.errorCode ?? "unknown") : undefined}
+        hiddenZeroBalance={source.hiddenZeroBalance}
         reviewStorageReady={confirmations.storageReady && escalations.storageReady}
         coordinatorEditor={coordinatorOptions?.storageReady ? { options: coordinatorOptions.labels } : undefined}
         reviewQueue={reviewQueue}

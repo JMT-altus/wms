@@ -9,6 +9,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // Today: no approved transaction source exists (activeTransactionSource() = NO_TRANSACTION_SOURCE), `outstanding`
 // is set to null for every company by the loader, nothing writes the closures table, and the Tracker lists every
 // Collection Master company. So a company never leaves the Tracker and never appears in Collection Logs.
+// (Separately, the Tracker's default list leaves out companies whose uploaded Debit and Credit are both zero —
+// a read-time filter on the active balance snapshot, not a closure; see collection-zero-balance-visibility.test.ts.)
 const h = vi.hoisted(() => ({
   master: { storageReady: true, rows: [] as Record<string, unknown>[] },
   balances: { storageReady: true, snapshot: null, byCompany: new Map<string, { debit: number | null; credit: number | null }>() },

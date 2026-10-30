@@ -156,6 +156,25 @@ function refusesSuperAdminTarget(actorEmail: string, targetEmail: string): strin
   return isSuperAdmin(targetEmail) && !isSuperAdmin(actorEmail) ? SUPER_ADMIN_TARGET_REFUSED : null;
 }
 
+/**
+ * Audit a login-details email that did not go out (first send or a retry):
+ * who tried, for whom, and the provider's message. Never the password or the
+ * API key — `note` holds the error text only. Best-effort: a failed audit
+ * write must not turn an email problem into an action failure.
+ */
+async function recordInviteEmailFailure(employeeId: string, actorId: string, error: string): Promise<void> {
+  try {
+    await db.insert(employeeEvents).values({
+      employeeId,
+      actorId,
+      eventType: "invite_email_failed",
+      note: error.slice(0, 500),
+    });
+  } catch (err) {
+    console.error("[inviteEmployee] audit write failed (invite_email_failed)", err);
+  }
+}
+
 export async function inviteEmployee(input: InviteEmployeeInput): Promise<{
   ok: boolean;
   id?: string;
@@ -296,12 +315,15 @@ export async function inviteEmployee(input: InviteEmployeeInput): Promise<{
       loginUrl:    `${siteUrl()}/login`,
     });
     if (sendError) {
-      emailWarning = `Created the account but the login-details email failed: ${sendError}. Use "Resend invite" to retry.`;
+      emailWarning = `Created the account but the login-details email failed: ${sendError.replace(/\.?\s*$/, ".")} Use "Resend invite" to retry.`;
       console.error("[inviteEmployee] sendCredentialsEmail returned error", sendError);
+      await recordInviteEmailFailure(inserted.id, me.id, sendError);
     }
   } catch (err: any) {
-    emailWarning = `Created the account but the login-details email failed: ${err?.message ?? err}. Use "Resend invite" to retry.`;
-    console.error("[inviteEmployee] sendCredentialsEmail threw", err);
+    const message = String(err?.message ?? err);
+    emailWarning = `Created the account but the login-details email failed: ${message}. Use "Resend invite" to retry.`;
+    console.error("[inviteEmployee] sendCredentialsEmail threw", message);
+    await recordInviteEmailFailure(inserted.id, me.id, message);
   }
 
   try {
@@ -619,6 +641,9 @@ export async function resendInvite(employeeId: string): Promise<{ ok: boolean; e
   const refused = refusesSuperAdminTarget(me.email, emp.email);
   if (refused) return { ok: false, error: refused };
   if (emp.joinedAt !== null) return { ok: false, error: "Employee has already joined." };
+  // A retry only re-sends the email for THIS row: nothing is created, nothing
+  // on the employee or their Firebase account changes. A failure is recorded
+  // (the message, never the credentials) so the history shows what happened.
   try {
     const { error } = await sendCredentialsEmail({
       email:       emp.email,
@@ -627,9 +652,14 @@ export async function resendInvite(employeeId: string): Promise<{ ok: boolean; e
       password:    DEFAULT_INVITE_PASSWORD,
       loginUrl:    `${siteUrl()}/login`,
     });
-    if (error) return { ok: false, error };
+    if (error) {
+      await recordInviteEmailFailure(emp.id, me.id, error);
+      return { ok: false, error };
+    }
   } catch (err: any) {
-    return { ok: false, error: translateFirebaseAdminError(err) ?? (err.message ?? String(err)) };
+    const message = translateFirebaseAdminError(err) ?? (err?.message ?? String(err));
+    await recordInviteEmailFailure(emp.id, me.id, message);
+    return { ok: false, error: message };
   }
 
   try {

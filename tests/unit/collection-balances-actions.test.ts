@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // The Tracker Bulk Upload server actions with the database, the session and the
 // resolved grants MOCKED. No database is touched.
 const h = vi.hoisted(() => ({
+  /** The signed session's employee (what getCurrentEmployee resolves from the Firebase UID); null = signed out. */
+  me: null as null | { id: string; isActive: boolean; isAdmin: boolean },
   caps: new Set<string>(),
   touched: [] as string[],
   inserts: [] as { table: unknown; values: unknown }[],
@@ -16,8 +18,11 @@ vi.mock("server-only", () => ({}));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/rate-limit", () => ({ rateLimitOrError: () => null }));
 vi.mock("@/lib/auth/current", () => ({
-  getCurrentEmployee: async () => ({ id: "emp-1", isActive: true, isAdmin: true }),
-  requireAdmin: async () => ({ id: "emp-1", isActive: true, isAdmin: true }),
+  getCurrentEmployee: async () => h.me,
+  requireAdmin: async () => {
+    if (!h.me?.isActive || !h.me.isAdmin) throw new Error("Forbidden");
+    return h.me;
+  },
 }));
 vi.mock("@/lib/auth/field-access", () => ({
   getMyFieldAccess: async () => Object.fromEntries([...h.caps].map((k) => [k, { allowed: true, source: "employee" }])),
@@ -92,6 +97,7 @@ const prev = (over: Record<string, unknown> = {}) => ({
 });
 
 beforeEach(() => {
+  h.me = { id: "emp-1", isActive: true, isAdmin: true };
   h.caps = new Set(["collection.balances.import"]);
   h.touched = [];
   h.inserts = [];
@@ -103,12 +109,74 @@ beforeEach(() => {
   company("co-2", "Beta Works");
 });
 
+// Bulk Upload is controlled by ONE registry entry, collection.balances.import
+// ("Collection Tracker — Bulk Upload" in Field Permissions): granted and revoked
+// there, per person, by a super-admin. The actions never read who is asking, or
+// what they may do, from the request — only from the signed session and the
+// grants the matrix resolved for it.
 describe("permission", () => {
   it("preview and import are refused without collection.balances.import, before anything is read or written", async () => {
     h.caps = new Set(["collection.view", "collection.master.import", "collection.followup.write"]);
     await expect(previewCollectionBalances(file())).rejects.toThrow("Forbidden");
     await expect(go()).rejects.toThrow("Forbidden");
     expect(h.inserts).toHaveLength(0);
+    expect(h.touched).toEqual([]);
+  });
+
+  it.each([
+    ["signed out", () => (h.me = null)],
+    ["the account is deactivated", () => (h.me = { id: "emp-1", isActive: false, isAdmin: true })],
+    ["not an admin (the Forms area is admin-only), even with the grant", () => (h.me = { id: "emp-1", isActive: true, isAdmin: false })],
+  ])("%s: preview and import are Forbidden, nothing read or written", async (_name, setup) => {
+    setup();
+    await expect(previewCollectionBalances(file())).rejects.toThrow("Forbidden");
+    await expect(go()).rejects.toThrow("Forbidden");
+    expect(h.inserts).toHaveLength(0);
+    expect(h.touched).toEqual([]);
+  });
+
+  it("a forged identity in the payload changes nothing: who is asking comes from the session only", async () => {
+    h.caps = new Set(["collection.view"]);
+    const forged = {
+      employeeId: "emp-super",
+      userId: "emp-super",
+      email: "someone@example.test",
+      role: "super-admin",
+      isAdmin: true,
+      isSuperAdmin: true,
+      permissions: ["collection.balances.import"],
+      capabilities: { "collection.balances.import": true },
+      canImport: true,
+    };
+    await expect(previewCollectionBalances({ ...file(), ...forged })).rejects.toThrow("Forbidden");
+    await expect(go(forged)).rejects.toThrow("Forbidden");
+    expect(h.inserts).toHaveLength(0);
+    // With the real grant, the same forged fields are ignored too: the snapshot is recorded against the session's employee.
+    h.caps = new Set(["collection.balances.import"]);
+    const r = await go({ ...forged, uploadedById: "emp-super" });
+    expect(r.ok).toBe(true);
+    expect(snapshotValues().uploadedById).toBe("emp-1");
+  });
+
+  it("a revoked grant stops the next request: preview and import both refuse again, and the grant alone restores them", async () => {
+    expect((await previewCollectionBalances(file())).ok).toBe(true);
+    h.caps.delete("collection.balances.import"); // the super-admin set the row back to Inherit (or Deny)
+    await expect(previewCollectionBalances(file())).rejects.toThrow("Forbidden");
+    await expect(go()).rejects.toThrow("Forbidden");
+    expect(h.inserts).toHaveLength(0);
+    h.caps.add("collection.balances.import"); // granted again
+    expect((await previewCollectionBalances(file())).ok).toBe(true);
+    expect((await go()).ok).toBe(true);
+    expect(h.inserts).toHaveLength(2); // one snapshot, one batch of lines
+  });
+
+  it("the other Tracker capabilities neither grant Bulk Upload nor depend on it", async () => {
+    // Every other Collection capability together does not open Bulk Upload…
+    h.caps = new Set(["collection.view", "collection.master.import", "collection.followup.write", "collection.confirmation.set", "collection.escalation.create", "collection.coordinator.assign", "collection.commitments.view", "collection.commitments.edit", "collection.escalation.review", "collection.escalation.close", "collection.logs.view"]);
+    await expect(previewCollectionBalances(file())).rejects.toThrow("Forbidden");
+    // …and Bulk Upload needs none of them: the one grant is enough.
+    h.caps = new Set(["collection.balances.import"]);
+    expect((await previewCollectionBalances(file())).ok).toBe(true);
   });
 });
 
@@ -179,6 +247,28 @@ describe("importCollectionBalances", () => {
       ["co-2", "200.00", "50.00"],
     ]);
     // Never updates or deletes anything (so the Master, follow-ups, commitments etc. are untouched).
+    expect(h.touched).toEqual([]);
+  });
+
+  it("a confirmed upload stores zero rows as ₹0.00 lines (the Tracker hides those companies from the snapshot, not from a flag); a preview stores nothing", async () => {
+    company("co-3", "Zero Co");
+    company("co-4", "Blank Side Co");
+    const grid = sheetGrid({ extra: [["Zero Co", "0", "0.00"], ["Blank Side Co", "0", ""]] });
+    const preview = await previewCollectionBalances(file({ grid }));
+    if (!preview.ok) throw new Error(preview.error);
+    expect(preview.preview.summary).toMatchObject({ matched: 4, verification: { status: "ok" } });
+    expect(h.inserts).toHaveLength(0); // an unconfirmed preview changes nothing, so no visibility changes either
+    const r = await go({ grid, expected: { matched: 4, debitPaise: 30_000, creditPaise: 5_000 } });
+    if (!r.ok) throw new Error(r.error);
+    const lines = h.inserts[1]!.values as { companyId: string; debit: string | null; credit: string | null }[];
+    expect(lines.map((l) => [l.companyId, l.debit, l.credit])).toEqual([
+      ["co-1", "100.00", null],
+      ["co-2", "200.00", "50.00"],
+      ["co-3", "0.00", "0.00"],
+      ["co-4", "0.00", null],
+    ]);
+    // Only a snapshot and its lines are written: no company is created, updated or deleted for being zero.
+    expect(h.inserts.map((i) => i.table)).toEqual([collectionBalanceSnapshots, collectionBalanceLines]);
     expect(h.touched).toEqual([]);
   });
 

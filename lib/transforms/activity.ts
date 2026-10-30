@@ -149,6 +149,8 @@ export function employeeEventCopy(row: ActivityRow): string {
       return `invited ${target}`;
     case "invite_resent":
       return `re-sent invite to ${target}`;
+    case "invite_email_failed":
+      return `could not email login details to ${target}`;
     case "edited":
       return `edited ${target}'s profile`;
     case "deactivated":
