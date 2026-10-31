@@ -103,7 +103,7 @@ export function CollectionLogsList({ rows, storageReady }: { rows: ClosureRow[];
               {rows.map((r) => (
                 <tr key={r.id} data-closure-id={r.id} className="border-b border-hairline last:border-b-0">
                   <td className={TD}>
-                    <Link href={`/forms/collection/logs/${r.id}` as Route} className="font-semibold text-ink-strong underline-offset-2 hover:underline">
+                    <Link href={`/collection/logs/${r.id}` as Route} className="font-semibold text-ink-strong underline-offset-2 hover:underline">
                       {r.companyName}
                     </Link>
                     {r.collectionPerson && <span className="block text-[11.5px] text-ink-subtle">{r.collectionPerson}</span>}
@@ -222,7 +222,7 @@ export function CollectionLogDetail({ closure, episodes, history }: { closure: C
                 {e.id === closure.id ? (
                   <span className="font-semibold">{istDateTime(e.closedAt)} (this one)</span>
                 ) : (
-                  <Link href={`/forms/collection/logs/${e.id}` as Route} className="underline-offset-2 hover:underline">
+                  <Link href={`/collection/logs/${e.id}` as Route} className="underline-offset-2 hover:underline">
                     {istDateTime(e.closedAt)}
                   </Link>
                 )}{" "}
@@ -336,7 +336,7 @@ export function LogsShell({ title = "Collection Logs", back = false, children }:
     <div>
       <header className="mb-4">
         {back && (
-          <Link href={"/forms/collection/logs" as Route} className="mb-1 inline-block text-[12.5px] font-semibold text-ink-subtle underline-offset-2 hover:underline">
+          <Link href={"/collection/logs" as Route} className="mb-1 inline-block text-[12.5px] font-semibold text-ink-subtle underline-offset-2 hover:underline">
             ← Collection Logs
           </Link>
         )}

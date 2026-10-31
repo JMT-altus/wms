@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { formatInrExact } from "@/lib/collections/money";
-import { getCompanyCommitment, saveCompanyCommitment } from "@/app/(forms-module)/forms/collection/commitments/actions";
+import { getCompanyCommitment, saveCompanyCommitment } from "@/app/(collection-module)/collection/commitments/actions";
 import type { Commitment } from "@/lib/queries/collection-commitments";
 import { CommentList, type CommentEntry } from "@/components/collections/comment-list";
 import { POPUP_HEADING, POPUP_SECTION, POPUP_VALUE } from "@/components/collections/popup-style";

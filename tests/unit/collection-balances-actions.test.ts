@@ -16,6 +16,23 @@ const h = vi.hoisted(() => ({
 }));
 
 vi.mock("server-only", () => ({}));
+// Collection is its own module now (Admin → Access). Its gate is mocked to follow the session's admin flag — the
+// admin bypass — so these tests keep exercising the collection.* capabilities exactly as before.
+vi.mock("@/lib/auth/module-access", async () => {
+  const { getCurrentEmployee } = await import("@/lib/auth/current");
+  const inModule = async () => {
+    const me = (await getCurrentEmployee()) as { isActive?: boolean; isAdmin?: boolean } | null;
+    return !!me && me.isActive !== false && me.isAdmin === true;
+  };
+  return {
+    canAccessModule: inModule,
+    requireModuleAccess: async () => {
+      const me = await getCurrentEmployee();
+      if (!(await inModule())) throw new Error("Forbidden");
+      return me;
+    },
+  };
+});
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/rate-limit", () => ({ rateLimitOrError: () => null }));
 vi.mock("@/lib/auth/current", () => ({
@@ -69,7 +86,7 @@ vi.mock("@/lib/collections/weekly-upload/server", () => ({
   completeWeeklyUploadAfterImport: (...x: unknown[]) => (h.weeklyComplete as unknown as (...a: unknown[]) => unknown)(...x),
 }));
 
-import { addMissingBalanceCompanies, importCollectionBalances, previewCollectionBalances } from "@/app/(forms-module)/forms/collection/tracker/bulk-actions";
+import { addMissingBalanceCompanies, importCollectionBalances, previewCollectionBalances } from "@/app/(collection-module)/collection/tracker/bulk-actions";
 import { collectionBalanceLines, collectionBalanceSnapshots } from "@/db/schema";
 
 const company = (id: string, name: string) => h.master.set(name.toLowerCase().replace(/[^a-z0-9]/g, ""), { id, companyName: name, nameKey: name.toLowerCase().replace(/[^a-z0-9]/g, "") });

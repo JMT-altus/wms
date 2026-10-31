@@ -21,6 +21,23 @@ const h = vi.hoisted(() => ({
 }));
 
 vi.mock("server-only", () => ({}));
+// Collection is its own module now (Admin → Access). Its gate is mocked to follow the session's admin flag — the
+// admin bypass — so these tests keep exercising the collection.* capabilities exactly as before.
+vi.mock("@/lib/auth/module-access", async () => {
+  const { getCurrentEmployee } = await import("@/lib/auth/current");
+  const inModule = async () => {
+    const me = (await getCurrentEmployee()) as { isActive?: boolean; isAdmin?: boolean } | null;
+    return !!me && me.isActive !== false && me.isAdmin === true;
+  };
+  return {
+    canAccessModule: inModule,
+    requireModuleAccess: async () => {
+      const me = await getCurrentEmployee();
+      if (!(await inModule())) throw new Error("Forbidden");
+      return me;
+    },
+  };
+});
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("next/navigation", () => ({
   notFound: () => {
@@ -74,7 +91,7 @@ vi.mock("@/lib/db", () => {
   };
 });
 
-import { getCompanyCommitment, saveCompanyCommitment } from "@/app/(forms-module)/forms/collection/commitments/actions";
+import { getCompanyCommitment, saveCompanyCommitment } from "@/app/(collection-module)/collection/commitments/actions";
 
 const COMPANY = "11111111-1111-4111-8111-111111111111";
 const ORDINARY = ["collection.view", "collection.followup.write", "collection.confirmation.set", "collection.escalation.create", "collection.master.import"];
@@ -236,14 +253,14 @@ function findProps(node: ReactNode, name: string): Record<string, unknown> | nul
 
 describe("commitments page", () => {
   it("is not found without the capability, without reading commitments", async () => {
-    const { default: Page } = await import("@/app/(forms-module)/forms/collection/commitments/page");
+    const { default: Page } = await import("@/app/(collection-module)/collection/commitments/page");
     otherAdmin();
     await expect(Page()).rejects.toThrow("NEXT_NOT_FOUND");
     expect(h.listCommitments).not.toHaveBeenCalled();
   });
 
   it("shows the commitments table, read with the holder's proof", async () => {
-    const { default: Page, dynamic } = await import("@/app/(forms-module)/forms/collection/commitments/page");
+    const { default: Page, dynamic } = await import("@/app/(collection-module)/collection/commitments/page");
     expect(dynamic).toBe("force-dynamic");
     owner();
     const rows = [{ companyId: COMPANY, companyName: "Alpha Traders", amount: "5000.00", committedDate: "2026-11-05", recordedAt: new Date(), collectionPerson: "Mihir" }];
@@ -265,7 +282,7 @@ describe("commitments page", () => {
 
 describe("tracker page payload", () => {
   it("sends users without the capability only canSeeCommitments=false — no commitment figures anywhere in the props", async () => {
-    const { default: Page } = await import("@/app/(forms-module)/forms/collection/tracker/page");
+    const { default: Page } = await import("@/app/(collection-module)/collection/tracker/page");
     otherAdmin();
     const props = findProps(await Page(), "CollectionTracker")!;
     expect(props.canSeeCommitments).toBe(false);
@@ -275,7 +292,7 @@ describe("tracker page payload", () => {
   });
 
   it("tells a holder's popup it may fetch, still without putting figures in the page data", async () => {
-    const { default: Page } = await import("@/app/(forms-module)/forms/collection/tracker/page");
+    const { default: Page } = await import("@/app/(collection-module)/collection/tracker/page");
     owner();
     const props = findProps(await Page(), "CollectionTracker")!;
     expect(props.canSeeCommitments).toBe(true);
@@ -290,7 +307,7 @@ describe("tracker page payload", () => {
   });
 
   it("Bulk Upload (canImportBalances) follows collection.balances.import alone — decided from the session, revocation seen on the next request", async () => {
-    const { default: Page } = await import("@/app/(forms-module)/forms/collection/tracker/page");
+    const { default: Page } = await import("@/app/(collection-module)/collection/tracker/page");
     otherAdmin(); // every ordinary Collection capability, no Bulk Upload grant
     const without = findProps(await Page(), "CollectionTracker")!;
     expect(without.canImportBalances).toBe(false);

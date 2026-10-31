@@ -37,7 +37,7 @@ import { createTestDb } from "./_pglite";
 const sqlOf = (n: string) => readFileSync(resolve(__dirname, "../../db/migrations", n), "utf8");
 type Pg = Awaited<ReturnType<typeof createTestDb>>["pg"];
 let pg: Pg;
-let tracker: typeof import("@/app/(forms-module)/forms/collection/actions");
+let tracker: typeof import("@/app/(collection-module)/collection/actions");
 let followups: typeof import("@/lib/queries/collection-followups");
 
 const people = {
@@ -90,7 +90,7 @@ beforeAll(async () => {
     create function test_fail_audit() returns trigger language plpgsql as $$
     begin if exists (select 1 from test_faults where kind = 'audit') then raise exception 'simulated audit failure'; end if; return new; end $$;
     create trigger test_fail_audit before insert on employee_events for each row execute function test_fail_audit();`);
-  tracker = await import("@/app/(forms-module)/forms/collection/actions");
+  tracker = await import("@/app/(collection-module)/collection/actions");
   followups = await import("@/lib/queries/collection-followups");
 }, 180_000);
 afterAll(async () => {

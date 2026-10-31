@@ -50,8 +50,8 @@ const TABLES = ["collection_followups", "collection_master_imports", "collection
 
 type Pg = Awaited<ReturnType<typeof createTestDb>>["pg"];
 let pg: Pg;
-let master: typeof import("@/app/(forms-module)/forms/collection/master/actions");
-let tracker: typeof import("@/app/(forms-module)/forms/collection/actions");
+let master: typeof import("@/app/(collection-module)/collection/master/actions");
+let tracker: typeof import("@/app/(collection-module)/collection/actions");
 let load: typeof import("@/lib/collections/load");
 let queries: typeof import("@/lib/queries/collection-master");
 let followups: typeof import("@/lib/queries/collection-followups");
@@ -119,8 +119,8 @@ beforeAll(async () => {
   ids.granted = await emp("Granted", GRANTED_EMAIL);
   // What a super-admin's "Allow" in the permission matrix stores.
   await pg.query(`insert into field_permission_grants (field_key, subject_type, subject_id, allowed) values ('collection.coordinator.assign', 'employee', $1, true)`, [ids.granted]);
-  master = await import("@/app/(forms-module)/forms/collection/master/actions");
-  tracker = await import("@/app/(forms-module)/forms/collection/actions");
+  master = await import("@/app/(collection-module)/collection/master/actions");
+  tracker = await import("@/app/(collection-module)/collection/actions");
   load = await import("@/lib/collections/load");
   queries = await import("@/lib/queries/collection-master");
   followups = await import("@/lib/queries/collection-followups");

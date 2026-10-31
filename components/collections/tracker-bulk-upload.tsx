@@ -12,7 +12,7 @@ import {
   type AddedCompaniesResult,
   type BalanceImportResult,
   type BalancePreview,
-} from "@/app/(forms-module)/forms/collection/tracker/bulk-actions";
+} from "@/app/(collection-module)/collection/tracker/bulk-actions";
 // Paise are shown: a difference of a few paise must stay visible in the preview.
 const inr2 = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const formatInr = (n: number) => inr2.format(n);

@@ -29,6 +29,23 @@ const h = vi.hoisted(() => ({
 }));
 
 vi.mock("server-only", () => ({}));
+// Collection is its own module now (Admin → Access). Its gate is mocked to follow the session's admin flag — the
+// admin bypass — so these tests keep exercising the collection.* capabilities exactly as before.
+vi.mock("@/lib/auth/module-access", async () => {
+  const { getCurrentEmployee } = await import("@/lib/auth/current");
+  const inModule = async () => {
+    const me = (await getCurrentEmployee()) as { isActive?: boolean; isAdmin?: boolean } | null;
+    return !!me && me.isActive !== false && me.isAdmin === true;
+  };
+  return {
+    canAccessModule: inModule,
+    requireModuleAccess: async () => {
+      const me = await getCurrentEmployee();
+      if (!(await inModule())) throw new Error("Forbidden");
+      return me;
+    },
+  };
+});
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("next/navigation", () => ({
   notFound: () => {
@@ -72,8 +89,8 @@ vi.mock("@/lib/queries/collection-followups", () => ({ listFollowUps: async () =
 vi.mock("@/components/collections/commitments-table", () => ({ CommitmentsTable: () => null }));
 vi.mock("@/components/collections/collection-tracker", () => ({ CollectionTracker: () => null }));
 
-import { escalateForReview, setCollectionConfirmation } from "@/app/(forms-module)/forms/collection/actions";
-import { closeEscalation } from "@/app/(forms-module)/forms/collection/commitments/actions";
+import { escalateForReview, setCollectionConfirmation } from "@/app/(collection-module)/collection/actions";
+import { closeEscalation } from "@/app/(collection-module)/collection/commitments/actions";
 
 const missing = Object.assign(new Error("relation does not exist"), { code: "42P01" });
 const proof = (employeeId: string, capability: string) => ({ employeeId, capability });
@@ -245,7 +262,7 @@ describe("pages", () => {
   it("Tracker: every Tracker user sees the confirmation and open-escalation status, never commitment data", async () => {
     h.latest.mockResolvedValue({ storageReady: true, byCompany: new Map([[COMPANY, { value: "no", recordedAt: new Date("2026-10-19T05:00:00Z"), recordedByName: "Asha" }]]) });
     h.open.mockResolvedValue({ storageReady: true, byCompany: new Map([[COMPANY, { id: ESCALATION, companyId: COMPANY, escalatedAt: new Date("2026-10-19T06:00:00Z"), escalatedByName: "Asha", confirmationAtEscalation: "no" }]]) });
-    const { default: Page } = await import("@/app/(forms-module)/forms/collection/tracker/page");
+    const { default: Page } = await import("@/app/(collection-module)/collection/tracker/page");
     const props = findProps(await Page(), "CollectionTracker")!;
     const row = (props.rows as Record<string, unknown>[])[0]!;
     expect(row.confirmation).toEqual({ value: "no", recordedAt: new Date("2026-10-19T05:00:00Z"), recordedByName: "Asha" });
@@ -258,7 +275,7 @@ describe("pages", () => {
 
   it("Tracker: without collection.view the page is refused before anything is loaded", async () => {
     h.caps.delete("collection.view");
-    const { default: Page } = await import("@/app/(forms-module)/forms/collection/tracker/page");
+    const { default: Page } = await import("@/app/(collection-module)/collection/tracker/page");
     await expect(Page()).rejects.toThrow("Forbidden");
     expect(h.latest).not.toHaveBeenCalled();
   });
@@ -271,7 +288,7 @@ describe("pages", () => {
       rows: [{ id: ESCALATION, companyId: COMPANY, companyName: "Alpha Traders", collectionPerson: "MANGESH", escalatedAt: new Date("2026-10-19T06:00:00Z"), escalatedByName: "Asha", confirmationAtEscalation: null, reason: "Customer disputes the invoice amount." }],
     });
     h.latest.mockResolvedValue({ storageReady: true, byCompany: new Map([[COMPANY, { value: "yes", recordedAt: new Date(), recordedByName: "Asha" }]]) });
-    const { default: Page } = await import("@/app/(forms-module)/forms/collection/commitments/page");
+    const { default: Page } = await import("@/app/(collection-module)/collection/commitments/page");
     const props = findProps(await Page(), "CommitmentsTable")!;
     expect(props).toMatchObject({ showCommitments: false, showEscalations: true, canClose: false });
     expect(h.listCommitments).not.toHaveBeenCalled();
@@ -291,7 +308,7 @@ describe("pages", () => {
 
   it("commitments-view only: commitments are read, escalations are not", async () => {
     h.caps.add("collection.commitments.view");
-    const { default: Page } = await import("@/app/(forms-module)/forms/collection/commitments/page");
+    const { default: Page } = await import("@/app/(collection-module)/collection/commitments/page");
     const props = findProps(await Page(), "CommitmentsTable")!;
     expect(props).toMatchObject({ showCommitments: true, showEscalations: false });
     expect(h.listCommitments).toHaveBeenCalledWith(proof("emp-asha", "collection.commitments.view"));
@@ -299,7 +316,7 @@ describe("pages", () => {
   });
 
   it("the page is not found without commitments.view or escalation.review (admins included), and reads nothing", async () => {
-    const { default: Page } = await import("@/app/(forms-module)/forms/collection/commitments/page");
+    const { default: Page } = await import("@/app/(collection-module)/collection/commitments/page");
     await expect(Page()).rejects.toThrow("NEXT_NOT_FOUND");
     expect(h.listOpen).not.toHaveBeenCalled();
     expect(h.listCommitments).not.toHaveBeenCalled();
@@ -308,7 +325,7 @@ describe("pages", () => {
   // ── reviewer discoverability, setup notice, and the review page's states ───────
   const OPEN_ONE = () => h.open.mockResolvedValue({ storageReady: true, byCompany: new Map([[COMPANY, { id: ESCALATION, companyId: COMPANY, escalatedAt: new Date("2026-10-19T06:00:00Z"), escalatedByName: "Asha", confirmationAtEscalation: null }]]) });
   const trackerProps = async () => {
-    const { default: Page } = await import("@/app/(forms-module)/forms/collection/tracker/page");
+    const { default: Page } = await import("@/app/(collection-module)/collection/tracker/page");
     return findProps(await Page(), "CollectionTracker")!;
   };
   const asSuperAdmin = () => {
@@ -318,7 +335,7 @@ describe("pages", () => {
   it("Tracker: a holder of escalation.review gets the review-queue link with the open count; everyone else gets none", async () => {
     OPEN_ONE();
     h.caps.add("collection.escalation.review");
-    expect((await trackerProps()).reviewQueue).toEqual({ openCount: 1, href: "/forms/collection/commitments" });
+    expect((await trackerProps()).reviewQueue).toEqual({ openCount: 1, href: "/collection/commitments" });
     h.caps.delete("collection.escalation.review");
     expect((await trackerProps()).reviewQueue).toBeUndefined();
   });
@@ -366,13 +383,13 @@ describe("pages", () => {
       storageReady: true,
       rows: [{ id: ESCALATION, companyId: COMPANY, companyName: "Alpha Traders", collectionPerson: "MANGESH", escalatedAt: new Date("2026-10-19T06:00:00Z"), escalatedByName: "Asha", confirmationAtEscalation: null }],
     });
-    const { default: Page } = await import("@/app/(forms-module)/forms/collection/commitments/page");
+    const { default: Page } = await import("@/app/(collection-module)/collection/commitments/page");
     const rows = findProps(await Page(), "CommitmentsTable")!.rows as { companyName: string; escalation: { id: string } | null }[];
     expect(rows.map((r) => [r.companyName, r.escalation?.id])).toEqual([["Alpha Traders", ESCALATION]]);
   });
 
   it("Review page: a reviewer with an empty queue is told what empty means; a commitments-only viewer is told theirs", async () => {
-    const { default: Page } = await import("@/app/(forms-module)/forms/collection/commitments/page");
+    const { default: Page } = await import("@/app/(collection-module)/collection/commitments/page");
     h.caps.add("collection.escalation.review");
     expect(findProps(await Page(), "CommitmentsTable")!.emptyMessage).toMatch(/No escalations are waiting for review\. When someone escalates a party/);
     h.caps.delete("collection.escalation.review");
@@ -384,7 +401,7 @@ describe("pages", () => {
     h.caps.add("collection.escalation.review");
     const err = vi.spyOn(console, "error").mockImplementation(() => {});
     h.listOpen.mockRejectedValue(new Error("password authentication failed for user secret-db-user"));
-    const { default: Page } = await import("@/app/(forms-module)/forms/collection/commitments/page");
+    const { default: Page } = await import("@/app/(collection-module)/collection/commitments/page");
     const tree = await Page();
     expect(findProps(tree, "CommitmentsTable")).toBeNull();
     const html = renderToStaticMarkup(tree as ReactElement);
@@ -403,7 +420,7 @@ describe("pages", () => {
   it("Review page: while migration 0118 is not installed, reviewers are told reasons aren't available (escalations still listed)", async () => {
     h.caps.add("collection.escalation.review");
     h.listOpen.mockResolvedValue({ storageReady: true, reasonStorageReady: false, rows: [{ id: ESCALATION, companyId: COMPANY, companyName: "Alpha Traders", collectionPerson: null, escalatedAt: new Date(), escalatedByName: "Asha", confirmationAtEscalation: null, reason: null }] });
-    const { default: Page } = await import("@/app/(forms-module)/forms/collection/commitments/page");
+    const { default: Page } = await import("@/app/(collection-module)/collection/commitments/page");
     const tree = await Page();
     expect(JSON.stringify(tree)).toMatch(/Escalation reasons aren.+t available yet \(migration 0118 is pending\)/);
     expect((findProps(tree, "CommitmentsTable")!.rows as unknown[]).length).toBe(1);
@@ -413,7 +430,7 @@ describe("pages", () => {
 
   it("Review page: still not found without a view/review capability, and reads nothing", async () => {
     h.caps = new Set(["collection.view"]);
-    const { default: Page } = await import("@/app/(forms-module)/forms/collection/commitments/page");
+    const { default: Page } = await import("@/app/(collection-module)/collection/commitments/page");
     await expect(Page()).rejects.toThrow("NEXT_NOT_FOUND");
     expect(h.listOpen).not.toHaveBeenCalled();
   });

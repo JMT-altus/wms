@@ -20,6 +20,23 @@ const h = vi.hoisted(() => ({
   refresh: vi.fn(),
 }));
 vi.mock("server-only", () => ({}));
+// Collection is its own module now (Admin → Access). Its gate is mocked to follow the session's admin flag — the
+// admin bypass — so these tests keep exercising the collection.* capabilities exactly as before.
+vi.mock("@/lib/auth/module-access", async () => {
+  const { getCurrentEmployee } = await import("@/lib/auth/current");
+  const inModule = async () => {
+    const me = (await getCurrentEmployee()) as { isActive?: boolean; isAdmin?: boolean } | null;
+    return !!me && me.isActive !== false && me.isAdmin === true;
+  };
+  return {
+    canAccessModule: inModule,
+    requireModuleAccess: async () => {
+      const me = await getCurrentEmployee();
+      if (!(await inModule())) throw new Error("Forbidden");
+      return me;
+    },
+  };
+});
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: h.refresh }) }));
 vi.mock("@/lib/toast", () => ({ fireToast: vi.fn() }));
@@ -63,8 +80,8 @@ vi.mock("@/lib/queries/collection-review", () => ({
 vi.mock("@/lib/queries/collection-master", () => ({ listCoordinatorOptions: async () => null, isMissingTable: () => false }));
 vi.mock("@/lib/queries/collection-setup", () => ({ capabilityHolders: async () => null }));
 vi.mock("@/lib/queries/collection-scorecards", () => ({ escalationCountsForSalesperson: (...a: unknown[]) => h.counts(...a) }));
-vi.mock("@/app/(forms-module)/forms/collection/actions", () => ({ editFollowUpComment: vi.fn(), deleteFollowUpComment: vi.fn(), saveFollowUp: vi.fn() }));
-vi.mock("@/app/(forms-module)/forms/collection/commitments/actions", () => ({ getCompanyCommitment: vi.fn(), saveCompanyCommitment: vi.fn() }));
+vi.mock("@/app/(collection-module)/collection/actions", () => ({ editFollowUpComment: vi.fn(), deleteFollowUpComment: vi.fn(), saveFollowUp: vi.fn() }));
+vi.mock("@/app/(collection-module)/collection/commitments/actions", () => ({ getCompanyCommitment: vi.fn(), saveCompanyCommitment: vi.fn() }));
 vi.mock("@/components/collections/tracker-bulk-upload", () => ({ TrackerBulkUpload: () => <p>bulk upload form</p> }));
 
 import { buildScorecards, formatInrTwoDecimals, scorecardFor, verifiedPaise, type EscalationCounts, type ScorecardView } from "@/lib/collections/scorecards";
@@ -234,13 +251,13 @@ describe("the Tracker page — the server decides whose card, and sends only tha
   };
   const signIn = () => (h.me = { id: "emp-gauri", email: "g@example.test", isActive: true, isAdmin: true, name: "GR" });
   const page = async () => {
-    const { default: Page } = await import("@/app/(forms-module)/forms/collection/tracker/page");
+    const { default: Page } = await import("@/app/(collection-module)/collection/tracker/page");
     return findProps(await Page(), "CollectionTracker")!;
   };
 
   it("without collection.view: refused before anything is read", async () => {
     signIn();
-    const { default: Page } = await import("@/app/(forms-module)/forms/collection/tracker/page");
+    const { default: Page } = await import("@/app/(collection-module)/collection/tracker/page");
     await expect(Page()).rejects.toThrow(/Forbidden/);
     expect(h.counts).not.toHaveBeenCalled();
   });

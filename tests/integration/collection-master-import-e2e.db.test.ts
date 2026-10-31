@@ -36,7 +36,7 @@ import * as schema from "@/db/schema";
 import { createTestDb } from "./_pglite";
 
 let pg: Awaited<ReturnType<typeof createTestDb>>["pg"];
-let master: typeof import("@/app/(forms-module)/forms/collection/master/actions");
+let master: typeof import("@/app/(collection-module)/collection/master/actions");
 let clientId = "";
 
 const body = (rows: [string, string, string][]) => ({
@@ -73,7 +73,7 @@ function findProps(node: ReactNode, name: string): Record<string, unknown> | nul
   return null;
 }
 const trackerProps = async () => {
-  const { default: Page } = await import("@/app/(forms-module)/forms/collection/tracker/page");
+  const { default: Page } = await import("@/app/(collection-module)/collection/tracker/page");
   return findProps(await Page(), "CollectionTracker")!;
 };
 
@@ -92,7 +92,7 @@ beforeAll(async () => {
   clientId = (await pg.query<{ id: string }>(`insert into customer_masters (name, kyc_stage) values ('Client One Pvt Ltd', 'complete') returning id`)).rows[0]!.id;
   // An ordinary admin: Collection view and import by the admin default — no grants needed.
   h.me = { id: adminId, email: "asha@example.test", name: "Asha", isActive: true, isAdmin: true, departmentId: null };
-  master = await import("@/app/(forms-module)/forms/collection/master/actions");
+  master = await import("@/app/(collection-module)/collection/master/actions");
 }, 180_000);
 afterAll(async () => {
   await pg?.close();

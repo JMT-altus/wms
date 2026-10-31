@@ -278,8 +278,8 @@ export async function importCollectionBalances(raw: unknown): Promise<Result<{ r
       } satisfies BalanceImportResult;
     });
 
-    revalidatePath("/forms/collection/tracker");
-    revalidatePath("/forms/collection/dashboard");
+    revalidatePath("/collection/tracker");
+    revalidatePath("/collection/dashboard");
     // The snapshot is committed: this upload completes the week's compulsory
     // task (see lib/collections/weekly-upload). Only here — never after a
     // preview, a refusal or a failed transaction — and it can't fail the upload.
@@ -428,9 +428,9 @@ export async function addMissingBalanceCompanies(raw: unknown): Promise<Result<{
       return { importId, created: totals.inserted, alreadyExisted: totals.alreadyExisted, rejected: totals.rejected, companies: out } satisfies AddedCompaniesResult;
     });
 
-    revalidatePath("/forms/collection/master");
-    revalidatePath("/forms/collection/tracker");
-    revalidatePath("/forms/collection/dashboard");
+    revalidatePath("/collection/master");
+    revalidatePath("/collection/tracker");
+    revalidatePath("/collection/dashboard");
     return { ok: true, result };
   } catch (err) {
     if (err instanceof RefusedError) return { ok: false, error: err.message };

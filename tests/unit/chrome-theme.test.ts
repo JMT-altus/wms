@@ -8,7 +8,7 @@ describe("isLightChrome", () => {
     }
   });
   it("is off for areas with their own navy rail and for an unknown path", () => {
-    for (const p of ["/forms/collection", "/admin/users", "/master-setup", "/masters/clients", "/project-plan", "/targets"]) {
+    for (const p of ["/collection", "/admin/users", "/master-setup", "/masters/clients", "/project-plan", "/targets"]) {
       expect(isLightChrome(p), p).toBe(false);
     }
     expect(isLightChrome(null)).toBe(false);

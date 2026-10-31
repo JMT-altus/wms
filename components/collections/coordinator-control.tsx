@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { assignSalesCoordinator } from "@/app/(forms-module)/forms/collection/actions";
+import { assignSalesCoordinator } from "@/app/(collection-module)/collection/actions";
 
 const SELECT = "h-8 max-w-[180px] rounded-lg border border-hairline-strong bg-white px-2 text-[12.5px] text-ink-strong disabled:opacity-60";
 const BTN = "h-8 rounded-lg px-2.5 text-[12px] font-bold disabled:cursor-not-allowed disabled:opacity-50";

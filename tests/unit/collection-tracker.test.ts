@@ -146,11 +146,30 @@ const insertValues = vi.fn();
 const requireAdmin = vi.fn();
 const loadParties = vi.fn();
 vi.mock("server-only", () => ({}));
+// Collection is its own module now (Admin → Access). Its gate is mocked to follow the session's admin flag — the
+// admin bypass — so these tests keep exercising the collection.* capabilities exactly as before.
+vi.mock("@/lib/auth/module-access", async () => {
+  const { getCurrentEmployee } = await import("@/lib/auth/current");
+  const inModule = async () => {
+    const me = (await getCurrentEmployee()) as { isActive?: boolean; isAdmin?: boolean } | null;
+    return !!me && me.isActive !== false && me.isAdmin === true;
+  };
+  return {
+    canAccessModule: inModule,
+    requireModuleAccess: async () => {
+      const me = await getCurrentEmployee();
+      if (!(await inModule())) throw new Error("Forbidden");
+      return me;
+    },
+  };
+});
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/db", () => ({ db: { insert: () => ({ values: (v: unknown) => insertValues(v) }) } }));
+/** The signed session. `isAdmin` also decides the (mocked) Collection module gate above. */
+const session = { id: "admin-1", isAdmin: true, isActive: true };
 vi.mock("@/lib/auth/current", () => ({
   requireAdmin: () => requireAdmin(),
-  getCurrentEmployee: async () => ({ id: "admin-1", isAdmin: true, isActive: true }),
+  getCurrentEmployee: async () => session,
 }));
 vi.mock("@/lib/auth/field-access", () => ({
   getMyFieldAccess: async () => Object.fromEntries(["collection.followup.write"].map((k) => [k, { allowed: true, source: "admin" }])),
@@ -167,7 +186,7 @@ describe("saveFollowUp (server action)", () => {
     requireAdmin.mockReset().mockResolvedValue({ id: "admin-1", isAdmin: true, isActive: true });
     loadParties.mockReset().mockResolvedValue({ connected: true, parties: [party()] });
   });
-  const run = async (input: unknown) => (await import("@/app/(forms-module)/forms/collection/actions")).saveFollowUp(input);
+  const run = async (input: unknown) => (await import("@/app/(collection-module)/collection/actions")).saveFollowUp(input);
 
   it("saves for a listed party, with the author from the session and the source's spelling of the name", async () => {
     const res = await run({ partyName: "alpha traders", nextFollowupDate: "2026-11-10", note: " Will pay " });
@@ -194,10 +213,14 @@ describe("saveFollowUp (server action)", () => {
     expect((await run({ partyName: "Alpha Traders" })).ok).toBe(false);
     expect(insertValues).not.toHaveBeenCalled();
   });
-  it("is admin-only: the check runs first and a refusal stops everything", async () => {
-    requireAdmin.mockRejectedValue(new Error("Admin access required"));
-    await expect(run({ partyName: "Alpha Traders", note: "x" })).rejects.toThrow();
-    expect(insertValues).not.toHaveBeenCalled();
+  it("needs the Collection module: the gate runs first and a refusal stops everything", async () => {
+    session.isAdmin = false; // neither an admin nor granted the module
+    try {
+      await expect(run({ partyName: "Alpha Traders", note: "x" })).rejects.toThrow("Forbidden");
+      expect(insertValues).not.toHaveBeenCalled();
+    } finally {
+      session.isAdmin = true;
+    }
   });
   it("reports a missing table honestly instead of claiming success", async () => {
     insertValues.mockRejectedValue(Object.assign(new Error("relation does not exist"), { code: "42P01" }));

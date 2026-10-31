@@ -16,6 +16,23 @@ const { h, touch } = vi.hoisted(() => {
 });
 
 vi.mock("server-only", () => ({}));
+// Collection is its own module now (Admin → Access). Its gate is mocked to follow the session's admin flag — the
+// admin bypass — so these tests keep exercising the collection.* capabilities exactly as before.
+vi.mock("@/lib/auth/module-access", async () => {
+  const { getCurrentEmployee } = await import("@/lib/auth/current");
+  const inModule = async () => {
+    const me = (await getCurrentEmployee()) as { isActive?: boolean; isAdmin?: boolean } | null;
+    return !!me && me.isActive !== false && me.isAdmin === true;
+  };
+  return {
+    canAccessModule: inModule,
+    requireModuleAccess: async () => {
+      const me = await getCurrentEmployee();
+      if (!(await inModule())) throw new Error("Forbidden");
+      return me;
+    },
+  };
+});
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("next/navigation", () => ({
   notFound: () => {
@@ -64,9 +81,9 @@ vi.mock("@/components/collections/collection-tracker", () => ({ CollectionTracke
 vi.mock("@/components/collections/master/collection-master-import", () => ({ CollectionMasterImport: () => null }));
 vi.mock("@/components/collections/commitments-table", () => ({ CommitmentsTable: () => null }));
 
-import * as tracker from "@/app/(forms-module)/forms/collection/actions";
-import * as commitments from "@/app/(forms-module)/forms/collection/commitments/actions";
-import * as master from "@/app/(forms-module)/forms/collection/master/actions";
+import * as tracker from "@/app/(collection-module)/collection/actions";
+import * as commitments from "@/app/(collection-module)/collection/commitments/actions";
+import * as master from "@/app/(collection-module)/collection/master/actions";
 
 const CO = "11111111-1111-4111-8111-111111111111";
 const ALL = [
@@ -100,11 +117,11 @@ const ACTIONS: [string, string, () => Promise<unknown>][] = [
 ];
 
 const PAGES: [string, string[], () => Promise<unknown>, RegExp][] = [
-  ["tracker page", ["collection.view"], async () => (await import("@/app/(forms-module)/forms/collection/tracker/page")).default(), /Forbidden/],
-  ["dashboard page", ["collection.view"], async () => (await import("@/app/(forms-module)/forms/collection/dashboard/page")).default(), /Forbidden/],
-  ["master page", ["collection.view"], async () => (await import("@/app/(forms-module)/forms/collection/master/page")).default({ searchParams: Promise.resolve({}) }), /Forbidden/],
-  ["master company page", ["collection.view"], async () => (await import("@/app/(forms-module)/forms/collection/master/[id]/page")).default({ params: Promise.resolve({ id: CO }) }), /Forbidden/],
-  ["commitments & escalations page", ["collection.commitments.view", "collection.escalation.review"], async () => (await import("@/app/(forms-module)/forms/collection/commitments/page")).default(), /NEXT_NOT_FOUND/],
+  ["tracker page", ["collection.view"], async () => (await import("@/app/(collection-module)/collection/tracker/page")).default(), /Forbidden/],
+  ["dashboard page", ["collection.view"], async () => (await import("@/app/(collection-module)/collection/dashboard/page")).default(), /Forbidden/],
+  ["master page", ["collection.view"], async () => (await import("@/app/(collection-module)/collection/master/page")).default({ searchParams: Promise.resolve({}) }), /Forbidden/],
+  ["master company page", ["collection.view"], async () => (await import("@/app/(collection-module)/collection/master/[id]/page")).default({ params: Promise.resolve({ id: CO }) }), /Forbidden/],
+  ["commitments & escalations page", ["collection.commitments.view", "collection.escalation.review"], async () => (await import("@/app/(collection-module)/collection/commitments/page")).default(), /NEXT_NOT_FOUND/],
 ];
 
 beforeEach(() => {

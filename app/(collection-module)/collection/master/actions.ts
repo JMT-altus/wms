@@ -319,9 +319,9 @@ export async function importCollectionMaster(raw: unknown): Promise<Result<{ res
       return { importId, totals, rows } satisfies MasterImportResult;
     });
 
-    revalidatePath("/forms/collection/master");
-    revalidatePath("/forms/collection/tracker");
-    revalidatePath("/forms/collection/dashboard");
+    revalidatePath("/collection/master");
+    revalidatePath("/collection/tracker");
+    revalidatePath("/collection/dashboard");
     return { ok: true, result };
   } catch (err) {
     if (err instanceof StaleError) {

@@ -41,7 +41,7 @@ const sqlOf = (n: string) => readFileSync(resolve(__dirname, "../../db/migration
 
 type Pg = Awaited<ReturnType<typeof createTestDb>>["pg"];
 let pg: Pg;
-let tracker: typeof import("@/app/(forms-module)/forms/collection/actions");
+let tracker: typeof import("@/app/(collection-module)/collection/actions");
 let followups: typeof import("@/lib/queries/collection-followups");
 const ids = { asha: "", ravi: "", plain: "", denied: "", leaver: "" };
 const people: Record<keyof typeof ids, { name: string; email: string; admin: boolean }> = {
@@ -74,7 +74,7 @@ beforeAll(async () => {
   await pg.exec(`insert into collection_master_companies (company_name, name_key) values ('Alpha Traders', 'alpha traders'), ('Beta Corp', 'beta corp')`);
   // A comment from before the author was on record (no author id), as an older row would look.
   await pg.exec(`insert into collection_followups (party_name, note, created_by_id, created_at) values ('Alpha Traders', 'Older note, author not on record', null, '2026-09-01T05:00:00Z')`);
-  tracker = await import("@/app/(forms-module)/forms/collection/actions");
+  tracker = await import("@/app/(collection-module)/collection/actions");
   followups = await import("@/lib/queries/collection-followups");
 }, 180_000);
 afterAll(async () => {

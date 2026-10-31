@@ -167,7 +167,7 @@ describe("ensureWeeklyTask — one task per reporting week", () => {
     expect(sent[0]).toMatchObject({ userId: MIHIR, kind: "task_assigned", taskId: r.row.taskId });
     expect(sent[0]!.title).toContain(WEEKLY_TASK_TITLE);
     expect(sent[0]!.title).toContain("Fri, 6 Nov 2026");
-    expect(sent[0]!.body).toContain("https://wms.example.test/forms/collection/tracker");
+    expect(sent[0]!.body).toContain("https://wms.example.test/collection/tracker");
   });
 
   it("running again — the same day, a later day, or many times — creates nothing and notifies nobody", async () => {
@@ -323,7 +323,7 @@ describe("reminders — each once, only while open", () => {
     expect(nudges[0]).toMatchObject({ userId: MIHIR, taskId, title: `Due today: '${WEEKLY_TASK_TITLE}'` });
     expect(nudges[1]!.title).toMatch(/^Overdue: /);
     expect(nudges[1]!.body).toContain("Status: Overdue");
-    for (const n of nudges) expect(n.body).toContain("/forms/collection/tracker");
+    for (const n of nudges) expect(n.body).toContain("/collection/tracker");
   });
 
   it("a completed week is never reminded", async () => {

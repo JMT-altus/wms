@@ -55,7 +55,7 @@ describe("Weekly Bulk Upload — admin page", () => {
     expect(within(thisWeek).getByText("Pending")).toBeTruthy();
     expect(thisWeek.textContent).toMatch(/Last successful weekly upload:.*30 Oct 2026.*Collection 301026\.xls.*by Person A/);
     expect(within(thisWeek).getByRole("link", { name: "Open task" }).getAttribute("href")).toBe("/tasks/task-1");
-    expect(within(thisWeek).getByRole("link", { name: /Open the Collection Tracker/ }).getAttribute("href")).toBe("/forms/collection/tracker");
+    expect(within(thisWeek).getByRole("link", { name: /Open the Collection Tracker/ }).getAttribute("href")).toBe("/collection/tracker");
     expect(screen.queryByRole("alert")).toBeNull();
   });
 

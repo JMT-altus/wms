@@ -17,7 +17,7 @@ import {
   previewCollectionMaster,
   type MasterImportResult,
   type MasterPreview,
-} from "@/app/(forms-module)/forms/collection/master/actions";
+} from "@/app/(collection-module)/collection/master/actions";
 
 /**
  * Collection Master — upload, map, preview, confirm.

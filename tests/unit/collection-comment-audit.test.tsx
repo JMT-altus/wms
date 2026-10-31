@@ -7,8 +7,8 @@ import { cleanup, fireEvent, render, screen, within } from "@testing-library/rea
 // Server actions are MOCKED; nothing here reaches a database.
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 vi.mock("@/lib/toast", () => ({ fireToast: vi.fn() }));
-vi.mock("@/app/(forms-module)/forms/collection/actions", () => ({ saveFollowUp: vi.fn() }));
-vi.mock("@/app/(forms-module)/forms/collection/commitments/actions", () => ({ getCompanyCommitment: vi.fn(), saveCompanyCommitment: vi.fn() }));
+vi.mock("@/app/(collection-module)/collection/actions", () => ({ saveFollowUp: vi.fn() }));
+vi.mock("@/app/(collection-module)/collection/commitments/actions", () => ({ getCompanyCommitment: vi.fn(), saveCompanyCommitment: vi.fn() }));
 
 import { COMMENT_TIME_ZONE, HISTORICAL_AUTHOR, UNAVAILABLE_USER_ID, commentAuthor, commentDate, commentTime } from "@/lib/collections/comment-audit";
 import { CommentAudit, CommentList, type CommentEntry } from "@/components/collections/comment-list";

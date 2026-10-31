@@ -12,9 +12,9 @@ vi.setConfig({ testTimeout: 30_000 });
 const a = vi.hoisted(() => ({ preview: vi.fn(), run: vi.fn(), add: vi.fn(), refresh: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: a.refresh }) }));
 vi.mock("@/lib/toast", () => ({ fireToast: vi.fn() }));
-vi.mock("@/app/(forms-module)/forms/collection/actions", () => ({ saveFollowUp: vi.fn(), setCollectionConfirmation: vi.fn(), escalateForReview: vi.fn() }));
-vi.mock("@/app/(forms-module)/forms/collection/commitments/actions", () => ({ getCompanyCommitment: vi.fn(), saveCompanyCommitment: vi.fn(), closeEscalation: vi.fn() }));
-vi.mock("@/app/(forms-module)/forms/collection/tracker/bulk-actions", () => ({
+vi.mock("@/app/(collection-module)/collection/actions", () => ({ saveFollowUp: vi.fn(), setCollectionConfirmation: vi.fn(), escalateForReview: vi.fn() }));
+vi.mock("@/app/(collection-module)/collection/commitments/actions", () => ({ getCompanyCommitment: vi.fn(), saveCompanyCommitment: vi.fn(), closeEscalation: vi.fn() }));
+vi.mock("@/app/(collection-module)/collection/tracker/bulk-actions", () => ({
   previewCollectionBalances: (...x: unknown[]) => a.preview(...x),
   importCollectionBalances: (...x: unknown[]) => a.run(...x),
   addMissingBalanceCompanies: (...x: unknown[]) => a.add(...x),

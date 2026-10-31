@@ -7,7 +7,7 @@ import { formatDate } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
-const BASE = "/forms/collection/master";
+const BASE = "/collection/master";
 
 function href(q: string, page: number, coordinator: string) {
   const p = new URLSearchParams();

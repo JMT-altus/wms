@@ -38,8 +38,8 @@ const M0118 = sqlOf("0118_collection_escalation_reason.sql");
 
 type Pg = Awaited<ReturnType<typeof createTestDb>>["pg"];
 let pg: Pg;
-let tracker: typeof import("@/app/(forms-module)/forms/collection/actions");
-let review: typeof import("@/app/(forms-module)/forms/collection/commitments/actions");
+let tracker: typeof import("@/app/(collection-module)/collection/actions");
+let review: typeof import("@/app/(collection-module)/collection/commitments/actions");
 let q: typeof import("@/lib/queries/collection-review");
 let cap: typeof import("@/lib/auth/capability");
 const ids = { raiser: "", reviewer: "", plain: "", denied: "", alpha: "", beta: "", gamma: "", legacyEscalation: "" };
@@ -90,8 +90,8 @@ beforeAll(async () => {
   ids.beta = await co("Beta Corp");
   ids.gamma = await co("Gamma Ltd");
   ids.legacyEscalation = (await pg.query<{ id: string }>(`insert into collection_escalations (company_id, escalated_by_id, escalated_at) values ($1, $2, '2026-10-20T05:00:00Z') returning id`, [ids.gamma, ids.raiser])).rows[0]!.id;
-  tracker = await import("@/app/(forms-module)/forms/collection/actions");
-  review = await import("@/app/(forms-module)/forms/collection/commitments/actions");
+  tracker = await import("@/app/(collection-module)/collection/actions");
+  review = await import("@/app/(collection-module)/collection/commitments/actions");
   q = await import("@/lib/queries/collection-review");
   cap = await import("@/lib/auth/capability");
 }, 180_000);

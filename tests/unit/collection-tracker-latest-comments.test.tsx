@@ -18,6 +18,23 @@ const h = vi.hoisted(() => ({
   refresh: vi.fn(),
 }));
 vi.mock("server-only", () => ({}));
+// Collection is its own module now (Admin → Access). Its gate is mocked to follow the session's admin flag — the
+// admin bypass — so these tests keep exercising the collection.* capabilities exactly as before.
+vi.mock("@/lib/auth/module-access", async () => {
+  const { getCurrentEmployee } = await import("@/lib/auth/current");
+  const inModule = async () => {
+    const me = (await getCurrentEmployee()) as { isActive?: boolean; isAdmin?: boolean } | null;
+    return !!me && me.isActive !== false && me.isAdmin === true;
+  };
+  return {
+    canAccessModule: inModule,
+    requireModuleAccess: async () => {
+      const me = await getCurrentEmployee();
+      if (!(await inModule())) throw new Error("Forbidden");
+      return me;
+    },
+  };
+});
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: h.refresh }), notFound: () => { throw new Error("NOT_FOUND"); } }));
 vi.mock("@/lib/toast", () => ({ fireToast: vi.fn() }));
@@ -48,8 +65,8 @@ vi.mock("@/lib/queries/collection-review", () => ({
 }));
 vi.mock("@/lib/queries/collection-master", () => ({ listCoordinatorOptions: async () => null, isMissingTable: () => false }));
 vi.mock("@/lib/queries/collection-setup", () => ({ capabilityHolders: async () => null }));
-vi.mock("@/app/(forms-module)/forms/collection/actions", () => ({ editFollowUpComment: h.edit, saveFollowUp: vi.fn() }));
-vi.mock("@/app/(forms-module)/forms/collection/commitments/actions", () => ({ getCompanyCommitment: vi.fn(), saveCompanyCommitment: vi.fn() }));
+vi.mock("@/app/(collection-module)/collection/actions", () => ({ editFollowUpComment: h.edit, saveFollowUp: vi.fn() }));
+vi.mock("@/app/(collection-module)/collection/commitments/actions", () => ({ getCompanyCommitment: vi.fn(), saveCompanyCommitment: vi.fn() }));
 
 import { CollectionTracker } from "@/components/collections/collection-tracker";
 import { buildRows, type FollowUpEntry } from "@/lib/collections/derive";
@@ -217,7 +234,7 @@ describe("access — the page's server-side gate", () => {
   it("without collection.view the page refuses BEFORE any comment is read", async () => {
     h.me = { id: "emp-x", email: "x@example.test", isActive: true, isAdmin: true, name: "X" };
     h.caps = new Set(); // no collection.view
-    const { default: Page } = await import("@/app/(forms-module)/forms/collection/tracker/page");
+    const { default: Page } = await import("@/app/(collection-module)/collection/tracker/page");
     await expect(Page()).rejects.toThrow(/Forbidden/);
     h.me = { ...h.me, isAdmin: false }; // a non-admin, even with the grant
     h.caps = new Set(["collection.view"]);
@@ -229,7 +246,7 @@ describe("access — the page's server-side gate", () => {
     h.me = { id: "emp-1", email: "a@example.test", isActive: true, isAdmin: true, name: "Asha" };
     h.caps = new Set(["collection.view"]);
     h.listFollowUps.mockResolvedValue({ storageReady: true, entries: [...ALPHA, ...BETA] });
-    const { default: Page } = await import("@/app/(forms-module)/forms/collection/tracker/page");
+    const { default: Page } = await import("@/app/(collection-module)/collection/tracker/page");
     let props = findProps(await Page(), "CollectionTracker")!;
     const rows = props.rows as { partyName: string; history: FollowUpEntry[] }[];
     expect(rows.find((r) => r.partyName === "Alpha Traders")!.history.every((e) => e.partyName === "Alpha Traders")).toBe(true);

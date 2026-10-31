@@ -8,8 +8,8 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 const a = vi.hoisted(() => ({ get: vi.fn(), save: vi.fn(), follow: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 vi.mock("@/lib/toast", () => ({ fireToast: vi.fn() }));
-vi.mock("@/app/(forms-module)/forms/collection/actions", () => ({ saveFollowUp: a.follow }));
-vi.mock("@/app/(forms-module)/forms/collection/commitments/actions", () => ({
+vi.mock("@/app/(collection-module)/collection/actions", () => ({ saveFollowUp: a.follow }));
+vi.mock("@/app/(collection-module)/collection/commitments/actions", () => ({
   getCompanyCommitment: (...x: unknown[]) => a.get(...x),
   saveCompanyCommitment: (...x: unknown[]) => a.save(...x),
 }));

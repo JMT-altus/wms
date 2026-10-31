@@ -68,8 +68,8 @@ export async function saveFollowUp(input: unknown): Promise<ActionResult> {
     return { ok: false, error: "The follow-up could not be saved, so nothing was changed. Please try again." };
   }
 
-  revalidatePath("/forms/collection/tracker");
-  revalidatePath("/forms/collection/dashboard");
+  revalidatePath("/collection/tracker");
+  revalidatePath("/collection/dashboard");
   return { ok: true };
 }
 
@@ -130,9 +130,9 @@ export async function editFollowUpComment(input: unknown): Promise<ActionResult>
   }
   if (!outcome.ok) return outcome;
   if (outcome.changed) {
-    revalidatePath("/forms/collection/tracker");
-    revalidatePath("/forms/collection/commitments");
-    revalidatePath("/forms/collection/dashboard");
+    revalidatePath("/collection/tracker");
+    revalidatePath("/collection/commitments");
+    revalidatePath("/collection/dashboard");
   }
   return { ok: true };
 }
@@ -218,9 +218,9 @@ export async function deleteFollowUpComment(input: unknown): Promise<ActionResul
   }
   if (!outcome.ok) return outcome;
   if (outcome.changed) {
-    revalidatePath("/forms/collection/tracker");
-    revalidatePath("/forms/collection/commitments");
-    revalidatePath("/forms/collection/dashboard");
+    revalidatePath("/collection/tracker");
+    revalidatePath("/collection/commitments");
+    revalidatePath("/collection/dashboard");
   }
   return { ok: true };
 }
@@ -256,8 +256,8 @@ export async function setCollectionConfirmation(input: unknown): Promise<ActionR
     console.error("[collection-review] confirmation save failed");
     return { ok: false, error: "The confirmation could not be saved, so nothing was changed. Please try again." };
   }
-  revalidatePath("/forms/collection/tracker");
-  revalidatePath("/forms/collection/commitments");
+  revalidatePath("/collection/tracker");
+  revalidatePath("/collection/commitments");
   return { ok: true };
 }
 
@@ -295,8 +295,8 @@ export async function escalateForReview(input: unknown): Promise<ActionResult> {
     console.error("[collection-review] escalation failed");
     return { ok: false, error: "The escalation could not be saved, so nothing was changed. Please try again." };
   }
-  revalidatePath("/forms/collection/tracker");
-  revalidatePath("/forms/collection/commitments");
+  revalidatePath("/collection/tracker");
+  revalidatePath("/collection/commitments");
   return { ok: true };
 }
 
@@ -337,10 +337,10 @@ export async function assignSalesCoordinator(input: unknown): Promise<ActionResu
       };
     }
     if (outcome.changed) {
-      revalidatePath("/forms/collection/tracker");
-      revalidatePath("/forms/collection/dashboard");
-      revalidatePath("/forms/collection/commitments");
-      revalidatePath("/forms/collection/master");
+      revalidatePath("/collection/tracker");
+      revalidatePath("/collection/dashboard");
+      revalidatePath("/collection/commitments");
+      revalidatePath("/collection/master");
     }
     return { ok: true, changed: outcome.changed };
   } catch (err) {

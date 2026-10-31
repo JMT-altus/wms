@@ -10,7 +10,7 @@ import { addDays, formatWeekLabel, istYmd, mondayOf, weekEnd } from "@/lib/weekl
  * Tasks module's "due today" and "overdue" buckets apply to it unchanged.
  */
 
-export const TRACKER_PATH = "/forms/collection/tracker";
+export const TRACKER_PATH = "/collection/tracker";
 export const WEEKLY_TASK_TITLE = "Complete Weekly Collection Tracker Bulk Upload";
 export const WEEKLY_TASK_SUBJECT = "Collection Tracker";
 export const DEFAULT_DUE_DOW = 5;

@@ -6,7 +6,7 @@ import * as Dialog from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
 import { fireToast } from "@/lib/toast";
 import { formatInr } from "@/lib/format";
-import { saveFollowUp } from "@/app/(forms-module)/forms/collection/actions";
+import { saveFollowUp } from "@/app/(collection-module)/collection/actions";
 import type { PartyRow } from "@/lib/collections/derive";
 import type { TransactionSourceInfo } from "@/lib/collections/source";
 import { evaluateOverdue } from "@/lib/collections/overdue";

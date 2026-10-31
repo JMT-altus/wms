@@ -107,7 +107,7 @@ export async function setCoordinatorLink(raw: unknown): Promise<Result> {
     });
     if (changed) {
       revalidatePath("/admin/sales-coordinators");
-      revalidatePath("/forms/collection/tracker");
+      revalidatePath("/collection/tracker");
     }
     return { ok: true, changed };
   } catch (err) {

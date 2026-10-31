@@ -8,7 +8,7 @@ import { act, cleanup, fireEvent, render, screen, within } from "@testing-librar
 const h = vi.hoisted(() => ({ edit: vi.fn(), del: vi.fn(), refresh: vi.fn(), toast: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: h.refresh }) }));
 vi.mock("@/lib/toast", () => ({ fireToast: h.toast }));
-vi.mock("@/app/(forms-module)/forms/collection/actions", () => ({ editFollowUpComment: h.edit, deleteFollowUpComment: h.del }));
+vi.mock("@/app/(collection-module)/collection/actions", () => ({ editFollowUpComment: h.edit, deleteFollowUpComment: h.del }));
 
 import { TrackerComments } from "@/components/collections/tracker-comments";
 import { REVIEWER_COMMENT_CLASS, type CommentEntry } from "@/components/collections/comment-list";

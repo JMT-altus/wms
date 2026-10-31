@@ -15,6 +15,23 @@ const h = vi.hoisted(() => ({
   txByMaster: vi.fn(),
 }));
 vi.mock("server-only", () => ({}));
+// Collection is its own module now (Admin → Access). Its gate is mocked to follow the session's admin flag — the
+// admin bypass — so these tests keep exercising the collection.* capabilities exactly as before.
+vi.mock("@/lib/auth/module-access", async () => {
+  const { getCurrentEmployee } = await import("@/lib/auth/current");
+  const inModule = async () => {
+    const me = (await getCurrentEmployee()) as { isActive?: boolean; isAdmin?: boolean } | null;
+    return !!me && me.isActive !== false && me.isAdmin === true;
+  };
+  return {
+    canAccessModule: inModule,
+    requireModuleAccess: async () => {
+      const me = await getCurrentEmployee();
+      if (!(await inModule())) throw new Error("Forbidden");
+      return me;
+    },
+  };
+});
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: vi.fn() }),
   notFound: () => {
@@ -40,8 +57,8 @@ vi.mock("@/lib/queries/collection-review", () => ({
   latestConfirmations: async () => ({ storageReady: true, byCompany: new Map() }),
   listOpenEscalationsForReview: async () => ({ storageReady: true, rows: [] }),
 }));
-vi.mock("@/app/(forms-module)/forms/collection/actions", () => ({ saveFollowUp: vi.fn() }));
-vi.mock("@/app/(forms-module)/forms/collection/commitments/actions", () => ({ getCompanyCommitment: vi.fn(), saveCompanyCommitment: vi.fn() }));
+vi.mock("@/app/(collection-module)/collection/actions", () => ({ saveFollowUp: vi.fn() }));
+vi.mock("@/app/(collection-module)/collection/commitments/actions", () => ({ getCompanyCommitment: vi.fn(), saveCompanyCommitment: vi.fn() }));
 
 import { CommitmentsTable, type CommitmentView } from "@/components/collections/commitments-table";
 import { CollectionTracker } from "@/components/collections/collection-tracker";
@@ -172,7 +189,7 @@ describe("owner page data", () => {
     h.txByMaster.mockResolvedValue(
       new Map([["c1", [{ id: "t1", collectionMasterId: "c1", reference: "INV-77", amount: 9999, outstanding: 500, dueDate: "2026-10-17", status: "open" }]]]),
     );
-    const { default: Page } = await import("@/app/(forms-module)/forms/collection/commitments/page");
+    const { default: Page } = await import("@/app/(collection-module)/collection/commitments/page");
     const props = findProps(await Page(), "CommitmentsTable")!;
     expect(h.txByMaster).toHaveBeenCalledWith(["c1", "c2"]);
     const rows = props.rows as CommitmentView[];
@@ -187,7 +204,7 @@ describe("owner page data", () => {
   it("without the capability: not found, and no due dates are read", async () => {
     h.me = { id: "emp-x", email: "other@example.test", isActive: true, isAdmin: true, name: "Other" };
     h.claims = { email: "other@example.test", email_verified: true };
-    const { default: Page } = await import("@/app/(forms-module)/forms/collection/commitments/page");
+    const { default: Page } = await import("@/app/(collection-module)/collection/commitments/page");
     await expect(Page()).rejects.toThrow("NEXT_NOT_FOUND");
     expect(h.txByMaster).not.toHaveBeenCalled();
     expect(h.listCommitments).not.toHaveBeenCalled();

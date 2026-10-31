@@ -39,7 +39,7 @@ describe("the HR module", () => {
   it("does not rename or duplicate any existing module", () => {
     expect(MODULES.map((m) => m.label)).toEqual([
       "WMS", "Employees", "Incentive Tracker", "Training", "Masters",
-      "Targets & Forecasts", "Project Plan", "HR",
+      "Targets & Forecasts", "Project Plan", "Collection", "HR",
     ]);
     expect(new Set(MODULE_IDS).size).toBe(MODULE_IDS.length);
   });

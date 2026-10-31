@@ -99,9 +99,9 @@ describe("no code path writes a closure or moves a company to Collection Logs", 
     const closures = read(CLOSURES_QUERIES);
     expect(closures).not.toMatch(/\.(insert|update|delete)\(/);
     for (const f of [
-      "app/(forms-module)/forms/collection/actions.ts",
-      "app/(forms-module)/forms/collection/commitments/actions.ts",
-      "app/(forms-module)/forms/collection/tracker/bulk-actions.ts",
+      "app/(collection-module)/collection/actions.ts",
+      "app/(collection-module)/collection/commitments/actions.ts",
+      "app/(collection-module)/collection/tracker/bulk-actions.ts",
       "lib/queries/collection-review.ts",
       "lib/collections/load.ts",
     ]) {

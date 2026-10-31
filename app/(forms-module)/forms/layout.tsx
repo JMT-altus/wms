@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
 import { requireAdmin } from "@/lib/auth/current";
 import { getOrgSettings } from "@/lib/queries/org-settings";
-import { getCollectionCapabilities } from "@/lib/auth/capability";
 import { IdleTimerClient } from "@/components/auth/idle-timer-client";
 import { FormsSidebar, FormsMobileNav } from "@/components/forms/forms-sidebar";
 import { DashboardHeader } from "@/components/layout/header";
@@ -18,22 +17,20 @@ import { DashboardHeader } from "@/components/layout/header";
  * `moduleIdForPath("/forms/...")` resolves to WMS, which is granted to
  * everyone by default, so inheriting that guard would have widened access
  * rather than restricted it.
+ *
+ * Collection used to live here too; it is now its own module at /collection
+ * (app/(collection-module)), with its own rail and module access.
  */
 export default async function FormsLayout({ children }: { children: ReactNode }) {
   const me = await requireAdmin();
   const settings = await getOrgSettings();
-  // Only decides which nav links show; every Collection page and action checks again.
-  const caps = await getCollectionCapabilities();
-  const showCommitments = caps["collection.commitments.view"] || caps["collection.escalation.review"];
-  const showCollection = caps["collection.view"];
-  const showLogs = caps["collection.logs.view"];
 
   return (
     <>
       <IdleTimerClient timeoutMinutes={settings.idleTimeoutMinutes} />
       <div className="min-h-screen flex max-md:block app-wallpaper">
-        <FormsSidebar userName={me.name} showCommitments={showCommitments} showCollection={showCollection} showLogs={showLogs} />
-        <FormsMobileNav showCommitments={showCommitments} showCollection={showCollection} showLogs={showLogs} />
+        <FormsSidebar userName={me.name} />
+        <FormsMobileNav />
         <div className="flex-1 min-w-0 max-md:flex max-md:flex-col">
           {/* The app's slim header bar, same as every (app) page carries, so
               the search / Live / account cluster is reachable from every

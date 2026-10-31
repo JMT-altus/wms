@@ -15,12 +15,7 @@ import {
   SlidersHorizontal,
   TrendingUp,
   Trash2,
-  LayoutDashboard,
-  ClipboardList,
   ArrowLeft,
-  Building2,
-  HandCoins,
-  Archive,
   type LucideIcon,
 } from "lucide-react";
 // The same brand ramp the Masters rail uses. Imported rather than re-declared
@@ -108,57 +103,15 @@ const NAV: ReadonlyArray<NavItem> = [
     hint: "Deleted clients",
     icon: Trash2,
   },
-  {
-    href: "/forms/collection/dashboard" as Route,
-    label: "Collection Dashboard",
-    hint: "Outstanding and follow-ups at a glance",
-    icon: LayoutDashboard,
-    groupLabel: "Collection",
-  },
-  {
-    href: "/forms/collection/tracker" as Route,
-    label: "Collection Tracker",
-    hint: "Party-wise follow-ups",
-    icon: ClipboardList,
-  },
-  {
-    href: "/forms/collection/master" as Route,
-    label: "Collection Master",
-    hint: "Companies, coordinators & payment terms",
-    icon: Building2,
-  },
 ];
 
 /**
- * Shown only with collection.commitments.view or collection.escalation.review
- * (decided on the server); the page and its data check again regardless.
+ * The Forms rail is Client KYC only. Collection — which used to be listed
+ * here under its own heading — is its own module now (/collection, with its
+ * own rail in components/collections/collection-sidebar.tsx).
  */
-const COMMITMENTS_ITEM: NavItem = {
-  href: "/forms/collection/commitments" as Route,
-  label: "Commitments & Escalations",
-  hint: "Restricted: commitments and reviews",
-  icon: HandCoins,
-};
-
-/** Shown only with collection.logs.view (decided on the server); the page checks again regardless. */
-const LOGS_ITEM: NavItem = {
-  href: "/forms/collection/logs" as Route,
-  label: "Collection Logs",
-  hint: "Closed collections and their history",
-  icon: Archive,
-};
-
-/**
- * The rail for this person: the Collection screens only with collection.view,
- * and the restricted pages only with their capabilities. Hiding is a courtesy —
- * every Collection page and action checks on the server.
- */
-export function navFor(showCommitments: boolean, showCollection: boolean, showLogs = false): ReadonlyArray<NavItem> {
-  const base = showCollection ? NAV : NAV.filter((i) => !String(i.href).startsWith("/forms/collection/"));
-  const extra = [showCommitments && COMMITMENTS_ITEM, showLogs && LOGS_ITEM].filter((i): i is NavItem => Boolean(i));
-  if (extra.length === 0) return base;
-  const at = base.findIndex((i) => i.href === "/forms/collection/master");
-  return at < 0 ? [...base, ...extra] : [...base.slice(0, at + 1), ...extra, ...base.slice(at + 1)];
+export function navFor(): ReadonlyArray<NavItem> {
+  return NAV;
 }
 
 /* The Forms accent, taken from the module's own hub tile (see STYLES.forms
@@ -168,18 +121,8 @@ const ACCENT_FROM = "#FB7185";
 const ACCENT_TO = "#BE123C";
 const ACCENT = `linear-gradient(135deg, ${ACCENT_FROM} 0%, ${ACCENT_TO} 100%)`;
 
-export function FormsSidebar({
-  userName,
-  showCommitments = false,
-  showCollection = true,
-  showLogs = false,
-}: {
-  userName: string;
-  showCommitments?: boolean;
-  showCollection?: boolean;
-  showLogs?: boolean;
-}) {
-  const items = navFor(showCommitments, showCollection, showLogs);
+export function FormsSidebar({ userName }: { userName: string }) {
+  const items = navFor();
   const pathname = usePathname();
   const collapsed = useRailCollapsed();
 
@@ -305,16 +248,8 @@ export function FormsSidebar({
 }
 
 /** The same links as a scrollable strip, for phones where the rail hides. */
-export function FormsMobileNav({
-  showCommitments = false,
-  showCollection = true,
-  showLogs = false,
-}: {
-  showCommitments?: boolean;
-  showCollection?: boolean;
-  showLogs?: boolean;
-}) {
-  const items = navFor(showCommitments, showCollection, showLogs);
+export function FormsMobileNav() {
+  const items = navFor();
   const pathname = usePathname();
   return (
     <div

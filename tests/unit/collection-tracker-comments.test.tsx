@@ -8,9 +8,26 @@ import { cleanup, fireEvent, render, screen, within } from "@testing-library/rea
 // "See all comments" for that company's complete history. Display only — the
 // history is what the Tracker page already loaded for the row.
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
+// Collection is its own module now (Admin → Access). Its gate is mocked to follow the session's admin flag — the
+// admin bypass — so these tests keep exercising the collection.* capabilities exactly as before.
+vi.mock("@/lib/auth/module-access", async () => {
+  const { getCurrentEmployee } = await import("@/lib/auth/current");
+  const inModule = async () => {
+    const me = (await getCurrentEmployee()) as { isActive?: boolean; isAdmin?: boolean } | null;
+    return !!me && me.isActive !== false && me.isAdmin === true;
+  };
+  return {
+    canAccessModule: inModule,
+    requireModuleAccess: async () => {
+      const me = await getCurrentEmployee();
+      if (!(await inModule())) throw new Error("Forbidden");
+      return me;
+    },
+  };
+});
 vi.mock("@/lib/toast", () => ({ fireToast: vi.fn() }));
-vi.mock("@/app/(forms-module)/forms/collection/actions", () => ({ saveFollowUp: vi.fn() }));
-vi.mock("@/app/(forms-module)/forms/collection/commitments/actions", () => ({ getCompanyCommitment: vi.fn(), saveCompanyCommitment: vi.fn() }));
+vi.mock("@/app/(collection-module)/collection/actions", () => ({ saveFollowUp: vi.fn() }));
+vi.mock("@/app/(collection-module)/collection/commitments/actions", () => ({ getCompanyCommitment: vi.fn(), saveCompanyCommitment: vi.fn() }));
 
 import { CollectionTracker } from "@/components/collections/collection-tracker";
 import { TrackerComments } from "@/components/collections/tracker-comments";
@@ -133,9 +150,9 @@ describe("Tracker Comments column", () => {
   it("calls only the two comment actions — editing or deleting your own comment — fetches nothing else, and the page's authorization is unchanged", () => {
     const src = readFileSync(resolve(__dirname, "../../components/collections/tracker-comments.tsx"), "utf8");
     expect(src).not.toMatch(/fetch\(|server-only|\bdb\b/);
-    expect([...src.matchAll(/import \{([^}]*)\} from "@\/app\/\(forms-module\)\/forms\/collection\/actions"/g)].map((m) => m[1]!.trim())).toEqual(["deleteFollowUpComment, editFollowUpComment"]);
+    expect([...src.matchAll(/import \{([^}]*)\} from "@\/app\/\(collection-module\)\/collection\/actions"/g)].map((m) => m[1]!.trim())).toEqual(["deleteFollowUpComment, editFollowUpComment"]);
     expect(src.match(/await \w+\(/g)).toEqual(["await editFollowUpComment(", "await deleteFollowUpComment("]);
-    const page = readFileSync(resolve(__dirname, "../../app/(forms-module)/forms/collection/tracker/page.tsx"), "utf8");
+    const page = readFileSync(resolve(__dirname, "../../app/(collection-module)/collection/tracker/page.tsx"), "utf8");
     expect(page).toMatch(/collection\.view/); // still gated on the server before any row (or comment) is loaded
   });
 });

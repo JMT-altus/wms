@@ -26,7 +26,7 @@ import { createTestDb } from "./_pglite";
 import type { CapabilityProof } from "@/lib/auth/capability";
 
 let pg: Awaited<ReturnType<typeof createTestDb>>["pg"];
-let importAction: typeof import("@/app/(forms-module)/forms/collection/master/actions");
+let importAction: typeof import("@/app/(collection-module)/collection/master/actions");
 let load: typeof import("@/lib/collections/load");
 let derive: typeof import("@/lib/collections/derive");
 let commitments: typeof import("@/lib/queries/collection-commitments");
@@ -49,7 +49,7 @@ beforeAll(async () => {
     .values({ name: "Admin", email: "admin@example.test", role: "both", isAdmin: true } as typeof schema.employees.$inferInsert)
     .returning({ id: schema.employees.id });
   h.me.id = admin!.id;
-  importAction = await import("@/app/(forms-module)/forms/collection/master/actions");
+  importAction = await import("@/app/(collection-module)/collection/master/actions");
   load = await import("@/lib/collections/load");
   derive = await import("@/lib/collections/derive");
   commitments = await import("@/lib/queries/collection-commitments");

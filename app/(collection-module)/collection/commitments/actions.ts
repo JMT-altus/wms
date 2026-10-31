@@ -66,8 +66,8 @@ export async function saveCompanyCommitment(raw: unknown): Promise<Result<{ comm
     await recordCommitment(editor, p.data);
     const viewer = await getCollectionCapability("collection.commitments.view");
     const after = viewer ? await getCommitment(viewer, p.data.companyId) : null;
-    revalidatePath("/forms/collection/commitments");
-    revalidatePath("/forms/collection/tracker");
+    revalidatePath("/collection/commitments");
+    revalidatePath("/collection/tracker");
     return { ok: true, commitment: after?.commitment ?? null };
   } catch (err) {
     if (isMissingTable(err)) return { ok: false, error: NOT_READY };
@@ -96,7 +96,7 @@ export async function closeEscalation(raw: unknown): Promise<Result<object>> {
     console.error("[collection-review] close failed");
     return { ok: false, error: "The escalation could not be closed. Please try again." };
   }
-  revalidatePath("/forms/collection/commitments");
-  revalidatePath("/forms/collection/tracker");
+  revalidatePath("/collection/commitments");
+  revalidatePath("/collection/tracker");
   return { ok: true };
 }

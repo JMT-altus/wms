@@ -88,7 +88,7 @@ export default async function CollectionTrackerPage() {
   }
 
   const openEscalationCount = escalations.byCompany.size;
-  const reviewQueue = caps["collection.escalation.review"] ? { openCount: openEscalationCount, href: "/forms/collection/commitments" } : undefined;
+  const reviewQueue = caps["collection.escalation.review"] ? { openCount: openEscalationCount, href: "/collection/commitments" } : undefined;
   // Super-admins only (the existing rule): what to grant, and where, when work is waiting for nobody.
   const me = await getCurrentEmployee();
   const setupHints =

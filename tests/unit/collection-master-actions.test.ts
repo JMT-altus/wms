@@ -19,6 +19,23 @@ const h = vi.hoisted(() => ({
 }));
 
 vi.mock("server-only", () => ({}));
+// Collection is its own module now (Admin → Access). Its gate is mocked to follow the session's admin flag — the
+// admin bypass — so these tests keep exercising the collection.* capabilities exactly as before.
+vi.mock("@/lib/auth/module-access", async () => {
+  const { getCurrentEmployee } = await import("@/lib/auth/current");
+  const inModule = async () => {
+    const me = (await getCurrentEmployee()) as { isActive?: boolean; isAdmin?: boolean } | null;
+    return !!me && me.isActive !== false && me.isAdmin === true;
+  };
+  return {
+    canAccessModule: inModule,
+    requireModuleAccess: async () => {
+      const me = await getCurrentEmployee();
+      if (!(await inModule())) throw new Error("Forbidden");
+      return me;
+    },
+  };
+});
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/rate-limit", () => ({ rateLimitOrError: () => null }));
 vi.mock("@/lib/auth/current", () => ({
@@ -108,7 +125,7 @@ vi.mock("@/lib/db", () => ({
   },
 }));
 
-import { importCollectionMaster, previewCollectionMaster } from "@/app/(forms-module)/forms/collection/master/actions";
+import { importCollectionMaster, previewCollectionMaster } from "@/app/(collection-module)/collection/master/actions";
 
 const stored = (companyName: string, nameKey: string, coordinatorLabel: string | null, paymentTerms: string | null): ExistingCompany => ({
   id: `id-${nameKey}`,
@@ -144,10 +161,10 @@ beforeEach(() => {
 });
 
 describe("access and validation", () => {
-  it("both actions are admin-only and stop before reading or writing", async () => {
-    h.admin = false;
-    await expect(previewCollectionMaster(body([{ rowNo: 2, company: "A" }]))).rejects.toThrow(/Admin/);
-    await expect(importCollectionMaster({ ...body([{ rowNo: 2, company: "A" }]), confirm: true })).rejects.toThrow(/Admin/);
+  it("both actions need the Collection module (and then the capability) and stop before reading or writing", async () => {
+    h.admin = false; // not an admin and not granted the Collection module → the module gate refuses first
+    await expect(previewCollectionMaster(body([{ rowNo: 2, company: "A" }]))).rejects.toThrow(/Forbidden/);
+    await expect(importCollectionMaster({ ...body([{ rowNo: 2, company: "A" }]), confirm: true })).rejects.toThrow(/Forbidden/);
     expect(h.transactions).toBe(0);
   });
 

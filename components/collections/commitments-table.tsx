@@ -10,7 +10,7 @@ import { partyOverdue, type OverdueInput } from "@/lib/collections/overdue";
 import { OverdueBadge, overdueRowStyle, useBusinessToday } from "@/components/collections/overdue-display";
 import { confirmationLabel, type ConfirmationValue } from "@/lib/collections/review";
 import { commentDate, commentTime } from "@/lib/collections/comment-audit";
-import { closeEscalation } from "@/app/(forms-module)/forms/collection/commitments/actions";
+import { closeEscalation } from "@/app/(collection-module)/collection/commitments/actions";
 
 /**
  * One company on the commitments and escalations page: a recorded commitment, an open

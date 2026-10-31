@@ -39,6 +39,11 @@ export const MODULE_CODE_DEFAULTS: Record<ModuleId, boolean> = {
   // everyone, and the module's single permission rule is about who may RULE
   // on a row's status — not who may look at one.
   project: true,
+  // Off by default. Collection used to be reachable only by admins (it lived
+  // in the admin-only Forms area); admins keep it through the admin bypass,
+  // everyone else is granted it deliberately — and still needs the
+  // collection.* Field Permissions for each section inside.
+  collection: false,
   // Off by default, like Employees — the module Policies used to sit in. Admins
   // get in through the admin bypass and anyone else is granted HR deliberately,
   // so moving Policies under HR widens nobody's access.

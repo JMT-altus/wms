@@ -4,7 +4,7 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { CenterDialog } from "@/components/ui/center-dialog";
 import { CommentAudit, CommentList, type CommentEntry } from "@/components/collections/comment-list";
-import { deleteFollowUpComment, editFollowUpComment } from "@/app/(forms-module)/forms/collection/actions";
+import { deleteFollowUpComment, editFollowUpComment } from "@/app/(collection-module)/collection/actions";
 import { fireToast } from "@/lib/toast";
 import { TRACKER_COMMENT_LIMIT, commentHistory } from "@/lib/collections/derive";
 

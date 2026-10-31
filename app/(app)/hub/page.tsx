@@ -12,6 +12,7 @@ import {
   Waypoints,
   BriefcaseBusiness,
   FileText,
+  HandCoins,
   ArrowRight,
   Lock,
 } from "lucide-react";
@@ -68,6 +69,8 @@ const STYLES: Record<ModuleId | "admin" | "forms", Style> = {
   targets: { Icon: Target, card: "#F2F6FB", chip: "#DCE6F3", accent: "#2C5E9E", border: "rgba(44,94,158,0.14)" },
   // Soft blue.
   project: { Icon: Waypoints, card: "#F1F6FD", chip: "#DAE7F9", accent: "#2457A6", border: "rgba(36,87,166,0.14)" },
+  // Soft teal.
+  collection: { Icon: HandCoins, card: "#F0F9FA", chip: "#D5EEF1", accent: "#0B6B8A", border: "rgba(11,107,138,0.14)" },
   // Soft lavender-blue.
   hr: { Icon: BriefcaseBusiness, card: "#F3F5FD", chip: "#E0E5FA", accent: "#4A56B8", border: "rgba(74,86,184,0.14)" },
   // Soft beige.

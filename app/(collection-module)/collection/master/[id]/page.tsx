@@ -29,7 +29,7 @@ export default async function CollectionMasterCompanyPage({ params }: { params: 
 
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-4">
-      <Link href={"/forms/collection/master" as Route} className="inline-flex w-fit items-center gap-1.5 text-[13px] font-bold text-[#0B4FB8]">
+      <Link href={"/collection/master" as Route} className="inline-flex w-fit items-center gap-1.5 text-[13px] font-bold text-[#0B4FB8]">
         <ArrowLeft size={14} aria-hidden /> Collection Master
       </Link>
       <header>

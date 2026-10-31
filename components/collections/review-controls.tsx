@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import * as Dialog from "@radix-ui/react-dialog";
-import { escalateForReview, setCollectionConfirmation } from "@/app/(forms-module)/forms/collection/actions";
+import { escalateForReview, setCollectionConfirmation } from "@/app/(collection-module)/collection/actions";
 import {
   CONFIRMATION_LABELS,
   CONFIRMATION_UNAVAILABLE,

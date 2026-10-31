@@ -25,7 +25,7 @@ export default function CollectionErrorBoundary({ error, reset }: { error: Error
         think you should have access, ask a super-admin to check your permissions in Field Permissions.
       </p>
       <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
-        <Link href={"/forms/collection/tracker" as Route} className="rounded-chip px-5 py-2.5 text-[14px] font-bold text-white" style={{ background: "#0A6CFF" }}>
+        <Link href={"/collection/tracker" as Route} className="rounded-chip px-5 py-2.5 text-[14px] font-bold text-white" style={{ background: "#0A6CFF" }}>
           Back to the Tracker
         </Link>
         <Button onClick={reset} variant="outline">

@@ -4,12 +4,29 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 
 const saveFollowUp = vi.fn();
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
+// Collection is its own module now (Admin → Access). Its gate is mocked to follow the session's admin flag — the
+// admin bypass — so these tests keep exercising the collection.* capabilities exactly as before.
+vi.mock("@/lib/auth/module-access", async () => {
+  const { getCurrentEmployee } = await import("@/lib/auth/current");
+  const inModule = async () => {
+    const me = (await getCurrentEmployee()) as { isActive?: boolean; isAdmin?: boolean } | null;
+    return !!me && me.isActive !== false && me.isAdmin === true;
+  };
+  return {
+    canAccessModule: inModule,
+    requireModuleAccess: async () => {
+      const me = await getCurrentEmployee();
+      if (!(await inModule())) throw new Error("Forbidden");
+      return me;
+    },
+  };
+});
 vi.mock("@/lib/toast", () => ({ fireToast: vi.fn() }));
-vi.mock("@/app/(forms-module)/forms/collection/actions", () => ({
+vi.mock("@/app/(collection-module)/collection/actions", () => ({
   saveFollowUp: (...a: unknown[]) => saveFollowUp(...a),
 }));
 const commitments = vi.hoisted(() => ({ get: vi.fn(), save: vi.fn() }));
-vi.mock("@/app/(forms-module)/forms/collection/commitments/actions", () => ({
+vi.mock("@/app/(collection-module)/collection/commitments/actions", () => ({
   getCompanyCommitment: (...a: unknown[]) => commitments.get(...a),
   saveCompanyCommitment: (...a: unknown[]) => commitments.save(...a),
 }));
@@ -94,12 +111,21 @@ describe("Collection Tracker", () => {
       ],
     );
     render(<CollectionTracker rows={many} connected storageReady today={TODAY} />);
+    // The row shows only the latest note; the earlier ones are kept behind "See all comments".
     const cell = screen.getByLabelText("Comments, newest first");
     expect(cell.textContent).toContain("User: A · Date & Time: 12-Nov-2026, 11:30 AM ISTComment: Third call");
-    expect(cell.textContent).toContain("User: A · Date & Time: 11-Nov-2026, 11:30 AM ISTComment: Second call");
-    expect(cell.textContent).toContain("User: A · Date & Time: 10-Nov-2026, 11:30 AM ISTComment: First call");
+    expect(cell.textContent).not.toContain("Second call");
+    expect(screen.getByText("Latest of 3")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "See all 3 comments for Alpha Traders" }));
+    const all = within(screen.getByRole("dialog", { name: "All comments" })).getByRole("list", { name: "All comments for Alpha Traders, newest first" });
+    // The full history, in the popup's own (labelled) format: every note with its author, date and time.
+    for (const [day, note] of [["12-Nov-2026", "Third call"], ["11-Nov-2026", "Second call"], ["10-Nov-2026", "First call"]]) {
+      expect(all.textContent).toContain(`${day}, 11:30 AM IST`);
+      expect(all.textContent).toContain(note);
+    }
+    expect(all.querySelectorAll('[data-comment-audit="full"]')).toHaveLength(3);
     // newest first
-    expect(cell.textContent!.indexOf("Third call")).toBeLessThan(cell.textContent!.indexOf("First call"));
+    expect(all.textContent!.indexOf("Third call")).toBeLessThan(all.textContent!.indexOf("First call"));
   });
 
   it("opens the party's detail, read-only figures and history, from a click on the name", () => {

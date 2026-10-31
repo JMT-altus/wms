@@ -1,6 +1,7 @@
 import "server-only";
-import { getCurrentEmployee, requireAdmin } from "@/lib/auth/current";
+import { getCurrentEmployee } from "@/lib/auth/current";
 import { getMyFieldAccess } from "@/lib/auth/field-access";
+import { canAccessModule } from "@/lib/auth/module-access";
 import { PERMISSION_FIELDS, type PermissionFieldKey } from "@/db/enums";
 
 /**
@@ -53,30 +54,42 @@ export async function requireCapability<K extends PermissionFieldKey>(key: K): P
 }
 
 /**
- * Collection guard. The Forms area that hosts Collection is admin-only (its
- * layout calls requireAdmin, and Client KYC shares it), so this keeps that gate
- * and then requires the specific capability. Both happen before any Collection
- * data is read or written; anyone else gets "Forbidden".
+ * Whether the signed session may enter the Collection module at all: the
+ * "collection" module in Admin → Access (admins pass through the admin
+ * bypass unless explicitly denied; everyone else needs a grant). The module
+ * gate replaces the admin-only gate of the Forms area Collection used to live
+ * in. It opens the door only — each section still needs its own collection.*
+ * capability below, so a module grant by itself shows nothing.
+ */
+async function inCollectionModule(): Promise<boolean> {
+  const me = await getCurrentEmployee();
+  if (!me || !me.isActive) return false;
+  return canAccessModule("collection");
+}
+
+/**
+ * Collection guard: module access first, then the specific capability. Both
+ * happen before any Collection data is read or written; anyone else gets
+ * "Forbidden".
  */
 export async function requireCollectionCapability<K extends CollectionCapability>(key: K): Promise<CapabilityProof<K>> {
-  await requireAdmin();
+  if (!(await inCollectionModule())) throw new Error("Forbidden");
   return requireCapability(key);
 }
 
 /** Same, without throwing: the proof, or null. For pages that render a "no access" state. */
 export async function getCollectionCapability<K extends CollectionCapability>(key: K): Promise<CapabilityProof<K> | null> {
   const me = await getCurrentEmployee();
-  if (!me || !me.isActive || !me.isAdmin) return null;
+  if (!me || !me.isActive || !(await canAccessModule("collection"))) return null;
   const access = await getMyFieldAccess();
   return access[key]?.allowed === true ? ({ employeeId: me.id, capability: key } as CapabilityProof<K>) : null;
 }
 
 /** Every Collection capability of the current request — for deciding what UI to render (the server checks again). */
 export async function getCollectionCapabilities(): Promise<Record<CollectionCapability, boolean>> {
-  const me = await getCurrentEmployee();
-  const admin = !!me && me.isActive && me.isAdmin;
-  const access = admin ? await getMyFieldAccess() : {};
-  return Object.fromEntries(COLLECTION_CAPABILITIES.map((k) => [k, admin && access[k]?.allowed === true])) as Record<CollectionCapability, boolean>;
+  const inModule = await inCollectionModule();
+  const access = inModule ? await getMyFieldAccess() : {};
+  return Object.fromEntries(COLLECTION_CAPABILITIES.map((k) => [k, inModule && access[k]?.allowed === true])) as Record<CollectionCapability, boolean>;
 }
 
 /**

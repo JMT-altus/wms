@@ -32,6 +32,7 @@ export type ModuleId =
   | "masters"
   | "targets"
   | "project"
+  | "collection"
   | "hr";
 
 export interface ModuleNavItem {
@@ -229,6 +230,22 @@ export const MODULES: ModuleDef[] = [
     // Left rail, same reasoning as Masters and Targets — Project Views /
     // Projects / Milestones / Results / Actions / Sub-Actions / Kanban is
     // seven entries, and a pill row stops being readable around six.
+    items: [],
+  },
+  {
+    id: "collection",
+    label: "Collection",
+    tagline: "Dashboard, party-wise tracker, master, commitments & logs.",
+    icon: "HandCoins",
+    landing: "/collection/dashboard",
+    // The old home under Forms redirects here (next.config.ts), so an old link
+    // is judged by this module too.
+    routes: ["/collection", "/forms/collection"],
+    accent: { from: "#0EA5B7", to: "#0B6B8A", ink: "#0B6B8A" },
+    // Left rail in its own route group, like Masters, Targets and Project
+    // Plan. Module access opens the door; what is shown inside is decided by
+    // the collection.* Field Permissions, section by section, exactly as
+    // before the module existed.
     items: [],
   },
   {

@@ -17,6 +17,23 @@ const h = vi.hoisted(() => ({
 }));
 
 vi.mock("server-only", () => ({}));
+// Collection is its own module now (Admin → Access). Its gate is mocked to follow the session's admin flag — the
+// admin bypass — so these tests keep exercising the collection.* capabilities exactly as before.
+vi.mock("@/lib/auth/module-access", async () => {
+  const { getCurrentEmployee } = await import("@/lib/auth/current");
+  const inModule = async () => {
+    const me = (await getCurrentEmployee()) as { isActive?: boolean; isAdmin?: boolean } | null;
+    return !!me && me.isActive !== false && me.isAdmin === true;
+  };
+  return {
+    canAccessModule: inModule,
+    requireModuleAccess: async () => {
+      const me = await getCurrentEmployee();
+      if (!(await inModule())) throw new Error("Forbidden");
+      return me;
+    },
+  };
+});
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: vi.fn() }),
   notFound: () => {
@@ -42,8 +59,8 @@ vi.mock("@/lib/queries/collection-review", () => ({
   latestConfirmations: async () => ({ storageReady: true, byCompany: new Map() }),
   listOpenEscalationsForReview: async () => ({ storageReady: true, rows: [] }),
 }));
-vi.mock("@/app/(forms-module)/forms/collection/actions", () => ({ saveFollowUp: vi.fn() }));
-vi.mock("@/app/(forms-module)/forms/collection/commitments/actions", () => ({
+vi.mock("@/app/(collection-module)/collection/actions", () => ({ saveFollowUp: vi.fn() }));
+vi.mock("@/app/(collection-module)/collection/commitments/actions", () => ({
   getCompanyCommitment: (...a: unknown[]) => h.getCommitment(...a),
   saveCompanyCommitment: vi.fn(),
 }));
@@ -132,10 +149,19 @@ describe("company popup", () => {
     expect(within(dialog).queryByText(/₹1,25,000/)).toBeNull();
   });
 
-  it("the Tracker's Comments column shows each comment with its author, user id, date and time (IST)", () => {
+  it("the Tracker's Comments column shows the latest comment with its author, user id, date and time (IST); the rest are in See all", () => {
     render(<CollectionTracker rows={trackerRows} connected storageReady today="2026-10-19" />);
     const alpha = screen.getByRole("button", { name: "Alpha Traders" }).closest("tr")!;
-    expect(within(alpha).getByLabelText("Comments, newest first").textContent).toBe("User: Asha · Date & Time: 15-Oct-2026, 11:30 AM ISTComment: Cheque promisedUser: Asha · Date & Time: 10-Oct-2026, 11:30 AM ISTComment: First call — will pay next week");
+    expect(within(alpha).getByLabelText("Comments, newest first").textContent).toBe("User: Asha · Date & Time: 15-Oct-2026, 11:30 AM ISTComment: Cheque promised");
+    fireEvent.click(within(alpha).getByRole("button", { name: "See all 2 comments for Alpha Traders" }));
+    const all = screen.getByRole("list", { name: "All comments for Alpha Traders, newest first" });
+    expect(all.querySelectorAll('[data-comment-audit="full"]')).toHaveLength(2);
+    expect(all.textContent).toContain("15-Oct-2026, 11:30 AM IST");
+    expect(all.textContent).toContain("Cheque promised");
+    expect(all.textContent).toContain("10-Oct-2026, 11:30 AM IST");
+    expect(all.textContent).toContain("First call — will pay next week");
+    expect(all.textContent!.indexOf("Cheque promised")).toBeLessThan(all.textContent!.indexOf("First call"));
+    expect(all.textContent).not.toMatch(/Disputed invoice/); // another company's comment
   });
 });
 
@@ -173,7 +199,7 @@ describe("commitments page (collection.commitments.view)", () => {
   it("attaches each company's own comments, most recent first; none → empty list", async () => {
     asOwner();
     h.listCommitments.mockResolvedValue({ storageReady: true, rows: [commitment("c1", "Alpha Traders", "Mihir"), commitment("c2", "Beta Corp", "Ravi"), commitment("c3", "Gamma Ltd", null)] });
-    const { default: Page } = await import("@/app/(forms-module)/forms/collection/commitments/page");
+    const { default: Page } = await import("@/app/(collection-module)/collection/commitments/page");
     const rows = findProps(await Page(), "CommitmentsTable")!.rows as CommitmentView[];
     expect(rows.map((r) => [r.companyName, r.comments.map((c) => c.note)])).toEqual([
       ["Alpha Traders", ["Cheque promised", "First call — will pay next week"]],
@@ -189,7 +215,7 @@ describe("commitments page (collection.commitments.view)", () => {
     asOwner();
     h.followUps = { storageReady: false, entries: [] };
     h.listCommitments.mockResolvedValue({ storageReady: true, rows: [commitment("c1", "Alpha Traders", "Mihir")] });
-    const { default: Page } = await import("@/app/(forms-module)/forms/collection/commitments/page");
+    const { default: Page } = await import("@/app/(collection-module)/collection/commitments/page");
     const tree = await Page();
     expect(JSON.stringify(tree)).toMatch(/Tracker comments aren.+t available yet/);
     expect((findProps(tree, "CommitmentsTable")!.rows as CommitmentView[])[0]!.comments).toEqual([]);
@@ -198,7 +224,7 @@ describe("commitments page (collection.commitments.view)", () => {
   it("is still not found without the capability, and reads neither commitments nor comments", async () => {
     h.me = { id: "emp-x", email: "other@example.test", isActive: true, isAdmin: true, name: "Other" };
     h.claims = { email: "other@example.test", email_verified: true };
-    const { default: Page } = await import("@/app/(forms-module)/forms/collection/commitments/page");
+    const { default: Page } = await import("@/app/(collection-module)/collection/commitments/page");
     await expect(Page()).rejects.toThrow("NEXT_NOT_FOUND");
     expect(h.listCommitments).not.toHaveBeenCalled();
     expect(h.listFollowUps).not.toHaveBeenCalled();

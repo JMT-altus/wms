@@ -2,9 +2,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 
-// Loading and error states shared by every Collection page (app/(forms-module)/forms/collection/).
-import CollectionLoading from "@/app/(forms-module)/forms/collection/loading";
-import CollectionErrorBoundary from "@/app/(forms-module)/forms/collection/error";
+// Loading and error states shared by every Collection page (app/(collection-module)/collection/).
+import CollectionLoading from "@/app/(collection-module)/collection/loading";
+import CollectionErrorBoundary from "@/app/(collection-module)/collection/error";
 
 afterEach(cleanup);
 
@@ -22,7 +22,7 @@ describe("Collection route states", () => {
     expect(alert.textContent).toMatch(/Field Permissions/);
     expect(alert.textContent).not.toMatch(/ECONNREFUSED|secret-host/); // never the raw message
     expect(alert.textContent).toContain("ref: abc123"); // the opaque digest, for support
-    expect(screen.getByRole("link", { name: "Back to the Tracker" }).getAttribute("href")).toBe("/forms/collection/tracker");
+    expect(screen.getByRole("link", { name: "Back to the Tracker" }).getAttribute("href")).toBe("/collection/tracker");
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
     expect(reset).toHaveBeenCalledTimes(1);
   });

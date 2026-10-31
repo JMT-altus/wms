@@ -7,7 +7,24 @@ import { act, cleanup, fireEvent, render, screen, within } from "@testing-librar
 // as before, and the signed-in author can edit their OWN comments with Save / Cancel.
 const h = vi.hoisted(() => ({ edit: vi.fn(), refresh: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: h.refresh }) }));
-vi.mock("@/app/(forms-module)/forms/collection/actions", () => ({ editFollowUpComment: h.edit }));
+// Collection is its own module now (Admin → Access). Its gate is mocked to follow the session's admin flag — the
+// admin bypass — so these tests keep exercising the collection.* capabilities exactly as before.
+vi.mock("@/lib/auth/module-access", async () => {
+  const { getCurrentEmployee } = await import("@/lib/auth/current");
+  const inModule = async () => {
+    const me = (await getCurrentEmployee()) as { isActive?: boolean; isAdmin?: boolean } | null;
+    return !!me && me.isActive !== false && me.isAdmin === true;
+  };
+  return {
+    canAccessModule: inModule,
+    requireModuleAccess: async () => {
+      const me = await getCurrentEmployee();
+      if (!(await inModule())) throw new Error("Forbidden");
+      return me;
+    },
+  };
+});
+vi.mock("@/app/(collection-module)/collection/actions", () => ({ editFollowUpComment: h.edit }));
 
 import { TrackerComments } from "@/components/collections/tracker-comments";
 import { CommentAudit, CommentList, REVIEWER_COMMENT_CLASS, type CommentEntry } from "@/components/collections/comment-list";
@@ -28,27 +45,48 @@ const OTHER = entry("o1", "emp-o", "Left voicemail.", 3);
 const HISTORY = [REVIEWER, WRITER, OTHER];
 const PLAIN_COMPACT = "block border-b border-hairline py-1 last:border-b-0";
 
-const item = (note: string) => screen.getByText(new RegExp(note.replace(/[.?]/g, "\\$&"))).closest("[data-comment-audit]") as HTMLElement;
+const PLAIN_FULL = "grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5 text-[13px]";
+
+// The row shows only the latest comment; the complete history is behind "See all comments". `item` looks in a
+// given scope so the latest comment (present in the row AND the dialog) is never matched twice.
+const itemIn = (scope: HTMLElement, note: string) => within(scope).getByText(new RegExp(note.replace(/[.?]/g, "\\$&"))).closest("[data-comment-audit]") as HTMLElement;
+const item = (note: string) => itemIn(document.body, note);
+const openAll = () => {
+  fireEvent.click(screen.getByRole("button", { name: /See all \d+ comments/ }));
+  return screen.getByRole("list", { name: /All comments for/ }) as HTMLElement;
+};
+const row = () => screen.getByLabelText("Comments, newest first") as HTMLElement;
 
 describe("the escalation reviewer's comments are yellow for every viewer; others are unchanged", () => {
   for (const viewer of [null, "emp-w", "emp-o", "emp-rev"]) {
-    it(`viewer ${viewer ?? "(read-only)"}: only the reviewer's comment is yellow`, () => {
+    it(`viewer ${viewer ?? "(read-only)"}: only the reviewer's comment is yellow — in the row and in the full history`, () => {
       render(<TrackerComments companyName="Alpha Traders" history={HISTORY} editorId={viewer} />);
-      expect(item(REVIEWER.note!).getAttribute("data-reviewer-comment")).toBe("true");
-      expect(item(REVIEWER.note!).className).toContain(REVIEWER_COMMENT_CLASS);
+      // The reviewer's is the latest, so it is the one in the row.
+      expect(itemIn(row(), REVIEWER.note!).getAttribute("data-reviewer-comment")).toBe("true");
+      expect(itemIn(row(), REVIEWER.note!).className).toContain(REVIEWER_COMMENT_CLASS);
+      const all = openAll();
+      expect(itemIn(all, REVIEWER.note!).getAttribute("data-reviewer-comment")).toBe("true");
+      expect(itemIn(all, REVIEWER.note!).className).toContain(REVIEWER_COMMENT_CLASS);
       for (const e of [WRITER, OTHER]) {
-        expect(item(e.note!).getAttribute("data-reviewer-comment")).toBeNull();
-        expect(item(e.note!).className).toBe(PLAIN_COMPACT); // exactly the styling it had before
+        expect(itemIn(all, e.note!).getAttribute("data-reviewer-comment")).toBeNull();
+        expect(itemIn(all, e.note!).className).toBe(PLAIN_FULL); // exactly the styling the History had before
       }
     });
   }
 
+  it("an older (non-latest) comment keeps its plain compact styling when it is the one in the row", () => {
+    render(<TrackerComments companyName="Alpha Traders" history={[WRITER, OTHER]} editorId={null} />);
+    expect(itemIn(row(), WRITER.note!).getAttribute("data-reviewer-comment")).toBeNull();
+    expect(itemIn(row(), WRITER.note!).className).toBe(PLAIN_COMPACT);
+  });
+
   it("the yellow comment uses the new header — User and Date & Time together, no user id — and Edit is still offered on your own", () => {
     render(<TrackerComments companyName="Alpha Traders" history={[{ ...REVIEWER, createdByName: "MV" }, WRITER]} editorId="emp-w" />);
-    const yellow = screen.getByText(/Please follow up today\./).closest("[data-comment-audit]") as HTMLElement;
+    const yellow = itemIn(row(), "Please follow up today.");
     expect(yellow.textContent).toBe("User: MV · Date & Time: 05-Oct-2026, 11:30 AM ISTComment: Please follow up today.");
     expect(yellow.innerHTML).not.toContain("emp-rev");
     expect(yellow.className).toContain(REVIEWER_COMMENT_CLASS);
+    openAll(); // emp-w's own comment is the older one, so its Edit is in the full history
     expect(screen.getByRole("button", { name: /Edit your comment/ })).toBeTruthy();
   });
 
@@ -77,15 +115,19 @@ describe("the escalation reviewer's comments are yellow for every viewer; others
 describe("Edit — only on your own comments", () => {
   it("is offered on the viewer's own comment only, and not at all to a read-only viewer", () => {
     render(<TrackerComments companyName="Alpha Traders" history={HISTORY} editorId="emp-w" />);
+    expect(screen.queryByRole("button", { name: /Edit your comment/ })).toBeNull(); // the row holds the reviewer's comment
+    openAll();
     expect(screen.getAllByRole("button", { name: /Edit your comment/ })).toHaveLength(1);
     cleanup();
     render(<TrackerComments companyName="Alpha Traders" history={HISTORY} editorId={null} />);
+    openAll();
     expect(screen.queryByRole("button", { name: /Edit your comment/ })).toBeNull();
   });
 
   it("Save sends the id, the text it started from and the trimmed new text; success closes the box and refreshes", async () => {
     h.edit.mockResolvedValue({ ok: true });
     render(<TrackerComments companyName="Alpha Traders" history={HISTORY} editorId="emp-w" />);
+    openAll();
     fireEvent.click(screen.getByRole("button", { name: /Edit your comment/ }));
     fireEvent.change(screen.getByRole("textbox", { name: /Edit comment/ }), { target: { value: "  Called accounts again.  " } });
     await act(async () => fireEvent.click(screen.getByRole("button", { name: "Save" })));
@@ -96,6 +138,7 @@ describe("Edit — only on your own comments", () => {
 
   it("an empty comment can't be saved and says why; an unchanged one can't be saved either", () => {
     render(<TrackerComments companyName="Alpha Traders" history={HISTORY} editorId="emp-w" />);
+    openAll();
     fireEvent.click(screen.getByRole("button", { name: /Edit your comment/ }));
     expect((screen.getByRole("button", { name: "Save" }) as HTMLButtonElement).disabled).toBe(true); // unchanged
     fireEvent.change(screen.getByRole("textbox"), { target: { value: "   " } });
@@ -109,6 +152,7 @@ describe("Edit — only on your own comments", () => {
     let resolve!: (v: unknown) => void;
     h.edit.mockReturnValue(new Promise((r) => (resolve = r)));
     render(<TrackerComments companyName="Alpha Traders" history={HISTORY} editorId="emp-w" />);
+    openAll();
     fireEvent.click(screen.getByRole("button", { name: /Edit your comment/ }));
     fireEvent.change(screen.getByRole("textbox"), { target: { value: "New text" } });
     const save = screen.getByRole("button", { name: "Save" });
@@ -121,6 +165,7 @@ describe("Edit — only on your own comments", () => {
 
   it("a refused or failed save keeps the box open with the typed text and shows the reason", async () => {
     render(<TrackerComments companyName="Alpha Traders" history={HISTORY} editorId="emp-w" />);
+    openAll();
     fireEvent.click(screen.getByRole("button", { name: /Edit your comment/ }));
     fireEvent.change(screen.getByRole("textbox"), { target: { value: "My new text" } });
     h.edit.mockResolvedValueOnce({ ok: false, error: "This comment was changed by someone else after you opened it." });
@@ -135,6 +180,7 @@ describe("Edit — only on your own comments", () => {
 
   it("Cancel discards the change and sends nothing", () => {
     render(<TrackerComments companyName="Alpha Traders" history={HISTORY} editorId="emp-w" />);
+    openAll();
     fireEvent.click(screen.getByRole("button", { name: /Edit your comment/ }));
     fireEvent.change(screen.getByRole("textbox"), { target: { value: "Discard me" } });
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));

@@ -19,6 +19,23 @@ const h = vi.hoisted(() => ({
   refresh: vi.fn(),
 }));
 vi.mock("server-only", () => ({}));
+// Collection is its own module now (Admin → Access). Its gate is mocked to follow the session's admin flag — the
+// admin bypass — so these tests keep exercising the collection.* capabilities exactly as before.
+vi.mock("@/lib/auth/module-access", async () => {
+  const { getCurrentEmployee } = await import("@/lib/auth/current");
+  const inModule = async () => {
+    const me = (await getCurrentEmployee()) as { isActive?: boolean; isAdmin?: boolean } | null;
+    return !!me && me.isActive !== false && me.isAdmin === true;
+  };
+  return {
+    canAccessModule: inModule,
+    requireModuleAccess: async () => {
+      const me = await getCurrentEmployee();
+      if (!(await inModule())) throw new Error("Forbidden");
+      return me;
+    },
+  };
+});
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: h.refresh }) }));
 vi.mock("@/lib/toast", () => ({ fireToast: vi.fn() }));
@@ -53,7 +70,7 @@ vi.mock("@/lib/queries/collection-review", () => ({
   openEscalations: async () => ({ storageReady: true, byCompany: new Map() }),
 }));
 
-import { assignSalesCoordinator } from "@/app/(forms-module)/forms/collection/actions";
+import { assignSalesCoordinator } from "@/app/(collection-module)/collection/actions";
 import { CollectionTracker } from "@/components/collections/collection-tracker";
 import { buildRows, type PartyRow } from "@/lib/collections/derive";
 
@@ -157,7 +174,7 @@ function findProps(node: ReactNode, name: string): Record<string, unknown> | nul
 describe("Tracker page payload", () => {
   it("other Tracker users get no editor, and the options aren't even read", async () => {
     asAdmin();
-    const { default: Page } = await import("@/app/(forms-module)/forms/collection/tracker/page");
+    const { default: Page } = await import("@/app/(collection-module)/collection/tracker/page");
     const props = findProps(await Page(), "CollectionTracker")!;
     expect(props.coordinatorEditor).toBeUndefined();
     expect(h.options).not.toHaveBeenCalled();
@@ -166,7 +183,7 @@ describe("Tracker page payload", () => {
   it("a holder gets the Collection Master's coordinators as the only options", async () => {
     asGranted();
     h.options.mockResolvedValue({ storageReady: true, labels: ["Gauri", "MANGESH"] });
-    const { default: Page } = await import("@/app/(forms-module)/forms/collection/tracker/page");
+    const { default: Page } = await import("@/app/(collection-module)/collection/tracker/page");
     const props = findProps(await Page(), "CollectionTracker")!;
     expect(props.coordinatorEditor).toEqual({ options: ["Gauri", "MANGESH"] });
   });

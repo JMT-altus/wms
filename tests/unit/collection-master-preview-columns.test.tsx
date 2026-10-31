@@ -8,7 +8,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 // file is read in jsdom; the server preview is MOCKED.
 const h = vi.hoisted(() => ({ preview: vi.fn(), refresh: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: h.refresh }) }));
-vi.mock("@/app/(forms-module)/forms/collection/master/actions", () => ({
+vi.mock("@/app/(collection-module)/collection/master/actions", () => ({
   previewCollectionMaster: (...a: unknown[]) => h.preview(...a),
   importCollectionMaster: vi.fn(),
 }));

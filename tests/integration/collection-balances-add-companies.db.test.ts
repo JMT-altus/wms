@@ -46,7 +46,7 @@ import { createTestDb } from "./_pglite";
 
 type Pg = Awaited<ReturnType<typeof createTestDb>>["pg"];
 let pg: Pg;
-let bulk: typeof import("@/app/(forms-module)/forms/collection/tracker/bulk-actions");
+let bulk: typeof import("@/app/(collection-module)/collection/tracker/bulk-actions");
 let masterQ: typeof import("@/lib/queries/collection-master");
 let balancesQ: typeof import("@/lib/queries/collection-balances");
 
@@ -104,7 +104,7 @@ function findProps(node: ReactNode, name: string): Record<string, unknown> | nul
   return null;
 }
 const trackerProps = async () => {
-  const { default: Page } = await import("@/app/(forms-module)/forms/collection/tracker/page");
+  const { default: Page } = await import("@/app/(collection-module)/collection/tracker/page");
   return findProps(await Page(), "CollectionTracker")!;
 };
 
@@ -133,7 +133,7 @@ beforeAll(async () => {
   // Two companies already in the Master: one with a coordinator, one Unassigned.
   await pg.query(`insert into collection_master_companies (company_name, name_key, coordinator_label, payment_terms, updated_at) values ('Alpha Traders', 'alphatraders', 'MANGESH', '30 days', '2026-01-01T00:00:00Z')`);
   await pg.query(`insert into collection_master_companies (company_name, name_key) values ('Beta Works', 'betaworks')`);
-  bulk = await import("@/app/(forms-module)/forms/collection/tracker/bulk-actions");
+  bulk = await import("@/app/(collection-module)/collection/tracker/bulk-actions");
   masterQ = await import("@/lib/queries/collection-master");
   balancesQ = await import("@/lib/queries/collection-balances");
 }, 180_000);

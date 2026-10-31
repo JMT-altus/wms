@@ -10,11 +10,11 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 // tests/integration/collection-escalation-reason.db.test.ts).
 const a = vi.hoisted(() => ({ escalate: vi.fn(), refresh: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: a.refresh }) }));
-vi.mock("@/app/(forms-module)/forms/collection/actions", () => ({
+vi.mock("@/app/(collection-module)/collection/actions", () => ({
   escalateForReview: (...x: unknown[]) => a.escalate(...x),
   setCollectionConfirmation: vi.fn(),
 }));
-vi.mock("@/app/(forms-module)/forms/collection/commitments/actions", () => ({ closeEscalation: vi.fn() }));
+vi.mock("@/app/(collection-module)/collection/commitments/actions", () => ({ closeEscalation: vi.fn() }));
 
 import { ESCALATE_LABEL, EscalateControl } from "@/components/collections/review-controls";
 import { CommitmentsTable, type CommitmentView } from "@/components/collections/commitments-table";
@@ -189,14 +189,16 @@ describe("no person is hard-coded into access or routing", () => {
   it("the escalation, review and permission code never names Mihir (only the button label does)", () => {
     const read = (p: string) => readFileSync(resolve(__dirname, "../..", p), "utf8");
     for (const p of [
-      "app/(forms-module)/forms/collection/actions.ts",
-      "app/(forms-module)/forms/collection/commitments/actions.ts",
-      "app/(forms-module)/forms/collection/commitments/page.tsx",
+      "app/(collection-module)/collection/actions.ts",
+      "app/(collection-module)/collection/commitments/actions.ts",
+      "app/(collection-module)/collection/commitments/page.tsx",
       "lib/queries/collection-review.ts",
       "lib/collections/review.ts",
       "lib/auth/capability.ts",
       "lib/access/field-permissions.ts",
       "app/(forms-module)/forms/layout.tsx",
+      "app/(collection-module)/collection/layout.tsx",
+      "components/collections/collection-sidebar.tsx",
     ]) {
       expect(read(p), p).not.toMatch(/mihir/i);
     }

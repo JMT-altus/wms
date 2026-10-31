@@ -8,12 +8,12 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 const a = vi.hoisted(() => ({ confirm: vi.fn(), escalate: vi.fn(), close: vi.fn(), refresh: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: a.refresh }) }));
 vi.mock("@/lib/toast", () => ({ fireToast: vi.fn() }));
-vi.mock("@/app/(forms-module)/forms/collection/actions", () => ({
+vi.mock("@/app/(collection-module)/collection/actions", () => ({
   saveFollowUp: vi.fn(),
   setCollectionConfirmation: (...x: unknown[]) => a.confirm(...x),
   escalateForReview: (...x: unknown[]) => a.escalate(...x),
 }));
-vi.mock("@/app/(forms-module)/forms/collection/commitments/actions", () => ({
+vi.mock("@/app/(collection-module)/collection/commitments/actions", () => ({
   getCompanyCommitment: vi.fn(),
   saveCompanyCommitment: vi.fn(),
   closeEscalation: (...x: unknown[]) => a.close(...x),
@@ -178,17 +178,17 @@ describe("Tracker — review queue link and setup notice", () => {
     render(<CollectionTracker rows={[party()]} connected storageReady today="2026-10-19" {...extra} />);
 
   it("a reviewer sees how many escalations are waiting and a link to the review queue", () => {
-    render0({ reviewQueue: { openCount: 1, href: "/forms/collection/commitments" } });
+    render0({ reviewQueue: { openCount: 1, href: "/collection/commitments" } });
     const note = screen.getByRole("note", { name: "Escalations awaiting review" });
     expect(within(note).getByText("1 escalation is waiting for your review.")).toBeTruthy();
-    expect(within(note).getByRole("link", { name: "Open the review queue" }).getAttribute("href")).toBe("/forms/collection/commitments");
+    expect(within(note).getByRole("link", { name: "Open the review queue" }).getAttribute("href")).toBe("/collection/commitments");
   });
 
   it("pluralises, formats large counts, and says plainly when the queue is empty", () => {
-    render0({ reviewQueue: { openCount: 1204, href: "/forms/collection/commitments" } });
+    render0({ reviewQueue: { openCount: 1204, href: "/collection/commitments" } });
     expect(screen.getByText("1,204 escalations are waiting for your review.")).toBeTruthy();
     cleanup();
-    render0({ reviewQueue: { openCount: 0, href: "/forms/collection/commitments" } });
+    render0({ reviewQueue: { openCount: 0, href: "/collection/commitments" } });
     expect(screen.getByText("No escalations are waiting for review.")).toBeTruthy();
   });
 

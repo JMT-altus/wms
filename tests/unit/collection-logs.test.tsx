@@ -26,11 +26,28 @@ const h = vi.hoisted(() => ({
 }));
 
 vi.mock("server-only", () => ({}));
+// Collection is its own module now (Admin → Access). Its gate is mocked to follow the session's admin flag — the
+// admin bypass — so these tests keep exercising the collection.* capabilities exactly as before.
+vi.mock("@/lib/auth/module-access", async () => {
+  const { getCurrentEmployee } = await import("@/lib/auth/current");
+  const inModule = async () => {
+    const me = (await getCurrentEmployee()) as { isActive?: boolean; isAdmin?: boolean } | null;
+    return !!me && me.isActive !== false && me.isAdmin === true;
+  };
+  return {
+    canAccessModule: inModule,
+    requireModuleAccess: async () => {
+      const me = await getCurrentEmployee();
+      if (!(await inModule())) throw new Error("Forbidden");
+      return me;
+    },
+  };
+});
 vi.mock("next/navigation", () => ({
   notFound: () => {
     throw Object.assign(new Error("NEXT_NOT_FOUND"), { digest: "NEXT_NOT_FOUND" });
   },
-  usePathname: () => "/forms/collection/logs",
+  usePathname: () => "/collection/logs",
 }));
 vi.mock("@/lib/auth/current", () => ({
   getCurrentEmployee: async () => h.me,
@@ -46,10 +63,10 @@ vi.mock("@/lib/db", () => ({ db: new Proxy({}, { get: () => () => { throw new Er
 vi.mock("@/lib/queries/collection-closures", () => h.q);
 vi.mock("@/lib/queries/collection-followups", () => ({ listFollowUps: h.listFollowUps }));
 
-import LogsPage from "@/app/(forms-module)/forms/collection/logs/page";
-import LogPage from "@/app/(forms-module)/forms/collection/logs/[closureId]/page";
+import LogsPage from "@/app/(collection-module)/collection/logs/page";
+import LogPage from "@/app/(collection-module)/collection/logs/[closureId]/page";
 import { CollectionLogsList, CollectionLogDetail, LOGS_EMPTY_MESSAGE, exactAmount } from "@/components/collections/collection-logs";
-import { navFor } from "@/components/forms/forms-sidebar";
+import { navFor } from "@/components/collections/collection-sidebar";
 import { isSensitivePermission, permissionFieldDef } from "@/db/enums";
 import { FIELD_CODE_DEFAULTS, resolveFieldAccess } from "@/lib/access/field-permissions";
 import type { ClosureRow } from "@/lib/queries/collection-closures";
@@ -143,12 +160,12 @@ describe("Collection Logs page — access", () => {
 
   it("the navigation shows Collection Logs only when the server says so", () => {
     const hrefs = (items: ReadonlyArray<{ href: string }>) => items.map((i) => String(i.href));
-    expect(hrefs(navFor(false, true))).not.toContain("/forms/collection/logs");
-    expect(hrefs(navFor(true, true))).not.toContain("/forms/collection/logs");
-    expect(hrefs(navFor(false, true, true))).toContain("/forms/collection/logs");
-    expect(hrefs(navFor(true, true, true)).slice(-2)).toEqual(["/forms/collection/commitments", "/forms/collection/logs"]);
-    expect(hrefs(navFor(false, false, true))).toContain("/forms/collection/logs");
-    const layout = read("app/(forms-module)/forms/layout.tsx");
+    expect(hrefs(navFor(false, true))).not.toContain("/collection/logs");
+    expect(hrefs(navFor(true, true))).not.toContain("/collection/logs");
+    expect(hrefs(navFor(false, true, true))).toContain("/collection/logs");
+    expect(hrefs(navFor(true, true, true)).slice(-2)).toEqual(["/collection/commitments", "/collection/logs"]);
+    expect(hrefs(navFor(false, false, true))).toContain("/collection/logs");
+    const layout = read("app/(collection-module)/collection/layout.tsx");
     expect(layout).toMatch(/showLogs = caps\["collection\.logs\.view"\]/);
   });
 });
@@ -190,7 +207,7 @@ describe("Collection Logs page — states", () => {
     const rows = screen.getAllByRole("row").slice(1);
     expect(rows).toHaveLength(2);
     const a = within(rows[0]!);
-    expect(a.getByRole("link", { name: "Alpha Traders" }).getAttribute("href")).toBe(`/forms/collection/logs/${ID}`);
+    expect(a.getByRole("link", { name: "Alpha Traders" }).getAttribute("href")).toBe(`/collection/logs/${ID}`);
     expect(rows[0]!.textContent).toContain("27-Oct-2026 · 01:35 PM IST");
     expect(rows[0]!.textContent).toContain("Outstanding reached zero");
     expect(rows[0]!.textContent).toContain("₹0");
@@ -312,8 +329,8 @@ describe("no archival or Tracker filtering is introduced", () => {
       .sort();
     expect(out).toEqual(
       [
-        "app/(forms-module)/forms/collection/logs/[closureId]/page.tsx",
-        "app/(forms-module)/forms/collection/logs/page.tsx",
+        "app/(collection-module)/collection/logs/[closureId]/page.tsx",
+        "app/(collection-module)/collection/logs/page.tsx",
         "components/collections/collection-logs.tsx",
         "db/migrations/0119_collection_closures.sql",
         "db/schema.ts",
@@ -326,12 +343,12 @@ describe("no archival or Tracker filtering is introduced", () => {
 
   it("the Tracker, its loader, the Tally Bulk Upload and the Commitments page are untouched by closure logic", () => {
     for (const f of [
-      "app/(forms-module)/forms/collection/tracker/page.tsx",
-      "app/(forms-module)/forms/collection/tracker/bulk-actions.ts",
+      "app/(collection-module)/collection/tracker/page.tsx",
+      "app/(collection-module)/collection/tracker/bulk-actions.ts",
       "lib/collections/load.ts",
       "lib/collections/derive.ts",
       "lib/collections/balances/plan.ts",
-      "app/(forms-module)/forms/collection/commitments/page.tsx",
+      "app/(collection-module)/collection/commitments/page.tsx",
       "lib/queries/collection-review.ts",
     ]) {
       expect(read(f), f).not.toMatch(/closure|Closure|logs\.view/);
