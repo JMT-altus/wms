@@ -8,6 +8,8 @@ import {
   listEscalationHistory,
 } from "@/lib/queries/collection-closures";
 import { listFollowUps } from "@/lib/queries/collection-followups";
+import { inScope } from "@/lib/collections/scope";
+import { collectionScopeFor } from "@/lib/collections/scope-server";
 import { commentsOf, followUpsByParty, partyKey } from "@/lib/collections/derive";
 import { CollectionLogDetail, LogsLoadError, LogsShell, type LogHistory } from "@/components/collections/collection-logs";
 
@@ -38,8 +40,11 @@ export default async function CollectionLogPage({ params }: { params: Promise<{ 
     getCollectionCapability("collection.escalation.review"),
   ]);
 
+  const scope = await collectionScopeFor();
   const loaded = await (async () => {
     const found = await getClosure(viewer, closureId);
+    // A closure of a company outside the signed-in person's scope reads as "not found".
+    if (found.row && !inScope(scope, found.row.collectionPerson)) return { found: { ...found, row: null }, episodes: [], history: null };
     if (!found.row) return { found, episodes: [], history: null };
     const companyId = found.row.companyId;
     const [episodes, followUps, confirmations, commitments, escalations] = await Promise.all([

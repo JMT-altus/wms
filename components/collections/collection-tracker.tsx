@@ -7,7 +7,7 @@ import { ArrowDown, ArrowUp, Search, Upload } from "lucide-react";
 import { CenterDialog } from "@/components/ui/center-dialog";
 import { formatInr } from "@/lib/format";
 import { NOT_CONNECTED_MESSAGE, type TransactionSourceInfo } from "@/lib/collections/source";
-import { hiddenZeroBalanceNote } from "@/lib/collections/balances/visibility";
+import { orderZeroBalanceLast, zeroBalanceNote } from "@/lib/collections/balances/visibility";
 import { partyOverdue } from "@/lib/collections/overdue";
 import { OverdueBadge, overdueRowStyle, useBusinessToday } from "./overdue-display";
 import { UNASSIGNED_PERSON, filterRows, personOf, sortRows, type PartyRow, type SortKey, type TrackerFilters } from "@/lib/collections/derive";
@@ -15,7 +15,7 @@ import { PartyDetailDialog } from "./party-detail-dialog";
 import { TrackerComments } from "./tracker-comments";
 import { SalespersonScorecard } from "./salesperson-scorecards";
 import type { ScorecardView } from "@/lib/collections/scorecards";
-import { ConfirmationControl, EscalateControl } from "./review-controls";
+import { ConfirmedAmountControl, EscalateControl } from "./review-controls";
 import { CoordinatorControl } from "./coordinator-control";
 // Loaded only when Bulk Upload is opened, so the Tracker page itself stays as light as before.
 const TrackerBulkUpload = React.lazy(() => import("./tracker-bulk-upload").then((m) => ({ default: m.TrackerBulkUpload })));
@@ -46,6 +46,7 @@ export function CollectionTracker({
   storageReady,
   today: initialToday,
   emptyMessage = NOT_CONNECTED_MESSAGE,
+  scopeNote,
   transactionSource,
   canSeeCommitments = false,
   canEditCommitments = false,
@@ -57,8 +58,8 @@ export function CollectionTracker({
   canImportBalances = false,
   canAddMasterCompanies = false,
   balancesProblem,
-  hiddenZeroBalance = 0,
   reviewStorageReady = true,
+  amountStorageReady = true,
   coordinatorEditor,
   reviewQueue,
   setupHints = [],
@@ -70,6 +71,8 @@ export function CollectionTracker({
   today: string;
   /** Why the list is empty when nothing is connected (from the loader). */
   emptyMessage?: string;
+  /** Whose companies these are, when not every company (a linked Sales Coordinator's own) — decided on the server. */
+  scopeNote?: string;
   /** The transaction source, so the detail can say when none is approved. */
   transactionSource?: TransactionSourceInfo;
   /** collection.commitments.view — decided on the server from the signed session, like every flag below. */
@@ -97,10 +100,10 @@ export function CollectionTracker({
   canAddMasterCompanies?: boolean;
   /** Set (to the database error code) when the uploaded Debit / Credit couldn't be read: a permission or configuration problem. Everything else still works. */
   balancesProblem?: string;
-  /** How many Collection Master companies the loader left out because their Debit and Credit are both zero in the latest upload. */
-  hiddenZeroBalance?: number;
-  /** False while migration 0115 isn't applied: the confirmation/escalation controls are disabled. */
+  /** False while migration 0115 isn't applied: the escalation control is disabled. */
   reviewStorageReady?: boolean;
+  /** False while migration 0123 isn't applied: the confirmed-amount field is read-only and says so. */
+  amountStorageReady?: boolean;
   /**
    * Given only to holders of collection.coordinator.assign (decided on the
    * server): lets them set or correct a Sales Coordinator, choosing from these
@@ -132,10 +135,13 @@ export function CollectionTracker({
     () => [...new Set(rows.map(personOf).filter((p): p is string => Boolean(p)))].sort((a, b) => a.localeCompare(b)),
     [rows],
   );
+  // Filter, sort, THEN put the zero-balance companies last (each group keeps the chosen sort), THEN page — so a page
+  // never shows a ₹0/₹0 company above a normal one, and the count is of exactly what is listed.
   const shown = React.useMemo(
-    () => sortRows(filterRows(rows, filters, today), sort.key, sort.dir),
+    () => orderZeroBalanceLast(sortRows(filterRows(rows, filters, today), sort.key, sort.dir)),
     [rows, filters, sort, today],
   );
+  const zeroBalanceCount = React.useMemo(() => rows.filter((r) => r.zeroBalance).length, [rows]);
   const pages = Math.max(1, Math.ceil(shown.length / PAGE));
   const safePage = Math.min(page, pages - 1);
   const slice = shown.slice(safePage * PAGE, safePage * PAGE + PAGE);
@@ -189,9 +195,14 @@ export function CollectionTracker({
           </p>
         </div>
       )}
-      {hiddenZeroBalance > 0 && (
-        <p aria-label="Companies not listed" className="mb-3 rounded-lg border border-hairline bg-[#F8FAFD] px-3 py-2 text-[12.5px] text-ink-subtle">
-          {hiddenZeroBalanceNote(hiddenZeroBalance)}
+      {scopeNote && (
+        <p aria-label="Companies shown" className="mb-3 rounded-lg border border-hairline bg-[#F8FAFD] px-3 py-2 text-[12.5px] font-semibold text-ink-soft">
+          {scopeNote}
+        </p>
+      )}
+      {zeroBalanceCount > 0 && (
+        <p aria-label="Empty-balance companies" className="mb-3 rounded-lg border border-hairline bg-[#F8FAFD] px-3 py-2 text-[12.5px] text-ink-subtle">
+          {zeroBalanceNote(zeroBalanceCount)}
         </p>
       )}
       {setupHints.length > 0 && (
@@ -268,7 +279,7 @@ export function CollectionTracker({
           </button>
         )}
         <span className={`text-[12.5px] text-ink-subtle tabular-nums${canImportBalances ? "" : " ml-auto"}`}>
-          {connected ? `${shown.length} part${shown.length === 1 ? "y" : "ies"}` : ""}
+          {connected ? `${shown.length} part${shown.length === 1 ? "y" : "ies"}${shown.some((r) => r.zeroBalance) ? ` (${shown.filter((r) => r.zeroBalance).length} with no balance, shown last)` : ""}` : ""}
         </span>
       </div>
 
@@ -325,7 +336,9 @@ export function CollectionTracker({
                 <tr
                   key={r.partyName}
                   data-overdue={od.level}
-                  className={`border-t border-[#EEF1F6] ${od.level !== "none" ? "" : "hover:bg-[#F7F9FD]"}`}
+                  data-zero-balance={r.zeroBalance ? "true" : undefined}
+                  // An empty-balance company (no Debit or Credit in the confirmed uploads) is muted, not removed: every control in the row still works.
+                  className={`border-t border-[#EEF1F6] ${od.level !== "none" ? "" : "hover:bg-[#F7F9FD]"} ${r.zeroBalance ? "opacity-60 saturate-50 hover:opacity-100" : ""}`}
                   style={overdueRowStyle(od.level)}
                 >
                   <td className="px-3 py-2">
@@ -336,6 +349,11 @@ export function CollectionTracker({
                     >
                       {r.partyName}
                     </button>
+                    {r.zeroBalance && (
+                      <span className="ml-2 inline-block rounded-pill px-1.5 py-px align-middle text-[10.5px] font-bold uppercase tracking-[0.04em] text-ink-subtle" style={{ border: "1px solid var(--color-hairline-strong)" }} title="No Debit or Credit in the confirmed uploads">
+                        No balance
+                      </span>
+                    )}
                     <OverdueBadge level={od.level} daysOverdue={od.daysOverdue} />
                   </td>
                   <td className="px-3 py-2 text-right tabular-nums">{money(r.debit)}</td>
@@ -362,14 +380,7 @@ export function CollectionTracker({
                   </td>
                   <td className="px-3 py-2">
                     {r.masterId ? (
-                      <ConfirmationControl
-                        companyId={r.masterId}
-                        companyName={r.partyName}
-                        outstanding={r.outstanding}
-                        current={r.confirmation ?? null}
-                        storageReady={reviewStorageReady}
-                        canSet={canSetConfirmation}
-                      />
+                      <ConfirmedAmountControl companyId={r.masterId} companyName={r.partyName} current={r.confirmedAmount ?? null} storageReady={amountStorageReady} canSet={canSetConfirmation} />
                     ) : (
                       <span className="text-ink-subtle">—</span>
                     )}

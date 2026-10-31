@@ -2,7 +2,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 
-// The Tracker's confirmation dropdown and escalate button, and the owner's
+// The Tracker's Collection Amount Confirmation column (now the confirmed-amount field; the Yes/No control is kept and tested
+// on its own), its escalate button, and the owner's
 // escalation column, with their server actions MOCKED: the UI shows only what
 // the server answered, never a default "Yes".
 const a = vi.hoisted(() => ({ confirm: vi.fn(), escalate: vi.fn(), close: vi.fn(), refresh: vi.fn() }));
@@ -11,6 +12,7 @@ vi.mock("@/lib/toast", () => ({ fireToast: vi.fn() }));
 vi.mock("@/app/(collection-module)/collection/actions", () => ({
   saveFollowUp: vi.fn(),
   setCollectionConfirmation: (...x: unknown[]) => a.confirm(...x),
+  setConfirmedAmount: vi.fn(),
   escalateForReview: (...x: unknown[]) => a.escalate(...x),
 }));
 vi.mock("@/app/(collection-module)/collection/commitments/actions", () => ({
@@ -20,6 +22,7 @@ vi.mock("@/app/(collection-module)/collection/commitments/actions", () => ({
 }));
 
 import { CollectionTracker } from "@/components/collections/collection-tracker";
+import { ConfirmationControl } from "@/components/collections/review-controls";
 import { CommitmentsTable, type CommitmentView } from "@/components/collections/commitments-table";
 import { buildRows, type PartyRow } from "@/lib/collections/derive";
 
@@ -35,19 +38,33 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 
+/* The Yes/No control is kept for its history and the review page, but the Tracker row now shows the confirmed-amount
+   field (tests/unit/collection-confirmed-amount.test.tsx), so the Yes/No tests render the control on its own. */
+const yesNo = (over: Partial<Parameters<typeof ConfirmationControl>[0]> = {}) =>
+  render(<ConfirmationControl companyId={CO} companyName="Alpha Traders" outstanding={125000} current={null} storageReady canSet {...over} />);
 const select = () => screen.getByLabelText("Collection Amount Confirmation for Alpha Traders") as HTMLSelectElement;
 
-describe("Collection Amount Confirmation (Tracker)", () => {
-  it("starts at Not set — never a default Yes", () => {
+describe("Collection Amount Confirmation — the Tracker column", () => {
+  it("keeps its heading and shows the confirmed-amount text field, not the Yes/No dropdown", () => {
     render(<CollectionTracker rows={[party()]} connected storageReady today="2026-10-19" />);
     expect(screen.getByRole("columnheader", { name: "Collection Amount Confirmation" })).toBeTruthy();
+    const field = screen.getByLabelText("Collection Amount Confirmation for Alpha Traders") as HTMLInputElement;
+    expect(field.tagName).toBe("INPUT");
+    expect(field.placeholder).toBe("Enter confirmed amount");
+    expect(screen.queryByRole("combobox", { name: /Collection Amount Confirmation/ })).toBeNull();
+  });
+});
+
+describe("Collection Amount Confirmation — the Yes/No control (kept, not in the Tracker row)", () => {
+  it("starts at Not set — never a default Yes", () => {
+    yesNo();
     expect(select().value).toBe("");
     expect(select().selectedOptions[0]!.textContent).toBe("Not set");
     expect(select().disabled).toBe(false);
   });
 
   it("is unavailable (disabled, explained) when the source supplies no outstanding amount", () => {
-    render(<CollectionTracker rows={[party({ outstanding: null })]} connected storageReady today="2026-10-19" />);
+    yesNo({ outstanding: null });
     expect(select().disabled).toBe(true);
     expect(select().selectedOptions[0]!.textContent).toBe("Unavailable");
     expect(screen.getByText("No outstanding amount from an approved source.")).toBeTruthy();
@@ -55,33 +72,37 @@ describe("Collection Amount Confirmation (Tracker)", () => {
 
   it("saving calls the server with the chosen value and refreshes; a refusal is shown and nothing changes", async () => {
     a.confirm.mockResolvedValue({ ok: true });
-    render(<CollectionTracker rows={[party()]} connected storageReady today="2026-10-19" />);
+    yesNo();
     fireEvent.change(select(), { target: { value: "no" } });
     await waitFor(() => expect(a.confirm).toHaveBeenCalledWith({ companyId: CO, value: "no" }));
     await waitFor(() => expect(a.refresh).toHaveBeenCalled());
     cleanup();
     a.confirm.mockResolvedValue({ ok: false, error: "There is no outstanding amount from an approved transaction source to confirm for this company." });
-    render(<CollectionTracker rows={[party()]} connected storageReady today="2026-10-19" />);
+    yesNo();
     fireEvent.change(select(), { target: { value: "yes" } });
     expect((await screen.findByRole("alert")).textContent).toMatch(/no outstanding amount/);
   });
 
-  it("every Tracker user sees the current value and who set it", () => {
-    render(<CollectionTracker rows={[party({ confirmation: { value: "yes", recordedAt: new Date("2026-10-19T05:00:00Z"), recordedByName: "Asha" } })]} connected storageReady today="2026-10-19" />);
+  it("shows the current value and who set it", () => {
+    yesNo({ current: { value: "yes", recordedAt: new Date("2026-10-19T05:00:00Z"), recordedByName: "Asha" } });
     expect(select().value).toBe("yes");
     expect(screen.getByText(/Asha, 19 Oct/)).toBeTruthy();
   });
 
-  it("is disabled while migration 0115 isn't applied", () => {
-    render(<CollectionTracker rows={[party()]} connected storageReady today="2026-10-19" reviewStorageReady={false} />);
+  it("is disabled while migration 0115 isn't applied, as is the Tracker's escalate button", () => {
+    yesNo({ storageReady: false });
     expect(select().disabled).toBe(true);
-    expect((screen.getByRole("button", { name: "Escalate Alpha Traders to Mihir Sir" }) as HTMLButtonElement).disabled).toBe(true);
+    cleanup();
+    render(<CollectionTracker rows={[party()]} connected storageReady today="2026-10-19" reviewStorageReady={false} />);
+    expect((screen.getByRole("button", { name: "Escalate Alpha Traders" }) as HTMLButtonElement).disabled).toBe(true);
   });
 });
 
-describe("Escalate to Mihir Sir (Tracker)", () => {
+describe("Escalate (Tracker)", () => {
   const escalateWith = async (reason: string) => {
-    fireEvent.click(screen.getByRole("button", { name: "Escalate Alpha Traders to Mihir Sir" }));
+    const btn = screen.getByRole("button", { name: "Escalate Alpha Traders" });
+    expect(btn.textContent).toBe("Escalate");
+    fireEvent.click(btn);
     const dialog = await screen.findByRole("dialog");
     fireEvent.change(within(dialog).getByLabelText(/Reason for Escalation/), { target: { value: reason } });
     fireEvent.click(within(dialog).getByRole("button", { name: "Submit" }));

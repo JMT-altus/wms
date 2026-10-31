@@ -21,6 +21,9 @@ const h = vi.hoisted(() => {
   return { db: null as unknown, me: null as null | Me, claims: null as null | { email?: string; email_verified?: boolean } };
 });
 vi.mock("server-only", () => ({}));
+// Company visibility (lib/collections/scope-server.ts) is not under test here: every company is in scope. The real
+// resolver, over real coordinator links, is covered by tests/integration/collection-tracker-scope.db.test.ts.
+vi.mock("@/lib/collections/scope-server", () => ({ collectionScopeFor: async () => ({ kind: "all" }) }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/rate-limit", () => ({ rateLimitOrError: () => null }));
 vi.mock("@/lib/format", async (orig) => ({ ...(await orig<typeof import("@/lib/format")>()), localDateString: () => "2026-10-21" }));
@@ -99,7 +102,7 @@ async function freshDb(migrations: string[]) {
     grant usage on schema public to anon, authenticated, app_owner, app_other;
     grant all on all tables in schema public to anon, authenticated, app_other;
     grant select, insert, update, references on employees, customer_masters to app_owner;
-    grant select on departments, employee_departments, field_permission_grants to app_owner;
+    grant select on departments, employee_departments, field_permission_grants, module_access_grants to app_owner;
   `);
   for (const t of TABLES) {
     if ((await made.pg.query<{ r: string | null }>(`select to_regclass('public.${t}')::text as r`)).rows[0]!.r) {
@@ -202,7 +205,7 @@ describe("after 0116", () => {
     const again = await master.previewCollectionMaster(body([["Alpha Traders", "MANGESH", "30 days"]]));
     expect(again.ok && again.preview.storageReady && again.preview.rows[0]!.status).toBe("unchanged");
     expect((await queries.listRecentImports(5)).map((i) => i.source)).toEqual(["file"]);
-    const companies = (await load.loadCollectionParties()).parties;
+    const companies = (await load.loadCollectionParties({ kind: "all" })).parties;
     ids.alpha = companies.find((p) => p.partyName === "Alpha Traders")!.masterId!;
     ids.beta = companies.find((p) => p.partyName === "Beta Corp")!.masterId!;
     expect(companies.map((p) => [p.partyName, p.collectionPerson, p.paymentTerms])).toEqual([
@@ -223,7 +226,7 @@ describe("after 0116", () => {
     asGranted();
     expect((await queries.listCoordinatorOptions()).labels).toEqual(["MANGESH"]);
     expect(await tracker.assignSalesCoordinator({ companyId: ids.beta, coordinatorLabel: "MANGESH", expected: null })).toEqual({ ok: true, changed: true });
-    expect((await load.loadCollectionParties()).parties.find((p) => p.masterId === ids.beta)?.collectionPerson).toBe("MANGESH");
+    expect((await load.loadCollectionParties({ kind: "all" })).parties.find((p) => p.masterId === ids.beta)?.collectionPerson).toBe("MANGESH");
     expect((await queries.listRecentImports(1))[0]).toMatchObject({ source: "tracker-assignment", importedByName: "Granted" });
   });
 

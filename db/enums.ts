@@ -929,7 +929,7 @@ export const PERMISSION_FIELDS = [
   {
     key: "collection.confirmation.set",
     label: "Collections — Amount confirmation",
-    hint: "Set the Collection Amount Confirmation (Yes / No).",
+    hint: "Set the Collection Amount Confirmation: enter the confirmed amount in the Tracker (and the Yes / No answer where an approved source supplies the outstanding amount).",
     defaultAllowed: false,
     group: "Collections",
   },
@@ -951,9 +951,12 @@ export const PERMISSION_FIELDS = [
     superAdminBypass: false,
   },
   {
+    // The Commitment section inside the Collection Tracker's company popup
+    // (view). Independent of the Commitments & Escalations PAGE below: this
+    // never opens that page, and that page's key never opens this section.
     key: "collection.commitments.view",
-    label: "Collections — View commitments",
-    hint: "See committed amounts and dates.",
+    label: "Collection Tracker — Company Popup — Commitment Section: View",
+    hint: "Show the Commitment section in a company's popup in the Collection Tracker: commitment status, committed amount, committed date and Tracker comments. Does not open the Commitments & Escalations page.",
     defaultAllowed: false,
     group: "Collections",
     sensitive: true,
@@ -962,8 +965,23 @@ export const PERMISSION_FIELDS = [
   },
   {
     key: "collection.commitments.edit",
-    label: "Collections — Record commitments",
-    hint: "Record a committed amount and date for a company.",
+    label: "Collection Tracker — Company Popup — Commitment Section: Record",
+    hint: "Record a new committed amount and date from a company's popup in the Collection Tracker. Give with the View permission above to also see what was recorded.",
+    defaultAllowed: false,
+    group: "Collections",
+    sensitive: true,
+    adminBypass: false,
+    superAdminBypass: false,
+  },
+  {
+    // The separate Commitments & Escalations page (Collection rail). Opening
+    // it needs THIS key; what the page shows still follows the popup View key
+    // (commitment columns) and Review escalations (escalation column). Explicit
+    // grant only — never implied by admin or super-admin status, and never by
+    // the popup keys.
+    key: "collection.commitments.page",
+    label: "Collection — Commitments & Escalations Page Access",
+    hint: "Open the Commitments & Escalations page from the Collection sidebar (all companies' commitments and open escalations). Separate from the company popup's Commitment section: holding one never gives the other.",
     defaultAllowed: false,
     group: "Collections",
     sensitive: true,
@@ -1031,6 +1049,18 @@ export const PERMISSION_FIELDS = [
     hint: "With 'Approve or reject' (and 'View queue'): see and decide pending requests assigned to other approvers, or to nobody. Never your own.",
     defaultAllowed: false,
     group: "Leave approvals",
+    sensitive: true,
+    adminBypass: false,
+    superAdminBypass: false,
+  },
+  // ── Tally Data Import. Writes accounting history, so it is an explicit grant
+  // made by a super-admin, never implied by admin status.
+  {
+    key: "tally.import",
+    label: "Tally Data Import — Upload and import",
+    hint: "Validate Tally exports and import them into the WMS. Viewing the import history needs only the Forms module (admins).",
+    defaultAllowed: false,
+    group: "Tally Data Import",
     sensitive: true,
     adminBypass: false,
     superAdminBypass: false,

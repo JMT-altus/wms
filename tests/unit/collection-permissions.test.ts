@@ -6,7 +6,7 @@ import { FIELD_CODE_DEFAULTS, resolveFieldAccess, type ResolvedFieldGrants } fro
 // that the original field permissions resolve exactly as before.
 
 const ORDINARY = ["collection.view", "collection.master.import", "collection.followup.write", "collection.confirmation.set", "collection.escalation.create", "collection.logs.view"] as const;
-const SENSITIVE = ["collection.coordinator.assign", "collection.commitments.view", "collection.commitments.edit", "collection.escalation.review", "collection.escalation.close", "collection.balances.import"] as const;
+const SENSITIVE = ["collection.coordinator.assign", "collection.commitments.view", "collection.commitments.edit", "collection.commitments.page", "collection.escalation.review", "collection.escalation.close", "collection.balances.import"] as const;
 const ORIGINAL = ["enquiry.quantity", "enquiry.avg_rate", "forecast.quantity", "forecast.avg_rate", "master.product", "master.customer"] as const;
 
 const none = (): ResolvedFieldGrants => ({ everyone: {}, department: {}, employee: {} });

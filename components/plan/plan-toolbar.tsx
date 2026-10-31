@@ -101,7 +101,7 @@ export function PlanToolbar({ level, board = false, counts, chip, onChip, onFull
             className="font-bold"
             style={{ fontSize: 20, lineHeight: 1.2, letterSpacing: "-0.012em", color: "#0B2250" }}
           >
-            {board ? "Project Plan" : KIND_LABEL_PLURAL[LEVEL_KIND[level]]}
+            {board ? "Project" : KIND_LABEL_PLURAL[LEVEL_KIND[level]]}
           </div>
           <p className="mt-0.5 text-[13px]" style={{ color: "var(--color-ink-muted)" }}>
             {board

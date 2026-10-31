@@ -70,11 +70,9 @@ export async function DashboardHeader({
   // that belong to no module (the hub, admin, master setup) keep the original
   // blue → teal, which is the app's own accent rather than any module's.
   //
-  // Two areas own a rail accent without owning a module: Forms (rose, from
-  // its hub tile) sits inside WMS's routes, and Master Setup (amber) sits
-  // outside every module. Both render this header directly under their rail,
-  // so without the override the corner where the two lines meet would change
-  // colour mid-turn.
+  // Forms keeps its rose here and Master Setup (amber) sits outside every
+  // module. Both render this header directly under their rail, so without the
+  // override the corner where the two lines meet would change colour mid-turn.
   const mod = moduleId ? (MODULES.find((m) => m.id === moduleId) ?? null) : null;
   const areaAccent =
     pathname?.startsWith("/forms") === true ? { from: "#FB7185", to: "#BE123C" }

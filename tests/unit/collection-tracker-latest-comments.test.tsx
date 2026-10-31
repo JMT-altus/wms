@@ -18,6 +18,9 @@ const h = vi.hoisted(() => ({
   refresh: vi.fn(),
 }));
 vi.mock("server-only", () => ({}));
+// Company visibility (lib/collections/scope-server.ts) is not under test here: every company is in scope. The real
+// resolver, over real coordinator links, is covered by tests/integration/collection-tracker-scope.db.test.ts.
+vi.mock("@/lib/collections/scope-server", () => ({ collectionScopeFor: async () => ({ kind: "all" }) }));
 // Collection is its own module now (Admin → Access). Its gate is mocked to follow the session's admin flag — the
 // admin bypass — so these tests keep exercising the collection.* capabilities exactly as before.
 vi.mock("@/lib/auth/module-access", async () => {
@@ -60,6 +63,7 @@ vi.mock("@/lib/collections/load", () => ({
 }));
 vi.mock("@/lib/queries/collection-followups", () => ({ listFollowUps: (...a: unknown[]) => h.listFollowUps(...a) }));
 vi.mock("@/lib/queries/collection-review", () => ({
+  latestConfirmedAmounts: async () => ({ storageReady: true, byCompany: new Map() }),
   latestConfirmations: async () => ({ storageReady: true, byCompany: new Map() }),
   openEscalations: async () => ({ storageReady: true, byCompany: new Map() }),
 }));

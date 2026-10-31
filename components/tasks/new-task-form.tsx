@@ -631,7 +631,7 @@ export function NewTaskForm({ employees, clients, subjects, projectNodes = [], d
         }
         if (!leafName.trim()) {
           setError(
-            `Give this ${KIND_LABEL[leafKind].toLowerCase()} a name — it is what the Project Plan will show.`,
+            `Give this ${KIND_LABEL[leafKind].toLowerCase()} a name — it is what the Project module will show.`,
           );
           return;
         }
@@ -1168,7 +1168,7 @@ export function NewTaskForm({ employees, clients, subjects, projectNodes = [], d
                 className="-mt-1 text-[12.5px]"
                 style={{ color: "var(--color-ink-muted)" }}
               >
-                This is the row the Project Plan shows under{" "}
+                This is the row the Project module shows under{" "}
                 <strong>
                   {resultChoices.find((r) => r.id === resultPick)?.name ??
                     UNCLASSIFIED_RESULT}

@@ -8,11 +8,12 @@ import { requireCollectionCapability } from "@/lib/auth/capability";
 import { rateLimitOrError } from "@/lib/rate-limit";
 import { localDateString } from "@/lib/format";
 import { loadCollectionParties } from "@/lib/collections/load";
+import { collectionScopeFor } from "@/lib/collections/scope-server";
 import { partyKey } from "@/lib/collections/derive";
 import { DeleteCommentInput, EditCommentInput, FollowUpInput, followUpDateError } from "@/lib/collections/validate";
 import { COMMENT_DELETED_EVENT, COMMENT_EDITED_EVENT } from "@/lib/queries/collection-followups";
-import { CONFIRMATION_UNAVAILABLE, ConfirmationInput, EscalationInput, confirmationAvailable } from "@/lib/collections/review";
-import { escalateCompany, isMissingColumn, recordConfirmation } from "@/lib/queries/collection-review";
+import { CONFIRMATION_UNAVAILABLE, ConfirmationInput, ConfirmedAmountInput, EscalationInput, confirmationAvailable, parseConfirmedAmount } from "@/lib/collections/review";
+import { escalateCompany, isMissingColumn, recordConfirmation, recordConfirmedAmount } from "@/lib/queries/collection-review";
 import { assignCoordinatorLabel, isMissingTable } from "@/lib/queries/collection-master";
 import { CoordinatorAssignmentInput } from "@/lib/collections/coordinator";
 
@@ -45,7 +46,8 @@ export async function saveFollowUp(input: unknown): Promise<ActionResult> {
   const dateError = followUpDateError(nextFollowupDate, localDateString("Asia/Kolkata"));
   if (dateError) return { ok: false, error: dateError };
 
-  const source = await loadCollectionParties();
+  // Only a party inside the caller's scope (their own companies; every company for a super-admin).
+  const source = await loadCollectionParties(await collectionScopeFor());
   const party = source.parties.find((p) => partyKey(p.partyName) === partyKey(partyName));
   if (!party) {
     return { ok: false, error: "That party isn't in the collection data, so nothing was saved." };
@@ -243,7 +245,7 @@ export async function setCollectionConfirmation(input: unknown): Promise<ActionR
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
   const { companyId, value } = parsed.data;
 
-  const source = await loadCollectionParties();
+  const source = await loadCollectionParties(await collectionScopeFor());
   const party = source.parties.find((p) => p.masterId === companyId);
   if (!party) return { ok: false, error: "That company isn't in the Collection Master, so nothing was saved." };
   // Only an amount the approved transaction source actually supplies can be confirmed.
@@ -262,6 +264,42 @@ export async function setCollectionConfirmation(input: unknown): Promise<ActionR
 }
 
 const REASON_NOT_READY = "Escalation reasons can't be stored yet (migration 0118 is pending), so nothing was escalated.";
+const AMOUNT_NOT_READY = "Confirmed amounts can't be stored yet (migration 0123 is pending), so nothing was saved.";
+
+/**
+ * Enter (append) the confirmed amount for a company — the text field under
+ * Collection Amount Confirmation. Needs collection.confirmation.set, the same
+ * capability as the Yes/No answer, checked from the signed session before
+ * anything is read. The amount is validated HERE (rupees, exact to the paise,
+ * more than zero, at most 2 decimals) whatever the field did; the company must
+ * be in the Collection Master. Append-only: every entry stays on record with
+ * who entered it and when. This never writes the Yes/No answer and verifies
+ * nothing — it is a separate value.
+ */
+export async function setConfirmedAmount(input: unknown): Promise<ActionResult> {
+  const me = await requireCollectionCapability("collection.confirmation.set");
+  const limited = rateLimitOrError(me.employeeId, "write");
+  if (limited) return limited;
+  const parsed = ConfirmedAmountInput.safeParse(input);
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
+  const amount = parseConfirmedAmount(parsed.data.amount);
+  if (!amount.ok) return { ok: false, error: amount.error };
+  const { companyId } = parsed.data;
+
+  const source = await loadCollectionParties(await collectionScopeFor());
+  if (!source.parties.some((p) => p.masterId === companyId)) return { ok: false, error: "That company isn't in the Collection Master, so nothing was saved." };
+
+  try {
+    await recordConfirmedAmount(me, companyId, amount.text);
+  } catch (err) {
+    if (isMissingTable(err)) return { ok: false, error: AMOUNT_NOT_READY };
+    console.error("[collection-review] confirmed amount save failed");
+    return { ok: false, error: "The confirmed amount could not be saved, so nothing was changed. Please try again." };
+  }
+  revalidatePath("/collection/tracker");
+  revalidatePath("/collection/commitments");
+  return { ok: true };
+}
 
 /**
  * Escalate a company for review, with a Reason for Escalation. Every employee
@@ -279,7 +317,7 @@ export async function escalateForReview(input: unknown): Promise<ActionResult> {
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
   const { companyId, reason } = parsed.data;
 
-  const source = await loadCollectionParties();
+  const source = await loadCollectionParties(await collectionScopeFor());
   if (!source.parties.some((p) => p.masterId === companyId)) {
     return { ok: false, error: "That company isn't in the Collection Master, so nothing was escalated." };
   }
@@ -322,6 +360,11 @@ export async function assignSalesCoordinator(input: unknown): Promise<ActionResu
 
   const p = CoordinatorAssignmentInput.safeParse(input);
   if (!p.success) return { ok: false, error: p.error.issues[0]?.message ?? "Choose a Sales Coordinator." };
+  // Only a company inside the caller's scope can be reassigned (a Sales Coordinator may hand their own company on; a
+  // super-admin any). Afterwards the company shows in the new coordinator's Tracker and leaves the previous one's.
+  const scoped = await loadCollectionParties(await collectionScopeFor());
+  // (With the Master storage missing the loader lists nothing; that case is reported by the assignment itself below.)
+  if (scoped.masterReady !== false && !scoped.parties.some((c) => c.masterId === p.data.companyId)) return { ok: false, error: "That company isn't in the Collection Master, so nothing was saved." };
 
   try {
     const outcome = await assignCoordinatorLabel(proof, p.data);

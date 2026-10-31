@@ -194,10 +194,10 @@ describe("Project Views — navy and white, thin rules", () => {
   });
 });
 
-describe("Project Plan rail", () => {
+describe("Project rail", () => {
   it("keeps every item, label, hint and route", () => {
     render(<PlanSidebar userName="Asha" />);
-    const nav = screen.getByRole("navigation", { name: "Project Plan" });
+    const nav = screen.getByRole("navigation", { name: "Project" });
     const links = within(nav).getAllByRole("link");
     expect(links.map((l) => l.getAttribute("href"))).toEqual([
       "/project-plan/views", "/project-plan", "/project-plan/milestones", "/project-plan/results",
@@ -215,7 +215,7 @@ describe("Project Plan rail", () => {
     expect(active.style.background).not.toMatch(/gradient|225, 6, 0|E10600/i);
     expect(active.style.background).toMatch(/rgba\(127, 176, 255/);
     // The label pill is not red either.
-    const pill = screen.getByText("Project Plan", { selector: "p" });
+    const pill = screen.getByText("Project", { selector: "p" });
     expect(pill.style.background).not.toMatch(/gradient|225, 6, 0/i);
   });
 

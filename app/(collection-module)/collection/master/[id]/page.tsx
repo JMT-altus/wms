@@ -4,6 +4,7 @@ import type { Route } from "next";
 import { ArrowLeft } from "lucide-react";
 import { requireCollectionCapability } from "@/lib/auth/capability";
 import { getMasterCompany } from "@/lib/queries/collection-master";
+import { collectionScopeFor } from "@/lib/collections/scope-server";
 import { formatDate } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -24,7 +25,8 @@ export default async function CollectionMasterCompanyPage({ params }: { params: 
   await requireCollectionCapability("collection.view");
   const { id } = await params;
   if (!UUID.test(id)) notFound();
-  const { storageReady, company: c } = await getMasterCompany(id);
+  // A company outside the signed-in person's scope reads as "not found" — a guessed id reveals nothing.
+  const { storageReady, company: c } = await getMasterCompany(id, await collectionScopeFor());
   if (!storageReady || !c) notFound();
 
   return (

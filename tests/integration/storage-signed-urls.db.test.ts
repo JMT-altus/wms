@@ -185,6 +185,10 @@ describe("getAttachmentUrl — task attachments", () => {
 });
 
 describe("getClientKycAttachmentUrl — KYC files", () => {
+  beforeEach(() => {
+    h.modules = new Set(["forms"]); // KYC files are gated by the Forms module
+  });
+
   it("signs a file only for the customer it belongs to, under that customer's folder", async () => {
     asEmployee({ isAdmin: true });
     expect(await kyc.getClientKycAttachmentUrl(id.kyc1!, id.c1!)).toEqual({ ok: true, url: `signed:client-kyc/${id.c1}/3-pan.pdf` });
@@ -202,8 +206,9 @@ describe("getClientKycAttachmentUrl — KYC files", () => {
     expect(h.signed).toEqual([]);
   });
 
-  it("a non-admin gets the existing KYC refusal, before any lookup or signing", async () => {
-    expect(await kyc.getClientKycAttachmentUrl(id.kyc1!, id.c1!)).toEqual({ ok: false, error: "Client KYC is restricted to admins." });
+  it("someone without the Forms module gets the KYC refusal, before any lookup or signing", async () => {
+    h.modules = new Set();
+    expect(await kyc.getClientKycAttachmentUrl(id.kyc1!, id.c1!)).toEqual({ ok: false, error: "You don't have access to Forms." });
     expect(h.signed).toEqual([]);
   });
 });

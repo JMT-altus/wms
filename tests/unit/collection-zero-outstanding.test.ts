@@ -13,7 +13,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // a read-time filter on the active balance snapshot, not a closure; see collection-zero-balance-visibility.test.ts.)
 const h = vi.hoisted(() => ({
   master: { storageReady: true, rows: [] as Record<string, unknown>[] },
-  balances: { storageReady: true, snapshot: null, byCompany: new Map<string, { debit: number | null; credit: number | null }>() },
+  balances: { storageReady: true, snapshot: null, byCompany: new Map<string, { debit: number | null; credit: number | null }>(), latestLineByCompany: new Map<string, { debit: number | null; credit: number | null }>() },
   source: null as null | { key: string; label: string; approved: boolean; list: (ids: string[]) => Promise<unknown[]> },
 }));
 vi.mock("server-only", () => ({}));
@@ -47,32 +47,32 @@ const zeroSource = (approved: boolean) => ({
 
 beforeEach(() => {
   h.master = { storageReady: true, rows: [company("m1", "Zero Paid Co"), company("m2", "Still Owes Co")] };
-  h.balances = { storageReady: true, snapshot: null, byCompany: new Map() };
+  h.balances = { storageReady: true, snapshot: null, byCompany: new Map(), latestLineByCompany: new Map() };
   h.source = null;
 });
 
 describe("₹0 outstanding today — no approved Tally / transaction source", () => {
   it("the active source is the 'no approved source' placeholder, so outstanding is null (unknown) — never 0", async () => {
-    const s = await loadCollectionParties();
+    const s = await loadCollectionParties({ kind: "all" });
     expect(s.transactions).toEqual({ key: NO_TRANSACTION_SOURCE.key, label: "No approved source", approved: false });
     expect(s.parties.map((p) => p.outstanding)).toEqual([null, null]);
   });
 
   it("Debit equal to Credit in the uploaded balances does NOT make outstanding 0 (it is never derived)", async () => {
     h.balances.byCompany = new Map([["m1", { debit: 5000, credit: 5000 }]]);
-    const s = await loadCollectionParties();
+    const s = await loadCollectionParties({ kind: "all" });
     expect(s.parties.find((p) => p.masterId === "m1")).toMatchObject({ debit: 5000, credit: 5000, outstanding: null });
   });
 
   it("every Collection Master company stays a Tracker row — nothing is filtered out or moved", async () => {
-    const s = await loadCollectionParties();
+    const s = await loadCollectionParties({ kind: "all" });
     expect(buildRows(s.parties, []).map((r) => r.partyName).sort()).toEqual(["Still Owes Co", "Zero Paid Co"]);
   });
 
   it("an UNAPPROVED source reporting ₹0 is not even read", async () => {
     const list = vi.fn(zeroSource(false).list);
     h.source = { ...zeroSource(false), list };
-    const s = await loadCollectionParties();
+    const s = await loadCollectionParties({ kind: "all" });
     expect(list).not.toHaveBeenCalled();
     expect(s.parties.find((p) => p.masterId === "m1")!.transactions).toEqual([]);
   });
@@ -81,7 +81,7 @@ describe("₹0 outstanding today — no approved Tally / transaction source", ()
 describe("₹0 outstanding with a (hypothetical) approved source — what the current code would do", () => {
   it("the transaction is loaded, but company-level outstanding is still null and the company stays in the Tracker", async () => {
     h.source = zeroSource(true);
-    const s = await loadCollectionParties();
+    const s = await loadCollectionParties({ kind: "all" });
     const zero = s.parties.find((p) => p.masterId === "m1")!;
     expect(zero.transactions).toEqual([expect.objectContaining({ outstanding: 0 })]);
     expect(zero.outstanding).toBeNull(); // load.ts hard-codes null — no company-level figure is produced

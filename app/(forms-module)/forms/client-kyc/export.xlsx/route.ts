@@ -1,5 +1,5 @@
 import * as XLSX from "xlsx";
-import { requireAdmin } from "@/lib/auth/current";
+import { canAccessModule } from "@/lib/auth/module-access";
 import { listClientMasterRows } from "@/lib/queries/client-kyc";
 import { MAX_EXPORT_ROWS, EXPORT_TOO_LARGE } from "@/lib/exports/csv";
 import {
@@ -17,7 +17,7 @@ import {
  * rather than the ones currently ticked on screen.
  *
  * The guard is explicit even though `(forms-module)/forms/layout.tsx` already
- * calls `requireAdmin`: a route handler is not wrapped by the layout, so
+ * calls `requireModuleAccess`: a route handler is not wrapped by the layout, so
  * inheriting that guard is an illusion. Without this line the file is
  * reachable by any signed-in employee who knows the URL.
  */
@@ -25,12 +25,8 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(): Promise<Response> {
-  // requireAdmin throws (rendering error.tsx / a 500) rather than returning,
-  // so it is caught and re-answered as a clean 403 — the same shape the task
-  // exports use.
-  try {
-    await requireAdmin();
-  } catch {
+  // A clean 403 — the same shape the task exports use.
+  if (!(await canAccessModule("forms"))) {
     return new Response("Forbidden", { status: 403 });
   }
 

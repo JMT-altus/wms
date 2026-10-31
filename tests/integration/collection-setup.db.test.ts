@@ -7,6 +7,9 @@ const h = vi.hoisted(() => {
   return { db: null as unknown };
 });
 vi.mock("server-only", () => ({}));
+// Company visibility (lib/collections/scope-server.ts) is not under test here: every company is in scope. The real
+// resolver, over real coordinator links, is covered by tests/integration/collection-tracker-scope.db.test.ts.
+vi.mock("@/lib/collections/scope-server", () => ({ collectionScopeFor: async () => ({ kind: "all" }) }));
 vi.mock("@/lib/db", () => ({
   get db() {
     if (!h.db) throw new Error("test database not ready");

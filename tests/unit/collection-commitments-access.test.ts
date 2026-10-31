@@ -21,6 +21,9 @@ const h = vi.hoisted(() => ({
 }));
 
 vi.mock("server-only", () => ({}));
+// Company visibility (lib/collections/scope-server.ts) is not under test here: every company is in scope. The real
+// resolver, over real coordinator links, is covered by tests/integration/collection-tracker-scope.db.test.ts.
+vi.mock("@/lib/collections/scope-server", () => ({ collectionScopeFor: async () => ({ kind: "all" }) }));
 // Collection is its own module now (Admin → Access). Its gate is mocked to follow the session's admin flag — the
 // admin bypass — so these tests keep exercising the collection.* capabilities exactly as before.
 vi.mock("@/lib/auth/module-access", async () => {
@@ -95,10 +98,10 @@ import { getCompanyCommitment, saveCompanyCommitment } from "@/app/(collection-m
 
 const COMPANY = "11111111-1111-4111-8111-111111111111";
 const ORDINARY = ["collection.view", "collection.followup.write", "collection.confirmation.set", "collection.escalation.create", "collection.master.import"];
-/** An admin granted both commitment capabilities explicitly. */
+/** An admin granted both popup commitment capabilities AND the Commitments & Escalations page explicitly. */
 const owner = () => {
   h.me = { id: "emp-granted", email: "granted@example.test", isActive: true, isAdmin: true, name: "Granted" };
-  h.caps = new Set([...ORDINARY, "collection.commitments.view", "collection.commitments.edit"]);
+  h.caps = new Set([...ORDINARY, "collection.commitments.view", "collection.commitments.edit", "collection.commitments.page"]);
 };
 /** An admin with only the ordinary Collection capabilities. */
 const otherAdmin = () => {
@@ -232,6 +235,7 @@ vi.mock("@/lib/queries/collection-followups", () => ({ listFollowUps: async () =
 // so the page itself still makes no direct database call here.
 vi.mock("@/lib/collections/salesperson-identity", () => ({ salespersonIdentityFor: async () => ({ status: "unconfigured" }) }));
 vi.mock("@/lib/queries/collection-review", () => ({
+  latestConfirmedAmounts: async () => ({ storageReady: true, byCompany: new Map() }),
   latestConfirmations: async () => ({ storageReady: true, byCompany: new Map() }),
   openEscalations: async () => ({ storageReady: true, byCompany: new Map() }),
   listOpenEscalationsForReview: async () => ({ storageReady: true, rows: [] }),
@@ -252,10 +256,23 @@ function findProps(node: ReactNode, name: string): Record<string, unknown> | nul
 }
 
 describe("commitments page", () => {
-  it("is not found without the capability, without reading commitments", async () => {
+  it("is not found without the page permission, without reading commitments — the popup section keys alone do not open it", async () => {
     const { default: Page } = await import("@/app/(collection-module)/collection/commitments/page");
     otherAdmin();
     await expect(Page()).rejects.toThrow("NEXT_NOT_FOUND");
+    expect(h.listCommitments).not.toHaveBeenCalled();
+  });
+
+  it("the popup section keys alone do not open the page; the page key alone opens it with nothing restricted shown", async () => {
+    const { default: Page } = await import("@/app/(collection-module)/collection/commitments/page");
+    owner();
+    h.caps.delete("collection.commitments.page");
+    await expect(Page()).rejects.toThrow("NEXT_NOT_FOUND");
+    expect(h.listCommitments).not.toHaveBeenCalled();
+    otherAdmin();
+    h.caps.add("collection.commitments.page");
+    const props = findProps(await Page(), "CommitmentsTable")!;
+    expect(props).toMatchObject({ showCommitments: false, showEscalations: false, rows: [] });
     expect(h.listCommitments).not.toHaveBeenCalled();
   });
 
@@ -269,7 +286,7 @@ describe("commitments page", () => {
     expect(h.listCommitments).toHaveBeenCalledWith({ employeeId: "emp-granted", capability: "collection.commitments.view" });
     // The page adds each company's Tracker comments (none in this fixture).
     expect(findProps(tree, "CommitmentsTable")).toEqual({
-      rows: rows.map((r) => ({ ...r, comments: [], due: [], confirmation: null, outstanding: null, escalation: null })),
+      rows: rows.map((r) => ({ ...r, comments: [], due: [], confirmation: null, confirmedAmount: null, outstanding: null, escalation: null })),
       today: expect.any(String),
       showCommitments: true,
       showEscalations: false,
@@ -287,7 +304,8 @@ describe("tracker page payload", () => {
     const props = findProps(await Page(), "CollectionTracker")!;
     expect(props.canSeeCommitments).toBe(false);
     const { canSeeCommitments: _flag, canEditCommitments: _edit, ...data } = props;
-    expect(JSON.stringify(data)).not.toMatch(/committed|commitment|5000|amount"/i);
+    // The confirmed amount (Collection Amount Confirmation) is a Tracker value every Tracker user may see; commitment amounts are not.
+    expect(JSON.stringify(data)).not.toMatch(/committed|commitment|5000|(?<!confirmed)amount"/i);
     expect(h.dbCalls).toEqual([]);
   });
 

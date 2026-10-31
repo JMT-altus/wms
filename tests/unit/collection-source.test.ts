@@ -5,7 +5,7 @@ import { MASTER_EMPTY_MESSAGE, MASTER_NOT_READY_MESSAGE } from "@/lib/collection
 
 const h = vi.hoisted(() => ({
   master: { storageReady: true, rows: [] as Record<string, unknown>[] },
-  balances: { storageReady: true, snapshot: null, byCompany: new Map<string, { debit: number | null; credit: number | null }>() },
+  balances: { storageReady: true, snapshot: null, byCompany: new Map<string, { debit: number | null; credit: number | null }>(), latestLineByCompany: new Map<string, { debit: number | null; credit: number | null }>() },
 }));
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/queries/collection-master", () => ({ listAllMasterCompanies: async () => h.master }));
@@ -27,7 +27,7 @@ const company = (over: Record<string, unknown> = {}) => ({
 
 beforeEach(() => {
   h.master = { storageReady: true, rows: [] };
-  h.balances = { storageReady: true, snapshot: null, byCompany: new Map() };
+  h.balances = { storageReady: true, snapshot: null, byCompany: new Map(), latestLineByCompany: new Map() };
 });
 
 describe("transaction source", () => {
@@ -49,7 +49,7 @@ describe("transaction source", () => {
 describe("loadCollectionParties", () => {
   it("lists companies from the Collection Master with no invented figures", async () => {
     h.master.rows = [company(), company({ id: "m2", companyName: "Beta", coordinatorLabel: null, customerMasterId: "c1", paymentTerms: "30 days" })];
-    const s = await loadCollectionParties();
+    const s = await loadCollectionParties({ kind: "all" });
     expect(s.connected).toBe(true);
     expect(s.transactions).toEqual({ key: "none", label: "No approved source", approved: false });
     expect(s.parties).toEqual([
@@ -69,7 +69,7 @@ describe("loadCollectionParties", () => {
       ["m1", { debit: 100, credit: 25 }],
       ["m2", { debit: null, credit: 40 }],
     ]);
-    const s = await loadCollectionParties();
+    const s = await loadCollectionParties({ kind: "all" });
     expect(s.parties.map((p) => [p.partyName, p.debit, p.credit, p.outstanding])).toEqual([
       ["Alpha Traders", 100, 25, null],
       ["Beta", null, 40, null],
@@ -79,13 +79,13 @@ describe("loadCollectionParties", () => {
   });
 
   it("an empty master says so", async () => {
-    const s = await loadCollectionParties();
+    const s = await loadCollectionParties({ kind: "all" });
     expect(s).toMatchObject({ connected: false, parties: [], message: MASTER_EMPTY_MESSAGE, masterReady: true });
   });
 
   it("missing storage says so instead of failing", async () => {
     h.master = { storageReady: false, rows: [] };
-    const s = await loadCollectionParties();
+    const s = await loadCollectionParties({ kind: "all" });
     expect(s).toMatchObject({ connected: false, parties: [], message: MASTER_NOT_READY_MESSAGE, masterReady: false });
   });
 });

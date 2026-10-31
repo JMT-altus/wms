@@ -13,6 +13,9 @@ const h = vi.hoisted(() => {
   return { db: null as unknown, me: null as null | Me };
 });
 vi.mock("server-only", () => ({}));
+// Company visibility (lib/collections/scope-server.ts) is not under test here: every company is in scope. The real
+// resolver, over real coordinator links, is covered by tests/integration/collection-tracker-scope.db.test.ts.
+vi.mock("@/lib/collections/scope-server", () => ({ collectionScopeFor: async () => ({ kind: "all" }) }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn(), updateTag: vi.fn() }));
 vi.mock("@/lib/rate-limit", () => ({ rateLimitOrError: () => null }));
 // The real editEmployee action is exercised below; its Firebase and email clients are never reached.
@@ -38,7 +41,7 @@ import * as schema from "@/db/schema";
 import { createTestDb } from "./_pglite";
 
 const ORDINARY = ["collection.view", "collection.master.import", "collection.followup.write", "collection.confirmation.set", "collection.escalation.create"] as const;
-const SENSITIVE = ["collection.coordinator.assign", "collection.commitments.view", "collection.commitments.edit", "collection.escalation.review", "collection.escalation.close"] as const;
+const SENSITIVE = ["collection.coordinator.assign", "collection.commitments.view", "collection.commitments.edit", "collection.commitments.page", "collection.escalation.review", "collection.escalation.close"] as const;
 
 let pg: Awaited<ReturnType<typeof createTestDb>>["pg"];
 let cap: typeof import("@/lib/auth/capability");
@@ -342,13 +345,14 @@ describe("sensitive capabilities have no department layer", () => {
       `select actor_id, from_value, to_value from settings_events order by created_at desc limit 1`,
     )).rows[0]!;
     expect(audit).toMatchObject({ actor_id: ids.super, from_value: { allowed: true }, to_value: { allowed: null, subjectType: "department" } });
-    // The other four legacy sensitive rows are untouched — nothing is deleted silently.
+    // The other five legacy sensitive rows are untouched — nothing is deleted silently.
     const left = await pg.query<{ field_key: string }>(
       `select field_key from field_permission_grants where subject_type = 'department' and subject_id = $1 order by field_key`,
       [legacyDept],
     );
     expect(left.rows.map((r) => r.field_key)).toEqual([
       "collection.commitments.edit",
+      "collection.commitments.page",
       "collection.coordinator.assign",
       "collection.escalation.close",
       "collection.escalation.review",

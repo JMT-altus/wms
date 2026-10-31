@@ -4,16 +4,16 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // The Client KYC Draft and Recycle Bin pages run the expiry sweep (a WRITE).
 // These prove the write can't happen during a build's static pre-render or for a
-// request that isn't a signed-in admin. Mocked: the pages' collaborators only.
+// request that isn't someone with the Forms module. Mocked: the pages' collaborators only.
 const h = vi.hoisted(() => ({
   calls: [] as string[],
   admin: vi.fn(),
 }));
 
 vi.mock("server-only", () => ({}));
-vi.mock("@/lib/auth/current", () => ({
-  requireAdmin: async () => {
-    h.calls.push("requireAdmin");
+vi.mock("@/lib/auth/module-access", () => ({
+  requireModuleAccess: async () => {
+    h.calls.push("requireModuleAccess");
     return h.admin();
   },
 }));
@@ -40,8 +40,8 @@ import RecyclePage, * as recycleModule from "@/app/(forms-module)/forms/client-k
 
 /**
  * What Next does while pre-rendering a page at build time: reading request
- * cookies (inside requireAdmin → readSession) throws a dynamic-usage signal
- * that stops the render. Modelled here as requireAdmin throwing.
+ * cookies (inside requireModuleAccess → readSession) throws a dynamic-usage signal
+ * that stops the render. Modelled here as requireModuleAccess throwing.
  */
 class DynamicServerUsage extends Error {
   digest = "DYNAMIC_SERVER_USAGE";
@@ -65,10 +65,10 @@ describe.each([
       throw new DynamicServerUsage("Route used cookies()");
     });
     await expect(Page()).rejects.toBeInstanceOf(DynamicServerUsage);
-    expect(h.calls).toEqual(["requireAdmin"]);
+    expect(h.calls).toEqual(["requireModuleAccess"]);
   });
 
-  it("a request that isn't a signed-in admin never sweeps", async () => {
+  it("a request that isn't someone with the Forms module never sweeps", async () => {
     h.admin.mockImplementation(() => {
       throw new Error("Forbidden");
     });
@@ -79,19 +79,19 @@ describe.each([
   it("an admin's request still sweeps first, then reads the list (behaviour preserved)", async () => {
     h.admin.mockResolvedValue({ id: "a", isAdmin: true });
     await Page();
-    expect(h.calls).toEqual(["requireAdmin", "sweep", "list"]);
+    expect(h.calls).toEqual(["requireModuleAccess", "sweep", "list"]);
   });
 });
 
 describe("source guard", () => {
-  it("no page or layout runs the KYC sweep without an admin check first, and none is statically rendered", () => {
+  it("no page or layout runs the KYC sweep without a Forms access check first, and none is statically rendered", () => {
     for (const f of [
       "app/(forms-module)/forms/client-kyc/drafts/page.tsx",
       "app/(forms-module)/forms/client-kyc/recycle-bin/page.tsx",
     ]) {
       const src = readFileSync(resolve(__dirname, "../..", f), "utf8");
       expect(src, f).toMatch(/export const dynamic = "force-dynamic"/);
-      const auth = src.indexOf("await requireAdmin()");
+      const auth = src.indexOf("await requireModuleAccess(\"forms\")");
       const sweep = src.indexOf("await sweepExpiredDraftsQuietly()");
       expect(auth, f).toBeGreaterThan(-1);
       expect(sweep, f).toBeGreaterThan(auth);

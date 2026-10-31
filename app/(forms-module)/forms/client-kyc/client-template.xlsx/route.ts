@@ -1,4 +1,4 @@
-import { requireAdmin } from "@/lib/auth/current";
+import { canAccessModule } from "@/lib/auth/module-access";
 import { listClientBulkOptions } from "@/lib/queries/client-bulk-options";
 import { buildClientTemplateWorkbook } from "@/lib/forms/client-template-workbook";
 import { COLUMN_BY_KEY, STANDARD_COLUMN_KEYS } from "@/lib/forms/client-bulk-columns";
@@ -19,7 +19,7 @@ import { COLUMN_BY_KEY, STANDARD_COLUMN_KEYS } from "@/lib/forms/client-bulk-col
  * columns.
  *
  * The guard is explicit even though `(forms-module)/forms/layout.tsx` already
- * calls `requireAdmin`: a route handler is not wrapped by the layout, so
+ * calls `requireModuleAccess`: a route handler is not wrapped by the layout, so
  * inheriting that guard is an illusion — the same note the sibling
  * export.xlsx route carries.
  */
@@ -27,9 +27,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request): Promise<Response> {
-  try {
-    await requireAdmin();
-  } catch {
+  if (!(await canAccessModule("forms"))) {
     return new Response("Forbidden", { status: 403 });
   }
 

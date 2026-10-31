@@ -5,6 +5,7 @@ import { collectionMasterCompanies, collectionMasterImports, customerMasters, em
 import { exactNameKey } from "@/lib/collections/master/normalize";
 import type { ExistingCompany } from "@/lib/collections/master/plan";
 import type { CapabilityProof } from "@/lib/auth/capability";
+import { inScope, type CollectionScope } from "@/lib/collections/scope";
 import type { CoordinatorAssignmentInputT } from "@/lib/collections/coordinator";
 
 /**
@@ -42,7 +43,13 @@ const COLS = {
 export const MASTER_PAGE_SIZE = 50;
 
 /** Search (company or coordinator, case-insensitive) and page through the master. */
-export async function listMasterCompanies(opts: { query?: string; page?: number; coordinator?: "all" | "unassigned" }): Promise<{
+/**
+ * The Collection Master list, inside the caller's scope (lib/collections/scope.ts):
+ * every company for a super-admin, only their own for a linked Sales
+ * Coordinator, none for anyone else — applied in SQL, so search, paging and the
+ * count see only what the person may.
+ */
+export async function listMasterCompanies(opts: { query?: string; page?: number; coordinator?: "all" | "unassigned"; scope: CollectionScope }): Promise<{
   storageReady: boolean;
   total: number;
   page: number;
@@ -57,6 +64,8 @@ export async function listMasterCompanies(opts: { query?: string; page?: number;
     conds.push(or(ilike(collectionMasterCompanies.companyName, like), ilike(collectionMasterCompanies.coordinatorLabel, like)));
   }
   if (opts.coordinator === "unassigned") conds.push(sql`${collectionMasterCompanies.coordinatorLabel} is null`);
+  if (opts.scope.kind === "coordinator") conds.push(eq(collectionMasterCompanies.coordinatorLabel, opts.scope.label.trim()));
+  if (opts.scope.kind === "none") return { storageReady: true, total: 0, page, pageSize: MASTER_PAGE_SIZE, rows: [] };
   const where = conds.length ? and(...conds) : undefined;
   try {
     const [count] = await db.select({ n: sql<number>`count(*)::int` }).from(collectionMasterCompanies).where(where);
@@ -81,14 +90,15 @@ export interface MasterCompanyDetail extends MasterCompanyRow {
   lastImport: { fileName: string | null; importedAt: Date; importedByName: string | null } | null;
 }
 
-export async function getMasterCompany(id: string): Promise<{ storageReady: boolean; company: MasterCompanyDetail | null }> {
+/** One company, or null when it doesn't exist OR is outside the caller's scope — the two are indistinguishable to the caller. */
+export async function getMasterCompany(id: string, scope: CollectionScope): Promise<{ storageReady: boolean; company: MasterCompanyDetail | null }> {
   try {
     const [row] = await db
       .select({ ...COLS, createdAt: collectionMasterCompanies.createdAt, createdImportId: collectionMasterCompanies.createdImportId, lastImportId: collectionMasterCompanies.lastImportId })
       .from(collectionMasterCompanies)
       .where(eq(collectionMasterCompanies.id, id))
       .limit(1);
-    if (!row) return { storageReady: true, company: null };
+    if (!row || !inScope(scope, row.coordinatorLabel)) return { storageReady: true, company: null };
     const [client] = row.customerMasterId
       ? await db.select({ name: customerMasters.name }).from(customerMasters).where(eq(customerMasters.id, row.customerMasterId)).limit(1)
       : [];

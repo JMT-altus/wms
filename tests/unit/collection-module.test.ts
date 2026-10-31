@@ -64,7 +64,7 @@ describe("the Collection module is registered like the others", () => {
     for (const p of [...SECTIONS, "/collection", "/collection/master/abc", "/collection/logs/xyz", "/forms/collection/tracker"]) {
       expect(moduleIdForPath(p), p).toBe("collection");
     }
-    expect(moduleIdForPath("/forms/client-kyc/new")).toBe("wms"); // Client KYC is unchanged
+    expect(moduleIdForPath("/forms/client-kyc/new")).toBe("forms"); // Client KYC is its own module
   });
 
   it("is OFF by default: nobody is granted it by code, admins pass through the admin bypass, a person-level deny beats that", () => {
@@ -94,10 +94,11 @@ describe("navigation", () => {
     expect(collectionNav(false, false)).toEqual([]);
   });
 
-  it("the Forms rail no longer carries any Collection section — Client KYC only", () => {
-    const hrefs = formsNav().map((i) => String(i.href));
+  it("the Forms rail no longer carries any Collection section — Client KYC, the masters and the Tally ledgers only", () => {
+    const hrefs = formsNav(true).map((i) => String(i.href));
     expect(hrefs.length).toBeGreaterThan(0);
-    expect(hrefs.every((p) => p.startsWith("/forms/client-kyc/"))).toBe(true);
+    expect(hrefs.every((p) => p.startsWith("/forms"))).toBe(true);
+    expect(hrefs.some((p) => p.startsWith("/forms/client-kyc/"))).toBe(true);
     expect(read("components/forms/forms-sidebar.tsx")).not.toMatch(/\/collection\//);
     expect(read("app/(forms-module)/forms/layout.tsx")).not.toMatch(/getCollectionCapabilities|showCollection/);
   });

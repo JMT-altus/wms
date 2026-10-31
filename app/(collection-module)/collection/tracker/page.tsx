@@ -1,6 +1,8 @@
 import { CollectionTracker } from "@/components/collections/collection-tracker";
 import { buildRows, personOf } from "@/lib/collections/derive";
 import { loadCollectionParties } from "@/lib/collections/load";
+import { scopeNote } from "@/lib/collections/scope";
+import { collectionScopeFor } from "@/lib/collections/scope-server";
 import { listFollowUps } from "@/lib/queries/collection-followups";
 import { localDateString } from "@/lib/format";
 import { getCollectionCapabilities, requireCollectionCapability } from "@/lib/auth/capability";
@@ -11,7 +13,7 @@ import { getCurrentEmployee } from "@/lib/auth/current";
 import { isSuperAdmin } from "@/lib/auth/super-admin";
 import { FIELD_PERMISSIONS_HREF, buildSetupHints } from "@/lib/collections/setup-hints";
 import { capabilityHolders } from "@/lib/queries/collection-setup";
-import { latestConfirmations, openEscalations } from "@/lib/queries/collection-review";
+import { latestConfirmations, latestConfirmedAmounts, openEscalations } from "@/lib/queries/collection-review";
 import { listCoordinatorOptions } from "@/lib/queries/collection-master";
 
 export const dynamic = "force-dynamic";
@@ -25,8 +27,9 @@ export const dynamic = "force-dynamic";
  * Needs collection.view, checked before anything is loaded. Each control is
  * shown according to its own capability; the server action checks it again.
  *
- * Holders of collection.escalation.review also get a link to the review queue,
- * with the count of open escalations. Super-admins — the only people who can
+ * Holders of collection.escalation.review who can also open the Commitments &
+ * Escalations page (collection.commitments.page) get a link to the review
+ * queue, with the count of open escalations. Super-admins — the only people who can
  * grant the sensitive capabilities — additionally see a "setup needed" notice
  * when escalations are waiting or parties are unassigned and nobody has been
  * granted the capability to handle them. Nothing is ever granted by code.
@@ -34,27 +37,34 @@ export const dynamic = "force-dynamic";
 export default async function CollectionTrackerPage() {
   const viewer = await requireCollectionCapability("collection.view");
   const caps = await getCollectionCapabilities();
-  // The Tracker's default list leaves out companies whose Debit and Credit are
-  // both zero in the active balance snapshot (they stay in the Collection
-  // Master; the next confirmed upload decides again). Everything on this page —
-  // search, pages, the count, the scorecard, the setup hints — is built from
-  // this same visible set.
-  const [source, followUps] = await Promise.all([loadCollectionParties({ hideZeroBalance: true }), listFollowUps()]);
+  // The companies inside the signed-in person's scope (lib/collections/scope.ts):
+  // every company for a super-admin, only their own for a linked Sales
+  // Coordinator, none for anyone else — decided on the server from the session,
+  // never from anything the browser sent. Those whose Debit and Credit are both
+  // empty in the confirmed uploads carry `zeroBalance`: the table shows them
+  // last and muted (they stay in the Master; the next confirmed upload that
+  // includes them decides again).
+  const scope = await collectionScopeFor();
+  const [source, followUps] = await Promise.all([loadCollectionParties(scope), listFollowUps()]);
   const companyIds = source.parties.map((p) => p.masterId).filter((id): id is string => !!id);
   // Confirmation (visible to every Tracker user) and open-escalation status, from
   // the database on every request — never from browser state.
   // Coordinator choices are read only for holders of collection.coordinator.assign.
-  const [confirmations, escalations, coordinatorOptions] = await Promise.all([
+  // The confirmed amount (the column's text field) is read beside the Yes/No answer; the two are separate values.
+  const [confirmations, confirmedAmounts, escalations, coordinatorOptions] = await Promise.all([
     latestConfirmations(companyIds),
+    latestConfirmedAmounts(companyIds),
     openEscalations(companyIds),
     caps["collection.coordinator.assign"] ? listCoordinatorOptions() : null,
   ]);
   const rows = buildRows(source.parties, followUps.entries).map((r) => {
     const c = r.masterId ? confirmations.byCompany.get(r.masterId) : undefined;
+    const a = r.masterId ? confirmedAmounts.byCompany.get(r.masterId) : undefined;
     const e = r.masterId ? escalations.byCompany.get(r.masterId) : undefined;
     return {
       ...r,
       confirmation: c ? { value: c.value, recordedAt: c.recordedAt, recordedByName: c.recordedByName } : null,
+      confirmedAmount: a ? { amount: a.amount, recordedAt: a.recordedAt, recordedByName: a.recordedByName } : null,
       openEscalation: e ? { escalatedAt: e.escalatedAt, escalatedByName: e.escalatedByName } : null,
     };
   });
@@ -88,7 +98,7 @@ export default async function CollectionTrackerPage() {
   }
 
   const openEscalationCount = escalations.byCompany.size;
-  const reviewQueue = caps["collection.escalation.review"] ? { openCount: openEscalationCount, href: "/collection/commitments" } : undefined;
+  const reviewQueue = caps["collection.escalation.review"] && caps["collection.commitments.page"] ? { openCount: openEscalationCount, href: "/collection/commitments" } : undefined;
   // Super-admins only (the existing rule): what to grant, and where, when work is waiting for nobody.
   const me = await getCurrentEmployee();
   const setupHints =
@@ -121,6 +131,7 @@ export default async function CollectionTrackerPage() {
         storageReady={followUps.storageReady}
         today={localDateString("Asia/Kolkata")}
         emptyMessage={source.message}
+        scopeNote={scopeNote(scope) ?? undefined}
         transactionSource={source.transactions}
         // Yes/no flags only. Commitment figures are never part of this page's
         // data; the popup fetches them through a capability-checked action.
@@ -133,8 +144,8 @@ export default async function CollectionTrackerPage() {
         canImportBalances={caps["collection.balances.import"]}
         canAddMasterCompanies={caps["collection.master.import"]}
         balancesProblem={source.balances?.status === "error" ? (source.balances.errorCode ?? "unknown") : undefined}
-        hiddenZeroBalance={source.hiddenZeroBalance}
         reviewStorageReady={confirmations.storageReady && escalations.storageReady}
+        amountStorageReady={confirmedAmounts.storageReady}
         coordinatorEditor={coordinatorOptions?.storageReady ? { options: coordinatorOptions.labels } : undefined}
         reviewQueue={reviewQueue}
         scorecard={scorecard}

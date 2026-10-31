@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { AMOUNT_PATTERN, paiseToText, toPaise, type ParsedAmount } from "./money";
 
 /**
  * Collection Amount Confirmation and escalation for review —
@@ -37,6 +38,57 @@ export const ConfirmationInput = z
   .object({
     companyId: z.string().uuid("Choose a company."),
     value: z.enum(CONFIRMATION_VALUES, { message: "Choose Yes or No." }),
+  })
+  .strict();
+
+/* ── the confirmed amount ─────────────────────────────────────────────────── */
+
+/**
+ * The confirmed AMOUNT (migration 0123) is a separate business value from the
+ * Yes/No answer: what the person confirms the collection amount to be, in
+ * rupees, exact to the paise. Entering it does not answer the Yes/No question
+ * and verifies nothing about the approved source's figure.
+ */
+export const CONFIRMED_AMOUNT_PLACEHOLDER = "Enter confirmed amount";
+export const CONFIRMED_AMOUNT_REQUIRED = "Enter the confirmed amount.";
+export const CONFIRMED_AMOUNT_MAX_CHARS = 40;
+
+/**
+ * A confirmed amount as a person types it — "25450.50", "₹25,450.50" or
+ * "25,450.50" — to the canonical "x.yy" text that is stored and the exact
+ * paise. The rupee sign, Indian or plain digit grouping and spaces are
+ * allowed and removed; nothing else is guessed. Only a string is accepted (a
+ * number has already been through binary floating point). Rejects a sign,
+ * zero, more than 2 decimals, and anything the column can't hold
+ * (numeric(14,2): at most 12 integer digits).
+ */
+export function parseConfirmedAmount(input: unknown): ParsedAmount {
+  if (typeof input !== "string") return { ok: false, error: CONFIRMED_AMOUNT_REQUIRED };
+  const raw = input.trim();
+  if (raw === "") return { ok: false, error: CONFIRMED_AMOUNT_REQUIRED };
+  if (raw.length > CONFIRMED_AMOUNT_MAX_CHARS) return { ok: false, error: "That amount is too long." };
+  if (/^[-−(]|-/.test(raw)) return { ok: false, error: "The confirmed amount can't be negative." };
+  // Digit grouping, Indian (31,18,55,013.28) or plain (1,234,567.00), is allowed and stripped; a stray comma is not.
+  const s = raw.replace(/^(₹|rs\.?|inr)\s*/i, "").replace(/\s+/g, "");
+  if (/,/.test(s) && !/^(\d{1,3}(,\d{3})+|\d{1,2}(,\d{2})*,\d{3})(\.\d+)?$/.test(s)) return { ok: false, error: "Enter the amount in rupees, for example 25450 or 25,450.50." };
+  const plain = s.replace(/,/g, "");
+  const m = AMOUNT_PATTERN.exec(plain);
+  if (!m) {
+    if (/^\d+\.\d{3,}$/.test(plain)) return { ok: false, error: "Use at most 2 decimal places (paise)." };
+    if (/^\d{13,}(\.\d*)?$/.test(plain)) return { ok: false, error: "That amount is too large." };
+    if (/^0\d/.test(plain)) return { ok: false, error: "Enter the amount in rupees, for example 25450 or 25,450.50." };
+    return { ok: false, error: "Enter the amount in rupees, for example 25450 or 25,450.50." };
+  }
+  const paise = toPaise(plain);
+  if (paise <= 0n) return { ok: false, error: "The confirmed amount must be more than zero." };
+  return { ok: true, text: paiseToText(paise), paise };
+}
+
+/** Entering the confirmed amount: which Collection Master company, and the amount as typed. The actor comes from the session. */
+export const ConfirmedAmountInput = z
+  .object({
+    companyId: z.string().uuid("Choose a company."),
+    amount: z.string({ message: CONFIRMED_AMOUNT_REQUIRED }).max(CONFIRMED_AMOUNT_MAX_CHARS, "That amount is too long."),
   })
   .strict();
 

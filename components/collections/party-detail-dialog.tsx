@@ -49,7 +49,7 @@ export function PartyDetailDialog({
   today: string;
   storageReady: boolean;
   transactionSource?: TransactionSourceInfo;
-  /** collection.commitments.view; without it (and without .edit) the section isn't rendered and nothing is fetched. */
+  /** collection.commitments.view ("Company Popup — Commitment Section: View"); without it (and without .edit) the section isn't rendered and nothing is fetched. Independent of the Commitments & Escalations page key. */
   canSeeCommitments?: boolean;
   /** collection.commitments.edit: the commitment form. */
   canEditCommitments?: boolean;

@@ -1,5 +1,5 @@
 import "server-only";
-import { desc, eq } from "drizzle-orm";
+import { asc, desc, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { collectionBalanceLines, collectionBalanceSnapshots } from "@/db/schema";
 import { isMissingTable } from "@/lib/queries/collection-master";
@@ -9,9 +9,17 @@ import { isMissingTable } from "@/lib/queries/collection-master";
  * from the LATEST applied snapshot only. A company with no line in that
  * snapshot has no balance — figures from older snapshots are never carried
  * forward, and snapshots are never added together.
+ *
+ * Separately, each company's MOST RECENT line across every applied snapshot
+ * (`latestLineByCompany`) decides whether the Tracker lists it: a company whose
+ * last confirmed figures were ₹0 Debit and ₹0 Credit stays hidden until an
+ * upload that includes it gives it a balance, and a company missing from a
+ * later file keeps whatever the previous upload decided. The figures shown are
+ * still only the latest snapshot's — the look-back is for visibility alone,
+ * so no older amount is ever shown as current.
  */
 
-type Reader = Pick<typeof db, "select">;
+type Reader = Pick<typeof db, "select" | "selectDistinctOn">;
 
 export interface BalanceSnapshotInfo {
   id: string;
@@ -55,6 +63,12 @@ export interface LatestBalances {
   snapshot: BalanceSnapshotInfo | null;
   /** Rupees by Collection Master company id; null = blank in the file. */
   byCompany: Map<string, { debit: number | null; credit: number | null }>;
+  /**
+   * Each company's most recent line in ANY applied snapshot (the latest one's
+   * where it has one). Decides visibility only — see lib/collections/balances/visibility.ts.
+   * A company in no upload at all has no entry and is never hidden.
+   */
+  latestLineByCompany: Map<string, { debit: number | null; credit: number | null }>;
 }
 
 const num = (v: string | null): number | null => (v === null ? null : Number(v));
@@ -85,22 +99,41 @@ export async function loadLatestBalances(): Promise<LatestBalances> {
   try {
     const snapshot = await latestBalanceSnapshot();
     const byCompany: LatestBalances["byCompany"] = new Map();
-    if (!snapshot) return { storageReady: true, status: "ok", snapshot: null, byCompany };
-    const lines = await db
-      .select({ companyId: collectionBalanceLines.companyId, debit: collectionBalanceLines.debit, credit: collectionBalanceLines.credit })
-      .from(collectionBalanceLines)
-      .where(eq(collectionBalanceLines.snapshotId, snapshot.id));
+    const latestLineByCompany: LatestBalances["latestLineByCompany"] = new Map();
+    if (!snapshot) return { storageReady: true, status: "ok", snapshot: null, byCompany, latestLineByCompany };
+    const [lines, history] = await Promise.all([
+      db
+        .select({ companyId: collectionBalanceLines.companyId, debit: collectionBalanceLines.debit, credit: collectionBalanceLines.credit })
+        .from(collectionBalanceLines)
+        .where(eq(collectionBalanceLines.snapshotId, snapshot.id)),
+      latestLinePerCompany(),
+    ]);
     for (const l of lines) byCompany.set(l.companyId, { debit: num(l.debit), credit: num(l.credit) });
-    return { storageReady: true, status: "ok", snapshot, byCompany };
+    for (const l of history) latestLineByCompany.set(l.companyId, { debit: num(l.debit), credit: num(l.credit) });
+    return { storageReady: true, status: "ok", snapshot, byCompany, latestLineByCompany };
   } catch (err) {
-    if (isMissingTable(err)) return { storageReady: false, status: "not-installed", snapshot: null, byCompany: new Map() };
+    if (isMissingTable(err)) return { storageReady: false, status: "not-installed", snapshot: null, byCompany: new Map(), latestLineByCompany: new Map() };
     const code = sqlState(err);
     if (code && SETUP_ERROR_CODES.has(code)) {
       console.error(`[collection-balances] balances unavailable (SQLSTATE ${code}); showing blank Debit / Credit`, err);
-      return { storageReady: false, status: "error", errorCode: code, snapshot: null, byCompany: new Map() };
+      return { storageReady: false, status: "error", errorCode: code, snapshot: null, byCompany: new Map(), latestLineByCompany: new Map() };
     }
     throw err;
   }
+}
+
+/**
+ * One row per company: its line from the newest snapshot that has one
+ * (DISTINCT ON company, newest upload first — the same order `latestBalanceSnapshot`
+ * uses, id breaking a tie). Only confirmed uploads have snapshots, so a preview,
+ * a refused or a failed upload can never appear here.
+ */
+async function latestLinePerCompany(q: Reader = db) {
+  return q
+    .selectDistinctOn([collectionBalanceLines.companyId], { companyId: collectionBalanceLines.companyId, debit: collectionBalanceLines.debit, credit: collectionBalanceLines.credit })
+    .from(collectionBalanceLines)
+    .innerJoin(collectionBalanceSnapshots, eq(collectionBalanceSnapshots.id, collectionBalanceLines.snapshotId))
+    .orderBy(asc(collectionBalanceLines.companyId), desc(collectionBalanceSnapshots.uploadedAt), desc(collectionBalanceSnapshots.id));
 }
 
 /** Company ids that have a line in the given snapshot (for "who would go blank"). */

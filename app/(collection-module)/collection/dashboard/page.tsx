@@ -1,6 +1,7 @@
 import { CollectionDashboard } from "@/components/collections/collection-dashboard";
 import { buildRows } from "@/lib/collections/derive";
 import { loadCollectionParties } from "@/lib/collections/load";
+import { collectionScopeFor } from "@/lib/collections/scope-server";
 import { listFollowUps } from "@/lib/queries/collection-followups";
 import { requireCollectionCapability } from "@/lib/auth/capability";
 
@@ -14,7 +15,8 @@ export const dynamic = "force-dynamic";
 export default async function CollectionDashboardPage() {
   // collection.view, checked before anything is loaded.
   await requireCollectionCapability("collection.view");
-  const [source, followUps] = await Promise.all([loadCollectionParties(), listFollowUps()]);
+  // The same scope as the Tracker: a super-admin's dashboard covers every company, a Sales Coordinator's only their own.
+  const [source, followUps] = await Promise.all([loadCollectionParties(await collectionScopeFor()), listFollowUps()]);
   const rows = buildRows(source.parties, followUps.entries);
 
   return (

@@ -16,6 +16,9 @@ const { h, touch } = vi.hoisted(() => {
 });
 
 vi.mock("server-only", () => ({}));
+// Company visibility (lib/collections/scope-server.ts) is not under test here: every company is in scope. The real
+// resolver, over real coordinator links, is covered by tests/integration/collection-tracker-scope.db.test.ts.
+vi.mock("@/lib/collections/scope-server", () => ({ collectionScopeFor: async () => ({ kind: "all" }) }));
 // Collection is its own module now (Admin → Access). Its gate is mocked to follow the session's admin flag — the
 // admin bypass — so these tests keep exercising the collection.* capabilities exactly as before.
 vi.mock("@/lib/auth/module-access", async () => {
@@ -95,6 +98,7 @@ const ALL = [
   "collection.coordinator.assign",
   "collection.commitments.view",
   "collection.commitments.edit",
+  "collection.commitments.page",
   "collection.escalation.review",
   "collection.escalation.close",
 ];
@@ -121,7 +125,7 @@ const PAGES: [string, string[], () => Promise<unknown>, RegExp][] = [
   ["dashboard page", ["collection.view"], async () => (await import("@/app/(collection-module)/collection/dashboard/page")).default(), /Forbidden/],
   ["master page", ["collection.view"], async () => (await import("@/app/(collection-module)/collection/master/page")).default({ searchParams: Promise.resolve({}) }), /Forbidden/],
   ["master company page", ["collection.view"], async () => (await import("@/app/(collection-module)/collection/master/[id]/page")).default({ params: Promise.resolve({ id: CO }) }), /Forbidden/],
-  ["commitments & escalations page", ["collection.commitments.view", "collection.escalation.review"], async () => (await import("@/app/(collection-module)/collection/commitments/page")).default(), /NEXT_NOT_FOUND/],
+  ["commitments & escalations page", ["collection.commitments.page"], async () => (await import("@/app/(collection-module)/collection/commitments/page")).default(), /NEXT_NOT_FOUND/],
 ];
 
 beforeEach(() => {

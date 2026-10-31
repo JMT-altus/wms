@@ -11,6 +11,9 @@ const h = vi.hoisted(() => {
   return { db: null as unknown };
 });
 vi.mock("server-only", () => ({}));
+// Company visibility (lib/collections/scope-server.ts) is not under test here: every company is in scope. The real
+// resolver, over real coordinator links, is covered by tests/integration/collection-tracker-scope.db.test.ts.
+vi.mock("@/lib/collections/scope-server", () => ({ collectionScopeFor: async () => ({ kind: "all" }) }));
 vi.mock("@/lib/db", () => ({
   get db() {
     if (!h.db) throw new Error("test database not ready");
@@ -45,6 +48,7 @@ beforeAll(async () => {
   h.db = made.db;
   await pg.exec(readFileSync(resolve(__dirname, "../../db/migrations/0115_collection_review.sql"), "utf8"));
   await pg.exec(readFileSync(resolve(__dirname, "../../db/migrations/0118_collection_escalation_reason.sql"), "utf8"));
+  await pg.exec(readFileSync(resolve(__dirname, "../../db/migrations/0123_collection_confirmed_amounts.sql"), "utf8"));
   const emp = async (name: string) =>
     (await pg.query<{ id: string }>(`insert into employees (name, email, role) values ($1, $2, 'both') returning id`, [name, `${name.toLowerCase()}@example.test`])).rows[0]!.id;
   ACTOR = await emp("Asha");
@@ -123,11 +127,12 @@ describe("escalations", () => {
   });
 });
 
-describe("migrations 0115 + 0118 vs db/schema.ts, and access", () => {
-  it("RLS is on for both tables", async () => {
-    const r = await pg.query<{ relname: string; rls: boolean }>(`select relname, relrowsecurity as rls from pg_class where relname in ('collection_amount_confirmations','collection_escalations') order by relname`);
+describe("migrations 0115 + 0118 + 0123 vs db/schema.ts, and access", () => {
+  it("RLS is on for all three tables", async () => {
+    const r = await pg.query<{ relname: string; rls: boolean }>(`select relname, relrowsecurity as rls from pg_class where relname in ('collection_amount_confirmations','collection_confirmed_amounts','collection_escalations') order by relname`);
     expect(r.rows).toEqual([
       { relname: "collection_amount_confirmations", rls: true },
+      { relname: "collection_confirmed_amounts", rls: true },
       { relname: "collection_escalations", rls: true },
     ]);
   });
@@ -147,6 +152,7 @@ describe("migrations 0115 + 0118 vs db/schema.ts, and access", () => {
       collectionMasterImports: schema.collectionMasterImports,
       collectionMasterCompanies: schema.collectionMasterCompanies,
       collectionAmountConfirmations: schema.collectionAmountConfirmations,
+      collectionConfirmedAmounts: schema.collectionConfirmedAmounts,
       collectionEscalations: schema.collectionEscalations,
     });
     try {

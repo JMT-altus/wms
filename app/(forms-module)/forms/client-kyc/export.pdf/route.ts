@@ -1,4 +1,5 @@
-import { requireAdmin } from "@/lib/auth/current";
+import { getCurrentEmployee } from "@/lib/auth/current";
+import { canAccessModule } from "@/lib/auth/module-access";
 import { listClientMasterRows } from "@/lib/queries/client-kyc";
 import { MAX_EXPORT_ROWS, EXPORT_TOO_LARGE } from "@/lib/exports/csv";
 import { kycExportFilename } from "@/lib/exports/client-kyc-rich";
@@ -18,20 +19,16 @@ import { renderClientKycPdf } from "@/lib/exports/client-kyc-pdf";
  * user.
  *
  * The guard is explicit even though the Forms layout already calls
- * `requireAdmin`: a route handler is not wrapped by its layout, so the file
+ * `requireModuleAccess`: a route handler is not wrapped by its layout, so the file
  * would otherwise be reachable by any signed-in employee with the URL.
  */
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(): Promise<Response> {
-  // requireAdmin throws (rendering error.tsx / a 500) rather than returning,
-  // so it is caught and re-answered as a clean 403 — the shape the task
-  // exports already use.
-  let me;
-  try {
-    me = await requireAdmin();
-  } catch {
+  // A clean 403 — the shape the task exports already use.
+  const me = await getCurrentEmployee();
+  if (!me || !(await canAccessModule("forms"))) {
     return new Response("Forbidden", { status: 403 });
   }
 

@@ -207,9 +207,9 @@ describe("the page header on the board", () => {
   const header = (board: boolean) =>
     render(<PlanToolbar level="actions" board={board} counts={counts} chip={null} onChip={() => {}} onFullScreen={() => {}} />);
 
-  it("says Project Plan, not Actions, because the board is not scoped to one level", () => {
+  it("says Project, not Actions, because the board is not scoped to one level", () => {
     header(true);
-    expect(screen.getByRole("heading", { level: 1, name: "Project Plan" })).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 1, name: "Project" })).toBeTruthy();
     expect(screen.getByText(/projects, milestones, results, actions and sub-actions together/)).toBeTruthy();
     const nav = screen.getByRole("navigation", { name: "Level" });
     expect(within(nav).getAllByRole("link").some((l) => l.getAttribute("aria-current") === "page")).toBe(false);

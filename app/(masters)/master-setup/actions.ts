@@ -38,7 +38,7 @@ const isUuid = (v: unknown): v is string => typeof v === "string" && UUID_RE.tes
 const PATHS = [
   "/master-setup",
   "/master-setup/products",
-  "/master-setup/customers",
+  "/forms/customer-master",
   "/master-setup/libraries",
   "/master-setup/access-control",
   "/master-setup/data-import",

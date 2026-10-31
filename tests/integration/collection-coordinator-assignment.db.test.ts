@@ -17,6 +17,9 @@ const h = vi.hoisted(() => {
   return { db: null as unknown, me: null as null | Me, claims: null as null | { email?: string; email_verified?: boolean } };
 });
 vi.mock("server-only", () => ({}));
+// Company visibility (lib/collections/scope-server.ts) is not under test here: every company is in scope. The real
+// resolver, over real coordinator links, is covered by tests/integration/collection-tracker-scope.db.test.ts.
+vi.mock("@/lib/collections/scope-server", () => ({ collectionScopeFor: async () => ({ kind: "all" }) }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/rate-limit", () => ({ rateLimitOrError: () => null }));
 vi.mock("@/lib/db", () => ({
@@ -150,7 +153,7 @@ describe("after migration 0112", () => {
   });
 
   it("Payment Terms and Sales Coordinator reach the Collection Tracker (Unassigned stays null)", async () => {
-    const src = await load.loadCollectionParties();
+    const src = await load.loadCollectionParties({ kind: "all" });
     expect(src.parties.map((p) => [p.partyName, p.collectionPerson, p.paymentTerms])).toEqual([
       ["Alpha Traders", "MANGESH", "30 days"],
       ["Beta Corp", null, "Advance"],
@@ -184,7 +187,7 @@ describe("after migration 0112", () => {
     expect(log.changes).toEqual([expect.objectContaining({ before: { coordinatorLabel: null }, after: { coordinatorLabel: "MANGESH" } })]);
     expect((await queries.listRecentImports(1))[0]).toMatchObject({ source: "tracker-assignment", importedByName: "Granted" });
 
-    const fresh = await load.loadCollectionParties(); // a new request reads the database again
+    const fresh = await load.loadCollectionParties({ kind: "all" }); // a new request reads the database again
     expect(fresh.parties.find((p) => p.partyName === "Beta Corp")?.collectionPerson).toBe("MANGESH");
   });
 

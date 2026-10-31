@@ -5,6 +5,9 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 // The permission matrix (/master-setup/access-control) with the Collection
 // capabilities: grouped, sensitive rows marked, and those rows changeable only
 // by a super-admin (the server action enforces it too). Actions MOCKED.
+// getByRole recomputes accessibility across this whole table on every query, so these tests are slow in jsdom, and
+// more so under a full parallel run. The time scales with the permission rows, not with anything being awaited.
+vi.setConfig({ testTimeout: 30_000 });
 const a = vi.hoisted(() => ({ set: vi.fn(), clear: vi.fn() }));
 vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
 vi.mock("@/app/(masters)/master-setup/actions", () => ({
@@ -26,7 +29,7 @@ const matrix: FieldMatrix = {
 };
 const row = (label: string) => within(screen.getByRole("table")).getByText(label).closest("tr")!;
 const button = (label: string, level: "Inherit" | "Allow" | "Deny") =>
-  within(row(label)).getByRole("button", { name: `${level}: ${label}` }) as HTMLButtonElement;
+  within(row(label)).getByRole("button", { name: `${level}: ${label}`, hidden: true }) as HTMLButtonElement;
 
 afterEach(() => {
   cleanup();
@@ -37,9 +40,9 @@ describe("permission matrix — Collections", () => {
   it("lists the Collection capabilities under their own heading, marking the six sensitive ones", () => {
     render(<FieldAccessManager matrix={matrix} />);
     expect(screen.getByRole("rowheader", { name: "Collections" })).toBeTruthy();
-    // 6 Collection capabilities (incl. the Tracker's Bulk Upload) + the 3 Leave approvals ones, all explicit-grant-only.
-    expect(within(screen.getByRole("table")).getAllByText("Sensitive")).toHaveLength(9);
-    for (const l of ["Collections — Assign Sales Coordinator", "Collections — View commitments", "Collections — Record commitments", "Collections — Review escalations", "Collections — Close escalations", "Collection Tracker — Bulk Upload"]) {
+    // 7 Collection capabilities (incl. the Tracker's Bulk Upload and the Commitments & Escalations page) + the 3 Leave approvals ones + Tally import, all explicit-grant-only.
+    expect(within(screen.getByRole("table")).getAllByText("Sensitive")).toHaveLength(11);
+    for (const l of ["Collections — Assign Sales Coordinator", "Collection Tracker — Company Popup — Commitment Section: View", "Collection Tracker — Company Popup — Commitment Section: Record", "Collection — Commitments & Escalations Page Access", "Collections — Review escalations", "Collections — Close escalations", "Collection Tracker — Bulk Upload"]) {
       expect(within(row(l)).getByText("Sensitive")).toBeTruthy();
     }
     expect(within(row("Collections — Escalate for review")).queryByText("Sensitive")).toBeNull();
@@ -98,8 +101,8 @@ describe("permission matrix — Collections", () => {
 
   it("for a non-super-admin, sensitive rows are locked (and say why); ordinary rows stay editable", () => {
     render(<FieldAccessManager matrix={matrix} canManageSensitive={false} />);
-    expect(button("Collections — View commitments", "Allow").disabled).toBe(true);
-    expect(within(row("Collections — View commitments")).getByText("Only a super-admin can change this.")).toBeTruthy();
+    expect(button("Collection Tracker — Company Popup — Commitment Section: View", "Allow").disabled).toBe(true);
+    expect(within(row("Collection Tracker — Company Popup — Commitment Section: View")).getByText("Only a super-admin can change this.")).toBeTruthy();
     expect(button("Collections — Escalate for review", "Allow").disabled).toBe(false);
     expect(button("Enquiry — Average Rate", "Allow").disabled).toBe(false);
   });
@@ -108,13 +111,13 @@ describe("permission matrix — Collections", () => {
     render(<FieldAccessManager matrix={matrix} canManageSensitive />);
     fireEvent.click(screen.getByRole("button", { name: "One person" }));
     fireEvent.change(screen.getByRole("combobox"), { target: { value: matrix.people[1]!.id } }); // a super-admin
-    expect(within(row("Collections — View commitments")).getByText("Not allowed")).toBeTruthy();
+    expect(within(row("Collection Tracker — Company Popup — Commitment Section: View")).getByText("Not allowed")).toBeTruthy();
     expect(within(row("Collections — Escalate for review")).getByText("Allowed")).toBeTruthy();
     expect(within(row("Enquiry — Average Rate")).getByText("Can edit")).toBeTruthy(); // original rows keep their wording
     a.set.mockResolvedValue({ ok: true });
-    fireEvent.click(button("Collections — View commitments", "Allow"));
+    fireEvent.click(button("Collection Tracker — Company Popup — Commitment Section: View", "Allow"));
     expect(a.set).toHaveBeenCalledWith("collection.commitments.view", "employee", matrix.people[1]!.id, true);
-    expect(within(row("Collections — View commitments")).getByText("Allowed")).toBeTruthy();
+    expect(within(row("Collection Tracker — Company Popup — Commitment Section: View")).getByText("Allowed")).toBeTruthy();
   });
 });
 
@@ -135,8 +138,8 @@ describe("permission matrix — sensitive permissions have no department layer",
   };
   const SENSITIVE_LABELS = [
     "Collections — Assign Sales Coordinator",
-    "Collections — View commitments",
-    "Collections — Record commitments",
+    "Collection Tracker — Company Popup — Commitment Section: View",
+    "Collection Tracker — Company Popup — Commitment Section: Record",
     "Collections — Review escalations",
     "Collections — Close escalations",
   ];
@@ -165,22 +168,22 @@ describe("permission matrix — sensitive permissions have no department layer",
     a.set.mockResolvedValue({ ok: true });
     render(<FieldAccessManager matrix={withLegacy} canManageSensitive />);
     pickDepartment();
-    expect(button("Collections — View commitments", "Inherit").disabled).toBe(false); // legacy row here
-    expect(button("Collections — Record commitments", "Inherit").disabled).toBe(true); // nothing to clear
-    expect(within(row("Collections — View commitments")).getByText(/legacy Allow that is ignored until you clear it/)).toBeTruthy();
-    fireEvent.click(button("Collections — View commitments", "Inherit"));
+    expect(button("Collection Tracker — Company Popup — Commitment Section: View", "Inherit").disabled).toBe(false); // legacy row here
+    expect(button("Collection Tracker — Company Popup — Commitment Section: Record", "Inherit").disabled).toBe(true); // nothing to clear
+    expect(within(row("Collection Tracker — Company Popup — Commitment Section: View")).getByText(/legacy Allow that is ignored until you clear it/)).toBeTruthy();
+    fireEvent.click(button("Collection Tracker — Company Popup — Commitment Section: View", "Inherit"));
     expect(a.set).toHaveBeenCalledWith("collection.commitments.view", "department", DEPT, null);
     cleanup();
     render(<FieldAccessManager matrix={withLegacy} canManageSensitive={false} />);
     pickDepartment();
-    expect(button("Collections — View commitments", "Inherit").disabled).toBe(true);
-    expect(within(row("Collections — View commitments")).getByText(/until a super-admin clears it/)).toBeTruthy();
+    expect(button("Collection Tracker — Company Popup — Commitment Section: View", "Inherit").disabled).toBe(true);
+    expect(within(row("Collection Tracker — Company Popup — Commitment Section: View")).getByText(/until a super-admin clears it/)).toBeTruthy();
   });
 
   it("the live preview ignores the legacy department Allow but still applies an ordinary department Deny", () => {
     render(<FieldAccessManager matrix={withLegacy} />);
     pickDepartment();
-    expect(within(row("Collections — View commitments")).getByText("Not allowed")).toBeTruthy();
+    expect(within(row("Collection Tracker — Company Popup — Commitment Section: View")).getByText("Not allowed")).toBeTruthy();
     expect(within(row("Collections — Follow-ups")).getByText("Not allowed")).toBeTruthy();
     expect(within(row("Collections — Follow-ups")).getByText("From their department")).toBeTruthy();
   });

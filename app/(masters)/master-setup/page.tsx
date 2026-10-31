@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { Route } from "next";
-import { Boxes, Contact, Library, KeyRound, DatabaseZap, ArrowRight } from "lucide-react";
+import { Boxes, Library, KeyRound, DatabaseZap, ArrowRight } from "lucide-react";
 import { requireAdmin } from "@/lib/auth/current";
 import { getMasterDataCounts } from "@/lib/queries/master-data";
 import { MasterPageHead } from "@/components/admin/master/page-head";
@@ -15,14 +15,6 @@ const CARDS = [
     icon: Boxes,
     keys: ["categories", "products", "skus"] as const,
     unit: "categories · products · SKUs",
-  },
-  {
-    href: "/master-setup/customers",
-    label: "Customer Masters",
-    hint: "Profiles, sales-rep ownership, A/B/C class and buying behaviour.",
-    icon: Contact,
-    keys: ["customers"] as const,
-    unit: "customers",
   },
   {
     href: "/master-setup/libraries",
@@ -59,7 +51,7 @@ export default async function MasterSetupOverviewPage() {
       <MasterPageHead
         eyebrow="Admin & Master Setup"
         title="Master Data"
-        lede="The reference data the business runs on — catalogue, customers, libraries, permissions and ingestion. Separate from the Admin Panel, which handles people and org settings."
+        lede="The reference data the business runs on — catalogue, libraries, permissions and ingestion. Separate from the Admin Panel, which handles people and org settings. Customer Master and Tally Data Import live in the Forms module."
       />
 
       <div className="grid grid-cols-2 max-lg:grid-cols-1 gap-4">

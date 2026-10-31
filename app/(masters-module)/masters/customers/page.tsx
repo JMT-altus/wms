@@ -20,10 +20,9 @@ export const dynamic = "force-dynamic";
  * one edit path. Only the heading differs, because that is what the rail calls
  * this route.
  *
- * The narrower form has not been deleted: /master-setup/customers still
- * renders `CustomerMasterManager`, which owns the fields this table does not
- * carry (Customer Category, purchase pattern, sensitivity) and is where an
- * admin sets them.
+ * The same table is also the Forms module's Customer Master
+ * (/forms/customer-master — it moved there from /master-setup/customers,
+ * which now redirects), admin-only inside that module.
  */
 export default async function CustomerMasterPage() {
   const [clients, salesPeople, bulk] = await allWithDbRetry([

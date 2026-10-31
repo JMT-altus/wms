@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { designations, lookupItems } from "@/db/schema";
 import type { Employee } from "@/db/schema";
 import { getCurrentEmployee } from "@/lib/auth/current";
+import { canAccessModule } from "@/lib/auth/module-access";
 import { rateLimitOrError } from "@/lib/rate-limit";
 import { KYC_LISTS, type KycListKey } from "@/lib/masters/kyc-dropdowns";
 
@@ -28,12 +29,12 @@ export type Result = { ok: true; id?: string } | { ok: false; error: string };
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const isUuid = (v: unknown): v is string => typeof v === "string" && UUID_RE.test(v);
 
-/** Admin-only, matching the Forms module layout that renders this screen. */
+/** The Forms module (Admin → Access), matching the layout that renders this screen. */
 type Denied = { ok: false; error: string };
 async function guard(): Promise<{ me: Employee } | { error: Denied }> {
   const me = await getCurrentEmployee();
   if (!me || !me.isActive) return { error: { ok: false, error: "Please sign in again." } };
-  if (!me.isAdmin) return { error: { ok: false, error: "Client Master DD is restricted to admins." } };
+  if (!(await canAccessModule("forms"))) return { error: { ok: false, error: "You don't have access to Forms." } };
   const limited = rateLimitOrError(me.id, "write");
   if (limited) return { error: limited };
   return { me };

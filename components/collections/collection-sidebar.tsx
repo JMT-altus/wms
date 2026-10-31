@@ -62,8 +62,9 @@ const NAV: ReadonlyArray<NavItem> = [
 ];
 
 /**
- * Shown only with collection.commitments.view or collection.escalation.review
- * (decided on the server); the page and its data check again regardless.
+ * Shown only with collection.commitments.page (decided on the server); the page
+ * and its data check again regardless. The company popup's Commitment section
+ * keys do not show it.
  */
 const COMMITMENTS_ITEM: NavItem = {
   href: `${COLLECTION_BASE}/commitments` as Route,

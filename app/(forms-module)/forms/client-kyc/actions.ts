@@ -19,6 +19,7 @@ import {
 } from "@/db/schema";
 import type { Employee } from "@/db/schema";
 import { getCurrentEmployee } from "@/lib/auth/current";
+import { canAccessModule } from "@/lib/auth/module-access";
 import { rateLimitOrError } from "@/lib/rate-limit";
 import { getSupabaseAdmin, DOCUMENTS_BUCKET } from "@/lib/supabase/admin";
 import {
@@ -62,17 +63,16 @@ const isUuid = (v: unknown): v is string => typeof v === "string" && UUID_RE.tes
 class NotADraftError extends Error {}
 
 /**
- * Admin-only, matching the Forms area this screen now lives in — the layout
- * at forms/client-kyc/layout.tsx enforces the same rule on the read path.
- * It used to be the `masters` module grant; server actions aren't covered by
- * a layout guard, so this check is what actually protects the write path.
+ * The Forms module (Admin → Access), matching the Forms layout on the read
+ * path. Server actions aren't covered by a layout guard, so this check is what
+ * actually protects the write path.
  */
 type Denied = { ok: false; error: string };
 async function guard(): Promise<{ me: Employee } | { error: Denied }> {
   const me = await getCurrentEmployee();
   if (!me || !me.isActive) return { error: { ok: false, error: "Please sign in again." } };
-  if (!me.isAdmin) {
-    return { error: { ok: false, error: "Client KYC is restricted to admins." } };
+  if (!(await canAccessModule("forms"))) {
+    return { error: { ok: false, error: "You don't have access to Forms." } };
   }
   const limited = rateLimitOrError(me.id, "write");
   if (limited) return { error: limited };
@@ -97,7 +97,7 @@ function revalidateKyc(): void {
   revalidatePath("/forms/client-kyc/credit-limit");
   revalidatePath("/forms/client-kyc/recycle-bin");
   revalidatePath("/masters/customers");
-  revalidatePath("/master-setup/customers");
+  revalidatePath("/forms/customer-master");
   revalidatePath("/master-setup/libraries");
 }
 

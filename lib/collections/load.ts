@@ -2,11 +2,12 @@ import "server-only";
 import { listAllMasterCompanies } from "@/lib/queries/collection-master";
 import { loadLatestBalances } from "@/lib/queries/collection-balances";
 import { activeTransactionSource } from "./transactions";
-import { isZeroBalanceLine, splitZeroBalance } from "./balances/visibility";
+import { isEmptyBalance } from "./balances/visibility";
+import { inScope, scopeMessage, type CollectionScope } from "./scope";
 import {
-  ALL_ZERO_BALANCE_MESSAGE,
   type CollectionTransaction,
   MASTER_EMPTY_MESSAGE,
+  SCOPE_EMPTY_MESSAGE,
   MASTER_NOT_READY_MESSAGE,
   type CollectionParty,
   type CollectionSource,
@@ -14,7 +15,10 @@ import {
 
 /**
  * The Collection screens' one loader. Companies come from the Collection
- * Master; Debit / Credit from the latest uploaded balance snapshot; transactions
+ * Master, narrowed to the caller's scope (lib/collections/scope.ts: a
+ * super-admin sees every company, a linked Sales Coordinator only their own,
+ * anyone else none) before anything else is read for them; Debit / Credit from
+ * the latest uploaded balance snapshot; transactions
  * from the active transaction source (none approved yet, so every party's
  * `transactions` is empty and `outstanding` stays null). Both
  * the Tracker and the Dashboard read through here, so they always agree.
@@ -33,31 +37,30 @@ export async function loadTransactionsByMaster(masterIds: string[]): Promise<Map
   return byMaster;
 }
 
-export interface LoadCollectionPartiesOptions {
-  /**
-   * Leave out companies whose Debit and Credit are both zero in the active
-   * (latest confirmed) balance snapshot — the Tracker's default list. Every
-   * party still carries `zeroBalance`; `hiddenZeroBalance` counts the ones left
-   * out. Off by default, so every other reader (Dashboard, the follow-up and
-   * review actions, the commitments page) still sees every company.
-   */
-  hideZeroBalance?: boolean;
-}
-
-export async function loadCollectionParties(options: LoadCollectionPartiesOptions = {}): Promise<CollectionSource> {
+export async function loadCollectionParties(scope: CollectionScope): Promise<CollectionSource> {
   const source = activeTransactionSource();
   const transactions = { key: source.key, label: source.label, approved: source.approved };
   const master = await listAllMasterCompanies();
   if (!master.storageReady) {
-    return { connected: false, parties: [], message: MASTER_NOT_READY_MESSAGE, masterReady: false, transactions };
+    return { connected: false, parties: [], message: MASTER_NOT_READY_MESSAGE, masterReady: false, transactions, scope };
   }
+  // The scope is applied HERE, before balances, transactions or anything else
+  // is read for a company: a company outside it never reaches the caller, so no
+  // screen, popup, filter, search or action built on this loader can show it.
+  const rows = master.rows.filter((r) => inScope(scope, r.coordinatorLabel));
 
-  const byMaster = await loadTransactionsByMaster(master.rows.map((r) => r.id));
+  const byMaster = await loadTransactionsByMaster(rows.map((r) => r.id));
   // Debit / Credit come from the LATEST uploaded balance snapshot only; a company
   // missing from it stays blank. Outstanding is never worked out from them.
+  // Whether a company is empty-balance (shown last and muted in the Tracker) is
+  // decided from its MOST RECENT line in any confirmed upload — no line at all
+  // means no amount on either side — so a company a later file leaves out
+  // keeps the state its last confirmed line gave it. Only once an upload has
+  // been confirmed and read: an unavailable source mutes nobody.
   const balances = await loadLatestBalances();
+  const sourceReady = balances.status === "ok" && balances.snapshot !== null;
 
-  const all: CollectionParty[] = master.rows.map((r) => {
+  const parties: CollectionParty[] = rows.map((r) => {
     const line = balances.byCompany.get(r.id);
     return {
       partyName: r.companyName,
@@ -72,23 +75,22 @@ export async function loadCollectionParties(options: LoadCollectionPartiesOption
       paymentTerms: r.paymentTerms,
       clientMasterLinked: r.customerMasterId !== null,
       transactions: byMaster.get(r.id) ?? [],
-      // Only a line in the active snapshot can say "zero"; no line (not in the
-      // file, no upload yet, balances unreadable) never hides a company.
-      zeroBalance: isZeroBalanceLine(line),
+      // Empty-balance: no amount on either side in the confirmed uploads (a
+      // ₹0 / ₹0 line, or no line in any upload). Never while no upload has been
+      // confirmed or the balances could not be read.
+      zeroBalance: isEmptyBalance(balances.latestLineByCompany.get(r.id), sourceReady),
     };
   });
-  // The hidden companies are only left out of this list: nothing about them is
-  // written, and the next confirmed upload decides afresh.
-  const { visible, hidden } = options.hideZeroBalance ? splitZeroBalance(all) : { visible: all, hidden: [] };
-  const parties = visible;
-  const message = parties.length > 0 ? undefined : all.length === 0 ? MASTER_EMPTY_MESSAGE : ALL_ZERO_BALANCE_MESSAGE;
+  // Every company is returned, empty-balance or not: nothing about them is
+  // written, and the next confirmed upload that includes them decides afresh.
+  // The Tracker orders the empty-balance ones last and mutes them.
   return {
     connected: parties.length > 0,
     parties,
-    message,
+    message: parties.length > 0 ? undefined : (scopeMessage(scope) ?? (master.rows.length === 0 ? MASTER_EMPTY_MESSAGE : SCOPE_EMPTY_MESSAGE)),
     masterReady: true,
     transactions,
     balances: { status: balances.status, errorCode: balances.errorCode },
-    ...(options.hideZeroBalance ? { hiddenZeroBalance: hidden.length } : {}),
+    scope,
   };
 }

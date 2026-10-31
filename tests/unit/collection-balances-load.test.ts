@@ -7,6 +7,8 @@ const h = vi.hoisted(() => ({
   fail: null as unknown,
   snapshot: null as null | Record<string, unknown>,
   lines: [] as Record<string, unknown>[],
+  /** Each company's most recent line across snapshots (the DISTINCT ON query). */
+  history: [] as Record<string, unknown>[],
 }));
 
 vi.mock("server-only", () => ({}));
@@ -17,7 +19,8 @@ vi.mock("@/lib/queries/collection-master", () => ({
   },
 }));
 vi.mock("@/lib/db", () => {
-  // select().from().orderBy().limit() → the newest snapshot;  select().from().where() → its lines.
+  // select().from().orderBy().limit() → the newest snapshot;  select().from().where() → its lines;
+  // selectDistinctOn().from().innerJoin().orderBy() → each company's most recent line.
   const chain = () => {
     const c: Record<string, unknown> = {};
     c.from = () => c;
@@ -32,7 +35,17 @@ vi.mock("@/lib/db", () => {
     };
     return c;
   };
-  return { db: { select: () => chain() } };
+  const distinct = () => {
+    const c: Record<string, unknown> = {};
+    c.from = () => c;
+    c.innerJoin = () => c;
+    c.orderBy = async () => {
+      if (h.fail) throw h.fail;
+      return h.history;
+    };
+    return c;
+  };
+  return { db: { select: () => chain(), selectDistinctOn: () => distinct() } };
 });
 
 import { loadLatestBalances } from "@/lib/queries/collection-balances";
@@ -44,6 +57,7 @@ beforeEach(() => {
   h.fail = null;
   h.snapshot = null;
   h.lines = [];
+  h.history = [];
   logged = vi.spyOn(console, "error").mockImplementation(() => {});
 });
 afterEach(() => logged.mockRestore());
@@ -52,13 +66,19 @@ describe("loadLatestBalances", () => {
   it("reads the latest snapshot's lines", async () => {
     h.snapshot = { id: "s1", fileName: "a.xls", sheetName: null, fileHash: null, periodFrom: null, periodTo: null, uploadedAt: new Date(), totals: { matched: 1 } };
     h.lines = [{ companyId: "c1", debit: "100.00", credit: null }];
+    h.history = [{ companyId: "c1", debit: "100.00", credit: null }, { companyId: "c2", debit: "0.00", credit: "0.00" }];
     const r = await loadLatestBalances();
     expect(r).toMatchObject({ storageReady: true, status: "ok" });
     expect(r.byCompany.get("c1")).toEqual({ debit: 100, credit: null });
+    // c2 is not in the latest snapshot (no figures), but its most recent line is known for visibility.
+    expect(r.byCompany.has("c2")).toBe(false);
+    expect(r.latestLineByCompany.get("c2")).toEqual({ debit: 0, credit: 0 });
   });
 
   it("no snapshot yet is simply empty", async () => {
-    expect(await loadLatestBalances()).toMatchObject({ storageReady: true, status: "ok", snapshot: null });
+    const r = await loadLatestBalances();
+    expect(r).toMatchObject({ storageReady: true, status: "ok", snapshot: null });
+    expect(r.latestLineByCompany.size).toBe(0);
   });
 
   it("tables not installed (42P01, also when wrapped) → 'not-installed', empty, not logged as a problem", async () => {

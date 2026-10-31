@@ -65,10 +65,11 @@ export interface CollectionParty {
   /** Records from the transaction source; empty while no source is approved. */
   transactions?: CollectionTransaction[];
   /**
-   * True when the ACTIVE (latest confirmed) balance snapshot has a line for the
-   * company with Debit and Credit both zero: the Tracker's default list leaves
-   * it out (see lib/collections/balances/visibility.ts). Never set from missing
-   * or unreadable balances. The company itself is untouched.
+   * Empty balance: the confirmed uploads give the company no amount on either
+   * side — its most recent line is ₹0 / ₹0, or it has no line in any upload
+   * (shown as — / —). The Tracker shows it last and muted (see
+   * lib/collections/balances/visibility.ts). Never set while no upload has been
+   * confirmed or the balances could not be read. The company itself is untouched.
    */
   zeroBalance?: boolean;
 }
@@ -88,16 +89,11 @@ export interface CollectionSource {
    * blank Debit / Credit, and say so. Absent from older callers.
    */
   balances?: { status: "ok" | "not-installed" | "error"; errorCode?: string };
-  /**
-   * How many Collection Master companies were left out of `parties` because
-   * their Debit and Credit are both zero in the active snapshot (only when the
-   * loader was asked to hide them). They remain in the Collection Master.
-   */
-  hiddenZeroBalance?: number;
+  /** Whose companies these are (lib/collections/scope.ts): every company, one Sales Coordinator's, or none. */
+  scope?: { kind: "all" } | { kind: "coordinator"; label: string } | { kind: "none"; reason: string };
 }
 
-export const ALL_ZERO_BALANCE_MESSAGE =
-  "Every company has ₹0 Debit and ₹0 Credit in the latest balance upload, so none is listed. They stay in the Collection Master and will be listed again when an upload gives them a balance.";
+export const SCOPE_EMPTY_MESSAGE = "No company in the Collection Master is assigned to you as Sales Coordinator yet.";
 
 export const NOT_CONNECTED_MESSAGE =
   "Collection data will appear here once a data source is connected.";

@@ -32,6 +32,7 @@ export type ModuleId =
   | "masters"
   | "targets"
   | "project"
+  | "forms"
   | "collection"
   | "hr";
 
@@ -89,7 +90,7 @@ export const MODULES: ModuleDef[] = [
     tagline: "The work dashboard for tasks, goals & the daily loop.",
     icon: "LayoutGrid",
     landing: "/",
-    routes: ["/tasks", "/projects", "/weekly-goals", "/inbox", "/archived", "/search", "/documents", "/forms"],
+    routes: ["/tasks", "/projects", "/weekly-goals", "/inbox", "/archived", "/search", "/documents"],
     accent: { from: "#0A6CFF", to: "#0047B3", ink: "#0A6CFF" },
     items: [
       { href: "/", label: "Dashboard", icon: "LayoutDashboard" },
@@ -218,7 +219,7 @@ export const MODULES: ModuleDef[] = [
   },
   {
     id: "project",
-    label: "Project Plan",
+    label: "Project",
     tagline: "Projects broken down to milestones, results and the actions that deliver them.",
     icon: "Waypoints",
     landing: "/project-plan",
@@ -230,6 +231,18 @@ export const MODULES: ModuleDef[] = [
     // Left rail, same reasoning as Masters and Targets — Project Views /
     // Projects / Milestones / Results / Actions / Sub-Actions / Kanban is
     // seven entries, and a pill row stops being readable around six.
+    items: [],
+  },
+  {
+    id: "forms",
+    label: "Forms",
+    tagline: "Client KYC, masters and Tally ledgers.",
+    icon: "FileText",
+    // The overview: one tile per Forms section with its live record count.
+    landing: "/forms",
+    routes: ["/forms"],
+    accent: { from: "#FB7185", to: "#BE123C", ink: "#BE123C" },
+    // Left rail in its own route group, like Masters and Project Plan.
     items: [],
   },
   {

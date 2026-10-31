@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 
-// The "Escalate to Mihir Sir" button and its Reason for Escalation dialog, and the
+// The "Escalate" button and its Reason for Escalation dialog, and the
 // reason on the review page. The server action is MOCKED here (the real one, and the
 // real SQL, are covered in collection-review-actions.test.ts and
 // tests/integration/collection-escalation-reason.db.test.ts).
@@ -31,18 +31,20 @@ afterEach(cleanup);
 const control = (over: Partial<Parameters<typeof EscalateControl>[0]> = {}) =>
   render(<EscalateControl companyId={CO} companyName="Alpha Traders" open={null} storageReady canEscalate {...over} />);
 const openDialog = async () => {
-  fireEvent.click(screen.getByRole("button", { name: "Escalate Alpha Traders to Mihir Sir" }));
+  fireEvent.click(screen.getByRole("button", { name: "Escalate Alpha Traders" }));
   return screen.findByRole("dialog");
 };
 const field = (dialog: HTMLElement) => within(dialog).getByLabelText(/Reason for Escalation/) as HTMLTextAreaElement;
 const submit = (dialog: HTMLElement) => fireEvent.click(within(dialog).getByRole("button", { name: "Submit" }));
 
 describe("the button", () => {
-  it("reads 'Escalate to Mihir Sir' (styling and permissions unchanged)", () => {
+  it("reads 'Escalate' — no name in the label or the accessible name (styling and permissions unchanged)", () => {
     control();
-    const btn = screen.getByRole("button", { name: "Escalate Alpha Traders to Mihir Sir" });
-    expect(btn.textContent).toBe("Escalate to Mihir Sir");
-    expect(ESCALATE_LABEL).toBe("Escalate to Mihir Sir");
+    const btn = screen.getByRole("button", { name: "Escalate Alpha Traders" });
+    expect(btn.textContent).toBe("Escalate");
+    expect(ESCALATE_LABEL).toBe("Escalate");
+    expect(btn.getAttribute("aria-label")).toBe("Escalate Alpha Traders");
+    expect(document.body.textContent).not.toMatch(/mihir/i);
     expect(btn.className).toContain("rounded-lg border border-hairline-strong");
   });
   it("is not offered without collection.escalation.create, and is disabled while storage isn't set up", () => {
@@ -62,7 +64,7 @@ describe("the Reason for Escalation dialog", () => {
   it("opens with a required multiline Reason for Escalation field, Cancel and Submit", async () => {
     control();
     const dialog = await openDialog();
-    expect(within(dialog).getByRole("heading", { name: "Escalate to Mihir Sir" })).toBeTruthy();
+    expect(within(dialog).getByRole("heading", { name: "Escalate" })).toBeTruthy();
     const f = field(dialog);
     expect(f.tagName).toBe("TEXTAREA");
     expect(f.getAttribute("aria-required")).toBe("true");
@@ -186,7 +188,7 @@ describe("the review page shows each escalation's own reason", () => {
 });
 
 describe("no person is hard-coded into access or routing", () => {
-  it("the escalation, review and permission code never names Mihir (only the button label does)", () => {
+  it("the escalation, review and permission code never names Mihir — the button label no longer does either", () => {
     const read = (p: string) => readFileSync(resolve(__dirname, "../..", p), "utf8");
     for (const p of [
       "app/(collection-module)/collection/actions.ts",
@@ -199,11 +201,9 @@ describe("no person is hard-coded into access or routing", () => {
       "app/(forms-module)/forms/layout.tsx",
       "app/(collection-module)/collection/layout.tsx",
       "components/collections/collection-sidebar.tsx",
+      "components/collections/review-controls.tsx",
     ]) {
       expect(read(p), p).not.toMatch(/mihir/i);
     }
-    const controls = read("components/collections/review-controls.tsx");
-    const mentions = controls.split(/\r?\n/).filter((l) => /mihir/i.test(l) && !/^\s*(\/\/|\*|\/\*\*)/.test(l));
-    expect(mentions.every((l) => /ESCALATE_LABEL = "Escalate to Mihir Sir"|aria-label=\{`Escalate \$\{companyName\} to Mihir Sir`\}/.test(l))).toBe(true);
   });
 });

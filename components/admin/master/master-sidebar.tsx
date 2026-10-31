@@ -7,11 +7,9 @@ import type { Route } from "next";
 import {
   Boxes,
   CalendarCheck2,
-  Contact,
   Library,
   KeyRound,
   DatabaseZap,
-  FileUp,
   LayoutGrid,
   ShieldCheck,
   ArrowLeft,
@@ -30,8 +28,12 @@ import { RailToggle } from "@/components/layout/rail-toggle";
  * Deliberately NOT the admin sidebar with extra rows: Admin Panel and Master
  * Setup are separate areas. Admin Panel is org administration (people,
  * departments, settings, activity); Master Setup is the reference data the
- * business runs on (catalogue, customers, libraries, ingestion). They are
- * reached separately from the Hub and each links across to the other.
+ * business runs on (catalogue, libraries, ingestion). They are reached
+ * separately from the Hub and each links across to the other.
+ *
+ * Customer Master and Tally Data Import moved to the Forms module
+ * (/forms/customer-master, /forms/tally-import); next.config.ts redirects the
+ * old /master-setup URLs there.
  *
  * Amber accent so it is visually distinct from the Admin Panel's blue.
  */
@@ -59,12 +61,6 @@ const NAV: ReadonlyArray<NavItem> = [
     icon: Boxes,
   },
   {
-    href: "/master-setup/customers" as Route,
-    label: "Customer Master",
-    hint: "Profiles & classification",
-    icon: Contact,
-  },
-  {
     href: "/master-setup/libraries" as Route,
     label: "System Libraries",
     hint: "Dropdowns & incentive slabs",
@@ -81,12 +77,6 @@ const NAV: ReadonlyArray<NavItem> = [
     label: "Data Ingestion",
     hint: "Sheets / Tally mapping",
     icon: DatabaseZap,
-  },
-  {
-    href: "/master-setup/tally-import" as Route,
-    label: "Tally Data Import",
-    hint: "Excel / CSV from Tally",
-    icon: FileUp,
   },
   {
     href: "/master-setup/collection-weekly-upload" as Route,

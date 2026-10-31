@@ -42,19 +42,15 @@ type Style = {
 };
 
 /**
- * Keyed by ModuleId, plus the synthetic "masters" and "forms" tiles.
+ * Keyed by ModuleId, plus the synthetic "admin" tile.
  *
  * Admin & Master Setup is deliberately NOT a nav module: it lives in the
  * `(admin)` route group with its own sidebar, so it has no top-nav pills, and
  * adding it to MODULES would put a grantable column in /admin/access — letting
  * someone hand a non-admin a tile that leads straight to a Forbidden page.
  * It is gated on `isAdmin`, which is exactly what every /admin page enforces.
- *
- * Forms (reimbursement/leave/reference/breakthrough requests) is the same
- * story — those four pages have no entry point anywhere in the app yet, so
- * the tile is admin-gated for now rather than opened to everyone sight unseen.
  */
-const STYLES: Record<ModuleId | "admin" | "forms", Style> = {
+const STYLES: Record<ModuleId | "admin", Style> = {
   // Soft blue.
   wms: { Icon: LayoutGrid, card: "#F2F7FE", chip: "#DCE9FC", accent: "#1D5FD1", border: "rgba(29,95,209,0.14)" },
   // Soft mint green.
@@ -118,11 +114,13 @@ export default async function HubPage({
   // app/(app)/layout.tsx enforces the same list on direct URL hits and sends
   // them back here with ?denied=<module>.
   // HR is held back and appended after the admin-only tiles below, so it is the
-  // ninth tile on a full hub rather than slotting in before Admin and Forms.
+  // last tile on a full hub rather than slotting in before Admin and Forms.
+  // Forms is held back the same way, so it keeps its place right after Admin.
   const visibleModules = MODULES.filter(
-    (m) => access[m.id]?.allowed && !m.hiddenFromHub && m.id !== "hr",
+    (m) => access[m.id]?.allowed && !m.hiddenFromHub && m.id !== "hr" && m.id !== "forms",
   );
   const hrModule = MODULES.find((m) => m.id === "hr");
+  const formsModule = MODULES.find((m) => m.id === "forms");
   const deniedModule = params.denied
     ? MODULES.find((m) => m.id === params.denied)
     : undefined;
@@ -149,17 +147,14 @@ export default async function HubPage({
             tagline: "Products, customers, libraries, permissions & data import.",
             href: "/master-setup",
           },
-          // Admin-gated alongside Admin & Master Setup; see the STYLES comment.
-          // Opens Client KYC rather than Reimbursements: KYC is the only form
-          // here without a second way in, while Reimbursements and Leave
-          // Approval both keep their pills in the Employees module.
-          {
-            key: "forms",
-            label: "Forms",
-            tagline: "Onboard a client end to end.",
-            href: "/forms/client-kyc/new",
-          },
         ]
+      : []),
+    // Gated by module access like every other module tile (Admin → Access).
+    // Opens Client KYC rather than Reimbursements: KYC is the only form here
+    // without a second way in, while Reimbursements and Leave Approval both
+    // keep their pills in the Employees module.
+    ...(formsModule && access.forms?.allowed
+      ? [{ key: "forms", label: formsModule.label, tagline: formsModule.tagline, href: formsModule.landing }]
       : []),
     // Last. Gated by module access like every other module tile (admins pass
     // through the admin bypass; everyone else needs an HR grant).
@@ -262,7 +257,7 @@ export default async function HubPage({
         {/* Module tiles — only the ones this person may open. */}
         <div className={`mx-auto w-full px-8 max-md:px-4 pb-4 grid gap-5 max-md:gap-4 grid-cols-1 ${gridCols}`} style={{ maxWidth: gridMaxWidth }}>
           {tiles.map((m) => {
-            const s = STYLES[m.key as ModuleId | "admin" | "forms"];
+            const s = STYLES[m.key as ModuleId | "admin"];
             const Icon = s.Icon;
             return (
               <Link

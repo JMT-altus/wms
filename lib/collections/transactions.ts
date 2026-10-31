@@ -1,4 +1,5 @@
 import type { CollectionTransaction, TransactionSourceInfo } from "./source";
+import { TALLY_BILLS_SOURCE_KEY, listTallyBills } from "./tally-source";
 
 /**
  * The collection-transaction source — the ONE place a real source plugs in.
@@ -28,6 +29,18 @@ export const NO_TRANSACTION_SOURCE: CollectionTransactionSource = {
   },
 };
 
+/** Tally's bill-wise outstanding snapshot. Implemented, and off until someone approves it. */
+export const TALLY_BILLS_SOURCE: CollectionTransactionSource = {
+  key: TALLY_BILLS_SOURCE_KEY,
+  label: "Tally outstanding snapshot",
+  approved: true,
+  list: listTallyBills,
+};
+
+/**
+ * Approving a source is a deliberate decision: importing a file doesn't do it.
+ * Set COLLECTION_TRANSACTION_SOURCE=tally-bills in the environment to turn it on.
+ */
 export function activeTransactionSource(): CollectionTransactionSource {
-  return NO_TRANSACTION_SOURCE;
+  return process.env.COLLECTION_TRANSACTION_SOURCE === TALLY_BILLS_SOURCE_KEY ? TALLY_BILLS_SOURCE : NO_TRANSACTION_SOURCE;
 }

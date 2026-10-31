@@ -29,8 +29,10 @@ export interface CommitmentView {
   comments: CommentEntry[];
   /** Due-date facts the Tracker's overdue colouring reads. */
   due?: OverdueInput[];
-  /** Current Collection Amount Confirmation; null = not set. */
+  /** Current Collection Amount Confirmation (Yes/No); null = not set. */
   confirmation?: ConfirmationValue | null;
+  /** Current confirmed amount ("x.yy" rupees); null = not entered. */
+  confirmedAmount?: string | null;
   /** Outstanding as the approved transaction source supplies it; null = not available. */
   outstanding?: number | null;
   /** The open escalation, if any. */
@@ -39,6 +41,8 @@ export interface CommitmentView {
     escalatedAt: Date;
     escalatedByName: string | null;
     confirmationAtEscalation: ConfirmationValue | null;
+    /** The confirmed amount in force when escalated ("x.yy" rupees); null = none entered then (or raised before amounts existed). */
+    confirmedAmountAtEscalation?: string | null;
     /** Reason for Escalation recorded with this escalation; null = raised before reasons were recorded. */
     reason?: string | null;
   } | null;
@@ -236,7 +240,10 @@ export function CommitmentsTable({
                       </>
                     )}
                     <td className="px-3 py-2">{r.collectionPerson ?? <span className="text-ink-subtle">Unassigned</span>}</td>
-                    <td className="px-3 py-2">{confirmationLabel(r.confirmation)}</td>
+                    <td className="px-3 py-2">
+                      {confirmationLabel(r.confirmation)}
+                      {r.confirmedAmount && <span className="block text-[12px] tabular-nums text-ink-subtle">Amount: {formatInrExact(r.confirmedAmount)}</span>}
+                    </td>
                     <td className="px-3 py-2 text-right tabular-nums">
                       {typeof r.outstanding === "number" ? formatInr(r.outstanding) : <span className="text-ink-subtle" title="No outstanding amount from an approved transaction source">—</span>}
                     </td>
@@ -261,6 +268,7 @@ export function CommitmentsTable({
                             Escalated by: {r.escalation.escalatedByName ?? "Not on record"} · {commentDate(r.escalation.escalatedAt)} · {commentTime(r.escalation.escalatedAt)}
                           </span>
                           <span className="block text-ink-subtle">Confirmation then: {confirmationLabel(r.escalation.confirmationAtEscalation)}</span>
+                          <span className="block text-ink-subtle">Confirmed amount then: {r.escalation.confirmedAmountAtEscalation ? formatInrExact(r.escalation.confirmedAmountAtEscalation) : "Not entered"}</span>
                           {canClose && <CloseEscalationButton escalationId={r.escalation.id} companyName={r.companyName} />}
                         </>
                       ) : (

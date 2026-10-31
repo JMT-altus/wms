@@ -44,7 +44,7 @@ function revalidateMasters(): void {
   // /master-setup edits the same two tables — leaving its cache warm would show
   // an admin stale rows there right after saving here.
   revalidatePath("/master-setup/products");
-  revalidatePath("/master-setup/customers");
+  revalidatePath("/forms/customer-master");
 }
 
 /**
@@ -152,8 +152,9 @@ export async function deleteMasterProduct(id: string): Promise<Result> {
  * One round trip regardless of `n`, so a bulk import doesn't pay N queries
  * for N codes.
  *
- * Deliberately app-layer, not a DB default/trigger, so /master-setup/customers
- * (which still lets an admin type a code by hand) is completely unaffected —
+ * Deliberately app-layer, not a DB default/trigger, so the Forms module's
+ * Customer Master (/forms/customer-master, formerly /master-setup/customers,
+ * which still lets an admin type a code by hand) is completely unaffected —
  * see the migration comment.
  */
 export async function nextCustomerCodes(n: number): Promise<string[]> {

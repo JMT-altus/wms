@@ -17,6 +17,9 @@ const h = vi.hoisted(() => ({
 }));
 
 vi.mock("server-only", () => ({}));
+// Company visibility (lib/collections/scope-server.ts) is not under test here: every company is in scope. The real
+// resolver, over real coordinator links, is covered by tests/integration/collection-tracker-scope.db.test.ts.
+vi.mock("@/lib/collections/scope-server", () => ({ collectionScopeFor: async () => ({ kind: "all" }) }));
 // Collection is its own module now (Admin → Access). Its gate is mocked to follow the session's admin flag — the
 // admin bypass — so these tests keep exercising the collection.* capabilities exactly as before.
 vi.mock("@/lib/auth/module-access", async () => {
@@ -48,14 +51,15 @@ vi.mock("@/lib/auth/current", () => ({
     return h.me;
   },
 }));
-// The person explicitly granted collection.commitments.view in the permission matrix (no one else).
+// The person explicitly granted collection.commitments.view AND the Commitments & Escalations page in the permission matrix (no one else).
 vi.mock("@/lib/auth/field-access", () => ({
-  getMyFieldAccess: async () => (h.me?.email === GRANTED ? { "collection.commitments.view": { allowed: true, source: "employee" } } : {}),
+  getMyFieldAccess: async () => (h.me?.email === GRANTED ? { "collection.commitments.view": { allowed: true, source: "employee" }, "collection.commitments.page": { allowed: true, source: "employee" } } : {}),
 }));
 vi.mock("@/lib/queries/collection-followups", () => ({ listFollowUps: () => h.listFollowUps() }));
 vi.mock("@/lib/queries/collection-commitments", () => ({ listOwnerCommitments: (...a: unknown[]) => h.listCommitments(...a) }));
 vi.mock("@/lib/collections/load", () => ({ loadTransactionsByMaster: async () => new Map(), loadCollectionParties: async () => ({ connected: true, parties: [] }) }));
 vi.mock("@/lib/queries/collection-review", () => ({
+  latestConfirmedAmounts: async () => ({ storageReady: true, byCompany: new Map() }),
   latestConfirmations: async () => ({ storageReady: true, byCompany: new Map() }),
   listOpenEscalationsForReview: async () => ({ storageReady: true, rows: [] }),
 }));

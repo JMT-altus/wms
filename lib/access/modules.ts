@@ -39,6 +39,10 @@ export const MODULE_CODE_DEFAULTS: Record<ModuleId, boolean> = {
   // everyone, and the module's single permission rule is about who may RULE
   // on a row's status — not who may look at one.
   project: true,
+  // Off by default. Client KYC holds customer, bank and credit details and was
+  // admin-only; admins keep it through the admin bypass, everyone else is
+  // granted it deliberately. Independent of Collection.
+  forms: false,
   // Off by default. Collection used to be reachable only by admins (it lived
   // in the admin-only Forms area); admins keep it through the admin bypass,
   // everyone else is granted it deliberately — and still needs the

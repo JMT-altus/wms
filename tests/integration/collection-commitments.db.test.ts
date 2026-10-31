@@ -11,6 +11,9 @@ const h = vi.hoisted(() => {
   return { db: null as unknown, me: { id: "", isAdmin: true, isActive: true, email: "admin@example.test", name: "Admin" } };
 });
 vi.mock("server-only", () => ({}));
+// Company visibility (lib/collections/scope-server.ts) is not under test here: every company is in scope. The real
+// resolver, over real coordinator links, is covered by tests/integration/collection-tracker-scope.db.test.ts.
+vi.mock("@/lib/collections/scope-server", () => ({ collectionScopeFor: async () => ({ kind: "all" }) }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/rate-limit", () => ({ rateLimitOrError: () => null }));
 vi.mock("@/lib/db", () => ({
@@ -85,7 +88,7 @@ describe("import → Collection Tracker (real SQL)", () => {
       { company_name: "Gamma Ltd", coordinator_label: null },
     ]);
 
-    const source = await load.loadCollectionParties();
+    const source = await load.loadCollectionParties({ kind: "all" });
     const rows = derive.buildRows(source.parties, []);
     expect(rows.map((r) => [r.partyName, r.collectionPerson])).toEqual([
       ["Alpha Traders", "MANGESH"],

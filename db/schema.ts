@@ -2029,6 +2029,30 @@ export const collectionAmountConfirmations = pgTable(
 );
 
 /**
+ * The confirmed AMOUNT a Tracker user enters for a company (migration 0123,
+ * prepared for review) — append-only history, newest row current, no row = not
+ * entered. Rupees exact to the paise (numeric(14,2), as commitments). A separate
+ * value from the Yes/No answer above: entering an amount verifies nothing and
+ * never touches collection_amount_confirmations.
+ */
+export const collectionConfirmedAmounts = pgTable(
+  "collection_confirmed_amounts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => collectionMasterCompanies.id, { onDelete: "restrict" }),
+    amount: numeric("amount", { precision: 14, scale: 2 }).notNull(),
+    recordedById: uuid("recorded_by_id").references(() => employees.id, { onDelete: "set null" }),
+    recordedAt: timestamp("recorded_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("collection_confirmed_amounts_company_idx").on(t.companyId, t.recordedAt),
+    check("collection_confirmed_amounts_amount_check", sql`${t.amount} > 0`),
+  ],
+);
+
+/**
  * Escalations for review (migration 0115). At most one OPEN
  * escalation per company; closing records who/when and leaves the escalation
  * fields untouched; a later escalation is a new row. Not a commitment.
@@ -2043,6 +2067,12 @@ export const collectionEscalations = pgTable(
     status: text("status").$type<"open" | "closed">().notNull().default("open"),
     /** The confirmation in force when escalated; null = not set. */
     confirmationAtEscalation: text("confirmation_at_escalation").$type<"yes" | "no">(),
+    /**
+     * The confirmed amount in force when escalated (migration 0123, prepared for
+     * review); null = none entered, or raised before amounts existed (never
+     * backfilled). Kept beside, never instead of, the Yes/No snapshot above.
+     */
+    confirmedAmountAtEscalation: numeric("confirmed_amount_at_escalation", { precision: 14, scale: 2 }),
     escalatedById: uuid("escalated_by_id").references(() => employees.id, { onDelete: "set null" }),
     escalatedAt: timestamp("escalated_at", { withTimezone: true }).notNull().defaultNow(),
     closedById: uuid("closed_by_id").references(() => employees.id, { onDelete: "set null" }),
@@ -2066,6 +2096,7 @@ export const collectionEscalations = pgTable(
       "collection_escalations_confirmation_check",
       sql`${t.confirmationAtEscalation} IS NULL OR ${t.confirmationAtEscalation} IN ('yes', 'no')`,
     ),
+    check("collection_escalations_confirmed_amount_check", sql`${t.confirmedAmountAtEscalation} IS NULL OR ${t.confirmedAmountAtEscalation} > 0`),
     check(
       "collection_escalations_closed_check",
       sql`(${t.status} = 'open' AND ${t.closedAt} IS NULL AND ${t.closedById} IS NULL) OR (${t.status} = 'closed' AND ${t.closedAt} IS NOT NULL)`,
@@ -2153,6 +2184,172 @@ export const collectionWeeklyUploadTasks = pgTable(
 );
 
 export type CollectionWeeklyUploadTask = typeof collectionWeeklyUploadTasks.$inferSelect;
+
+/**
+ * Tally Data Import (migration 0122, prepared for review). One batch per import,
+ * one row of audit per file row, and the ledger the vouchers land in. Deliberately
+ * separate from sales_orders / invoices / receipts, which are the Incentive
+ * Tracker's calculation inputs. See lib/tally/ and lib/queries/tally-import.ts.
+ */
+export const tallyImportBatches = pgTable(
+  "tally_import_batches",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    category: text("category").notNull(),
+    fileName: text("file_name").notNull(),
+    fileHash: text("file_hash").notNull(),
+    sheetName: text("sheet_name"),
+    headers: jsonb("headers").notNull().$type<string[]>().default([]),
+    mapping: jsonb("mapping").notNull().$type<Record<string, number>>().default({}),
+    asOfDate: date("as_of_date"),
+    direction: text("direction").$type<"receivable" | "payable">(),
+    includeAttention: boolean("include_attention").notNull().default(false),
+    periodFrom: date("period_from"),
+    periodTo: date("period_to"),
+    financialYears: text("financial_years").array().notNull().default(sql`'{}'`),
+    isHistorical: boolean("is_historical").notNull().default(false),
+    status: text("status").$type<"running" | "completed" | "partial" | "failed">().notNull().default("running"),
+    totalRows: integer("total_rows").notNull().default(0),
+    importedRows: integer("imported_rows").notNull().default(0),
+    skippedRows: integer("skipped_rows").notNull().default(0),
+    rejectedRows: integer("rejected_rows").notNull().default(0),
+    failedRows: integer("failed_rows").notNull().default(0),
+    createdById: uuid("created_by_id").references(() => employees.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+  },
+  (t) => [
+    index("tally_import_batches_created_idx").on(t.createdAt.desc().nullsFirst()),
+    index("tally_import_batches_resume_idx").on(t.category, t.fileHash),
+    check("tally_import_batches_status_check", sql`${t.status} IN ('running', 'completed', 'partial', 'failed')`),
+    check("tally_import_batches_direction_check", sql`${t.direction} IS NULL OR ${t.direction} IN ('receivable', 'payable')`),
+  ],
+);
+
+export const tallyImportRows = pgTable(
+  "tally_import_rows",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    batchId: uuid("batch_id").notNull().references(() => tallyImportBatches.id, { onDelete: "restrict" }),
+    rowNo: integer("row_no").notNull(),
+    status: text("status").$type<"imported" | "skipped" | "rejected" | "failed">().notNull(),
+    reason: text("reason"),
+    targetTable: text("target_table"),
+    targetId: uuid("target_id"),
+    cells: jsonb("cells").notNull().$type<string[]>().default([]),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("tally_import_rows_batch_row_uq").on(t.batchId, t.rowNo),
+    index("tally_import_rows_status_idx").on(t.batchId, t.status),
+    check("tally_import_rows_status_check", sql`${t.status} IN ('imported', 'skipped', 'rejected', 'failed')`),
+  ],
+);
+
+/** The last confirmed mapping per category, as { fieldKey: Tally heading }. */
+export const tallyColumnMappings = pgTable("tally_column_mappings", {
+  category: text("category").primaryKey(),
+  mapping: jsonb("mapping").notNull().$type<Record<string, string>>().default({}),
+  updatedById: uuid("updated_by_id").references(() => employees.id, { onDelete: "set null" }),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const vendorMasters = pgTable(
+  "vendor_masters",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    name: text("name").notNull(),
+    nameKey: text("name_key").notNull(),
+    code: text("code"),
+    gstin: text("gstin"),
+    panNo: text("pan_no"),
+    tallyGroup: text("tally_group"),
+    phone: text("phone"),
+    email: text("email"),
+    address: text("address"),
+    state: text("state"),
+    creditPeriodDays: integer("credit_period_days"),
+    isActive: boolean("is_active").notNull().default(true),
+    importBatchId: uuid("import_batch_id").references(() => tallyImportBatches.id, { onDelete: "restrict" }),
+    createdById: uuid("created_by_id").references(() => employees.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("vendor_masters_name_key_uq").on(t.nameKey), index("vendor_masters_gstin_idx").on(t.gstin).where(sql`${t.gstin} IS NOT NULL`)],
+);
+
+export const tallyDocuments = pgTable(
+  "tally_documents",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** Type + financial year + document number (+ vendor on the purchase side). Unique: the duplicate guard. */
+    identity: text("identity").notNull(),
+    documentType: text("document_type").notNull(),
+    documentNo: text("document_no").notNull(),
+    documentNoKey: text("document_no_key").notNull(),
+    documentDate: date("document_date").notNull(),
+    financialYear: text("financial_year").notNull(),
+    isHistorical: boolean("is_historical").notNull().default(false),
+    partyName: text("party_name").notNull(),
+    partyKey: text("party_key").notNull(),
+    partyGstin: text("party_gstin"),
+    customerMasterId: uuid("customer_master_id").references(() => customerMasters.id, { onDelete: "set null" }),
+    vendorMasterId: uuid("vendor_master_id").references(() => vendorMasters.id, { onDelete: "set null" }),
+    totalPaise: bigint("total_paise", { mode: "number" }).notNull(),
+    taxablePaise: bigint("taxable_paise", { mode: "number" }),
+    taxPaise: bigint("tax_paise", { mode: "number" }),
+    refDocumentNo: text("ref_document_no"),
+    refDocumentId: uuid("ref_document_id").references((): AnyPgColumn => tallyDocuments.id, { onDelete: "set null" }),
+    paymentMode: text("payment_mode"),
+    referenceNo: text("reference_no"),
+    adjustmentType: text("adjustment_type"),
+    dueDate: date("due_date"),
+    narration: text("narration"),
+    lines: jsonb("lines").notNull().$type<{ item: string | null; quantity: number | null; ratePaise: number | null; amountPaise: number | null }[]>().default([]),
+    importBatchId: uuid("import_batch_id").notNull().references(() => tallyImportBatches.id, { onDelete: "restrict" }),
+    sourceRow: integer("source_row").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("tally_documents_identity_uq").on(t.identity),
+    index("tally_documents_type_no_idx").on(t.documentType, t.documentNoKey),
+    index("tally_documents_type_date_idx").on(t.documentType, t.documentDate),
+    index("tally_documents_customer_idx").on(t.customerMasterId),
+    index("tally_documents_vendor_idx").on(t.vendorMasterId),
+    index("tally_documents_batch_idx").on(t.importBatchId),
+    check("tally_documents_total_check", sql`${t.totalPaise} > 0`),
+  ],
+);
+
+/** Balances at a date. Never a transaction, and never added to tally_documents totals. */
+export const tallyOutstandingLines = pgTable(
+  "tally_outstanding_lines",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    batchId: uuid("batch_id").notNull().references(() => tallyImportBatches.id, { onDelete: "restrict" }),
+    lineKey: text("line_key").notNull(),
+    direction: text("direction").$type<"receivable" | "payable">().notNull(),
+    asOfDate: date("as_of_date").notNull(),
+    partyName: text("party_name").notNull(),
+    partyKey: text("party_key").notNull(),
+    customerMasterId: uuid("customer_master_id").references(() => customerMasters.id, { onDelete: "set null" }),
+    vendorMasterId: uuid("vendor_master_id").references(() => vendorMasters.id, { onDelete: "set null" }),
+    collectionCompanyId: uuid("collection_company_id").references(() => collectionMasterCompanies.id, { onDelete: "set null" }),
+    billRef: text("bill_ref"),
+    billDate: date("bill_date"),
+    dueDate: date("due_date"),
+    originalPaise: bigint("original_paise", { mode: "number" }),
+    pendingPaise: bigint("pending_paise", { mode: "number" }).notNull(),
+    narration: text("narration"),
+    sourceRow: integer("source_row").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("tally_outstanding_lines_batch_key_uq").on(t.batchId, t.lineKey),
+    index("tally_outstanding_lines_company_idx").on(t.collectionCompanyId),
+    check("tally_outstanding_lines_direction_check", sql`${t.direction} IN ('receivable', 'payable')`),
+  ],
+);
 
 /**
  * Collection closure episodes — the history behind Collection Logs (migration

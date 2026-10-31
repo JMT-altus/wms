@@ -23,7 +23,8 @@ export default async function CollectionLayout({ children }: { children: ReactNo
   const settings = await getOrgSettings();
   // Only decides which nav links show; every Collection page and action checks again.
   const caps = await getCollectionCapabilities();
-  const showCommitments = caps["collection.commitments.view"] || caps["collection.escalation.review"];
+  // The Commitments & Escalations page has its own key; the popup section's keys never show it.
+  const showCommitments = caps["collection.commitments.page"];
   const showCollection = caps["collection.view"];
   const showLogs = caps["collection.logs.view"];
 

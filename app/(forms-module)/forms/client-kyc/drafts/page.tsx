@@ -2,7 +2,7 @@ import { listClientDrafts } from "@/lib/queries/client-kyc";
 import { sweepExpiredDraftsQuietly } from "@/lib/masters/draft-sweep";
 import { withDbRetry } from "@/lib/db/retry";
 import { ClientKycStageList } from "@/components/forms/client-kyc-stage-list";
-import { requireAdmin } from "@/lib/auth/current";
+import { requireModuleAccess } from "@/lib/auth/module-access";
 
 /**
  * Never pre-rendered at build time: this page WRITES (the expiry sweep below),
@@ -23,7 +23,7 @@ export const dynamic = "force-dynamic";
  * until the next cron run, which reads as a broken promise.
  */
 export default async function ClientKycDraftsPage() {
-  await requireAdmin();
+  await requireModuleAccess("forms");
   await sweepExpiredDraftsQuietly();
   const rows = await withDbRetry("client drafts", listClientDrafts);
   return <ClientKycStageList mode="draft" rows={rows} />;

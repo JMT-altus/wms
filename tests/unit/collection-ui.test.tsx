@@ -399,15 +399,15 @@ describe("Collection Tracker with the Collection Master", () => {
     expect(within(screen.getByRole("button", { name: "Two Days" }).closest("tr")!).getByText("Overdue 2 days")).toBeTruthy();
   });
 
-  it("says how many zero-balance companies the loader left out, and nothing when none were", () => {
-    const { unmount } = render(<CollectionTracker rows={masterRows} connected storageReady today={TODAY} transactionSource={NO_SOURCE} hiddenZeroBalance={3} />);
-    const note = screen.getByLabelText("Companies not listed");
-    expect(note.textContent).toMatch(/^3 companies with ₹0 Debit and ₹0 Credit in the latest upload aren't listed\./);
-    expect(note.textContent).toMatch(/stay in the Collection Master/);
-    expect(screen.getAllByRole("row")).toHaveLength(3); // the listed companies are unaffected
+  it("says how many companies are empty-balance (shown last, muted), and nothing when none are", () => {
+    const { unmount } = render(<CollectionTracker rows={masterRows.map((r, i) => (i === 0 ? { ...r, zeroBalance: true } : r))} connected storageReady today={TODAY} transactionSource={NO_SOURCE} />);
+    const note = screen.getByLabelText("Empty-balance companies");
+    expect(note.textContent).toMatch(/^1 company with no Debit or Credit in the confirmed uploads is shown last, muted\./);
+    expect(note.textContent).toMatch(/stays in the Collection Master/);
+    expect(screen.getAllByRole("row")).toHaveLength(3); // every company is still a row
     unmount();
     render(<CollectionTracker rows={masterRows} connected storageReady today={TODAY} transactionSource={NO_SOURCE} />);
-    expect(screen.queryByLabelText("Companies not listed")).toBeNull();
+    expect(screen.queryByLabelText("Empty-balance companies")).toBeNull();
   });
 
   it("shows the loader's reason when the master is empty or not set up", () => {

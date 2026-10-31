@@ -3,6 +3,7 @@ import type { Route } from "next";
 import { getCollectionCapabilities, requireCollectionCapability } from "@/lib/auth/capability";
 import { CollectionMasterImport } from "@/components/collections/master/collection-master-import";
 import { TRACKER_ASSIGNMENT_SOURCE, TRACKER_BALANCES_SOURCE, listMasterCompanies, listRecentImports } from "@/lib/queries/collection-master";
+import { collectionScopeFor } from "@/lib/collections/scope-server";
 import { formatDate } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -35,7 +36,8 @@ export default async function CollectionMasterPage({
   const q = (sp.q ?? "").trim().slice(0, 100);
   const page = Math.max(0, (Number.parseInt(sp.page ?? "1", 10) || 1) - 1);
   const coordinator = sp.coordinator === "unassigned" ? "unassigned" : "all";
-  const [list, imports] = await Promise.all([listMasterCompanies({ query: q, page, coordinator }), listRecentImports(5)]);
+  // The list is narrowed to the signed-in person's scope in SQL (a super-admin sees every company).
+  const [list, imports] = await Promise.all([listMasterCompanies({ query: q, page, coordinator, scope: await collectionScopeFor() }), listRecentImports(5)]);
   const pages = Math.max(1, Math.ceil(list.total / list.pageSize));
 
   return (

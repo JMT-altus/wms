@@ -20,15 +20,20 @@ const h = vi.hoisted(() => ({
   outstanding: 125000 as number | null,
   listed: true,
   recordConfirmation: vi.fn(),
+  recordConfirmedAmount: vi.fn(),
   escalateCompany: vi.fn(),
   closeEscalationById: vi.fn(),
   listOpen: vi.fn(),
   listCommitments: vi.fn(),
   latest: vi.fn(),
+  latestAmounts: vi.fn(),
   open: vi.fn(),
 }));
 
 vi.mock("server-only", () => ({}));
+// Company visibility (lib/collections/scope-server.ts) is not under test here: every company is in scope. The real
+// resolver, over real coordinator links, is covered by tests/integration/collection-tracker-scope.db.test.ts.
+vi.mock("@/lib/collections/scope-server", () => ({ collectionScopeFor: async () => ({ kind: "all" }) }));
 // Collection is its own module now (Admin → Access). Its gate is mocked to follow the session's admin flag — the
 // admin bypass — so these tests keep exercising the collection.* capabilities exactly as before.
 vi.mock("@/lib/auth/module-access", async () => {
@@ -75,6 +80,8 @@ vi.mock("@/lib/collections/load", () => ({
 }));
 vi.mock("@/lib/queries/collection-review", () => ({
   recordConfirmation: (...a: unknown[]) => h.recordConfirmation(...a),
+  recordConfirmedAmount: (...a: unknown[]) => h.recordConfirmedAmount(...a),
+  latestConfirmedAmounts: (...a: unknown[]) => h.latestAmounts(...a),
   escalateCompany: (...a: unknown[]) => h.escalateCompany(...a),
   isMissingColumn: (e: { code?: string } | null) => e?.code === "42703",
   closeEscalationById: (...a: unknown[]) => h.closeEscalationById(...a),
@@ -89,7 +96,7 @@ vi.mock("@/lib/queries/collection-followups", () => ({ listFollowUps: async () =
 vi.mock("@/components/collections/commitments-table", () => ({ CommitmentsTable: () => null }));
 vi.mock("@/components/collections/collection-tracker", () => ({ CollectionTracker: () => null }));
 
-import { escalateForReview, setCollectionConfirmation } from "@/app/(collection-module)/collection/actions";
+import { escalateForReview, setCollectionConfirmation, setConfirmedAmount } from "@/app/(collection-module)/collection/actions";
 import { closeEscalation } from "@/app/(collection-module)/collection/commitments/actions";
 
 const missing = Object.assign(new Error("relation does not exist"), { code: "42P01" });
@@ -101,10 +108,12 @@ beforeEach(() => {
   h.admin = true;
   h.me = { id: "emp-asha", email: "asha@example.test", isActive: true, isAdmin: true, name: "Asha" };
   // An ordinary admin: the ordinary Collection operations by the admin default, nothing sensitive.
-  h.caps = new Set(["collection.view", "collection.confirmation.set", "collection.escalation.create", "collection.followup.write", "collection.master.import"]);
+  // The Commitments & Escalations page has its own key (granted here so the page tests can open it; what it shows still follows the section keys).
+  h.caps = new Set(["collection.view", "collection.confirmation.set", "collection.escalation.create", "collection.followup.write", "collection.master.import", "collection.commitments.page"]);
   h.outstanding = 125000;
   h.listed = true;
-  for (const f of [h.recordConfirmation, h.escalateCompany, h.closeEscalationById, h.listOpen, h.listCommitments, h.latest, h.open]) f.mockReset();
+  for (const f of [h.recordConfirmation, h.recordConfirmedAmount, h.escalateCompany, h.closeEscalationById, h.listOpen, h.listCommitments, h.latest, h.latestAmounts, h.open]) f.mockReset();
+  h.latestAmounts.mockResolvedValue({ storageReady: true, byCompany: new Map() });
   h.escalateCompany.mockResolvedValue({ ok: true, escalationId: ESCALATION });
   h.closeEscalationById.mockResolvedValue(true);
   h.latest.mockResolvedValue({ storageReady: true, byCompany: new Map() });
@@ -152,6 +161,41 @@ describe("setCollectionConfirmation (collection.confirmation.set)", () => {
     h.listed = true;
     h.recordConfirmation.mockRejectedValue(missing);
     expect(await setCollectionConfirmation({ companyId: COMPANY, value: "yes" })).toEqual({ ok: false, error: expect.stringMatching(/migration 0115 is pending/) });
+  });
+});
+
+describe("setConfirmedAmount (collection.confirmation.set)", () => {
+  it("non-admins, and admins without the capability, are refused before anything happens", async () => {
+    h.admin = false;
+    await expect(setConfirmedAmount({ companyId: COMPANY, amount: "100" })).rejects.toThrow("Forbidden");
+    h.admin = true;
+    h.caps.delete("collection.confirmation.set");
+    await expect(setConfirmedAmount({ companyId: COMPANY, amount: "100" })).rejects.toThrow("Forbidden");
+    expect(h.recordConfirmedAmount).not.toHaveBeenCalled();
+  });
+
+  it("validates the amount ON THE SERVER: negatives, zero, 3 decimals, text, numbers and extra fields are refused — nothing is written", async () => {
+    for (const amount of ["-5", "0", "12.345", "abc", "", 500, undefined]) {
+      const r = await setConfirmedAmount({ companyId: COMPANY, amount });
+      expect(r.ok, String(amount)).toBe(false);
+    }
+    expect((await setConfirmedAmount({ companyId: COMPANY, amount: "500", recordedById: "someone" })).ok).toBe(false);
+    expect(h.recordConfirmedAmount).not.toHaveBeenCalled();
+  });
+
+  it("saves a valid amount in canonical paise-exact form for a listed company, as the signed-in employee — whether or not an outstanding amount exists", async () => {
+    h.outstanding = null; // the Yes/No answer would be unavailable; the amount is a separate value
+    expect(await setConfirmedAmount({ companyId: COMPANY, amount: "₹25,450.5" })).toEqual({ ok: true });
+    expect(h.recordConfirmedAmount).toHaveBeenCalledWith(proof("emp-asha", "collection.confirmation.set"), COMPANY, "25450.50");
+    expect(h.recordConfirmation).not.toHaveBeenCalled(); // the Yes/No answer is never written
+  });
+
+  it("refuses a company the Collection Master doesn't list, and reports missing storage plainly", async () => {
+    h.listed = false;
+    expect(await setConfirmedAmount({ companyId: COMPANY, amount: "100" })).toEqual({ ok: false, error: "That company isn't in the Collection Master, so nothing was saved." });
+    h.listed = true;
+    h.recordConfirmedAmount.mockRejectedValue(missing);
+    expect(await setConfirmedAmount({ companyId: COMPANY, amount: "100" })).toEqual({ ok: false, error: "Confirmed amounts can't be stored yet (migration 0123 is pending), so nothing was saved." });
   });
 });
 
@@ -315,11 +359,16 @@ describe("pages", () => {
     expect(h.listOpen).not.toHaveBeenCalled();
   });
 
-  it("the page is not found without commitments.view or escalation.review (admins included), and reads nothing", async () => {
+  it("the page is not found without the page key (admins and super-admins included), and reads nothing", async () => {
+    h.caps.delete("collection.commitments.page");
+    h.caps.add("collection.commitments.view");
+    h.caps.add("collection.escalation.review");
     const { default: Page } = await import("@/app/(collection-module)/collection/commitments/page");
     await expect(Page()).rejects.toThrow("NEXT_NOT_FOUND");
-    expect(h.listOpen).not.toHaveBeenCalled();
+    asSuperAdmin();
+    await expect(Page()).rejects.toThrow("NEXT_NOT_FOUND");
     expect(h.listCommitments).not.toHaveBeenCalled();
+    expect(h.listOpen).not.toHaveBeenCalled();
   });
 
   // ── reviewer discoverability, setup notice, and the review page's states ───────
@@ -337,6 +386,10 @@ describe("pages", () => {
     h.caps.add("collection.escalation.review");
     expect((await trackerProps()).reviewQueue).toEqual({ openCount: 1, href: "/collection/commitments" });
     h.caps.delete("collection.escalation.review");
+    expect((await trackerProps()).reviewQueue).toBeUndefined();
+    // A reviewer who cannot open the Commitments & Escalations page gets no link to it either.
+    h.caps.add("collection.escalation.review");
+    h.caps.delete("collection.commitments.page");
     expect((await trackerProps()).reviewQueue).toBeUndefined();
   });
 
@@ -428,10 +481,16 @@ describe("pages", () => {
     expect(JSON.stringify(await Page())).not.toMatch(/migration 0118/);
   });
 
-  it("Review page: still not found without a view/review capability, and reads nothing", async () => {
-    h.caps = new Set(["collection.view"]);
+  it("Review page: not found without the page key — even holding the popup View key and Review — and reads nothing; the page key alone opens it with nothing restricted shown", async () => {
+    h.caps = new Set(["collection.view", "collection.commitments.view", "collection.escalation.review"]);
     const { default: Page } = await import("@/app/(collection-module)/collection/commitments/page");
     await expect(Page()).rejects.toThrow("NEXT_NOT_FOUND");
     expect(h.listOpen).not.toHaveBeenCalled();
+    expect(h.listCommitments).not.toHaveBeenCalled();
+    h.caps = new Set(["collection.view", "collection.commitments.page"]);
+    const props = findProps(await Page(), "CommitmentsTable")!;
+    expect(props).toMatchObject({ showCommitments: false, showEscalations: false, rows: [] });
+    expect(h.listOpen).not.toHaveBeenCalled();
+    expect(h.listCommitments).not.toHaveBeenCalled();
   });
 });

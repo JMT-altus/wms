@@ -36,8 +36,10 @@ export interface PartyRow extends CollectionParty {
   nextFollowupDate: string | null;
   /** Most recent first. */
   history: FollowUpEntry[];
-  /** Current Collection Amount Confirmation (newest answer); null = not set. Visible to all Tracker users. */
+  /** Current Collection Amount Confirmation (newest Yes/No answer); null = not set. Visible to all Tracker users. */
   confirmation?: { value: "yes" | "no"; recordedAt: Date; recordedByName: string | null } | null;
+  /** Current confirmed amount (newest entry, "x.yy" rupees); null = not entered. Visible to all Tracker users; set with collection.confirmation.set. */
+  confirmedAmount?: { amount: string; recordedAt: Date; recordedByName: string | null } | null;
   /** The open escalation awaiting review, if any (who and when — no commitment data). */
   openEscalation?: { escalatedAt: Date; escalatedByName: string | null } | null;
 }

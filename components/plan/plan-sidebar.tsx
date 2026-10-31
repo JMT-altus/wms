@@ -137,7 +137,7 @@ export function PlanSidebar({ userName }: { userName: string }) {
                   border: "1px solid rgba(255,255,255,0.14)",
                 }}
               >
-                Project Plan
+                Project
               </p>
               <p className="text-[12.5px] mt-1.5 text-white/50">Signed in as {userName}</p>
             </>
@@ -145,7 +145,7 @@ export function PlanSidebar({ userName }: { userName: string }) {
         </div>
 
         <nav
-          aria-label="Project Plan"
+          aria-label="Project"
           className="px-3 flex flex-col gap-0.5 flex-1 overflow-y-auto min-h-0"
         >
           {NAV.map((item) => {

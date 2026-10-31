@@ -12,6 +12,15 @@ import { getCommitment, recordCommitment, type Commitment } from "@/lib/queries/
 import { isMissingTable } from "@/lib/queries/collection-master";
 import { CloseEscalationInput } from "@/lib/collections/review";
 import { closeEscalationById } from "@/lib/queries/collection-review";
+import { loadCollectionParties } from "@/lib/collections/load";
+import { collectionScopeFor } from "@/lib/collections/scope-server";
+
+/** Whether the company is inside the caller's scope (lib/collections/scope.ts) — a company id from the browser proves nothing. */
+async function companyInScope(companyId: string): Promise<boolean> {
+  const source = await loadCollectionParties(await collectionScopeFor());
+  // With the Master storage missing nothing is listed; the action itself then reports the missing storage.
+  return source.masterReady === false || source.parties.some((p) => p.masterId === companyId);
+}
 
 /**
  * Collection commitments (committed amount and committed date) and closing
@@ -35,6 +44,7 @@ export async function getCompanyCommitment(rawCompanyId: unknown): Promise<Resul
   const viewer = await requireCollectionCapability("collection.commitments.view");
   const id = CompanyId.safeParse(rawCompanyId);
   if (!id.success) return { ok: false, error: "Choose a company." };
+  if (!(await companyInScope(id.data))) return { ok: false, error: "That company isn't in the Collection Master." };
   try {
     const r = await getCommitment(viewer, id.data);
     return { ok: true, commitment: r.commitment, storageReady: r.storageReady };
@@ -54,6 +64,7 @@ export async function saveCompanyCommitment(raw: unknown): Promise<Result<{ comm
   if (limited) return limited;
   const p = CommitmentInput.safeParse(raw);
   if (!p.success) return { ok: false, error: p.error.issues[0]?.message ?? "Check the commitment." };
+  if (!(await companyInScope(p.data.companyId))) return { ok: false, error: "That company isn't in the Collection Master, so nothing was saved." };
 
   try {
     // Only a company that is in the Collection Master — never a free-typed name.
