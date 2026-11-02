@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import { X, Trash2, Loader2 } from "lucide-react";
 import { createDccItem, updateDccItem, deleteDccItem } from "@/app/(app)/dcc/actions";
-import { parseFrequency, maskLabel } from "@/lib/dcc/util";
+import { parseFrequency, maskLabel, DCC_INPUT_TYPES, DCC_INPUT_TYPE_LABELS, DCC_TARGET_PERIODS } from "@/lib/dcc/util";
 import { suggestCode, type BoardItem, type BoardClient } from "@/lib/dcc/board-model";
 
 const FIELD =
@@ -54,6 +54,8 @@ export function DccItemDialog({
   const [frequency, setFrequency] = React.useState("");
   const [target, setTarget] = React.useState("");
   const [unit, setUnit] = React.useState("");
+  const [inputType, setInputType] = React.useState<(typeof DCC_INPUT_TYPES)[number]>("yesno");
+  const [targetPeriod, setTargetPeriod] = React.useState<(typeof DCC_TARGET_PERIODS)[number]>("day");
   const [clientId, setClientId] = React.useState("");
   const [isParticipantList, setIsParticipantList] = React.useState(false);
   /** Once the user types a code themselves, stop suggesting over the top. */
@@ -72,6 +74,8 @@ export function DccItemDialog({
     setFrequency(item?.frequency ?? "");
     setTarget(item?.targetNumber ?? "");
     setUnit(item?.unit ?? "");
+    setInputType(item?.inputType ?? "yesno");
+    setTargetPeriod(item?.targetPeriod ?? "day");
     setClientId(item?.clientId ?? defaultClientId ?? "");
     setIsParticipantList(item?.isParticipantList ?? false);
     setCodeTouched(Boolean(item?.code));
@@ -126,6 +130,8 @@ export function DccItemDialog({
       frequency: frequency.trim() || null,
       targetNumber: target.trim() ? Number(target) : null,
       unit: unit.trim() || null,
+      inputType,
+      targetPeriod,
       clientId: clientId || null,
       isParticipantList,
     };
@@ -264,7 +270,32 @@ export function DccItemDialog({
             </p>
           </div>
 
-          <div className="grid grid-cols-2 gap-3 max-sm:grid-cols-1">
+          <div>
+            <label className={LABEL} htmlFor="dcc-input-type">
+              Answered as
+            </label>
+            <select
+              id="dcc-input-type"
+              className={FIELD}
+              value={inputType}
+              onChange={(e) => setInputType(e.target.value as (typeof DCC_INPUT_TYPES)[number])}
+            >
+              {DCC_INPUT_TYPES.map((t) => (
+                <option key={t} value={t}>
+                  {DCC_INPUT_TYPE_LABELS[t]}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1.5 text-[12px] text-ink-subtle">
+              {inputType === "number"
+                ? "A figure per day; the week adds them up (e.g. value of orders received)."
+                : inputType === "yesno"
+                  ? "Y / N / NA per day — the Done / Not done of the checklist."
+                  : "Free text per day (e.g. to whom and what brand)."}
+            </p>
+          </div>
+
+          <div className="grid grid-cols-3 gap-3 max-sm:grid-cols-1">
             <div>
               <label className={LABEL} htmlFor="dcc-target">
                 Target number
@@ -280,6 +311,23 @@ export function DccItemDialog({
               />
             </div>
             <div>
+              <label className={LABEL} htmlFor="dcc-target-period">
+                Target is per
+              </label>
+              <select
+                id="dcc-target-period"
+                className={FIELD}
+                value={targetPeriod}
+                onChange={(e) => setTargetPeriod(e.target.value as (typeof DCC_TARGET_PERIODS)[number])}
+              >
+                {DCC_TARGET_PERIODS.map((p) => (
+                  <option key={p} value={p}>
+                    {p === "day" ? "Day" : p === "week" ? "Week" : "Month"}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
               <label className={LABEL} htmlFor="dcc-unit">
                 Unit
               </label>
@@ -292,6 +340,9 @@ export function DccItemDialog({
               />
             </div>
           </div>
+          <p className="-mt-2 text-[12px] text-ink-subtle">
+            Weekly Deficit = the week&apos;s target − Weekly Actual. A per-day target counts once for every day the KPI is due that week. Leave the target blank for no deficit column.
+          </p>
 
           {clients.length > 0 && (
             <div>

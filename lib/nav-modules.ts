@@ -125,7 +125,7 @@ export const MODULES: ModuleDef[] = [
       // DCC — the daily KPI checklist. Sibling routes listed in notMatch so the
       // board pill doesn't stay lit on Team and Ranking, same pattern as Tasks.
       { href: "/dcc", label: "DCC", icon: "Gauge", notMatch: ["/dcc/dashboard", "/dcc/ranking"] },
-      { href: "/dcc/dashboard", label: "DCC Team", icon: "Users" },
+      { href: "/dcc/dashboard", label: "DCC Dashboard", icon: "Users" },
       { href: "/my-salary", label: "My Salary", icon: "Wallet" },
       { href: "/salary", label: "Salary", icon: "IndianRupee", adminOnly: true },
       { href: "/reimbursements", label: "Reimbursements", icon: "Receipt" },

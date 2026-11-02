@@ -1,0 +1,103 @@
+# BH – Bhavisha
+1 | Tally - Total Value of SO Recd | Daily | Number
+2 | Tally - Total Number of SO | Daily | Number
+3 | Tally - Total Collection Recd | Previous day | Number
+4 | Tally - Total No. of Collection Calls Done | Daily | Number
+5 | Book - Total Quotations Given | Daily | Number
+6 | Book - Quotations Pending today (at 6:00/7:00pm) | Daily | Number
+7 | Sales - Weekly Calls Sheet Done? (Y/N) | Daily | Yes/No
+8 | Sales - MSTS & Sales Funnel How Many calls done? | Daily | Number
+9 | Sales - Enquiry Funnel - Updated? (Y/N) till date? | Sat / Tues | Yes/No
+10 | Sales - Visit - Appointment taken/Planned? (Y/N/NA) | Daily | Y/N/NA
+11 | Callyzer - Total Connected Calls | Daily | Number
+12 | Callyzer - Total Never Attended (Has to be 0) | Daily | Number
+13 | Callyzer - Total Unique Clients | Daily | Number
+14 | Callyzer - Total Not Picked Up By Client | Daily | Number
+15 | Callyzer - Total Calls | Daily | Number
+16 | SO Done by 5:45pm? Y/N | Daily | Yes/No
+17 | Did you do the internal Sales Enquiry Discussion Meeting? | Daily | Yes/No
+
+# JY – Jyotsna
+1 | Tally - Total Value of SO Recd (in Rs.) | Daily | Number
+2 | Tally - Total Number of SO (No) | Daily | Number
+3 | Tally - Total Collection Recd | Daily | Number
+4 | Tally - Total No. of Collection Calls Done | Daily | Number
+5 | Book - Total Quotations Given | Daily | Number
+6 | Book - Quotations Pending today (at 6:00 / 7:00pm) | Daily | Number
+7 | Sales - Weekly Calls Sheet Done? (Y/N) | Daily | Yes/No
+8 | Sales - MSTS & Sales Funnel How Many calls done? | Daily | Number
+9 | Sales - Enquiry Funnel - Updated? (Y/N) till date? | Sat / Tues | Yes/No
+10 | Sales - Visit - Appointment taken/Planned? (Y/N/NA) | Daily | Y/N/NA
+11 | Callyzer - Total Connected Calls | Daily | Number
+12 | Callyzer - Total Never Attended (Has to be 0) | Daily | Number
+13 | Callyzer - Total Unique Clients | Daily | Number
+14 | Callyzer - Total Not Picked Up By Client | Daily | Number
+15 | Callyzer - Total Calls | Daily | Number
+16 | SO Done by 6:00pm with NO entry w/o prices? Y/N | Daily | Yes/No
+17 | Did you do the internal Sales Enquiry Discussion Meeting? | Daily | Yes/No
+
+# NM – Namrata
+1 | Spoke to Factory on Followup with HEM/Paras/Roto? | Daily | Yes/No
+2 | Stock Order List Ready for? (Brand) | Daily | Text
+3 | Stock Order Finalised / Placed Order to? | Daily | Text
+4 | How many PO arranged from Other dealer today for which we are authorised dealers? (cases) | Daily | Number
+4.1 | To whom & what brand? | | Text
+5 | Special Tempo arranged / Material got? (cases?) | Daily | Number
+6 | Bargain for how many cases? | Daily | Number
+7 | Special Price order booked for? | Daily | Text
+8 | communicated with vendors for Better Payment terms | Daily | Text
+9 | New Vendors Communication for? (Name) | Daily | Text
+10 | New Vendor Developed? (1st PO) | Daily | Yes/No
+11 | CUX - Number of Items in TBO() | Daily | Number
+12 | CUX- Number of Items in Process/Check/Hold? | Daily | Number
+13 | CUX- Number of Items in Query? | Daily | Number
+14 | Print - Dispatch List Ready at ? (Print Time) | Daily | Text
+15 | Email - SO Received at ? (Time) | Daily | Text
+
+# SV – Savita
+1 | StkFile - 9 Number Entries Done before 12pm? (Y/N) | Daily | Yes/No
+2 | StkFile - DI Uptodate till yesterday? If No, Till date? (Y/dt) | Daily | Text
+3 | StkFile - DO Entry? How many pending? | Daily | Number
+4 | StkFile - How may bills in Pending Stand related to DI/DO? | Daily | Number
+5 | Purchase Summary List UptoDate with all fields filled? (Y/N) | Daily | Yes/No
+6 | Stock Order List Ready for? (Brand) | Daily | Text
+7 | Urgent Material Arranged through Special Tempo (cases) | Daily | Number
+8 | Slack - How many POs Sent? | Daily | Number
+9 | Bank - cheques sent today? | Daily | Number
+10 | Tally - Total Receipt?? | Daily | Number
+11 | Collection File - Entry of Bounce cheque updated? (Y/N) | Daily | Yes/No
+12 | Print - Incoming List Ready at ? (Print Time) | Daily | Text
+13 | Tally - Total Collection Recd | Daily | Number
+14 | Tally - Total No. of Collection Calls Done | Daily | Number
+
+# GR – Gauri
+1 | Did you do the Morning DISP Meeting? (Y/N) | Daily | Yes/No
+2 | Did you discuss the IncomingList? (Y/N) | Daily | Yes/No
+3 | Did you speak with Sales Team regarding the Dispatch list? (Y/N) | Daily | Yes/No
+4 | Tally - Total number of Bills generated | Daily | Number
+5 | Tally - Total Value of Bills | Daily | Number
+6 | Complaints - Number of Complaints Closed today | Daily | Number
+7 | Complaints - Number of Complaints Live / Open | Daily | Number
+8 | Complaint-Number of Complaints Unresolved of 2 months | Daily | Number
+9 | Complaint-Number of Complaints Unresolved of 6 months | Daily | Number
+10 | Complaints - Number of Complaints in K mode | Daily | Number
+11 | Collection - Total Collection Recd | Daily | Number
+12 | Collection - Total No. of Collection Calls Done | Daily | Number
+13 | GST Compliance Coordination with CA? | Weekly | Yes/No
+
+# NM_1 (no employee on the tab — map before applying)
+1 | Spoke to Factory on Followup with HEM/Paras | Daily | Yes/No
+2 | How many PO arranged from Other dealer today for which we are authorised dealers? | Daily | Number
+3 | Stock Order Ready for? (Brand) | Daily | Text
+4 | Stock Order Placed for? | Daily | Text
+5 | Bargain for how many cases? | Daily | Number
+6 | Special Price order booked for? | Daily | Text
+7 | Number of vendors for Better Payment terms communicated with? | Daily | Number
+8 | Urgent Material Arranged through Special Tempo for? | Daily | Text
+9 | New Vendors Communication for? (Email or Call) | Daily | Text
+10 | New Vendor Developed? (1st PO) | Daily | Yes/No
+11 | Print - Dispatch List Ready at ? (Print Time) | Daily | Text
+12 | Email - SO Received at ? (Time) | Daily | Text
+13 | CUX - Number of Items in TBO() | Daily | Number
+14 | CUX - Number of Items in Process/Check/Hold? | Daily | Number
+15 | CUX - Number of Items in Query? | Daily | Number

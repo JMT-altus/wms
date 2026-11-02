@@ -21,6 +21,12 @@ export const SCHEDULE_KINDS = [
 ] as const;
 export type ScheduleKind = (typeof SCHEDULE_KINDS)[number];
 
+/** How a KPI is answered in the grid (0124). */
+export const DCC_INPUT_TYPES = ["number", "yesno", "text"] as const;
+export const DCC_INPUT_TYPE_LABELS: Record<(typeof DCC_INPUT_TYPES)[number], string> = { number: "Number", yesno: "Yes / No", text: "Text" };
+/** What a KPI's target number is per (0124). */
+export const DCC_TARGET_PERIODS = ["day", "week", "month"] as const;
+
 /** Mon–Sat, i.e. everything except Sunday. What "Daily" means here. */
 export const MASK_MON_SAT = 0b111111;
 
@@ -138,6 +144,12 @@ export function parseFrequency(raw: string | null | undefined): ParsedFrequency 
   // 7. "Every <single weekday>" — one slot a week on that day.
   if (/\bevery\b/i.test(s) && !isDailyPhrase && mask !== null && bitCount(mask) === 1) {
     return { scheduleKind: "weekly", weekdays: mask, needsReview: false };
+  }
+
+  // 8a. "prev day" / "previous day": filled every working day, for the day
+  //     before (the sheet's reporting basis). A daily line — kept as written.
+  if (/\bprev(ious)?\.?\s*day\b/i.test(s)) {
+    return { scheduleKind: "scheduled", weekdays: MASK_MON_SAT, needsReview: false };
   }
 
   // 8. Daily.

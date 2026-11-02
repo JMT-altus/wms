@@ -24,7 +24,48 @@ export interface BoardItem {
   needsReview: boolean;
   targetNumber: string | null;
   unit: string | null;
+  /** 0124 — 'number' | 'yesno' | 'text'. */
+  inputType: "number" | "yesno" | "text";
+  /** 0124 — what `targetNumber` is per. */
+  targetPeriod: "day" | "week" | "month";
   sortOrder: number | null;
+}
+
+/** The board's shape of a KPI row — the one mapper every DCC page uses. */
+export function toBoardItem(i: {
+  id: string;
+  section: string | null;
+  code: string | null;
+  title: string;
+  frequency: string | null;
+  weekdays: number | null;
+  scheduleKind: string;
+  isParticipantList: boolean;
+  clientId: string | null;
+  needsReview: boolean;
+  targetNumber: string | null;
+  unit: string | null;
+  inputType: "number" | "yesno" | "text";
+  targetPeriod: "day" | "week" | "month";
+  sortOrder: number | null;
+}): BoardItem {
+  return {
+    id: i.id,
+    section: i.section,
+    code: i.code,
+    title: i.title,
+    frequency: i.frequency,
+    weekdays: i.weekdays,
+    scheduleKind: i.scheduleKind,
+    isParticipantList: i.isParticipantList,
+    clientId: i.clientId,
+    needsReview: i.needsReview,
+    targetNumber: i.targetNumber,
+    unit: i.unit,
+    inputType: i.inputType,
+    targetPeriod: i.targetPeriod,
+    sortOrder: i.sortOrder,
+  };
 }
 
 /** One stored fill. */

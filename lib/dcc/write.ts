@@ -9,6 +9,7 @@ import {
   type DccKpiItem,
 } from "@/db/schema";
 import { isSuperAdmin } from "@/lib/auth/super-admin";
+import { kpiItemColumns } from "@/lib/dcc/schema-ready";
 import type { DccStatus } from "@/lib/dcc/util";
 
 /**
@@ -43,7 +44,7 @@ async function loadFillableItem(
   actor: DccActor,
 ): Promise<{ ok: true; item: DccKpiItem } | { ok: false; error: string }> {
   const [item] = await db
-    .select()
+    .select(await kpiItemColumns())
     .from(dccKpiItems)
     .where(eq(dccKpiItems.id, itemId))
     .limit(1);

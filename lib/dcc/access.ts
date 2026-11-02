@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { withDbRetry } from "@/lib/db/retry";
 import { employees, type Employee } from "@/db/schema";
 import { isSuperAdmin } from "@/lib/auth/super-admin";
+import { getFieldAccessFor } from "@/lib/auth/field-access";
 
 /**
  * DCC visibility scope.
@@ -22,18 +23,24 @@ export interface DccScope {
   isManager: boolean;
   /** Direct reports only (manager_id === me.id). Used by the review gate. */
   directReportIds: Set<string>;
+  /** Field Permission `dcc.kpi.manage` (admins by default): may configure KPIs on the checklists they can see. */
+  canManageKpis: boolean;
 }
 
 /**
  * Build the scope for one employee.
  *
- * Super-admins see everyone. Everyone else sees themselves plus their
- * transitive downline, walked iteratively (a recursive walk on a roster with
- * an accidental manager cycle would blow the stack; the `seen` set here just
- * stops).
+ * Super-admins and holders of Field Permission `dcc.team.view` (admins by
+ * default, or anyone granted it) see everyone. Everyone else sees themselves
+ * plus their transitive downline, walked iteratively (a recursive walk on a
+ * roster with an accidental manager cycle would blow the stack; the `seen` set
+ * here just stops). Nobody is named: the roster and the grants decide.
  */
 export const getDccScope = cache(async (me: Employee): Promise<DccScope> => {
   const superAdmin = isSuperAdmin(me.email);
+  const access = await getFieldAccessFor(me);
+  const canViewAll = superAdmin || access["dcc.team.view"]?.allowed === true;
+  const canManageKpis = superAdmin || access["dcc.kpi.manage"]?.allowed === true;
 
   const roster = await withDbRetry("dcc scope roster", () =>
     db
@@ -56,12 +63,13 @@ export const getDccScope = cache(async (me: Employee): Promise<DccScope> => {
     roster.filter((r) => r.managerId === me.id && r.isActive).map((r) => r.id),
   );
 
-  if (superAdmin) {
+  if (canViewAll) {
     return {
       me: self,
       visibleIds: new Set(roster.filter((r) => r.isActive).map((r) => r.id)).add(me.id),
       isManager: true,
       directReportIds,
+      canManageKpis,
     };
   }
 
@@ -90,6 +98,7 @@ export const getDccScope = cache(async (me: Employee): Promise<DccScope> => {
     visibleIds,
     isManager: visibleIds.size > 1,
     directReportIds,
+    canManageKpis,
   };
 });
 
@@ -109,9 +118,17 @@ export function canFill(scope: DccScope, ownerId: string): boolean {
   return scope.me.isSuperAdmin || ownerId === scope.me.id;
 }
 
-/** Can they author/edit/archive the KPI definitions on this person's board? */
+/**
+ * Can they author/edit/archive the KPI definitions on this person's board?
+ *
+ * Configuration is an administrator's job: Field Permission `dcc.kpi.manage`
+ * (held by admins through the usual bypass, grantable to anyone), and only on
+ * a checklist they can see. An employee no longer rewrites their own
+ * parameters unless granted that.
+ */
 export function canManageItems(scope: DccScope, ownerId: string): boolean {
-  return scope.me.isSuperAdmin || scope.visibleIds.has(ownerId);
+  if (scope.me.isSuperAdmin) return true;
+  return scope.canManageKpis && scope.visibleIds.has(ownerId);
 }
 
 /**

@@ -4157,6 +4157,14 @@ export const dccKpiItems = pgTable(
     needsReview: boolean("needs_review").notNull().default(false),
     targetNumber: numeric("target_number", { precision: 14, scale: 2 }),
     unit: text("unit"),
+    /**
+     * 0124 — how the KPI is answered in the checklist grid: 'number' (a figure
+     * the week sums), 'yesno' (Done / Not done / NA — the status itself) or
+     * 'text'. Default 'yesno': every KPI before 0124 was a Done / Not done line.
+     */
+    inputType: text("input_type").$type<"number" | "yesno" | "text">().notNull().default("yesno"),
+    /** 0124 — what `targetNumber` is per: 'day' | 'week' | 'month'. */
+    targetPeriod: text("target_period").$type<"day" | "week" | "month">().notNull().default("day"),
     sortOrder: integer("sort_order"),
     archived: boolean("archived").notNull().default(false),
     createdById: uuid("created_by_id").references(() => employees.id, {
@@ -4168,6 +4176,8 @@ export const dccKpiItems = pgTable(
   (t) => [
     index("dcc_kpi_items_owner_idx").on(t.ownerEmployeeId, t.sortOrder),
     index("dcc_kpi_items_client_idx").on(t.clientId),
+    check("dcc_kpi_items_input_type_check", sql`${t.inputType} IN ('number', 'yesno', 'text')`),
+    check("dcc_kpi_items_target_period_check", sql`${t.targetPeriod} IN ('day', 'week', 'month')`),
   ],
 );
 

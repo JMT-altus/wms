@@ -33,6 +33,8 @@ function item(over: Partial<BoardItem> & { id: string }): BoardItem {
     needsReview: false,
     targetNumber: null,
     unit: null,
+    inputType: "yesno",
+    targetPeriod: "day",
     sortOrder: 0,
     ...over,
   };

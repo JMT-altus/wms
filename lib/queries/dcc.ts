@@ -2,6 +2,7 @@ import "server-only";
 import { and, asc, eq, gte, inArray, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { withDbRetry } from "@/lib/db/retry";
+import { kpiItemColumns } from "@/lib/dcc/schema-ready";
 import {
   dccClients,
   dccEntries,
@@ -9,6 +10,8 @@ import {
   dccKpiItems,
   dccReviews,
   dccSubjects,
+  departments,
+  designations,
   employees,
 } from "@/db/schema";
 
@@ -30,21 +33,32 @@ export interface DccPerson {
   email: string;
   avatarUrl: string | null;
   managerId: string | null;
+  /** From the designations master; null when none is set. */
+  designation: string | null;
+  /** The canonical department (departments master), else the legacy free text. */
+  department: string | null;
 }
 
-/** The roster for the person switcher / dashboard, batched by visible ids. */
+/** The columns every roster read returns — the tabs show designation and department under each name. */
+const PERSON_COLUMNS = {
+  id: employees.id,
+  name: employees.name,
+  email: employees.email,
+  avatarUrl: employees.avatarUrl,
+  managerId: employees.managerId,
+  designation: designations.name,
+  department: sql<string | null>`coalesce(${departments.name}, ${employees.department})`,
+};
+
+/** The roster for the tabs / person switcher / dashboard, batched by visible ids. */
 export async function listDccPeople(visibleIds: string[]): Promise<DccPerson[]> {
   if (visibleIds.length === 0) return [];
   return withDbRetry("dcc people", () =>
     db
-      .select({
-        id: employees.id,
-        name: employees.name,
-        email: employees.email,
-        avatarUrl: employees.avatarUrl,
-        managerId: employees.managerId,
-      })
+      .select(PERSON_COLUMNS)
       .from(employees)
+      .leftJoin(designations, eq(designations.id, employees.designationId))
+      .leftJoin(departments, eq(departments.id, employees.departmentId))
       .where(and(inArray(employees.id, visibleIds), eq(employees.isActive, true)))
       .orderBy(asc(employees.name)),
   );
@@ -52,9 +66,10 @@ export async function listDccPeople(visibleIds: string[]): Promise<DccPerson[]> 
 
 /** Every active KPI definition for one person, in board order. */
 export async function listOwnerItems(ownerId: string) {
+  const cols = await kpiItemColumns();
   return withDbRetry("dcc owner items", () =>
     db
-      .select()
+      .select(cols)
       .from(dccKpiItems)
       .where(
         and(eq(dccKpiItems.ownerEmployeeId, ownerId), eq(dccKpiItems.archived, false)),
@@ -66,9 +81,10 @@ export async function listOwnerItems(ownerId: string) {
 /** Same, for many owners at once. */
 export async function listItemsForOwners(ownerIds: string[]) {
   if (ownerIds.length === 0) return [];
+  const cols = await kpiItemColumns();
   return withDbRetry("dcc items for owners", () =>
     db
-      .select()
+      .select(cols)
       .from(dccKpiItems)
       .where(
         and(
@@ -202,14 +218,10 @@ export async function listItemSubjectsForItems(itemIds: string[]) {
 export async function listAllActivePeople(): Promise<DccPerson[]> {
   return withDbRetry("dcc all people", () =>
     db
-      .select({
-        id: employees.id,
-        name: employees.name,
-        email: employees.email,
-        avatarUrl: employees.avatarUrl,
-        managerId: employees.managerId,
-      })
+      .select(PERSON_COLUMNS)
       .from(employees)
+      .leftJoin(designations, eq(designations.id, employees.designationId))
+      .leftJoin(departments, eq(departments.id, employees.departmentId))
       .where(eq(employees.isActive, true))
       .orderBy(asc(employees.name)),
   );

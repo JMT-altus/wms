@@ -1019,6 +1019,23 @@ export const PERMISSION_FIELDS = [
     defaultAllowed: false,
     group: "Collections",
   },
+  // ── Daily Compliance Checklist (DCC). Ordinary keys: admins hold them through
+  // the admin bypass; a specific person or everyone can be granted them. A
+  // manager still sees their own reporting line without either (lib/dcc/access.ts).
+  {
+    key: "dcc.team.view",
+    label: "DCC — View every employee's checklist",
+    hint: "Open any employee's Daily Compliance Checklist and the DCC Team dashboard, not only your own and your reporting line's. Filling stays each person's own.",
+    defaultAllowed: false,
+    group: "Daily Compliance (DCC)",
+  },
+  {
+    key: "dcc.kpi.manage",
+    label: "DCC — Configure KPIs",
+    hint: "Add, edit, reorder and remove the KPI parameters on the checklists you can see: which employee has which KPI, its frequency, answer type and target.",
+    defaultAllowed: false,
+    group: "Daily Compliance (DCC)",
+  },
   // ── Leave approvals. Leave requests are personal HR data, so all three need an
   // explicit grant made by a super-admin; nothing is implied by admin status.
   // `leave_approvers` only decides where a new request is ROUTED — who may see

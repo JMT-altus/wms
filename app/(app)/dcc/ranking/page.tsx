@@ -14,6 +14,7 @@ import {
   computeStreak,
   windowStats,
   rankScore,
+  toBoardItem,
   type BoardItem,
   type BoardEntry,
 } from "@/lib/dcc/board-model";
@@ -52,21 +53,7 @@ export default async function DccRankingPage() {
   const itemsByOwner = new Map<string, BoardItem[]>();
   for (const i of items) {
     const list = itemsByOwner.get(i.ownerEmployeeId) ?? [];
-    list.push({
-      id: i.id,
-      section: i.section,
-      code: i.code,
-      title: i.title,
-      frequency: i.frequency,
-      weekdays: i.weekdays,
-      scheduleKind: i.scheduleKind,
-      isParticipantList: i.isParticipantList,
-      clientId: i.clientId,
-      needsReview: i.needsReview,
-      targetNumber: i.targetNumber,
-      unit: i.unit,
-      sortOrder: i.sortOrder,
-    });
+    list.push(toBoardItem(i));
     itemsByOwner.set(i.ownerEmployeeId, list);
   }
 

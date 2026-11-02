@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { DCC_STATUSES } from "@/lib/dcc/util";
+import { DCC_INPUT_TYPES, DCC_STATUSES, DCC_TARGET_PERIODS } from "@/lib/dcc/util";
 
 const uuid = z.string().guid("Must be a UUID");
 const ymd = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Must be a yyyy-mm-dd date");
@@ -46,6 +46,10 @@ const itemFields = {
   unit: z.string().trim().max(40).nullable().optional().default(null),
   clientId: uuid.nullable().optional().default(null),
   isParticipantList: z.boolean().optional().default(false),
+  /** 0124 — how the grid asks for the answer. */
+  inputType: z.enum(DCC_INPUT_TYPES).optional().default("yesno"),
+  /** 0124 — what the target number is per. */
+  targetPeriod: z.enum(DCC_TARGET_PERIODS).optional().default("day"),
 };
 
 export const CreateDccItemSchema = z.object({
@@ -61,6 +65,16 @@ export const UpdateDccItemSchema = z.object({
 export type UpdateDccItemInput = z.input<typeof UpdateDccItemSchema>;
 
 export const DeleteDccItemSchema = z.object({ id: uuid });
+
+/** Bulk KPI setup from pasted text (preview and apply take the same input). */
+export const DccBulkImportSchema = z.object({
+  text: z.string().max(200_000, "Too much text — split the import"),
+  /** sheet tab label → employee id, or null to leave that group unassigned. Labels absent here take the server's suggestion. */
+  mapping: z.record(z.string().max(200), uuid.nullable()).optional().default({}),
+  /** Also update existing KPIs whose frequency, type or code differs (titles never change; nothing is removed). */
+  updateDiffering: z.boolean().optional().default(false),
+});
+export type DccBulkImportInput = z.input<typeof DccBulkImportSchema>;
 
 export const AddParticipantSchema = z.object({
   itemId: uuid,

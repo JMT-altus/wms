@@ -14,14 +14,17 @@ import { requireUser } from "@/lib/auth/current";
 import { rateLimitOrError } from "@/lib/rate-limit";
 import { getDccScope, canFill, canManageItems, canReview } from "@/lib/dcc/access";
 import { writeDccEntry, writeParticipantEntries } from "@/lib/dcc/write";
-import { getDccDayDetail } from "@/lib/queries/dcc";
-import { parseFrequency, scheduledDueOn, isFilled } from "@/lib/dcc/util";
+import { dccInputTypeReady } from "@/lib/dcc/schema-ready";
+import { getDccDayDetail, listDccPeople, listItemsForOwners } from "@/lib/queries/dcc";
+import { parseFrequency, scheduledDueOn, isFilled, maskLabel, type ParsedFrequency } from "@/lib/dcc/util";
+import { parseBulkImport, normaliseTitle, suggestEmployee, type BulkInputType } from "@/lib/dcc/bulk-import";
 import {
   SetDccEntrySchema,
   SetParticipantEntriesSchema,
   CreateDccItemSchema,
   UpdateDccItemSchema,
   DeleteDccItemSchema,
+  DccBulkImportSchema,
   AddParticipantSchema,
   RemoveParticipantSchema,
   RenameParticipantSchema,
@@ -35,6 +38,7 @@ import {
   type SetParticipantEntriesInput,
   type CreateDccItemInput,
   type UpdateDccItemInput,
+  type DccBulkImportInput,
   type AddParticipantInput,
   type CreateDccClientInput,
   type SetDccReviewInput,
@@ -150,28 +154,51 @@ export async function createDccItem(
   const freq = parseFrequency(data.frequency);
 
   try {
-    const [row] = await db
-      .insert(dccKpiItems)
-      .values({
-        ownerEmployeeId: data.ownerEmployeeId,
-        section: data.section,
-        code: data.code,
-        title: data.title,
-        frequency: data.frequency,
-        weekdays: freq.weekdays,
-        scheduleKind: freq.scheduleKind,
-        needsReview: freq.needsReview,
-        isParticipantList: data.isParticipantList,
-        clientId: data.clientId,
-        targetNumber: data.targetNumber == null ? null : String(data.targetNumber),
-        unit: data.unit,
-        sortOrder: await nextSortOrder(data.ownerEmployeeId),
-        createdById: me.id,
-      })
-      .returning({ id: dccKpiItems.id });
-    if (!row) return { ok: false, error: "Insert returned no row" };
+    const sortOrder = await nextSortOrder(data.ownerEmployeeId);
+    const targetNumber = data.targetNumber == null ? null : String(data.targetNumber);
+    let id: string | undefined;
+    if (await dccInputTypeReady()) {
+      const [row] = await db
+        .insert(dccKpiItems)
+        .values({
+          ownerEmployeeId: data.ownerEmployeeId,
+          section: data.section,
+          code: data.code,
+          title: data.title,
+          frequency: data.frequency,
+          weekdays: freq.weekdays,
+          scheduleKind: freq.scheduleKind,
+          needsReview: freq.needsReview,
+          isParticipantList: data.isParticipantList,
+          clientId: data.clientId,
+          targetNumber,
+          unit: data.unit,
+          inputType: data.inputType,
+          targetPeriod: data.targetPeriod,
+          sortOrder,
+          createdById: me.id,
+        })
+        .returning({ id: dccKpiItems.id });
+      id = row?.id;
+    } else {
+      // 0124 not installed: Drizzle's insert would list the two new columns
+      // (as DEFAULT) and fail, so this names the pre-0124 columns itself. The
+      // KPI is a Yes / No line with a per-day target, as every KPI was.
+      const rows = await db.execute<{ id: string }>(sql`
+        insert into dcc_kpi_items
+          (owner_employee_id, section, code, title, frequency, weekdays, schedule_kind, needs_review,
+           is_participant_list, client_id, target_number, unit, sort_order, created_by_id)
+        values
+          (${data.ownerEmployeeId}::uuid, ${data.section}, ${data.code}, ${data.title}, ${data.frequency},
+           ${freq.weekdays}, ${freq.scheduleKind}, ${freq.needsReview}, ${data.isParticipantList},
+           ${data.clientId}::uuid, ${targetNumber}::numeric, ${data.unit}, ${sortOrder}, ${me.id}::uuid)
+        returning id
+      `);
+      id = (Array.isArray(rows) ? rows[0] : (rows as unknown as { rows: { id: string }[] }).rows?.[0])?.id;
+    }
+    if (!id) return { ok: false, error: "Insert returned no row" };
     revalidateDcc();
-    return { ok: true, id: row.id };
+    return { ok: true, id };
   } catch (err) {
     return fail(err);
   }
@@ -217,6 +244,8 @@ export async function updateDccItem(input: UpdateDccItemInput): Promise<ActionRe
         clientId: data.clientId,
         targetNumber: data.targetNumber == null ? null : String(data.targetNumber),
         unit: data.unit,
+        // Only once 0124 is installed; an UPDATE names just the columns given.
+        ...((await dccInputTypeReady()) ? { inputType: data.inputType, targetPeriod: data.targetPeriod } : {}),
         updatedAt: new Date(),
       })
       .where(eq(dccKpiItems.id, data.id));
@@ -725,6 +754,231 @@ export async function summarizeDccDay(input: {
 /* ══════════════════════════════════════════════════════════════════════
    Misc
    ══════════════════════════════════════════════════════════════════════ */
+
+/* ══════════════════════════════════════════════════════════════════════
+   Bulk KPI setup (paste → preview → apply)
+   ══════════════════════════════════════════════════════════════════════ */
+
+export type BulkLineStatus = "create" | "same" | "differs" | "update" | "invalid" | "unassigned";
+export interface BulkPreviewLine {
+  line: number;
+  sr: string | null;
+  title: string;
+  frequency: string | null;
+  /** How the parser reads the frequency: "Due Mon–Sat", "Weekly", "Ad-hoc" … */
+  reads: string;
+  inputType: BulkInputType | null;
+  status: BulkLineStatus;
+  errors: string[];
+  notes: string[];
+}
+export interface BulkPreviewGroup {
+  label: string;
+  employeeId: string | null;
+  employeeName: string | null;
+  /** The employee came from the label (not chosen by the admin yet). */
+  suggested: boolean;
+  canManage: boolean;
+  errors: string[];
+  lines: BulkPreviewLine[];
+}
+export interface BulkPreview {
+  groups: BulkPreviewGroup[];
+  errors: string[];
+  willCreate: number;
+  willUpdate: number;
+  willSkip: number;
+  unresolved: number;
+  /** Groups that have an employee the viewer may configure. */
+  applicable: number;
+  /** Anything that must be fixed before Apply. */
+  blocking: string[];
+}
+export interface BulkApplySummary {
+  created: number;
+  updated: number;
+  skipped: number;
+  unresolved: number;
+  groups: { label: string; employeeName: string | null; created: number; updated: number; skipped: number }[];
+}
+
+function frequencyReads(p: ParsedFrequency): string {
+  switch (p.scheduleKind) {
+    case "scheduled":
+      return `Due ${maskLabel(p.weekdays)}`;
+    case "weekly":
+      return `Weekly${p.weekdays ? ` · ${maskLabel(p.weekdays)}` : ""}`;
+    case "monthly":
+      return "Monthly";
+    case "event":
+      return "When it happens";
+    default:
+      return "Ad-hoc";
+  }
+}
+
+/**
+ * Parse, map and validate — the one resolver both preview and apply use, so
+ * Apply can never write something the preview did not show. Existing KPIs are
+ * matched by owner + title (case and spacing ignored); a match is kept as it
+ * is unless `updateDiffering` asks to realign its frequency, type and code.
+ */
+async function resolveBulk(me: Awaited<ReturnType<typeof requireUser>>, input: DccBulkImportInput): Promise<{ ok: true; preview: BulkPreview; byLabel: Map<string, { employeeId: string; existing: Map<string, { id: string }> }> } | { ok: false; error: string }> {
+  const parsed = DccBulkImportSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
+  const { text, mapping, updateDiffering } = parsed.data;
+  const scope = await getDccScope(me);
+  if (!scope.me.isSuperAdmin && !scope.canManageKpis) return { ok: false, error: "You can't configure KPIs" };
+
+  const bulk = parseBulkImport(text);
+  const people = await listDccPeople([...scope.visibleIds]);
+  const byId = new Map(people.map((p) => [p.id, p]));
+
+  // Resolve each group's employee: the admin's choice wins; otherwise suggest from the label.
+  const targets = bulk.groups.map((g) => {
+    const chosen = Object.prototype.hasOwnProperty.call(mapping, g.label);
+    const employeeId = chosen ? mapping[g.label] ?? null : (suggestEmployee(g.label, people)?.id ?? null);
+    return { g, employeeId, suggested: !chosen && employeeId != null };
+  });
+  const ownerIds = [...new Set(targets.map((t) => t.employeeId).filter((id): id is string => Boolean(id)))];
+  const existingRows = await listItemsForOwners(ownerIds);
+  const existingByOwner = new Map<string, Map<string, (typeof existingRows)[number]>>();
+  for (const r of existingRows) {
+    const m = existingByOwner.get(r.ownerEmployeeId) ?? new Map();
+    m.set(normaliseTitle(r.title), r);
+    existingByOwner.set(r.ownerEmployeeId, m);
+  }
+
+  const groups: BulkPreviewGroup[] = [];
+  const blocking: string[] = [...bulk.errors];
+  const byLabel = new Map<string, { employeeId: string; existing: Map<string, { id: string }> }>();
+  let willCreate = 0;
+  let willUpdate = 0;
+  let willSkip = 0;
+  let unresolved = 0;
+  let applicable = 0;
+  for (const { g, employeeId, suggested } of targets) {
+    const errors = [...g.errors];
+    const person = employeeId ? byId.get(employeeId) : undefined;
+    let canManage = false;
+    if (employeeId && !person) errors.push("that employee is not in your scope");
+    else if (employeeId) canManage = canManageItems(scope, employeeId);
+    if (employeeId && person && !canManage) errors.push("you can't configure KPIs for this person");
+    const existing = employeeId ? (existingByOwner.get(employeeId) ?? new Map()) : new Map();
+    const lines: BulkPreviewLine[] = g.lines.map((l) => {
+      let status: BulkLineStatus;
+      if (l.errors.length > 0) status = "invalid";
+      else if (!employeeId || !canManage) status = "unassigned";
+      else {
+        const ex = existing.get(normaliseTitle(l.title));
+        if (!ex) status = "create";
+        else {
+          const same = (ex.frequency ?? "") === (l.frequency ?? "") && ex.inputType === l.inputType && (ex.code ?? "") === (l.sr ?? "");
+          status = same ? "same" : updateDiffering ? "update" : "differs";
+        }
+      }
+      if (status === "create") willCreate++;
+      else if (status === "update") willUpdate++;
+      else if (status === "same" || status === "differs") willSkip++;
+      return { line: l.line, sr: l.sr, title: l.title, frequency: l.frequency, reads: frequencyReads(l.parsed), inputType: l.inputType, status, errors: l.errors, notes: l.notes };
+    });
+    const usable = Boolean(employeeId) && canManage && errors.length === 0;
+    if (!employeeId) unresolved++;
+    if (usable) {
+      applicable++;
+      byLabel.set(g.label, { employeeId: employeeId!, existing });
+    }
+    if (employeeId && errors.length > 0) blocking.push(`${g.label}: ${errors.join("; ")}`);
+    if (employeeId && canManage) for (const l of lines) if (l.status === "invalid") blocking.push(`${g.label} line ${l.line}: ${l.errors.join("; ")}`);
+    groups.push({ label: g.label, employeeId, employeeName: person?.name ?? null, suggested, canManage, errors, lines });
+  }
+  return { ok: true, preview: { groups, errors: bulk.errors, willCreate, willUpdate, willSkip, unresolved, applicable, blocking }, byLabel };
+}
+
+/** What a bulk paste would do, with suggested employee mapping. Writes nothing. */
+export async function previewDccBulkImport(input: DccBulkImportInput): Promise<ActionResult<{ preview: BulkPreview }>> {
+  const me = await requireUser();
+  const r = await resolveBulk(me, input);
+  if (!r.ok) return r;
+  return { ok: true, preview: r.preview };
+}
+
+/**
+ * Apply a bulk paste in ONE transaction. Refused outright when anything in a
+ * mapped group is invalid, so a partial checklist is never written. Groups
+ * left unassigned are skipped and reported. Running the same text again
+ * creates nothing: every title already there is matched and kept.
+ */
+export async function applyDccBulkImport(input: DccBulkImportInput): Promise<ActionResult<{ summary: BulkApplySummary }>> {
+  const me = await requireUser();
+  const limited = rateLimitOrError(me.id, "write");
+  if (limited) return limited;
+  const r = await resolveBulk(me, input);
+  if (!r.ok) return r;
+  const { preview, byLabel } = r;
+  if (preview.blocking.length > 0) return { ok: false, error: `Fix before applying: ${preview.blocking[0]}${preview.blocking.length > 1 ? ` (+${preview.blocking.length - 1} more)` : ""}` };
+  if (preview.applicable === 0) return { ok: false, error: "Map at least one group to an employee you can configure" };
+  if (!(await dccInputTypeReady())) return { ok: false, error: "Bulk setup needs database migration 0124 (answer types) installed first" };
+
+  const summary: BulkApplySummary = { created: 0, updated: 0, skipped: 0, unresolved: preview.unresolved, groups: [] };
+  try {
+    await db.transaction(async (tx) => {
+      for (const g of preview.groups) {
+        const target = byLabel.get(g.label);
+        if (!target) {
+          summary.groups.push({ label: g.label, employeeName: null, created: 0, updated: 0, skipped: 0 });
+          continue;
+        }
+        const [max] = await tx.select({ max: sql<number>`coalesce(max(${dccKpiItems.sortOrder}), 0)::int` }).from(dccKpiItems).where(eq(dccKpiItems.ownerEmployeeId, target.employeeId));
+        let sortOrder = max?.max ?? 0;
+        const gs = { label: g.label, employeeName: g.employeeName, created: 0, updated: 0, skipped: 0 };
+        for (const l of g.lines) {
+          const freq = parseFrequency(l.frequency);
+          if (l.status === "create") {
+            sortOrder++;
+            await tx.insert(dccKpiItems).values({
+              ownerEmployeeId: target.employeeId,
+              section: null,
+              code: l.sr,
+              title: l.title,
+              frequency: l.frequency,
+              weekdays: freq.weekdays,
+              scheduleKind: freq.scheduleKind,
+              needsReview: freq.needsReview,
+              isParticipantList: false,
+              clientId: null,
+              targetNumber: null,
+              unit: null,
+              inputType: l.inputType ?? "yesno",
+              targetPeriod: "day",
+              sortOrder,
+              createdById: me.id,
+            });
+            gs.created++;
+          } else if (l.status === "update") {
+            const ex = target.existing.get(normaliseTitle(l.title));
+            if (!ex) throw new Error("existing KPI vanished during the import");
+            await tx
+              .update(dccKpiItems)
+              .set({ code: l.sr, frequency: l.frequency, weekdays: freq.weekdays, scheduleKind: freq.scheduleKind, needsReview: freq.needsReview, inputType: l.inputType ?? "yesno", updatedAt: new Date() })
+              .where(eq(dccKpiItems.id, ex.id));
+            gs.updated++;
+          } else {
+            gs.skipped++;
+          }
+        }
+        summary.created += gs.created;
+        summary.updated += gs.updated;
+        summary.skipped += gs.skipped;
+        summary.groups.push(gs);
+      }
+    });
+  } catch (err) {
+    return fail(err);
+  }
+  revalidateDcc();
+  return { ok: true, summary };
+}
 
 /** Distinct sections for the add/edit dialog's datalist. */
 export async function listDccSectionsFor(ownerId: string): Promise<string[]> {
