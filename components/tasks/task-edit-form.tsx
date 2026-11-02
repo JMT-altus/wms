@@ -526,7 +526,7 @@ export function TaskEditForm({
       )}
 
       {/* Schedule — GCal-style start/end + recurrence. Internal only. */}
-      <ScheduleSection value={schedule} onChange={setSchedule} />
+      <ScheduleSection value={schedule} onChange={setSchedule} dueDate={dueAt} />
 
       {isAdmin && (
         <div

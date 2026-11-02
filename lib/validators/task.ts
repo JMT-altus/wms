@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { parseRRule } from "@/lib/recurrence/rrule";
 import {
   TASK_PRIORITIES,
   APPROVAL_STATUSES,
@@ -13,6 +14,13 @@ const uuid = z.string().guid("Must be a UUID");
  * One audience entry on a `restricted` row. `management` carries no id (it
  * means "anyone with a designation flagged is_management"); the other two must.
  */
+/** A rule the materializer can actually run; anything else would save and then never repeat. */
+const RecurrenceRuleField = z
+  .string()
+  .trim()
+  .max(200)
+  .refine((r) => parseRRule(r) !== null, "That repeat pattern isn't valid.");
+
 export const AudienceEntrySchema = z
   .object({
     kind: z.enum(AUDIENCE_KINDS),
@@ -95,7 +103,7 @@ export const CreateTaskSchema = z
     endsAt: isoDateToDate.nullable().optional().default(null),
     allDay: z.boolean().optional().default(false),
     recurrence: z.enum(TASK_RECURRENCES).nullable().optional().default(null),
-    recurrenceRule: z.string().trim().max(200).nullable().optional().default(null),
+    recurrenceRule: RecurrenceRuleField.nullable().optional().default(null),
     projectNodeId: z.string().uuid().nullable().optional().default(null),
     ...VisibilityFields,
   })
@@ -140,7 +148,7 @@ export const EditTaskFieldsSchema = z
     endsAt: isoDateToDate.nullable().optional(),
     allDay: z.boolean().optional(),
     recurrence: z.enum(TASK_RECURRENCES).nullable().optional(),
-    recurrenceRule: z.string().trim().max(200).nullable().optional(),
+    recurrenceRule: RecurrenceRuleField.nullable().optional(),
     projectNodeId: z.string().uuid().nullable().optional(),
     // 0102 — the planned half of Estimated vs Actual. Capped at 100 hours:
     // anything longer is a project, not a task, and a stray extra digit

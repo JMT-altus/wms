@@ -142,9 +142,15 @@ function plusDaysUTC(d: Date, n: number): Date {
 
 /** Reformat our RRULE's `UNTIL=yyyy-mm-dd` into the form Google expects. */
 function toGoogleRecurrence(rule: string, allDay: boolean): string[] {
-  const fixed = rule.replace(/UNTIL=(\d{4})-(\d{2})-(\d{2})/i, (_m, y, mo, d) =>
-    allDay ? `UNTIL=${y}${mo}${d}` : `UNTIL=${y}${mo}${d}T235959Z`,
-  );
+  const fixed = rule
+    .replace(/UNTIL=(\d{4})-(\d{2})-(\d{2})/i, (_m, y, mo, d) =>
+      allDay ? `UNTIL=${y}${mo}${d}` : `UNTIL=${y}${mo}${d}T235959Z`,
+    )
+    // Day 29–31: the last of those days each month has, as the WMS schedules it.
+    .replace(/BYMONTHDAY=(29|30|31)\b/i, (_m, d) => {
+      const days = Array.from({ length: Number(d) - 27 }, (_v, i) => 28 + i);
+      return `BYMONTHDAY=${days.join(",")};BYSETPOS=-1`;
+    });
   return [`RRULE:${fixed}`];
 }
 

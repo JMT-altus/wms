@@ -53,15 +53,17 @@ interface Draft {
   interval: number;
   byday: string[]; // weekly list
   monthlyMode: "day" | "weekday";
+  /** The stored BYMONTHDAY, so a saved rule is described as saved. */
+  monthDay: number | null;
   endsType: EndsType;
   until: string | null;
   count: number | null;
 }
 
-function parseRule(rule: string | null): Draft | null {
+export function parseRule(rule: string | null): Draft | null {
   if (!rule) return null;
   const d: Draft = {
-    freq: "DAILY", interval: 1, byday: [], monthlyMode: "day",
+    freq: "DAILY", interval: 1, byday: [], monthlyMode: "day", monthDay: null,
     endsType: "never", until: null, count: null,
   };
   let sawFreq = false;
@@ -86,6 +88,7 @@ function parseRule(rule: string | null): Draft | null {
       }
     } else if (key === "BYMONTHDAY") {
       d.monthlyMode = "day";
+      const n = Number(val); if (Number.isInteger(n) && n >= 1 && n <= 31) d.monthDay = n;
     } else if (key === "UNTIL") {
       const m = val.match(/^(\d{4})-?(\d{2})-?(\d{2})/);
       if (m) { d.until = `${m[1]}-${m[2]}-${m[3]}`; d.endsType = "until"; }
@@ -97,12 +100,13 @@ function parseRule(rule: string | null): Draft | null {
 }
 
 /** Build an RRULE string from a draft + the task's anchor date. */
-function buildRule(d: Draft, anchor: Date): string {
+export function buildRule(d: Draft, anchor: Date): string {
   const segs = [`FREQ=${d.freq}`];
   if (d.interval > 1) segs.push(`INTERVAL=${d.interval}`);
   if (d.freq === "WEEKLY") {
     const days = d.byday.length ? d.byday : [wdCode(anchor)];
-    segs.push(`BYDAY=${days.join(",")}`);
+    // Calendar order, however the chips were clicked.
+    segs.push(`BYDAY=${WD.map((w) => w.code).filter((c) => days.includes(c)).join(",")}`);
   }
   if (d.freq === "MONTHLY") {
     if (d.monthlyMode === "weekday") {
@@ -116,10 +120,10 @@ function buildRule(d: Draft, anchor: Date): string {
   return segs.join(";");
 }
 
-type PresetKey = "none" | "daily" | "weekly" | "monthly" | "yearly" | "weekday" | "custom";
+type PresetKey = "none" | "daily" | "weekly" | "monthly" | "monthlyDay" | "yearly" | "weekday" | "custom";
 
 /** Which preset (if any) the current rule maps to for this anchor. */
-function detectPreset(rule: string | null, anchor: Date): PresetKey {
+export function detectPreset(rule: string | null, anchor: Date): PresetKey {
   const d = parseRule(rule);
   if (!d) return "none";
   if (d.interval > 1 || d.endsType !== "never") return "custom";
@@ -131,14 +135,15 @@ function detectPreset(rule: string | null, anchor: Date): PresetKey {
     return "custom";
   }
   if (d.freq === "MONTHLY") {
-    return d.monthlyMode === "weekday" ? "monthly" : "custom";
+    if (d.monthlyMode === "weekday") return "monthly";
+    return d.monthDay === anchor.getDate() ? "monthlyDay" : "custom";
   }
   if (d.freq === "YEARLY") return "yearly";
   return "custom";
 }
 
 const FREQ_OF_PRESET: Record<Exclude<PresetKey, "none" | "custom">, TaskRecurrence> = {
-  daily: "daily", weekly: "weekly", monthly: "monthly", yearly: "yearly", weekday: "weekly",
+  daily: "daily", weekly: "weekly", monthly: "monthly", monthlyDay: "monthly", yearly: "yearly", weekday: "weekly",
 };
 
 interface Props {
@@ -156,6 +161,7 @@ export function RecurrenceControl({ anchor, recurrence, recurrenceRule, onChange
     { key: "none", label: "Does not repeat" },
     { key: "daily", label: "Daily" },
     { key: "weekly", label: `Weekly on ${wdFull(anchor)}` },
+    { key: "monthlyDay", label: `Monthly on day ${anchor.getDate()}` },
     { key: "monthly", label: `Monthly on the ${nthLabel(anchor)} ${wdFull(anchor)}` },
     { key: "yearly", label: `Annually on ${MONTHS[anchor.getMonth()]} ${anchor.getDate()}` },
     { key: "weekday", label: "Every weekday (Monday to Friday)" },
@@ -169,6 +175,7 @@ export function RecurrenceControl({ anchor, recurrence, recurrenceRule, onChange
       key === "daily" ? "FREQ=DAILY"
       : key === "weekly" ? `FREQ=WEEKLY;BYDAY=${wdCode(anchor)}`
       : key === "monthly" ? `FREQ=MONTHLY;BYDAY=${nthRRuleNum(anchor)}${wdCode(anchor)}`
+      : key === "monthlyDay" ? `FREQ=MONTHLY;BYMONTHDAY=${anchor.getDate()}`
       : key === "weekday" ? "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR"
       : "FREQ=YEARLY";
     onChange({ recurrence: FREQ_OF_PRESET[key], recurrenceRule: rule });
@@ -225,7 +232,7 @@ export function RecurrenceControl({ anchor, recurrence, recurrenceRule, onChange
   );
 }
 
-function humanSummary(rule: string | null, anchor: Date): string | null {
+export function humanSummary(rule: string | null, anchor: Date): string | null {
   const d = parseRule(rule);
   if (!d) return null;
   const unit = { DAILY: "day", WEEKLY: "week", MONTHLY: "month", YEARLY: "year" }[d.freq];
@@ -240,7 +247,7 @@ function humanSummary(rule: string | null, anchor: Date): string | null {
   if (d.freq === "MONTHLY") {
     s += d.monthlyMode === "weekday"
       ? ` on the ${nthLabel(anchor)} ${wdFull(anchor)}`
-      : ` on day ${anchor.getDate()}`;
+      : ` on day ${d.monthDay ?? anchor.getDate()}`;
   }
   if (d.endsType === "until" && d.until) s += `, until ${d.until}`;
   if (d.endsType === "count" && d.count) s += `, ${d.count} times`;
@@ -253,6 +260,35 @@ const UNITS: { value: Freq; label: (n: number) => string }[] = [
   { value: "MONTHLY", label: (n) => (n === 1 ? "month" : "months") },
   { value: "YEARLY", label: (n) => (n === 1 ? "year" : "years") },
 ];
+
+/**
+ * A whole-number box that can be emptied while typing: clamping on every
+ * keystroke turned a cleared field straight back into 1, so "2" became "12".
+ * Settles to a valid number on blur; the draft always holds a valid one.
+ */
+function WholeNumberInput({ value, disabled, label, onChange }: { value: number; disabled?: boolean; label: string; onChange: (n: number) => void }) {
+  const [text, setText] = React.useState<string | null>(null);
+  return (
+    <input
+      type="number"
+      min={1}
+      max={999}
+      aria-label={label}
+      value={text ?? value}
+      disabled={disabled}
+      onChange={(e) => {
+        setText(e.target.value);
+        const n = Number(e.target.value);
+        if (Number.isInteger(n) && n >= 1) onChange(Math.min(999, n));
+      }}
+      onBlur={() => setText(null)}
+      className="nt-input w-20 text-center tabular-nums"
+    />
+  );
+}
+
+/** Above the dialog's z-[120]: the shared popover's z-[100] opened the list BEHIND it, so no option could be seen or picked. */
+const IN_DIALOG_LIST = "z-[130]";
 
 function CustomDialog({
   open,
@@ -278,11 +314,23 @@ function CustomDialog({
   }
   function toggleDay(code: string) {
     setDraft((d) => {
-      const has = d.byday.includes(code);
-      const byday = has ? d.byday.filter((c) => c !== code) : [...d.byday, code];
+      // Start from what the chips SHOW: a daily or monthly draft has no stored
+      // days and displays the anchor's weekday as selected.
+      const current = d.byday.length ? d.byday : [wdCode(anchor)];
+      const has = current.includes(code);
+      const byday = has ? current.filter((c) => c !== code) : [...current, code];
       return { ...d, byday: byday.length ? byday : [wdCode(anchor)] };
     });
   }
+
+  const endError =
+    draft.endsType !== "until"
+      ? null
+      : !draft.until
+        ? "Choose the end date."
+        : draft.until < ymd(anchor)
+          ? "The end date can't be before the first occurrence."
+          : null;
 
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
@@ -296,19 +344,14 @@ function CustomDialog({
           {/* Repeat every N [unit] */}
           <div className="flex items-center gap-2.5 mb-5">
             <span className="text-[14.5px] font-semibold text-ink-strong">Repeat every</span>
-            <input
-              type="number"
-              min={1}
-              max={999}
-              value={draft.interval}
-              onChange={(e) => patch({ interval: Math.max(1, Number(e.target.value) || 1) })}
-              className="nt-input w-20 text-center tabular-nums"
-            />
+            <WholeNumberInput label="Repeat every" value={draft.interval} onChange={(interval) => patch({ interval })} />
             <Select
               value={draft.freq}
               onValueChange={(v) => patch({ freq: v as Freq })}
               options={UNITS.map((u) => ({ value: u.value, label: u.label(draft.interval) }))}
               className="w-auto min-w-[8rem]"
+              contentClassName={IN_DIALOG_LIST}
+              ariaLabel="Repeat unit"
             />
           </div>
 
@@ -352,8 +395,12 @@ function CustomDialog({
                   { value: "day", label: `Monthly on day ${anchor.getDate()}` },
                   { value: "weekday", label: `Monthly on the ${nthLabel(anchor)} ${wdFull(anchor)}` },
                 ]}
+                contentClassName={IN_DIALOG_LIST}
+                ariaLabel="Monthly pattern"
               />
-
+              {draft.monthlyMode === "day" && anchor.getDate() > 28 && (
+                <p className="mt-2 text-[12.5px] text-ink-subtle">Months without day {anchor.getDate()} use their last day.</p>
+              )}
             </div>
           )}
 
@@ -403,22 +450,22 @@ function CustomDialog({
                   style={{ accentColor: "var(--color-altus-red)" }}
                 />
                 After
-                <input
-                  type="number"
-                  min={1}
-                  max={999}
+                <WholeNumberInput
+                  label="Occurrences"
                   value={draft.count ?? 13}
                   disabled={draft.endsType !== "count"}
-                  onChange={(e) =>
-                    patch({ endsType: "count", count: Math.max(1, Number(e.target.value) || 1) })
-                  }
-                  className="nt-input w-20 text-center tabular-nums"
+                  onChange={(count) => patch({ endsType: "count", count })}
                 />
                 occurrences
               </label>
             </div>
           </div>
 
+          {endError && (
+            <p role="alert" className="mb-3 text-[13px] font-semibold text-[#B91C1C]">
+              {endError}
+            </p>
+          )}
           <div className="flex justify-end gap-2">
             <Dialog.Close asChild>
               <button type="button" className="px-4 py-2.5 text-[14px] font-medium text-ink-soft">
@@ -427,11 +474,12 @@ function CustomDialog({
             </Dialog.Close>
             <button
               type="button"
+              disabled={endError !== null}
               onClick={() => {
                 onDone(draft);
                 onOpenChange(false);
               }}
-              className="rounded-md py-2.5 px-5 text-[14px] font-semibold text-white"
+              className="rounded-md py-2.5 px-5 text-[14px] font-semibold text-white disabled:opacity-50"
               style={{ background: "linear-gradient(135deg, #0A6CFF, #0751BE)" }}
             >
               Done
@@ -455,6 +503,7 @@ function seed(rule: string | null, anchor: Date): Draft {
     interval: 1,
     byday: [wdCode(anchor)],
     monthlyMode: "day",
+    monthDay: null,
     endsType: "never",
     until: null,
     count: null,

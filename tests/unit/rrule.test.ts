@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 
-import { parseRRule, generateOccurrences, ymd } from "@/lib/recurrence/rrule";
+import { parseRRule, generateOccurrences, searchWindowDays, ymd } from "@/lib/recurrence/rrule";
 
 function utc(yyyy: number, mm: number, dd: number): Date {
   return new Date(Date.UTC(yyyy, mm - 1, dd));
@@ -108,13 +108,10 @@ describe("generateOccurrences", () => {
     expect(out).toEqual(["2026-06-15", "2026-07-15", "2026-08-15", "2026-09-15"]);
   });
 
-  it("skips months that can't honour the rule (Feb 30 etc.)", () => {
+  it("uses the last available day of a month that lacks the day (never Feb 31, never a skipped month)", () => {
     const r = parseRRule("FREQ=MONTHLY;BYMONTHDAY=31")!;
     const out = generateOccurrences(r, utc(2026, 1, 1), utc(2026, 6, 30));
-    // 2026 is not a leap year. Anchor is Jan 1, so Jan 31 (>1) counts;
-    // Feb (no day 31) skipped; Mar 31; Apr (no 31) skipped; May 31;
-    // Jun (no 31) skipped.
-    expect(out).toEqual(["2026-01-31", "2026-03-31", "2026-05-31"]);
+    expect(out).toEqual(["2026-01-31", "2026-02-28", "2026-03-31", "2026-04-30", "2026-05-31", "2026-06-30"]);
   });
 
   it("emits same month+day next year for YEARLY", () => {
@@ -192,5 +189,57 @@ describe("ymd", () => {
   it("zero-pads month and day", () => {
     expect(ymd(utc(2026, 1, 9))).toBe("2026-01-09");
     expect(ymd(utc(2026, 12, 31))).toBe("2026-12-31");
+  });
+});
+
+describe("monthly recurrence", () => {
+  const out = (rule: string, a: Date, e: Date) => generateOccurrences(parseRRule(rule)!, a, e);
+
+  it("every month keeps the start's day", () => {
+    expect(out("FREQ=MONTHLY;BYMONTHDAY=5", utc(2026, 11, 5), utc(2027, 2, 28))).toEqual(["2026-12-05", "2027-01-05", "2027-02-05"]);
+  });
+  it("every 2, 3, 6 and 12 months", () => {
+    expect(out("FREQ=MONTHLY;INTERVAL=2;BYMONTHDAY=15", utc(2026, 11, 15), utc(2027, 5, 31))).toEqual(["2027-01-15", "2027-03-15", "2027-05-15"]);
+    expect(out("FREQ=MONTHLY;INTERVAL=3;BYMONTHDAY=15", utc(2026, 11, 15), utc(2027, 5, 31))).toEqual(["2027-02-15", "2027-05-15"]);
+    expect(out("FREQ=MONTHLY;INTERVAL=6;BYMONTHDAY=15", utc(2026, 11, 15), utc(2027, 11, 30))).toEqual(["2027-05-15", "2027-11-15"]);
+    expect(out("FREQ=MONTHLY;INTERVAL=12;BYMONTHDAY=15", utc(2026, 11, 15), utc(2028, 11, 30))).toEqual(["2027-11-15", "2028-11-15"]);
+  });
+  it("from the 31st: the last available day, returning to the 31st when it exists", () => {
+    expect(out("FREQ=MONTHLY;BYMONTHDAY=31", utc(2026, 1, 31), utc(2026, 5, 31))).toEqual(["2026-02-28", "2026-03-31", "2026-04-30", "2026-05-31"]);
+  });
+  it("February: 28 in a common year, 29 in a leap year; the 30th too", () => {
+    expect(out("FREQ=MONTHLY;BYMONTHDAY=31", utc(2028, 1, 31), utc(2028, 3, 31))).toEqual(["2028-02-29", "2028-03-31"]);
+    expect(out("FREQ=MONTHLY;BYMONTHDAY=30", utc(2027, 1, 30), utc(2027, 3, 31))).toEqual(["2027-02-28", "2027-03-30"]);
+    expect(out("FREQ=MONTHLY;BYMONTHDAY=29", utc(2028, 1, 29), utc(2028, 3, 31))).toEqual(["2028-02-29", "2028-03-29"]);
+  });
+  it("a rule naming no day uses the anchor's, clamped", () => {
+    expect(out("FREQ=MONTHLY", utc(2026, 1, 31), utc(2026, 3, 31))).toEqual(["2026-02-28", "2026-03-31"]);
+  });
+  it("ends on a date (inclusive) and after N occurrences, the start being #1", () => {
+    expect(out("FREQ=MONTHLY;BYMONTHDAY=31;UNTIL=2026-04-30", utc(2026, 1, 31), utc(2027, 1, 1))).toEqual(["2026-02-28", "2026-03-31", "2026-04-30"]);
+    expect(out("FREQ=MONTHLY;BYMONTHDAY=5;COUNT=3", utc(2026, 11, 5), utc(2028, 1, 1))).toEqual(["2026-12-05", "2027-01-05"]);
+  });
+  it("the nth-weekday pattern still works", () => {
+    expect(out("FREQ=MONTHLY;BYDAY=1MO", utc(2026, 11, 2), utc(2027, 1, 31))).toEqual(["2026-12-07", "2027-01-04"]);
+  });
+  it("a long interval reaches its next date and the search window always covers it", () => {
+    const r = parseRRule("FREQ=MONTHLY;INTERVAL=300;BYMONTHDAY=1")!;
+    expect(generateOccurrences(r, utc(2026, 1, 1), new Date(utc(2026, 1, 1).getTime() + searchWindowDays(r) * 86400000))[0]).toBe("2051-01-01");
+    expect(searchWindowDays(parseRRule("FREQ=YEARLY;INTERVAL=2")!)).toBeGreaterThan(731);
+  });
+});
+
+describe("weekly recurrence", () => {
+  const out = (rule: string, a: Date, e: Date) => generateOccurrences(parseRRule(rule)!, a, e);
+  it("one weekday", () => {
+    expect(out("FREQ=WEEKLY;BYDAY=MO", utc(2026, 11, 2), utc(2026, 11, 23))).toEqual(["2026-11-09", "2026-11-16", "2026-11-23"]);
+  });
+  it("several weekdays, every week and every 2 weeks", () => {
+    expect(out("FREQ=WEEKLY;BYDAY=MO,WE,FR", utc(2026, 11, 2), utc(2026, 11, 9))).toEqual(["2026-11-04", "2026-11-06", "2026-11-09"]);
+    expect(out("FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,TH", utc(2026, 11, 2), utc(2026, 11, 19))).toEqual(["2026-11-05", "2026-11-16", "2026-11-19"]);
+  });
+  it("ends by date and by count", () => {
+    expect(out("FREQ=WEEKLY;BYDAY=MO;UNTIL=2026-11-16", utc(2026, 11, 2), utc(2026, 12, 31))).toEqual(["2026-11-09", "2026-11-16"]);
+    expect(out("FREQ=WEEKLY;BYDAY=MO,WE;COUNT=3", utc(2026, 11, 2), utc(2026, 12, 31))).toEqual(["2026-11-04", "2026-11-09"]);
   });
 });

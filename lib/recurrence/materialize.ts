@@ -3,7 +3,7 @@ import { and, eq, isNotNull, isNull } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { tasks, taskEvents } from "@/db/schema";
 import { deriveShortId, nextShortIdCandidate } from "@/lib/import/short-id";
-import { generateOccurrences, parseRRule, ymd as ymdUTC } from "@/lib/recurrence/rrule";
+import { generateOccurrences, parseRRule, searchWindowDays, ymd as ymdUTC } from "@/lib/recurrence/rrule";
 
 /**
  * Recurrence materializer — "single actionable instance" model.
@@ -33,7 +33,8 @@ export interface MaterializeStats {
 // occurrences up to today (+ one future), capped so a long outage can't spawn
 // a runaway. Normal daily operation creates exactly one row per run.
 const MAX_CATCHUP = 40;
-// Forward search window when finding the next occurrence (covers yearly).
+// Forward search window when finding the next occurrence: at least a year, and
+// longer for long intervals (every 2 years, every 18 months).
 const NEXT_SEARCH_DAYS = 400;
 
 function toMidnightUTC(d: Date): Date {
@@ -111,13 +112,23 @@ export async function materializeRecurringTasks(
     // exactly ONE future occurrence. Generate FROM the floor (a valid
     // on-pattern date) so a long-running daily series doesn't hit the
     // from-original-anchor occurrence cap. COUNT is enforced above; strip it.
-    const genRule = { ...rule, count: null };
+    // A monthly rule naming no day keeps the ANCHOR's day, not the floor's: a
+    // floor of 28 Feb must not turn a 31 January series into the 28th for good.
+    const genRule = {
+      ...rule,
+      count: null,
+      byMonthDay:
+        rule.freq === "MONTHLY" && rule.byMonthDay === null && rule.monthlyNth === null
+          ? toMidnightUTC(anchor).getUTCDate()
+          : rule.byMonthDay,
+    };
+    const searchDays = Math.max(NEXT_SEARCH_DAYS, searchWindowDays(rule));
     const occurrences: string[] = [];
     let cursor = floor;
     let made = materializedCount;
     for (let guard = 0; guard < MAX_CATCHUP; guard++) {
       if (rule.count !== null && made >= rule.count) break;
-      const nxt = generateOccurrences(genRule, cursor, addDaysUTC(cursor, NEXT_SEARCH_DAYS))[0];
+      const nxt = generateOccurrences(genRule, cursor, addDaysUTC(cursor, searchDays))[0];
       if (!nxt) break; // series ended (past UNTIL)
       occurrences.push(nxt);
       made++;

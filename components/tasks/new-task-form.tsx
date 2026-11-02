@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
-import { useForm, Controller } from "react-hook-form";
+import { useForm, useWatch, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { ImagePlus, Link2, Plus, X, FileImage, Check } from "lucide-react";
@@ -315,6 +315,7 @@ export function NewTaskForm({ employees, clients, subjects, projectNodes = [], d
       projectNodeId: defaults?.projectNodeId ?? "",
     },
   });
+  const watchedDue = useWatch({ control, name: "dueAt" });
 
   // Auxiliary widgets — local state, folded into the payload at submit.
   const [tags, setTags] = React.useState<string[]>([]);
@@ -1197,7 +1198,7 @@ export function NewTaskForm({ employees, clients, subjects, projectNodes = [], d
 
       {/* Schedule — GCal-style start/end + recurrence. Internal metadata
           only; not synced to any actual calendar API. */}
-      {!hideSchedule && <ScheduleSection value={schedule} onChange={setSchedule} />}
+      {!hideSchedule && <ScheduleSection value={schedule} onChange={setSchedule} dueDate={watchedDue} />}
 
       </FormSection>
 

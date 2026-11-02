@@ -5,7 +5,9 @@
  *   FREQ=DAILY                          → every day
  *   FREQ=WEEKLY[;BYDAY=MO,WE,FR]        → weekly, optional specific weekdays
  *   FREQ=MONTHLY[;BYDAY=2MO]            → monthly on the nth weekday
- *   FREQ=MONTHLY[;BYMONTHDAY=15]        → monthly on day-of-month
+ *   FREQ=MONTHLY[;BYMONTHDAY=15]        → monthly on day-of-month; a day the
+ *                                         month doesn't have (31 in February)
+ *                                         lands on that month's last day
  *   FREQ=YEARLY                         → same month + day each year
  *   ...;UNTIL=2026-12-31                → end on (inclusive) the given date
  *
@@ -189,6 +191,10 @@ export function generateOccurrences(
   }
 
   if (rule.freq === "MONTHLY") {
+    // Bounded by the window, so a long interval (every 24 months) still
+    // reaches its next occurrence.
+    const months =
+      (end.getUTCFullYear() - start.getUTCFullYear()) * 12 + (end.getUTCMonth() - start.getUTCMonth());
     // Step through months starting from the anchor's month. Emit the
     // matching date for each month iff it's STRICTLY after the anchor
     // and within the window — the anchor itself counts as occurrence #1
@@ -196,7 +202,7 @@ export function generateOccurrences(
     // (e.g. "last Friday" of an early-month anchor) absolutely qualify.
     let y = start.getUTCFullYear();
     let m = start.getUTCMonth();
-    for (let safety = 0; safety < 24 * 12 && out.length < limit; safety++) {
+    for (let safety = 0; safety <= months && out.length < limit; safety++) {
       // Honour INTERVAL: only months a multiple of `interval` from the anchor.
       const monthsFromAnchor =
         (y - start.getUTCFullYear()) * 12 + (m - start.getUTCMonth());
@@ -254,9 +260,11 @@ function weekStartUTC(d: Date): Date {
 }
 
 /**
- * Resolve the rule's monthly occurrence for a given year+month. Returns
- * null when the rule can't be honoured for that month (e.g. BYMONTHDAY=31
- * in February, or BYDAY=5MO in a month without 5 Mondays).
+ * Resolve the rule's monthly occurrence for a given year+month. A day of the
+ * month the month doesn't have is clamped to its last day (31 January →
+ * 28 or 29 February → 31 March), so no month is skipped and no invalid date is
+ * built. Returns null only for an nth weekday the month lacks (BYDAY=5MO in a
+ * month without 5 Mondays).
  */
 function monthlyOccurrence(
   year: number,
@@ -284,13 +292,17 @@ function monthlyOccurrence(
   // Day-of-month (BYMONTHDAY=15)
   if (rule.byMonthDay !== null) {
     const daysInMonth = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
-    if (rule.byMonthDay > daysInMonth) return null;
-    return new Date(Date.UTC(year, month, rule.byMonthDay));
+    return new Date(Date.UTC(year, month, Math.min(rule.byMonthDay, daysInMonth)));
   }
 
   // No anchoring info — fall back to "same day-of-month as anchor".
-  const anchorDay = anchor.getUTCDate();
   const daysInMonth = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
-  if (anchorDay > daysInMonth) return null;
-  return new Date(Date.UTC(year, month, anchorDay));
+  return new Date(Date.UTC(year, month, Math.min(anchor.getUTCDate(), daysInMonth)));
+}
+
+/** Days ahead that are certain to contain the rule's next occurrence, however long its interval. */
+export function searchWindowDays(rule: ParsedRule): number {
+  const n = Math.max(1, rule.interval || 1);
+  const perPeriod = { DAILY: 1, WEEKLY: 7, MONTHLY: 31, YEARLY: 366 }[rule.freq];
+  return (n + 1) * perPeriod + 7;
 }

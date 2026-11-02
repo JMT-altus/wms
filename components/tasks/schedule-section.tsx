@@ -17,6 +17,8 @@ export interface ScheduleValue {
 interface Props {
   value: ScheduleValue;
   onChange: (next: ScheduleValue) => void;
+  /** The task's Due Date (yyyy-mm-dd): what a series with no start date runs from. */
+  dueDate?: string | null;
 }
 
 /** Split an ISO Date into the two strings the date + time inputs need. */
@@ -59,15 +61,21 @@ function formatDuration(start: Date | null, end: Date | null): string | null {
  * faithful recurrence picker (see RecurrenceControl). Self-contained — the
  * parent only supplies a ScheduleValue + onChange; no DB writes happen here.
  */
-export function ScheduleSection({ value, onChange }: Props) {
+export function ScheduleSection({ value, onChange, dueDate }: Props) {
   const startParts = isoToDateParts(value.startsAt);
   const endParts = isoToDateParts(value.endsAt);
   const duration = formatDuration(value.startsAt, value.endsAt);
 
   // Stable fallback anchor so the recurrence picker's labels + custom dialog
   // don't churn on every render when no start date is set yet.
+  // With no start date the series runs from the Due Date, so the labels and
+  // the rule must too.
   const fallbackAnchor = React.useRef(new Date());
-  const anchor = value.startsAt ?? fallbackAnchor.current;
+  const anchor = React.useMemo(() => {
+    if (value.startsAt) return value.startsAt;
+    const due = dueDate ? new Date(`${dueDate}T12:00:00`) : null;
+    return due && !Number.isNaN(due.getTime()) ? due : fallbackAnchor.current;
+  }, [value.startsAt, dueDate]);
 
   function setAllDay(next: boolean) {
     onChange({ ...value, allDay: next });
