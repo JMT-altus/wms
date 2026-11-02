@@ -23,6 +23,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import * as Dialog from "@radix-ui/react-dialog";
+import { DateField } from "@/components/ui/date-field";
+import { fmtTime } from "@/lib/dates";
 import {
   CHILD_KIND,
   KIND_LABEL,
@@ -1289,9 +1291,7 @@ function cellText(key: string, row: TableRow<PlanNode>): string {
 }
 
 function timeOf(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  return fmtTime(iso);
 }
 
 /* ── Inline editors ──────────────────────────────────────────────────────── */
@@ -1348,10 +1348,9 @@ function InlineDate({
   }
 
   return (
-    <input
-      type="date"
+    <DateField
       value={local}
-      onChange={(e) => commit(e.target.value)}
+      onChange={commit}
       disabled={disabled || pending}
       className="w-full rounded-md px-1.5 h-7 text-[12.5px] outline-none focus:ring-1 disabled:opacity-50"
       style={{
@@ -1638,11 +1637,10 @@ function TargetDatePrompt({
             >
               Target Date
             </span>
-            <input
-              type="date"
+            <DateField
               autoFocus
               value={value}
-              onChange={(e) => setValue(e.target.value)}
+              onChange={setValue}
               onKeyDown={(e) => {
                 if (e.key === "Enter") submit();
               }}

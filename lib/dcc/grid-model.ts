@@ -20,7 +20,8 @@
  *                   no target has no deficit (shown as "—", never as 0).
  */
 
-import { addDays, fromIsoDate, isoDate, isoWeekKey, pctOf, scheduledDueOn, slotKey, weekdayBit, isFilled } from "@/lib/dcc/util";
+import { addDays, isoDate, isoWeekKey, pctOf, scheduledDueOn, slotKey, weekdayBit, isFilled } from "@/lib/dcc/util";
+import { fmtDate } from "@/lib/dates";
 import { dayStats, type BoardItem, type SlotValue } from "@/lib/dcc/board-model";
 
 export type DccInputType = "number" | "yesno" | "text";
@@ -62,10 +63,9 @@ export function dayName(iso: string): string {
   return ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][weekdayBit(iso)]!;
 }
 
-/** "5-Nov" — the sheet's date heading. */
+/** "05/11/26" — the sheet's date heading, in the WMS standard form. */
 export function dayLabel(iso: string): string {
-  const d = fromIsoDate(iso);
-  return `${d.getDate()}-${d.toLocaleDateString("en-GB", { month: "short" })}`;
+  return fmtDate(iso);
 }
 
 /** First day of the month a date is in. */

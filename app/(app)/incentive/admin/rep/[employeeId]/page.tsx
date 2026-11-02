@@ -10,6 +10,7 @@ import { getMonthlySales, getMySales, getMyHistory } from "@/lib/queries/incenti
 import { getAtRiskInvoices } from "@/lib/queries/incentive-risk";
 import { getRepCustomers, getRepAudit } from "@/lib/queries/incentive-admin";
 import { formatInrPaise, formatInrCompactPaise } from "@/lib/format";
+import { fmtDateTime } from "@/lib/dates";
 import { PageHead } from "@/components/incentive/empty-state";
 
 export const dynamic = "force-dynamic";
@@ -97,7 +98,7 @@ export default async function RepProfilePage({ params }: { params: Promise<{ emp
           {audit.map((a, i) => (
             <div key={i} className="flex items-start gap-3 text-[13px]">
               <span className="inline-block size-2 rounded-full mt-1.5 shrink-0" style={{ background: "#94a3b8" }} />
-              <div className="leading-[1.5]"><span className="font-bold text-ink-strong">{a.actor ?? "Someone"}</span> <span className="text-ink-muted">{ACTION_LABEL[a.action] ?? a.action}</span>{typeof a.detail.amountPaise === "number" && <span className="text-ink-muted"> · {formatInrPaise(a.detail.amountPaise as number)}</span>}<div className="text-ink-subtle text-[11.5px] mt-0.5">{a.at.toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}</div></div>
+              <div className="leading-[1.5]"><span className="font-bold text-ink-strong">{a.actor ?? "Someone"}</span> <span className="text-ink-muted">{ACTION_LABEL[a.action] ?? a.action}</span>{typeof a.detail.amountPaise === "number" && <span className="text-ink-muted"> · {formatInrPaise(a.detail.amountPaise as number)}</span>}<div className="text-ink-subtle text-[11.5px] mt-0.5">{fmtDateTime(a.at)}</div></div>
             </div>
           ))}
         </div>

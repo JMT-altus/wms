@@ -122,7 +122,7 @@ describe("Project Views — content and controls are all still there", () => {
 
   it("shows target dates and child counts from the data", () => {
     open();
-    expect(screen.getByText("31-Mar-2027")).toBeTruthy();
+    expect(screen.getByText("31/03/27")).toBeTruthy();
     expect(screen.getByText(/0\/1 milestone/)).toBeTruthy();
   });
 });

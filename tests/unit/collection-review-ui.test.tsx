@@ -86,7 +86,7 @@ describe("Collection Amount Confirmation — the Yes/No control (kept, not in th
   it("shows the current value and who set it", () => {
     yesNo({ current: { value: "yes", recordedAt: new Date("2026-10-19T05:00:00Z"), recordedByName: "Asha" } });
     expect(select().value).toBe("yes");
-    expect(screen.getByText(/Asha, 19 Oct/)).toBeTruthy();
+    expect(screen.getByText(/Asha, 19\/10\/26/)).toBeTruthy();
   });
 
   it("is disabled while migration 0115 isn't applied, as is the Tracker's escalate button", () => {
@@ -129,7 +129,7 @@ describe("Escalate (Tracker)", () => {
     render(<CollectionTracker rows={[party({ openEscalation: { escalatedAt: new Date("2026-10-19T06:00:00Z"), escalatedByName: "Asha" } })]} connected storageReady today="2026-10-19" />);
     expect(screen.queryByRole("button", { name: /Escalate Alpha Traders/ })).toBeNull();
     expect(screen.getByText("Escalated")).toBeTruthy();
-    expect(screen.getByText(/Asha, 19 Oct/)).toBeTruthy();
+    expect(screen.getByText(/Asha, 19\/10\/26/)).toBeTruthy();
   });
 
   it("existing columns are unchanged", () => {
@@ -163,12 +163,12 @@ describe("Commitments & escalations page — escalations", () => {
     expect(within(row).getAllByText("Not recorded")).toHaveLength(2); // amount and date
     expect(within(row).getByText("No")).toBeTruthy(); // current confirmation
     expect(within(row).getByText("Confirmation then: Not set")).toBeTruthy();
-    expect(within(row).getByText("Escalated by: Asha · 19-Oct-2026 · 11:30 AM IST")).toBeTruthy();
+    expect(within(row).getByText("Escalated by: Asha · 19/10/26 · 11:30 AM IST")).toBeTruthy();
     expect(within(row).getByText("Reason for Escalation")).toBeTruthy();
     expect(within(row).getByText("Customer disputes the invoice amount.")).toBeTruthy();
-    expect(within(row).getByText("17 Oct 2026")).toBeTruthy(); // the actual due date
+    expect(within(row).getByText("17/10/26")).toBeTruthy(); // the actual due date
     expect(row.getAttribute("data-overdue")).toBe("warning"); // 2 days overdue → yellow, shared rule
-    expect(within(row).getByLabelText("Comments for Alpha Traders, newest first").textContent).toBe("User: Asha · Date & Time: 15-Oct-2026, 11:30 AM ISTComment: Cheque promised");
+    expect(within(row).getByLabelText("Comments for Alpha Traders, newest first").textContent).toBe("User: Asha · Date & Time: 15/10/26, 11:30 AM ISTComment: Cheque promised");
     expect(screen.getByText(/1 company · ₹0 committed · 1 open escalation/)).toBeTruthy();
   });
 

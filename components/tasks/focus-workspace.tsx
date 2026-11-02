@@ -6,7 +6,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import { motion, AnimatePresence } from "motion/react";
-import { format, formatDistanceToNow } from "date-fns";
+import { formatDistanceToNow } from "date-fns";
+import { fmtDateWithWeekday } from "@/lib/dates";
 import {
   ArrowLeft,
   Play,
@@ -402,7 +403,7 @@ function TaskHero({ task, elapsedLabel }: { task: TaskShape; elapsedLabel: strin
         >
           <Calendar size={13} strokeWidth={2.4} />
           {overdue ? "Overdue · " : "Due "}
-          {format(task.dueAt, "EEE, MMM d")}
+          {fmtDateWithWeekday(task.dueAt, "short")}
         </span>
       </div>
 

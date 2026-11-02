@@ -7,11 +7,11 @@ import type { ParsedReport } from "@/lib/attendance/import/parse-report";
 describe("period summary", () => {
   it("reports earliest, latest, distinct dates and the month, whatever the file is called", () => {
     const s = summarizeDates(["2026-04-30", "2026-04-01", "2026-04-01", null, "bad"]);
-    expect(s).toMatchObject({ first: "2026-04-01", last: "2026-04-30", distinct: 2, label: "April 2026" });
+    expect(s).toMatchObject({ first: "2026-04-01", last: "2026-04-30", distinct: 2, label: "Apr 2026" });
   });
 
   it("labels a multi-month span", () => {
-    expect(summarizeDates(["2026-03-31", "2026-04-02"]).label).toBe("March 2026 – April 2026 (2 months)");
+    expect(summarizeDates(["2026-03-31", "2026-04-02"]).label).toBe("Mar 2026 – Apr 2026 (2 months)");
     expect(summarizeDates([]).label).toBe("no dates");
   });
 });
@@ -33,7 +33,7 @@ describe("period warnings", () => {
 
   it("warns when the file name month differs from the dates inside", () => {
     const w = periodWarnings({ fileName: "Report Aug26.xlsx", dates: april, declared: null });
-    expect(w[0]).toMatch(/file name says August 2026, but the dates inside the file are April 2026/);
+    expect(w[0]).toMatch(/file name says Aug 2026, but the dates inside the file are Apr 2026/);
   });
   it("is quiet when name and data agree", () => {
     expect(periodWarnings({ fileName: "Report Apr26.xlsx", dates: april, declared: { from: "2026-04-01", to: "2026-04-30" } })).toEqual([]);

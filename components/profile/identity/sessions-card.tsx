@@ -7,6 +7,7 @@ import {
   revokeSession,
 } from "@/app/(app)/profile/actions";
 import { fireToast } from "@/lib/toast";
+import { fmtDate } from "@/lib/dates";
 import { SectionHeader } from "./avatar-and-name";
 
 export interface SessionRow {
@@ -40,7 +41,7 @@ export function SessionsCard({ sessions }: Props) {
     if (hrs < 24) return `${hrs}h ago`;
     const days = Math.round(hrs / 24);
     if (days < 30) return `${days}d ago`;
-    return d.toLocaleDateString();
+    return fmtDate(d);
   }
 
   function fmtDevice(ua: string | null): string {

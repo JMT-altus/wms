@@ -27,6 +27,7 @@ import { saveMasterProduct } from "@/app/(masters-module)/masters/actions";
 import { deriveStateFromGstin, isPlausibleGstin, panFromGstin } from "@/lib/masters/gstin";
 import { FullscreenToggle } from "@/components/masters/fullscreen-toggle";
 import type { KycListKey } from "@/lib/masters/kyc-dropdowns";
+import { fmtDate } from "@/lib/dates";
 import {
   CLIENT_ADDRESS_TYPES,
   CLIENT_ADDRESS_TYPE_LABELS,
@@ -277,10 +278,7 @@ function merge(base: readonly string[], extra: readonly string[]): string[] {
 }
 
 function formatSavedAt(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "earlier";
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${p(d.getDate())}-${p(d.getMonth() + 1)}-${d.getFullYear()}`;
+  return fmtDate(iso) || "earlier";
 }
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;

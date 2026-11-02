@@ -85,7 +85,7 @@ describe("Collection Tracker", () => {
     render(<CollectionTracker rows={rows} connected storageReady today={TODAY} />);
     const alpha = screen.getByRole("button", { name: "Alpha Traders" }).closest("tr")!;
     expect(within(alpha).getByText("Asha")).toBeTruthy();
-    expect(within(alpha).getByText(/10 Nov/)).toBeTruthy();
+    expect(within(alpha).getByText(/10\/11\/26/)).toBeTruthy();
     expect(within(alpha).getByText(/Promised a cheque/)).toBeTruthy();
     const beta = screen.getByRole("button", { name: "Beta Corp" }).closest("tr")!;
     expect(within(beta).getAllByText("—").length).toBeGreaterThanOrEqual(2); // no date, no comments
@@ -113,13 +113,13 @@ describe("Collection Tracker", () => {
     render(<CollectionTracker rows={many} connected storageReady today={TODAY} />);
     // The row shows only the latest note; the earlier ones are kept behind "See all comments".
     const cell = screen.getByLabelText("Comments, newest first");
-    expect(cell.textContent).toContain("User: A · Date & Time: 12-Nov-2026, 11:30 AM ISTComment: Third call");
+    expect(cell.textContent).toContain("User: A · Date & Time: 12/11/26, 11:30 AM ISTComment: Third call");
     expect(cell.textContent).not.toContain("Second call");
     expect(screen.getByText("Latest of 3")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "See all 3 comments for Alpha Traders" }));
     const all = within(screen.getByRole("dialog", { name: "All comments" })).getByRole("list", { name: "All comments for Alpha Traders, newest first" });
     // The full history, in the popup's own (labelled) format: every note with its author, date and time.
-    for (const [day, note] of [["12-Nov-2026", "Third call"], ["11-Nov-2026", "Second call"], ["10-Nov-2026", "First call"]]) {
+    for (const [day, note] of [["12/11/26", "Third call"], ["11/11/26", "Second call"], ["10/11/26", "First call"]]) {
       expect(all.textContent).toContain(`${day}, 11:30 AM IST`);
       expect(all.textContent).toContain(note);
     }
@@ -399,15 +399,14 @@ describe("Collection Tracker with the Collection Master", () => {
     expect(within(screen.getByRole("button", { name: "Two Days" }).closest("tr")!).getByText("Overdue 2 days")).toBeTruthy();
   });
 
-  it("says how many companies are empty-balance (shown last, muted), and nothing when none are", () => {
-    const { unmount } = render(<CollectionTracker rows={masterRows.map((r, i) => (i === 0 ? { ...r, zeroBalance: true } : r))} connected storageReady today={TODAY} transactionSource={NO_SOURCE} />);
-    const note = screen.getByLabelText("Empty-balance companies");
-    expect(note.textContent).toMatch(/^1 company with no Debit or Credit in the confirmed uploads is shown last, muted\./);
-    expect(note.textContent).toMatch(/stays in the Collection Master/);
-    expect(screen.getAllByRole("row")).toHaveLength(3); // every company is still a row
+  it("says how many companies are in Collection Logs, and nothing when none are", () => {
+    const { unmount } = render(<CollectionTracker rows={masterRows} connected storageReady today={TODAY} transactionSource={NO_SOURCE} logsNote={{ count: 1, href: "/collection/logs" }} />);
+    const note = screen.getByLabelText("Companies in Collection Logs");
+    expect(note.textContent).toMatch(/^1 company has ₹0 Debit and ₹0 Credit/);
+    expect(screen.getAllByRole("row")).toHaveLength(3); // the rows it was given, unchanged
     unmount();
     render(<CollectionTracker rows={masterRows} connected storageReady today={TODAY} transactionSource={NO_SOURCE} />);
-    expect(screen.queryByLabelText("Empty-balance companies")).toBeNull();
+    expect(screen.queryByLabelText("Companies in Collection Logs")).toBeNull();
   });
 
   it("shows the loader's reason when the master is empty or not set up", () => {

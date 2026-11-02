@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import type { Route } from "next";
 import * as Tooltip from "@radix-ui/react-tooltip";
-import { format } from "date-fns";
+import { fmtDate } from "@/lib/dates";
 import {
   Loader2,
   Archive,
@@ -1191,7 +1191,7 @@ function DueChip({
       }}
     >
       <CalendarDays size={11} strokeWidth={2.4} aria-hidden />
-      {format(due, "dd MMM yyyy")}
+      {fmtDate(due)}
       {overdue && " · overdue"}
     </span>
   );
@@ -1403,7 +1403,7 @@ function TaskHoverCard({
           <Meta
             icon={<CalendarDays size={14} strokeWidth={2.2} />}
             label="Due"
-            value={t.dueAt ? format(t.dueAt, "MMM d, yyyy") : null}
+            value={t.dueAt ? fmtDate(t.dueAt) : null}
           />
           <div className="min-w-0">
             <FieldHead icon={<User size={14} strokeWidth={2.2} />}>Doer</FieldHead>

@@ -5,6 +5,8 @@ import * as Dialog from "@radix-ui/react-dialog";
 import { Repeat } from "lucide-react";
 import type { TaskRecurrence } from "@/db/enums";
 import { Select } from "@/components/ui/select";
+import { DateField } from "@/components/ui/date-field";
+import { fmtDate } from "@/lib/dates";
 
 /**
  * Google-Calendar-faithful recurrence picker.
@@ -249,7 +251,7 @@ export function humanSummary(rule: string | null, anchor: Date): string | null {
       ? ` on the ${nthLabel(anchor)} ${wdFull(anchor)}`
       : ` on day ${d.monthDay ?? anchor.getDate()}`;
   }
-  if (d.endsType === "until" && d.until) s += `, until ${d.until}`;
+  if (d.endsType === "until" && d.until) s += `, until ${fmtDate(d.until)}`;
   if (d.endsType === "count" && d.count) s += `, ${d.count} times`;
   return s;
 }
@@ -432,11 +434,10 @@ function CustomDialog({
                   style={{ accentColor: "var(--color-altus-red)" }}
                 />
                 On
-                <input
-                  type="date"
+                <DateField
                   value={draft.until ?? ""}
                   disabled={draft.endsType !== "until"}
-                  onChange={(e) => patch({ endsType: "until", until: e.target.value || null })}
+                  onChange={(v) => patch({ endsType: "until", until: v || null })}
                   className="nt-input"
                   style={{ maxWidth: 180 }}
                 />

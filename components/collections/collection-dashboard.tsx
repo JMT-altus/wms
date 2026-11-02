@@ -14,6 +14,7 @@ import {
 } from "@/lib/collections/derive";
 import { HBars } from "@/components/charts/h-bars";
 import { Donut } from "@/components/charts/donut";
+import { DateField } from "@/components/ui/date-field";
 
 const CARD = { border: "1px solid var(--color-hairline-strong)", boxShadow: "0 1px 2px rgba(15,23,42,0.05)" } as const;
 const FIELD = "h-8 rounded-lg border border-hairline-strong bg-white px-2.5 text-[13px] text-ink-strong";
@@ -82,11 +83,11 @@ export function CollectionDashboard({
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <label className="flex items-center gap-1.5 text-[12.5px] font-semibold text-ink-soft">
           From
-          <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className={`${FIELD} tabular-nums`} />
+          <DateField value={from} onChange={setFrom} className={`${FIELD} tabular-nums`} />
         </label>
         <label className="flex items-center gap-1.5 text-[12.5px] font-semibold text-ink-soft">
           To
-          <input type="date" value={to} min={from || undefined} onChange={(e) => setTo(e.target.value)} className={`${FIELD} tabular-nums`} />
+          <DateField value={to} min={from || undefined} onChange={setTo} className={`${FIELD} tabular-nums`} />
         </label>
         <input
           type="search"

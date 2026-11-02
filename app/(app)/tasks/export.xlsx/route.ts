@@ -5,9 +5,10 @@ import { listTasksForExport } from "@/lib/queries/tasks";
 import { MAX_EXPORT_ROWS, EXPORT_TOO_LARGE } from "@/lib/exports/csv";
 import {
   RICH_EXPORT_HEADERS,
-  toRichRowArray,
+  toRichRowCells,
   richExportFilename,
 } from "@/lib/exports/tasks-rich";
+import { sheetFromRows, type Cell } from "@/lib/exports/xlsx-dates";
 
 /**
  * GET /tasks/export.xlsx
@@ -15,7 +16,7 @@ import {
  * Admin-only XLSX export of the current /tasks view. Shares query-param
  * parsing with /tasks/export (CSV) so the FilterBar can fan out to all
  * three formats. Columns are humanized (status labels, priority labels,
- * MMM d, yyyy dates) rather than raw enum/ISO values — see lib/exports/tasks-rich.
+ * dd/mm/yy date cells) rather than raw enum/ISO values — see lib/exports/tasks-rich.
  */
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -55,14 +56,13 @@ export async function GET(request: Request): Promise<Response> {
     );
   }
 
-  const aoa: (string | number)[][] = [
+  const aoa: Cell[][] = [
     [...RICH_EXPORT_HEADERS],
-    ...rows.map(toRichRowArray),
+    ...rows.map(toRichRowCells),
   ];
 
-  const ws = XLSX.utils.aoa_to_sheet(aoa);
   // Reasonable default column widths for the 11 columns.
-  ws["!cols"] = [
+  const ws = sheetFromRows(aoa, [
     { wch: 28 }, // Client Name
     { wch: 18 }, // Subject
     { wch: 14 }, // Status
@@ -74,7 +74,7 @@ export async function GET(request: Request): Promise<Response> {
     { wch: 18 }, // Revised Target Date
     { wch: 14 }, // Created At
     { wch: 24 }, // Tags
-  ];
+  ]);
 
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Tasks");

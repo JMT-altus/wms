@@ -18,6 +18,7 @@ import {
   saveTallyMapping,
 } from "@/app/(masters)/master-setup/actions";
 import { Dash, Pill } from "./data-table";
+import { fmtDate } from "@/lib/dates";
 import {
   CancelButton,
   Drawer,
@@ -440,7 +441,7 @@ function UploadTab({ batches }: { batches: ImportBatchRow[] }) {
                 {batches.map((b) => (
                   <tr key={b.id} className="border-t" style={{ borderColor: "var(--color-hairline)" }}>
                     <td className="px-3 py-2.5 text-ink-soft whitespace-nowrap" style={{ fontSize: 13.5 }}>
-                      {b.createdAt.toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
+                      {fmtDate(b.createdAt)}
                     </td>
                     <td className="px-3 py-2.5 text-ink-soft" style={{ fontSize: 13.5 }}>
                       {IMPORT_SOURCE_LABELS[b.source as ImportSource] ?? b.source}

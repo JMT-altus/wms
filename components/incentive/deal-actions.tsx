@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import { recordReceipt, editSale, deleteSale } from "@/app/(app)/incentive/actions";
+import { DateField } from "@/components/ui/date-field";
 
 const CATS = ["A", "B", "C", "N", "I", "R", "V"] as const;
 const field = "rounded-lg px-3 py-2 text-[14px] w-full";
@@ -32,7 +33,7 @@ export function DealActions({ deal }: { deal: { invoiceId: string; outstandingPa
           <h3 className="text-[13px] font-bold text-ink-strong mb-2.5">Record a payment</h3>
           <div className="flex items-end gap-2 flex-wrap">
             <label className="flex-1 min-w-[120px]"><span className="text-[11.5px] font-bold text-ink-subtle">Amount (₹)</span><input value={amount} onChange={(e) => setAmount(e.target.value)} type="number" min={0} className={field} style={fieldStyle} /></label>
-            <label className="min-w-[130px]"><span className="text-[11.5px] font-bold text-ink-subtle">Received on</span><input value={date} onChange={(e) => setDate(e.target.value)} type="date" className={field} style={fieldStyle} /></label>
+            <label className="min-w-[130px]"><span className="text-[11.5px] font-bold text-ink-subtle">Received on</span><DateField value={date} onChange={setDate} className={field} style={fieldStyle} /></label>
             <button type="submit" disabled={pending} className="rounded-xl px-4 py-2.5 text-white text-[13.5px] font-bold disabled:opacity-60" style={{ background: "linear-gradient(135deg,#12b6a0,#0b7268)" }}>{pending ? "…" : "Record"}</button>
           </div>
         </form>
@@ -51,7 +52,7 @@ export function DealActions({ deal }: { deal: { invoiceId: string; outstandingPa
           <div className="grid grid-cols-2 gap-3">
             <label><span className="text-[12px] font-bold text-ink-subtle">Category</span><select value={cat} onChange={(e) => setCat(e.target.value as typeof CATS[number])} className={field} style={fieldStyle}>{CATS.map((c) => <option key={c} value={c}>{c}</option>)}</select></label>
             <label><span className="text-[12px] font-bold text-ink-subtle">Amount (₹)</span><input value={amt} onChange={(e) => setAmt(e.target.value)} type="number" min={0} className={field} style={fieldStyle} /></label>
-            <label><span className="text-[12px] font-bold text-ink-subtle">Invoice date</span><input value={invDate} onChange={(e) => setInvDate(e.target.value)} type="date" className={field} style={fieldStyle} /></label>
+            <label><span className="text-[12px] font-bold text-ink-subtle">Invoice date</span><DateField value={invDate} onChange={setInvDate} className={field} style={fieldStyle} /></label>
             <label><span className="text-[12px] font-bold text-ink-subtle">Terms (days)</span><input value={terms} onChange={(e) => setTerms(e.target.value)} type="number" min={0} className={field} style={fieldStyle} /></label>
           </div>
           <div className="flex items-center gap-2">

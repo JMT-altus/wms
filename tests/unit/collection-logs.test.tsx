@@ -177,7 +177,7 @@ describe("Collection Logs page — states", () => {
   it("empty: says honestly that nothing has been closed and why", async () => {
     await renderPage(LogsPage());
     expect(screen.getByText(LOGS_EMPTY_MESSAGE)).toBeTruthy();
-    expect(LOGS_EMPTY_MESSAGE).toMatch(/approved outstanding-balance source/);
+    expect(LOGS_EMPTY_MESSAGE).toMatch(/moves here automatically when a confirmed Bulk Upload gives it ₹0 Debit and ₹0 Credit/);
     expect(document.querySelector("table")).toBeNull();
   });
 
@@ -211,15 +211,15 @@ describe("Collection Logs page — states", () => {
     expect(rows).toHaveLength(2);
     const a = within(rows[0]!);
     expect(a.getByRole("link", { name: "Alpha Traders" }).getAttribute("href")).toBe(`/collection/logs/${ID}`);
-    expect(rows[0]!.textContent).toContain("27-Oct-2026 · 01:35 PM IST");
-    expect(rows[0]!.textContent).toContain("Outstanding reached zero");
+    expect(rows[0]!.textContent).toContain("27/10/26 · 01:35 PM IST");
+    expect(rows[0]!.textContent).toContain("Debit and Credit both zero");
     expect(rows[0]!.textContent).toContain("₹0");
     expect(rows[0]!.textContent).toContain("approved_source");
     expect(rows[0]!.textContent).toContain("snap-42");
     expect(rows[0]!.querySelector("[data-closure-status]")?.getAttribute("data-closure-status")).toBe("closed");
     // 18:40 UTC is 12:10 AM IST the NEXT day.
     expect(rows[1]!.querySelector("[data-closure-status]")?.getAttribute("data-closure-status")).toBe("reopened");
-    expect(rows[1]!.textContent).toContain("28-Oct-2026 · 12:10 AM IST");
+    expect(rows[1]!.textContent).toContain("28/10/26 · 12:10 AM IST");
   });
 
   it("shows money exactly, keeping a sign the source wrote", () => {
@@ -271,9 +271,9 @@ describe("Collection Log detail — existing history, read-only", () => {
     expect(section("comments")).not.toContain("Not this company");
     expect(section("confirmations")).toContain("Yes");
     expect(section("commitments")).toContain("₹50,000");
-    expect(section("commitments")).toContain("05-Nov-2026");
+    expect(section("commitments")).toContain("05/11/26");
     expect(section("escalations")).toContain("Customer disputes the invoice");
-    expect(section("escalations")).toContain("Escalated by: Ravi · 20-Oct-2026 · 10:30 AM IST");
+    expect(section("escalations")).toContain("Escalated by: Ravi · 20/10/26 · 10:30 AM IST");
     expect(section("escalations")).toMatch(/No reason recorded/);
     expect(document.querySelector('[data-escalation-status="open"]')).toBeTruthy();
     expect(document.querySelector('[data-escalation-status="closed"]')).toBeTruthy();
@@ -289,7 +289,7 @@ describe("Collection Log detail — existing history, read-only", () => {
     );
     expect(document.querySelectorAll("button, form, input, textarea, select")).toHaveLength(0);
     expect(document.body.textContent).not.toMatch(/\b(Reopen now|Close now|Delete|Edit)\b/);
-    expect(document.body.textContent).toContain("Outstanding became positive again");
+    expect(document.body.textContent).toContain("Debit or Credit no longer zero");
     render(<CollectionLogsList rows={[closure()]} storageReady />);
     expect(document.querySelectorAll("button, form, input, textarea, select")).toHaveLength(0);
   });
@@ -319,13 +319,13 @@ describe("Collection Log detail — existing history, read-only", () => {
   });
 });
 
-describe("no archival or Tracker filtering is introduced", () => {
+describe("closures are written in exactly one place: the confirmed Bulk Upload", () => {
   it("the closure queries only read", () => {
     const q = read("lib/queries/collection-closures.ts");
     expect(q).not.toMatch(/\.(insert|update|delete)\(|\bexecute\(|sql`/);
   });
 
-  it("nothing outside Collection Logs and the schema refers to closures", () => {
+  it("only Collection Logs, the schema, the one writer, the Tracker loader and their tests refer to closures", () => {
     const out = execFileSync("git", ["grep", "--untracked", "-l", "-i", "-E", "collection_closures|collectionClosures|collection-closures"], { cwd: ROOT, encoding: "utf8" })
       .split("\n")
       .filter(Boolean)
@@ -338,22 +338,31 @@ describe("no archival or Tracker filtering is introduced", () => {
         "db/migrations/0119_collection_closures.sql",
         "db/schema.ts",
         "lib/queries/collection-closures.ts",
+        // The one writer, called only from the confirmed import (below), and the Tracker loader that reads open episodes.
+        "lib/queries/collection-closures-write.ts",
+        "lib/collections/balances/closures.ts",
+        "app/(collection-module)/collection/tracker/bulk-actions.ts",
+        "lib/collections/load.ts",
         "tests/integration/collection-closures-migration.db.test.ts",
+        "tests/integration/collection-logs-movement.db.test.ts",
+        // Tests that mock the loader's or the import's closure modules.
+        "tests/unit/collection-balances-actions.test.ts",
+        "tests/unit/collection-source.test.ts",
+        "tests/unit/collection-zero-outstanding.test.ts",
         "tests/unit/collection-logs.test.tsx",
       ].sort(),
     );
   });
 
-  it("the Tracker, its loader, the Tally Bulk Upload and the Commitments page are untouched by closure logic", () => {
-    for (const f of [
-      "app/(collection-module)/collection/tracker/page.tsx",
-      "app/(collection-module)/collection/tracker/bulk-actions.ts",
-      "lib/collections/load.ts",
-      "lib/collections/derive.ts",
-      "lib/collections/balances/plan.ts",
-      "app/(collection-module)/collection/commitments/page.tsx",
-      "lib/queries/collection-review.ts",
-    ]) {
+  it("the writer is called once, inside the confirmed import's transaction after its lines; nothing else writes closures", () => {
+    const bulk = read("app/(collection-module)/collection/tracker/bulk-actions.ts");
+    expect(bulk.match(/applyClosureMovement\(/g)).toHaveLength(1);
+    const importFn = bulk.slice(bulk.indexOf("export async function importCollectionBalances"), bulk.indexOf("const AddCompaniesSchema"));
+    expect(importFn.indexOf("applyClosureMovement(")).toBeGreaterThan(importFn.indexOf("db.transaction("));
+    expect(importFn.indexOf("applyClosureMovement(")).toBeGreaterThan(importFn.indexOf("insert(collectionBalanceLines)"));
+    expect(read("lib/queries/collection-closures-write.ts")).not.toMatch(/\.delete\(/);
+    expect(read("lib/collections/load.ts")).not.toMatch(/\.(insert|update|delete)\(/);
+    for (const f of ["lib/collections/derive.ts", "lib/collections/balances/plan.ts", "app/(collection-module)/collection/commitments/page.tsx", "lib/queries/collection-review.ts"]) {
       expect(read(f), f).not.toMatch(/closure|Closure|logs\.view/);
     }
   });

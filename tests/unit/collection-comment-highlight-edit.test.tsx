@@ -83,7 +83,7 @@ describe("the escalation reviewer's comments are yellow for every viewer; others
   it("the yellow comment uses the new header — User and Date & Time together, no user id — and Edit is still offered on your own", () => {
     render(<TrackerComments companyName="Alpha Traders" history={[{ ...REVIEWER, createdByName: "MV" }, WRITER]} editorId="emp-w" />);
     const yellow = itemIn(row(), "Please follow up today.");
-    expect(yellow.textContent).toBe("User: MV · Date & Time: 05-Oct-2026, 11:30 AM ISTComment: Please follow up today.");
+    expect(yellow.textContent).toBe("User: MV · Date & Time: 05/10/26, 11:30 AM ISTComment: Please follow up today.");
     expect(yellow.innerHTML).not.toContain("emp-rev");
     expect(yellow.className).toContain(REVIEWER_COMMENT_CLASS);
     openAll(); // emp-w's own comment is the older one, so its Edit is in the full history
@@ -108,7 +108,7 @@ describe("the escalation reviewer's comments are yellow for every viewer; others
 
   it("an edited comment says so, with who and when", () => {
     render(<CommentAudit entry={{ ...WRITER, editedAt: new Date("2026-10-28T09:40:00Z"), editedByName: "Name emp-w" }} />);
-    expect(screen.getByText(/Edited 28-Oct-2026 · 03:10 PM IST by Name emp-w/)).toBeTruthy();
+    expect(screen.getByText(/Edited 28\/10\/26 · 03:10 PM IST by Name emp-w/)).toBeTruthy();
   });
 });
 

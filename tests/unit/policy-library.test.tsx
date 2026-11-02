@@ -8,7 +8,7 @@ afterEach(cleanup);
 const base: PolicyCardData = {
   id: "p1",
   title: "Salary Policy",
-  subtitle: "Version v1.0 · Published 05-Oct-2026",
+  subtitle: "Version v1.0 · Published 05/10/26",
   version: "v1.0",
   fileName: "1759-salary-policy.pdf",
   downloadUrl: "https://files.example/salary.pdf",
@@ -37,8 +37,8 @@ describe("PolicyLibrary", () => {
   });
 
   it("a signed policy shows the green signed status with its date and counts as signed", () => {
-    render(<PolicyLibrary policies={[{ ...base, signed: { label: "Signed · 05-Oct-2026" } }]} />);
-    expect(screen.getByText("Signed · 05-Oct-2026")).toBeTruthy();
+    render(<PolicyLibrary policies={[{ ...base, signed: { label: "Signed · 05/10/26" } }]} />);
+    expect(screen.getByText("Signed · 05/10/26")).toBeTruthy();
     expect(screen.getByText("1/1 signed")).toBeTruthy();
     expect(screen.queryByRole("link", { name: /Read & sign/ })).toBeNull();
   });
@@ -47,7 +47,7 @@ describe("PolicyLibrary", () => {
     render(<PolicyLibrary policies={[base]} />);
     expect(screen.getByText("SP")).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Salary Policy", level: 3 })).toBeTruthy();
-    expect(screen.getByText("Version v1.0 · Published 05-Oct-2026")).toBeTruthy();
+    expect(screen.getByText("Version v1.0 · Published 05/10/26")).toBeTruthy();
   });
 
   it("omits Download when there is no link, rather than showing a dead one", () => {

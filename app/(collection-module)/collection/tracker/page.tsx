@@ -5,7 +5,7 @@ import { scopeNote } from "@/lib/collections/scope";
 import { collectionScopeFor } from "@/lib/collections/scope-server";
 import { listFollowUps } from "@/lib/queries/collection-followups";
 import { localDateString } from "@/lib/format";
-import { getCollectionCapabilities, requireCollectionCapability } from "@/lib/auth/capability";
+import { getCollectionCapabilities, getCollectionCapability, requireCollectionCapability } from "@/lib/auth/capability";
 import { scorecardFor, type ScorecardView } from "@/lib/collections/scorecards";
 import { salespersonIdentityFor, type SalespersonIdentity } from "@/lib/collections/salesperson-identity";
 import { escalationCountsForSalesperson } from "@/lib/queries/collection-scorecards";
@@ -15,6 +15,7 @@ import { FIELD_PERMISSIONS_HREF, buildSetupHints } from "@/lib/collections/setup
 import { capabilityHolders } from "@/lib/queries/collection-setup";
 import { latestConfirmations, latestConfirmedAmounts, openEscalations } from "@/lib/queries/collection-review";
 import { listCoordinatorOptions } from "@/lib/queries/collection-master";
+import { latestCommitments } from "@/lib/queries/collection-commitments";
 
 export const dynamic = "force-dynamic";
 
@@ -40,29 +41,38 @@ export default async function CollectionTrackerPage() {
   // The companies inside the signed-in person's scope (lib/collections/scope.ts):
   // every company for a super-admin, only their own for a linked Sales
   // Coordinator, none for anyone else — decided on the server from the session,
-  // never from anything the browser sent. Those whose Debit and Credit are both
-  // empty in the confirmed uploads carry `zeroBalance`: the table shows them
-  // last and muted (they stay in the Master; the next confirmed upload that
-  // includes them decides again).
+  // never from anything the browser sent. Companies in Collection Logs (₹0 Debit
+  // and ₹0 Credit in the latest confirmed upload that included them) are left
+  // out of the list; they stay in the Master with everything recorded, and the
+  // next confirmed upload that gives them a balance brings them back.
   const scope = await collectionScopeFor();
-  const [source, followUps] = await Promise.all([loadCollectionParties(scope), listFollowUps()]);
+  const [loaded, followUps] = await Promise.all([loadCollectionParties(scope), listFollowUps()]);
+  const loggedCount = loaded.parties.filter((p) => p.inLogs).length;
+  const active = loaded.parties.filter((p) => !p.inLogs);
+  const source = { ...loaded, parties: active, connected: loaded.connected && (active.length > 0 || loggedCount > 0) };
   const companyIds = source.parties.map((p) => p.masterId).filter((id): id is string => !!id);
   // Confirmation (visible to every Tracker user) and open-escalation status, from
   // the database on every request — never from browser state.
   // Coordinator choices are read only for holders of collection.coordinator.assign.
   // The confirmed amount (the column's text field) is read beside the Yes/No answer; the two are separate values.
-  const [confirmations, confirmedAmounts, escalations, coordinatorOptions] = await Promise.all([
+  // The commitment (amount – date) shown in the same column is restricted: it is read only with a proof of
+  // collection.commitments.view, for the companies in this person's scope, and sent to nobody else.
+  const commitmentViewer = caps["collection.commitments.view"] ? await getCollectionCapability("collection.commitments.view") : null;
+  const [confirmations, confirmedAmounts, escalations, coordinatorOptions, commitments] = await Promise.all([
     latestConfirmations(companyIds),
     latestConfirmedAmounts(companyIds),
     openEscalations(companyIds),
     caps["collection.coordinator.assign"] ? listCoordinatorOptions() : null,
+    commitmentViewer ? latestCommitments(commitmentViewer, companyIds) : null,
   ]);
   const rows = buildRows(source.parties, followUps.entries).map((r) => {
     const c = r.masterId ? confirmations.byCompany.get(r.masterId) : undefined;
     const a = r.masterId ? confirmedAmounts.byCompany.get(r.masterId) : undefined;
     const e = r.masterId ? escalations.byCompany.get(r.masterId) : undefined;
+    const k = commitments && r.masterId ? commitments.byCompany.get(r.masterId) : undefined;
     return {
       ...r,
+      ...(commitments ? { commitment: k ? { amount: k.amount, committedDate: k.committedDate, recordedAt: k.recordedAt, recordedByName: k.recordedByName } : null } : {}),
       confirmation: c ? { value: c.value, recordedAt: c.recordedAt, recordedByName: c.recordedByName } : null,
       confirmedAmount: a ? { amount: a.amount, recordedAt: a.recordedAt, recordedByName: a.recordedByName } : null,
       openEscalation: e ? { escalatedAt: e.escalatedAt, escalatedByName: e.escalatedByName } : null,
@@ -132,6 +142,7 @@ export default async function CollectionTrackerPage() {
         today={localDateString("Asia/Kolkata")}
         emptyMessage={source.message}
         scopeNote={scopeNote(scope) ?? undefined}
+        logsNote={loggedCount > 0 ? { count: loggedCount, href: caps["collection.logs.view"] ? "/collection/logs" : null } : undefined}
         transactionSource={source.transactions}
         // Yes/no flags only. Commitment figures are never part of this page's
         // data; the popup fetches them through a capability-checked action.

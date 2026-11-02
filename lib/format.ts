@@ -1,28 +1,19 @@
+import { fmtDate, fmtTime } from "@/lib/dates";
+
 const numberFmt = new Intl.NumberFormat("en-IN");
 
 export function formatCount(n: number): string {
   return numberFmt.format(n);
 }
 
-const timeFmt = new Intl.DateTimeFormat("en-IN", {
-  hour: "numeric",
-  minute: "2-digit",
-  second: "2-digit",
-  hour12: true,
-});
-
+/** "03:45 PM" on the Indian clock. See lib/dates for the full vocabulary. */
 export function formatTime(d: Date): string {
-  return timeFmt.format(d);
+  return fmtTime(d);
 }
 
-const dateFmt = new Intl.DateTimeFormat("en-IN", {
-  day: "2-digit",
-  month: "short",
-  year: "numeric",
-});
-
+/** "02/11/26" — the WMS standard date. See lib/dates for the full vocabulary. */
 export function formatDate(d: Date): string {
-  return dateFmt.format(d);
+  return fmtDate(d);
 }
 
 /**
@@ -40,14 +31,9 @@ export function localDateString(timeZone: string, d: Date = new Date()): string 
   }).format(d);
 }
 
-/** Clock time of `d` in the given IANA timezone (e.g. "10:42 am"). */
+/** Clock time of `d` in the given IANA timezone (e.g. "10:42 AM"). */
 export function formatTimeInTz(d: Date, timeZone: string): string {
-  return new Intl.DateTimeFormat("en-IN", {
-    timeZone,
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  }).format(d);
+  return fmtTime(d, { tz: timeZone });
 }
 
 const inrFmt = new Intl.NumberFormat("en-IN", {

@@ -18,10 +18,10 @@ import {
   type ConfirmationValue,
 } from "@/lib/collections/review";
 import { formatInrExact } from "@/lib/collections/money";
+import { fmtDateTime } from "@/lib/dates";
 
 const SELECT = "h-8 rounded-lg border border-hairline-strong bg-white px-2 text-[12.5px] text-ink-strong disabled:opacity-60";
-const when = (d: Date) =>
-  d.toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Asia/Kolkata" });
+const when = (d: Date) => fmtDateTime(d);
 
 /**
  * The confirmed AMOUNT for one Tracker row — the text field under the

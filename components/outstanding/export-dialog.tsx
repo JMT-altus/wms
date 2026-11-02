@@ -4,7 +4,7 @@ import * as React from "react";
 import { useSearchParams } from "next/navigation";
 import * as Dialog from "@radix-ui/react-dialog";
 import { stringify } from "csv-stringify/sync";
-import { format } from "date-fns";
+import { fmtDate } from "@/lib/dates";
 import {
   Download,
   FileText,
@@ -26,8 +26,7 @@ function cycleLabel(cycle: string | undefined): string {
 
 function fmtDue(iso: string | null | undefined): string {
   if (!iso) return "";
-  const d = new Date(`${iso}T00:00:00`);
-  return Number.isNaN(d.getTime()) ? iso : format(d, "dd-MMM-yyyy");
+  return fmtDate(iso) || iso;
 }
 
 const ENTRY_HEADERS = [

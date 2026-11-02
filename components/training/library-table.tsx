@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import type { MaterialRow } from "@/lib/queries/training";
+import { fmtDate } from "@/lib/dates";
 import {
   TRAINING_MATERIAL_KINDS,
   TRAINING_MATERIAL_KIND_LABELS,
@@ -200,11 +201,7 @@ export function LibraryTable({
                     style={{ borderColor: "var(--color-hairline)" }}
                   >
                     <td className="px-5 py-4 text-ink-soft whitespace-nowrap" style={{ fontSize: 14 }}>
-                      {r.createdAt.toLocaleDateString("en-IN", {
-                        day: "numeric",
-                        month: "short",
-                        year: "numeric",
-                      })}
+                      {fmtDate(r.createdAt)}
                     </td>
                     <td className="px-5 py-4 font-bold text-ink-strong" style={{ fontSize: 14 }}>
                       {r.subject || <span className="text-ink-subtle font-normal">—</span>}

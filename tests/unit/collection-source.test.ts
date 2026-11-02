@@ -10,6 +10,8 @@ const h = vi.hoisted(() => ({
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/queries/collection-master", () => ({ listAllMasterCompanies: async () => h.master }));
 vi.mock("@/lib/queries/collection-balances", () => ({ loadLatestBalances: async () => h.balances }));
+// Which companies are in Collection Logs is read by the loader; none here.
+vi.mock("@/lib/queries/collection-closures", () => ({ openClosureCompanyIds: async () => ({ storageReady: true, ids: new Set<string>() }) }));
 
 import { loadCollectionParties } from "@/lib/collections/load";
 import { activeTransactionSource, NO_TRANSACTION_SOURCE } from "@/lib/collections/transactions";

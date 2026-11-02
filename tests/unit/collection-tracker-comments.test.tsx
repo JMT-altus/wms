@@ -98,7 +98,7 @@ describe("Tracker Comments column", () => {
     expect(TRACKER_COMMENT_LIMIT).toBe(1);
     expect(notesIn(alpha)).toEqual(["a8"]);
     expect(alpha.querySelectorAll('[data-comment-audit="compact"]')).toHaveLength(1);
-    expect(alpha.textContent).toContain("User: Asha · Date & Time: 08-Oct-2026, 11:30 AM ISTComment: Alpha Traders note a8");
+    expect(alpha.textContent).toContain("User: Asha · Date & Time: 08/10/26, 11:30 AM ISTComment: Alpha Traders note a8");
     // The count is the real total, not what is visible.
     expect(within(alpha).getByText("Latest of 8")).toBeTruthy();
     expect(alpha.textContent).not.toMatch(/note a[1-7]\b/);
@@ -131,7 +131,7 @@ describe("Tracker Comments column", () => {
     expect(new Set(notesIn(list)).size).toBe(8);
     expect(dialog.textContent).not.toMatch(/Beta Corp/);
     // Same full format as the party's History: labelled user and date & time together; no user id.
-    expect(within(list.querySelectorAll("li")[7] as HTMLElement).getByText("01-Oct-2026, 11:30 AM IST")).toBeTruthy();
+    expect(within(list.querySelectorAll("li")[7] as HTMLElement).getByText("01/10/26, 11:30 AM IST")).toBeTruthy();
     expect(dialog.textContent).not.toMatch(/User ID|emp-1/);
     const closes = within(dialog).getAllByRole("button", { name: "Close" }); // the header ✕ and the footer "Close"
     expect(closes.map((b) => b.textContent)).toEqual(["", "Close"]);

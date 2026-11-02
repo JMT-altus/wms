@@ -155,7 +155,7 @@ describe("the Collection Amount Confirmation column (Tracker)", () => {
     const current = { amount: "25450.50", recordedAt: new Date("2026-10-19T05:00:00Z"), recordedByName: "Asha" };
     render(<CollectionTracker rows={[party({ confirmedAmount: current })]} connected storageReady today="2026-10-19" />);
     expect(field().value).toBe("25450.50");
-    expect(screen.getByText(/₹25,450\.50 · Asha, 19 Oct/)).toBeTruthy();
+    expect(screen.getByText(/₹25,450\.50 · Asha, 19\/10\/26/)).toBeTruthy();
     expect(saveButton()).toBeNull();
     cleanup();
     render(<CollectionTracker rows={[party({ confirmedAmount: current })]} connected storageReady today="2026-10-19" canSetConfirmation={false} />);

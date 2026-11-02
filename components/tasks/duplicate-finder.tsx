@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { bulkDelete } from "@/app/(app)/tasks/actions";
 import { fireToast } from "@/lib/toast";
+import { fmtDate } from "@/lib/dates";
 import { PRIORITY_LABELS } from "@/db/enums";
 import type { TaskStatus, StatusColorToken } from "@/db/enums";
 import type { DuplicateGroup } from "@/lib/queries/duplicates";
@@ -194,13 +195,7 @@ export function DuplicateFinder({
   );
 }
 
-const dateLabel = (iso: string) =>
-  new Intl.DateTimeFormat("en-IN", {
-    timeZone: "Asia/Kolkata",
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  }).format(new Date(iso));
+const dateLabel = (iso: string) => fmtDate(iso);
 
 function GroupCard({
   group,

@@ -2,6 +2,7 @@
 
 import { useSyncExternalStore } from "react";
 import { useOnline } from "@/lib/use-online";
+import { fmtDateWithWeekday, fmtTime } from "@/lib/dates";
 
 const TZ = "Asia/Kolkata";
 
@@ -40,22 +41,8 @@ export function HubStatus() {
   const online = useOnline();
   const now = epochSecond === null ? null : new Date(epochSecond * 1000);
 
-  const dateLabel = now
-    ? now.toLocaleDateString("en-IN", {
-        timeZone: TZ,
-        weekday: "short",
-        day: "numeric",
-        month: "short",
-      })
-    : "";
-  const timeLabel = now
-    ? now.toLocaleTimeString("en-IN", {
-        timeZone: TZ,
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: false,
-      })
-    : "--:--";
+  const dateLabel = now ? fmtDateWithWeekday(now, "short", { tz: TZ }) : "";
+  const timeLabel = now ? fmtTime(now, { tz: TZ }) : "--:--";
 
   const dot = online ? "#22c55e" : "#ef4444";
 

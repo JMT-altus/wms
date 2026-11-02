@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { Info, Clock, Globe, Lock, ShieldCheck, MapPin, LocateFixed } from "lucide-react";
 import { fireToast } from "@/lib/toast";
+import { fmtDateTime } from "@/lib/dates";
 import { updateOrgSettings } from "@/app/(admin)/admin/settings/actions";
 import type { OrgSettings } from "@/db/schema";
 
@@ -169,15 +170,7 @@ export function SettingsForm({ current }: Props) {
   // a hydration mismatch that re-rendered (and could wipe) the whole form.
   const updatedAtLabel =
     current.updatedAt instanceof Date && current.updatedAt.getTime() > 0
-      ? new Intl.DateTimeFormat("en-IN", {
-          timeZone: "Asia/Kolkata",
-          day: "2-digit",
-          month: "short",
-          year: "numeric",
-          hour: "2-digit",
-          minute: "2-digit",
-          hour12: true,
-        }).format(current.updatedAt)
+      ? fmtDateTime(current.updatedAt)
       : "never";
 
   return (

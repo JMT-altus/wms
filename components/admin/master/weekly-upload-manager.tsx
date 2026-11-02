@@ -8,6 +8,7 @@ import { AlertTriangle, CheckCircle2, Clock3, ExternalLink } from "lucide-react"
 import { saveWeeklyUploadSettings } from "@/app/(masters)/master-setup/collection-weekly-upload/actions";
 import type { WeeklyUploadOverview, WeeklyUploadWeekView } from "@/lib/queries/collection-weekly-upload";
 import { STATE_LABEL, TRACKER_PATH, dowLabel, formatDueDay, weekLabel, type WeeklyTaskState } from "@/lib/collections/weekly-upload/week";
+import { fmtDateTime } from "@/lib/dates";
 
 /**
  * The Weekly Bulk Upload settings and compliance view. Only the assignee and
@@ -36,8 +37,7 @@ function StatePill({ state }: { state: WeeklyTaskState }) {
   );
 }
 
-const when = (d: Date | string | null) =>
-  d ? new Date(d).toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "Asia/Kolkata" }) : "—";
+const when = (d: Date | string | null) => fmtDateTime(d) || "—";
 
 export function WeeklyUploadManager({ overview, now }: { overview: WeeklyUploadOverview; now: string }) {
   const router = useRouter();

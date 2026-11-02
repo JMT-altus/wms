@@ -11,6 +11,7 @@ import {
 import { notifyAttendance, decideCheckoutNotification } from "@/lib/attendance/notify";
 import { toMin, lateDeductionCrossed } from "@/lib/attendance/status";
 import type { AttendanceSchedule } from "@/lib/attendance/schedule";
+import { fmtMonth } from "@/lib/dates";
 
 /**
  * Attendance punch notifications — extracted from the web Server Action so the
@@ -63,11 +64,6 @@ async function readDayTimes(
   return { inAt, outAt };
 }
 
-const MONTH_NAMES = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
-];
-
 /**
  * Decide + fire the right attendance email for a SELF check-in. A late arrival
  * gets the `attendance_late` heads-up immediately (the waiver, if any, comes
@@ -108,7 +104,7 @@ async function maybeFireDeductionAlert(
       logDate,
       inAt,
       lateCount: now,
-      monthLabel: `${MONTH_NAMES[month - 1] ?? ""} ${year}`.trim(),
+      monthLabel: fmtMonth(logDate),
     });
   }
 }

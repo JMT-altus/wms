@@ -22,6 +22,7 @@ import { ScheduleSection, type ScheduleValue } from "./schedule-section";
 import { ClientSelect } from "./client-select";
 import { SubjectSelect } from "./subject-select";
 import { Select } from "@/components/ui/select";
+import { DateField } from "@/components/ui/date-field";
 
 interface Props {
   taskId: string;
@@ -340,12 +341,11 @@ export function TaskEditForm({
           setFocused={setFDue}
         >
           {(p) => (
-            <input
+            <DateField
               id="te-due"
-              type="date"
               required
               value={dueAt}
-              onChange={(e) => setDueAt(e.target.value)}
+              onChange={setDueAt}
               className={inputClass}
               {...p}
             />
@@ -576,11 +576,10 @@ export function TaskEditForm({
             setFocused={setFRevised}
           >
             {(p) => (
-              <input
+              <DateField
                 id="te-revised"
-                type="date"
                 value={revisedTargetDate}
-                onChange={(e) => setRevisedTargetDate(e.target.value)}
+                onChange={setRevisedTargetDate}
                 className={inputClass}
                 {...p}
               />

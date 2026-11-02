@@ -15,6 +15,7 @@ import { buildBalancePlan, missingCompanies, type BalanceCompany, type BalancePl
 import { TRACKER_BALANCES_SOURCE, isMissingTable, loadClientMasterIndex, loadExistingByKeys } from "@/lib/queries/collection-master";
 import { companyIdsInSnapshot, latestBalanceSnapshot } from "@/lib/queries/collection-balances";
 import { completeWeeklyUploadAfterImport } from "@/lib/collections/weekly-upload/server";
+import { applyClosureMovement, type ClosureMovement } from "@/lib/queries/collection-closures-write";
 
 /**
  * Tracker Bulk Upload — Tally customer summary (Debit / Credit per company).
@@ -191,6 +192,8 @@ export interface BalanceImportResult {
   written: number;
   skipped: { unmatched: number; duplicates: number; conflicts: number; rejected: number };
   totals: { debit: number; credit: number };
+  /** Companies this upload moved between the Tracker and Collection Logs (Debit and Credit both zero → Logs; either non-zero → Tracker). */
+  movement: ClosureMovement;
 }
 
 class RefusedError extends Error {}
@@ -270,16 +273,26 @@ export async function importCollectionBalances(raw: unknown): Promise<Result<{ r
           })),
         );
       }
+      // In the same transaction as the lines: only the companies this upload wrote a line for are moved,
+      // matched by Collection Master id (the plan matched each row to exactly one company by name key).
+      const movement = await applyClosureMovement(tx as unknown as Parameters<typeof applyClosureMovement>[0], {
+        snapshotId,
+        asOfDate: derived.sheet.periodTo,
+        uploadedById: me.id,
+        lines: plan.toWrite.map((r) => ({ companyId: r.companyId!, debitPaise: r.debitPaise, creditPaise: r.creditPaise })),
+      });
       return {
         snapshotId,
         written: plan.toWrite.length,
         skipped: { unmatched: s.unmatched, duplicates: s.duplicates, conflicts: s.conflicts, rejected: s.rejected },
         totals: s.totals.imported,
+        movement,
       } satisfies BalanceImportResult;
     });
 
     revalidatePath("/collection/tracker");
     revalidatePath("/collection/dashboard");
+    revalidatePath("/collection/logs");
     // The snapshot is committed: this upload completes the week's compulsory
     // task (see lib/collections/weekly-upload). Only here — never after a
     // preview, a refusal or a failed transaction — and it can't fail the upload.

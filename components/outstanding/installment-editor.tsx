@@ -6,6 +6,8 @@ import * as Dialog from "@radix-ui/react-dialog";
 import { Plus, Trash2, Check, X, Pencil } from "lucide-react";
 import { fireToast } from "@/lib/toast";
 import { formatInr } from "@/lib/format";
+import { fmtDate } from "@/lib/dates";
+import { DateField } from "@/components/ui/date-field";
 import {
   fetchInstallmentsForContract,
   editInstallment,
@@ -206,14 +208,13 @@ function InstallmentRow({
       </td>
       <td className="px-3 py-2.5">
         {editing ? (
-          <input
-            type="date"
+          <DateField
             value={dueDate}
-            onChange={(e) => setDueDate(e.target.value)}
+            onChange={setDueDate}
             className={INPUT_CLASS}
           />
         ) : (
-          <span className="text-[#0F172A] tabular-nums">{row.dueDate}</span>
+          <span className="text-[#0F172A] tabular-nums">{fmtDate(row.dueDate) || row.dueDate}</span>
         )}
       </td>
       <td className="px-3 py-2.5 tabular-nums">
@@ -326,10 +327,9 @@ function AddAdhocRow({
           <label className="block text-[12px] font-semibold text-[#0F172A] mb-1">
             Due date
           </label>
-          <input
-            type="date"
+          <DateField
             value={dueDate}
-            onChange={(e) => setDueDate(e.target.value)}
+            onChange={setDueDate}
             className={INPUT_CLASS}
           />
         </div>

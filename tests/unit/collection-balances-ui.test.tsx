@@ -122,7 +122,7 @@ describe("TrackerBulkUpload", () => {
         report: { reportTitle: "JMT (from 1-Apr-26)", periodFrom: "2026-04-01", periodTo: "2026-10-19" },
       },
     });
-    a.run.mockResolvedValue({ ok: true, result: { snapshotId: "snap-1", written: 1, skipped: { unmatched: 0, duplicates: 0, conflicts: 0, rejected: 0 }, totals: { debit: 100, credit: 0 } } });
+    a.run.mockResolvedValue({ ok: true, result: { snapshotId: "snap-1", written: 1, skipped: { unmatched: 0, duplicates: 0, conflicts: 0, rejected: 0 }, totals: { debit: 100, credit: 0 }, movement: { status: "ok", toLogs: 0, toTracker: 0 } } });
 
     render(<TrackerBulkUpload canImport onClose={() => {}} />);
     fireEvent.change(document.querySelector('input[type="file"]')!, { target: { files: [new File([csv], "Collection.csv", { type: "text/csv" })] } });

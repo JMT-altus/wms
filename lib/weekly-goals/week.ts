@@ -8,6 +8,8 @@
  * all reason in IST. No DB, no I/O — safe to import anywhere.
  */
 
+import { fmtDate, fmtDateRange } from "@/lib/dates";
+
 export const TZ = "Asia/Kolkata";
 
 /** yyyy-mm-dd for a Date, in IST. */
@@ -56,24 +58,14 @@ export function prevWeekStart(weekStart: string): string {
   return addDays(weekStart, -7);
 }
 
-/** "Jun 2 – Jun 8, 2026" */
+/** "02/06/26 – 08/06/26" */
 export function formatWeekLabel(weekStart: string): string {
-  const start = ymdToUtc(weekStart);
-  const end = ymdToUtc(weekEnd(weekStart));
-  const opts = { month: "short", day: "numeric", timeZone: "UTC" } as const;
-  return `${start.toLocaleDateString("en-US", opts)} – ${end.toLocaleDateString(
-    "en-US",
-    opts,
-  )}, ${end.getUTCFullYear()}`;
+  return fmtDateRange(weekStart, weekEnd(weekStart));
 }
 
-/** "Mon, Jun 2" — compact single-day label. */
+/** "02/06/26" — compact single-day label (the week's Monday). */
 export function formatWeekShort(weekStart: string): string {
-  return ymdToUtc(weekStart).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    timeZone: "UTC",
-  });
+  return fmtDate(weekStart);
 }
 
 /** The N most-recent Monday week-starts, oldest → newest, ending at `now`. */

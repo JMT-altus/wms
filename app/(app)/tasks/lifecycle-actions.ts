@@ -10,6 +10,7 @@ import { rateLimitOrError } from "@/lib/rate-limit";
 import { notify } from "@/lib/notifications/dispatch";
 import { taskLabel } from "@/lib/tasks/set-status";
 import { pickEffectiveDue } from "@/lib/tasks/effective-due";
+import { fmtDate } from "@/lib/dates";
 import { isProtectedWeeklyTask, PROTECTED_TASK_MESSAGE } from "@/lib/collections/weekly-upload/server";
 
 const UUID_RE =
@@ -236,14 +237,7 @@ export async function nudgeTask(
   // Formatted here, not in the template: the deadline that matters is the
   // EFFECTIVE one, and the notification body is the only place that
   // distinction survives the trip to email / Slack / WhatsApp.
-  const dueLabel = due
-    ? due.toLocaleDateString("en-IN", {
-        timeZone: "Asia/Kolkata",
-        day: "numeric",
-        month: "short",
-        year: "numeric",
-      })
-    : undefined;
+  const dueLabel = due ? fmtDate(due) : undefined;
   await notify({
     userId: task.doerId,
     actorId: me.id,

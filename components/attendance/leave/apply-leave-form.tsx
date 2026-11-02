@@ -3,6 +3,7 @@
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { fireToast } from "@/lib/toast";
+import { DateField } from "@/components/ui/date-field";
 import { LEAVE_TYPES, LEAVE_TYPE_LABELS, type LeaveType } from "@/db/enums";
 import { applyForLeave } from "@/app/(app)/attendance/leave/actions";
 import { inclusiveLeaveDays } from "@/lib/leave/workflow";
@@ -90,26 +91,24 @@ export function ApplyLeaveForm({
 
         <div className="grid grid-cols-2 max-md:grid-cols-1 gap-4">
           <Field label="Leave From Date" htmlFor="lv-from">
-            <input
+            <DateField
               id="lv-from"
-              type="date"
               required
               value={from}
-              onChange={(e) => {
-                setFrom(e.target.value);
-                if (to && to < e.target.value) setTo(e.target.value);
+              onChange={(v) => {
+                setFrom(v);
+                if (to && to < v) setTo(v);
               }}
               className={`${FIELD} tabular-nums`}
             />
           </Field>
           <Field label="Leave To Date" htmlFor="lv-to">
-            <input
+            <DateField
               id="lv-to"
-              type="date"
               required
               value={to}
               min={from || undefined}
-              onChange={(e) => setTo(e.target.value)}
+              onChange={setTo}
               className={`${FIELD} tabular-nums`}
             />
           </Field>

@@ -17,7 +17,7 @@ import {
   type Updater,
   type Table as TableInstance,
 } from "@tanstack/react-table";
-import { format } from "date-fns";
+import { fmtDate } from "@/lib/dates";
 import {
   pickEffectiveDue,
   daysUntilEffectiveDue,
@@ -46,13 +46,12 @@ function pageWindow(current: number, total: number): (number | "ellipsis")[] {
   return pages;
 }
 
-// date-fns `format()` throws RangeError on a null/invalid Date — which would
-// crash the ENTIRE table render. Guard every cell so one bad row degrades to
-// "—" instead of taking down the whole list.
-function safeFormat(value: unknown, pattern: string): string {
+// A null/invalid Date must not crash the ENTIRE table render. Guard every
+// cell so one bad row degrades to "—" instead of taking down the whole list.
+function safeFormat(value: unknown): string {
   if (!value) return "—";
   const d = value instanceof Date ? value : new Date(value as string);
-  return Number.isNaN(d.getTime()) ? "—" : format(d, pattern);
+  return fmtDate(d) || "—";
 }
 
 // Due-date urgency for the list. Terminal/finished tasks never read as overdue
@@ -487,7 +486,7 @@ function buildColumns(
       meta: { mobileHide: true },
       cell: (info) => (
         <span className="text-body-lg font-normal text-ink-muted tabular-nums">
-          {safeFormat(info.getValue<Date>(), "MMM d")}
+          {safeFormat(info.getValue<Date>())}
         </span>
       ),
     },
@@ -1775,13 +1774,13 @@ function TaskCard({
               className="tabular-nums"
               style={{ color, fontWeight: strong ? 700 : undefined }}
             >
-              Due {safeFormat(pickEffectiveDue(row), "MMM d")}
+              Due {safeFormat(pickEffectiveDue(row))}
               {u.label ? ` · ${u.label}` : ""}
             </span>
           );
         })()}
         <span aria-hidden>·</span>
-        <span className="tabular-nums">Created {safeFormat(row.createdAt, "MMM d")}</span>
+        <span className="tabular-nums">Created {safeFormat(row.createdAt)}</span>
         <span aria-hidden>·</span>
         <span className="tabular-nums">{row.ageDays}d old</span>
       </div>

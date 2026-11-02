@@ -3,6 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import * as Dialog from "@radix-ui/react-dialog";
+import { DateField } from "@/components/ui/date-field";
 import { Check, Link2, Plus, Trash2, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 import { TASK_PRIORITIES, PRIORITY_LABELS } from "@/db/enums";
@@ -272,10 +273,9 @@ export function PlanEditDialog({ node, refLabel, employees, onClose, onDone }: P
 
               <div className="grid grid-cols-2 gap-4 max-md:grid-cols-1">
                 <Row label="Target date">
-                  <input
-                    type="date"
+                  <DateField
                     value={targetDate}
-                    onChange={(e) => setTargetDate(e.target.value)}
+                    onChange={setTargetDate}
                     className="plan-edit-input"
                   />
                 </Row>
@@ -405,18 +405,16 @@ export function PlanEditDialog({ node, refLabel, employees, onClose, onDone }: P
                 style={{ border: "1px solid var(--color-hairline-strong)" }}
               >
                 <Row label="Start date">
-                  <input
-                    type="date"
+                  <DateField
                     value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
+                    onChange={setStartDate}
                     className="plan-edit-input"
                   />
                 </Row>
                 <Row label="End date">
-                  <input
-                    type="date"
+                  <DateField
                     value={endDate}
-                    onChange={(e) => setEndDate(e.target.value)}
+                    onChange={setEndDate}
                     className="plan-edit-input"
                     style={
                       days != null && days < 1 ? { borderColor: "#DC2626" } : undefined

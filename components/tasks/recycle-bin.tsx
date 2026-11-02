@@ -8,16 +8,10 @@ import { ArrowLeft, Loader2, RotateCcw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { restoreAbandonedTask, type AbandonedTaskRow } from "@/app/(app)/tasks/lifecycle-actions";
 import { deleteTask } from "@/app/(app)/tasks/actions";
+import { fmtDate } from "@/lib/dates";
 
 function dayLabel(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleDateString("en-IN", {
-    timeZone: "Asia/Kolkata",
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
+  return fmtDate(iso) || "—";
 }
 
 /**

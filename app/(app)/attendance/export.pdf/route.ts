@@ -1,5 +1,5 @@
 import PDFDocument from "pdfkit";
-import { format } from "date-fns";
+import { fmtDateTime } from "@/lib/dates";
 import { requireAdmin } from "@/lib/auth/current";
 import { canAccessModule } from "@/lib/auth/module-access";
 import { localDateString } from "@/lib/format";
@@ -210,7 +210,7 @@ function drawMasthead(
       lineBreak: false,
     });
 
-  const generated = format(new Date(), "EEE, MMM d, yyyy · HH:mm");
+  const generated = fmtDateTime(new Date());
   doc
     .font("Helvetica")
     .fontSize(8)

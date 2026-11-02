@@ -5,6 +5,7 @@ import { getOrgSettings } from "@/lib/queries/org-settings";
 import { hygieneRows } from "@/lib/queries/targets";
 import { fyLabel, fyStartYearForDate } from "@/lib/targets/period";
 import { istYmd } from "@/lib/weekly-goals/week";
+import { fmtDate } from "@/lib/dates";
 import { EmptyPanel, TargetsHead, YearSwitcher } from "@/components/targets/ui";
 
 export const dynamic = "force-dynamic";
@@ -181,13 +182,7 @@ export default async function HygienePage({ searchParams }: PageProps) {
                         </span>
                       </td>
                       <td className="px-4 py-2.5 text-ink-muted tabular-nums" style={{ fontSize: 12.5 }}>
-                        {r.lastUpdatedAt
-                          ? new Date(r.lastUpdatedAt).toLocaleDateString("en-IN", {
-                              day: "numeric",
-                              month: "short",
-                              timeZone: "Asia/Kolkata",
-                            })
-                          : "—"}
+                        {fmtDate(r.lastUpdatedAt) || "—"}
                       </td>
                     </tr>
                   );

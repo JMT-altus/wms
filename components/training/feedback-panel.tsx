@@ -3,6 +3,7 @@ import * as React from "react";
 import { Lock, MessageSquare, Send } from "lucide-react";
 import { toast } from "sonner";
 import type { SessionFeedbackRow } from "@/lib/queries/training";
+import { fmtDate } from "@/lib/dates";
 import { rateSession } from "@/app/(app)/training/actions";
 import { EmptyState, Panel, Stars } from "./ui";
 import { StarRating } from "./star-rating";
@@ -81,11 +82,7 @@ function SessionFeedback({
             {session.sessionTitle}
           </p>
           <p className="mt-1 text-ink-muted" style={{ fontSize: 13.5 }}>
-            {session.scheduledAt.toLocaleDateString("en-IN", {
-              day: "numeric",
-              month: "short",
-              year: "numeric",
-            })}
+            {fmtDate(session.scheduledAt)}
             {session.trainerName && ` · ${session.trainerName}`}
             {` · ${session.attendeeCount} attended`}
           </p>

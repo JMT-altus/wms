@@ -33,24 +33,24 @@ describe("date and time are shown in IST", () => {
   it("uses Asia/Kolkata", () => {
     expect(COMMENT_TIME_ZONE).toBe("Asia/Kolkata");
   });
-  it("formats the example exactly: 27-Oct-2026, 01:35 PM IST", () => {
+  it("formats the example exactly: 27/10/26, 01:35 PM IST", () => {
     const d = new Date("2026-10-27T08:05:00Z");
-    expect(commentDate(d)).toBe("27-Oct-2026");
+    expect(commentDate(d)).toBe("27/10/26");
     expect(commentTime(d)).toBe("01:35 PM IST");
   });
   it("the IST day, not the UTC day, decides the date (crossing midnight)", () => {
     const d = new Date("2026-10-26T19:00:00Z"); // 27-Oct 00:30 IST
-    expect(commentDate(d)).toBe("27-Oct-2026");
+    expect(commentDate(d)).toBe("27/10/26");
     expect(commentTime(d)).toBe("12:30 AM IST");
   });
   it("noon and the last minute of the day", () => {
     expect(commentTime(new Date("2026-10-27T06:30:00Z"))).toBe("12:00 PM IST");
     expect(commentTime(new Date("2026-10-27T18:29:00Z"))).toBe("11:59 PM IST");
-    expect(commentDate(new Date("2026-12-31T18:30:00Z"))).toBe("01-Jan-2027");
+    expect(commentDate(new Date("2026-12-31T18:30:00Z"))).toBe("01/01/27");
   });
-  it("month names are fixed three-letter forms (never 'Sept')", () => {
-    const months = Array.from({ length: 12 }, (_, i) => commentDate(new Date(Date.UTC(2026, i, 15, 6))).slice(3, 6));
-    expect(months).toEqual(["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]);
+  it("months are two-digit numbers in dd/mm/yy, never locale month names", () => {
+    const months = Array.from({ length: 12 }, (_, i) => commentDate(new Date(Date.UTC(2026, i, 15, 6))).slice(3, 5));
+    expect(months).toEqual(["01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"]);
   });
 });
 
@@ -74,23 +74,23 @@ describe("CommentAudit rendering", () => {
     const terms = [...container.querySelectorAll("dt")].map((n) => n.textContent);
     const values = [...container.querySelectorAll("dd")].map((n) => n.textContent);
     expect(terms).toEqual(["User:", "Date & Time:", "Comment:"]);
-    expect(values).toEqual(["Rahul Sharma", "27-Oct-2026, 01:35 PM IST", "Customer confirmed payment will be made by Friday."]);
+    expect(values).toEqual(["Rahul Sharma", "27/10/26, 01:35 PM IST", "Customer confirmed payment will be made by Friday."]);
     expect(container.textContent).not.toContain(RAHUL);
     expect(container.textContent).not.toMatch(/User ID|Comment by/);
   });
   it("compact: User and Date & Time in one meta line, then the comment; no user id", () => {
     const { container } = render(<CommentAudit entry={entry()} />);
-    expect(container.textContent).toBe(`User: Rahul Sharma · Date & Time: 27-Oct-2026, 01:35 PM ISTComment: Customer confirmed payment will be made by Friday.`);
+    expect(container.textContent).toBe(`User: Rahul Sharma · Date & Time: 27/10/26, 01:35 PM ISTComment: Customer confirmed payment will be made by Friday.`);
     expect(container.textContent).not.toContain(RAHUL);
     expect(container.textContent).not.toMatch(/User ID|Comment by/);
   });
   it("date and time stay together and in IST across the day boundary (no conversion drift)", () => {
     // 18:45 UTC on 27 Oct is 00:15 on 28 Oct in IST; 18:29 UTC is still 27 Oct (11:59 PM IST).
     const late = render(<CommentAudit entry={entry({ createdAt: new Date("2026-10-27T18:45:00Z") })} />);
-    expect(late.container.textContent).toContain("Date & Time: 28-Oct-2026, 12:15 AM IST");
+    expect(late.container.textContent).toContain("Date & Time: 28/10/26, 12:15 AM IST");
     cleanup();
     const before = render(<CommentAudit entry={entry({ createdAt: new Date("2026-10-27T18:29:00Z") })} variant="full" />);
-    expect([...before.container.querySelectorAll("dd")][1]!.textContent).toBe("27-Oct-2026, 11:59 PM IST");
+    expect([...before.container.querySelectorAll("dd")][1]!.textContent).toBe("27/10/26, 11:59 PM IST");
   });
   it("the user id is not rendered anywhere — not in text, attributes or titles", () => {
     for (const variant of ["compact", "full"] as const) {
@@ -108,11 +108,11 @@ describe("CommentAudit rendering", () => {
   it("a historical comment with no author shows the fallback in both layouts", () => {
     const old = entry({ createdById: null, createdByName: null });
     const full = render(<CommentAudit entry={old} variant="full" />);
-    expect([...full.container.querySelectorAll("dd")].map((n) => n.textContent).slice(0, 2)).toEqual([HISTORICAL_AUTHOR, "27-Oct-2026, 01:35 PM IST"]);
+    expect([...full.container.querySelectorAll("dd")].map((n) => n.textContent).slice(0, 2)).toEqual([HISTORICAL_AUTHOR, "27/10/26, 01:35 PM IST"]);
     expect(full.container.textContent).not.toContain(UNAVAILABLE_USER_ID);
     cleanup();
     const compact = render(<CommentAudit entry={old} />);
-    expect(compact.container.textContent).toContain(`User: ${HISTORICAL_AUTHOR} · Date & Time: 27-Oct-2026, 01:35 PM IST`);
+    expect(compact.container.textContent).toContain(`User: ${HISTORICAL_AUTHOR} · Date & Time: 27/10/26, 01:35 PM IST`);
     expect(compact.container.textContent).not.toContain(UNAVAILABLE_USER_ID);
   });
 });
@@ -126,8 +126,8 @@ describe("CommentList (Tracker Comments column, commitment popup, commitments pa
     render(<CommentList comments={list} />);
     const items = [...screen.getByLabelText("Comments, newest first").querySelectorAll("[data-comment-audit]")].map((n) => n.textContent);
     expect(items).toEqual([
-      "User: Bina · Date & Time: 28-Oct-2026, 09:30 AM ISTComment: Second",
-      `User: Rahul Sharma · Date & Time: 27-Oct-2026, 01:35 PM ISTComment: First`,
+      "User: Bina · Date & Time: 28/10/26, 09:30 AM ISTComment: Second",
+      `User: Rahul Sharma · Date & Time: 27/10/26, 01:35 PM ISTComment: First`,
     ]);
   });
   it("shows a dash when there are no comments, and leaves out date-only follow-ups", () => {
@@ -153,10 +153,10 @@ describe("Party popup History", () => {
     expect(items).toHaveLength(3);
     const values = (li: HTMLElement) => [...li.querySelectorAll("dd")].map((n) => n.textContent);
     // newest first
-    expect(values(items[0]!)).toEqual(["Bina", "28-Oct-2026, 09:30 AM IST"]);
-    expect(items[0]!.textContent).toContain("Next follow-up: 05 Nov 2026");
-    expect(values(items[1]!)).toEqual(["Rahul Sharma", "27-Oct-2026, 01:35 PM IST", "Customer confirmed payment will be made by Friday."]);
-    expect(values(items[2]!)).toEqual([HISTORICAL_AUTHOR, "01-Sep-2026, 10:30 AM IST", "Before the audit details existed"]);
+    expect(values(items[0]!)).toEqual(["Bina", "28/10/26, 09:30 AM IST"]);
+    expect(items[0]!.textContent).toContain("Next follow-up: 05/11/26");
+    expect(values(items[1]!)).toEqual(["Rahul Sharma", "27/10/26, 01:35 PM IST", "Customer confirmed payment will be made by Friday."]);
+    expect(values(items[2]!)).toEqual([HISTORICAL_AUTHOR, "01/09/26, 10:30 AM IST", "Before the audit details existed"]);
     expect(dialog.textContent).not.toMatch(/User ID|emp-b/);
     expect(dialog.textContent).not.toContain(RAHUL);
   });

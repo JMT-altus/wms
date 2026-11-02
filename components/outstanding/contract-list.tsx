@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import * as Dialog from "@radix-ui/react-dialog";
 import { MoreHorizontal, Pencil, ListOrdered, Ban, CheckCircle2 } from "lucide-react";
 import { Select } from "@/components/ui/select";
+import { DateField } from "@/components/ui/date-field";
 import { fireToast } from "@/lib/toast";
 import { formatInr } from "@/lib/format";
 import {
@@ -516,10 +517,9 @@ function EditContractDialog({
             </Field>
             <div className="grid grid-cols-2 gap-3">
               <Field label={isFullPayment ? "Date" : "Start date"} required>
-                <input
-                  type="date"
+                <DateField
                   value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
+                  onChange={setStartDate}
                   className={INPUT_CLASS}
                 />
               </Field>

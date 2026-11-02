@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { recordSale, recordReceipt } from "@/app/(app)/incentive/actions";
 import type { EmployeeOption } from "@/lib/queries/employees";
+import { DateField } from "@/components/ui/date-field";
 
 const CATS: { code: "A" | "B" | "C" | "N" | "I" | "R" | "V"; label: string }[] = [
   { code: "A", label: "A · Major sale" },
@@ -74,10 +75,10 @@ export function DataEntry({ employees }: { employees: EmployeeOption[] }) {
           </label>
           <label className={lbl}><span className={lblText}>Amount (₹)</span><input value={amount} onChange={(e) => setAmount(e.target.value)} type="number" min={0} className={field} style={fieldStyle} placeholder="e.g. 1500000" /></label>
           <label className={lbl}><span className={lblText}>Invoice #</span><input value={invNo} onChange={(e) => setInvNo(e.target.value)} className={field} style={fieldStyle} placeholder="INV-1234" /></label>
-          <label className={lbl}><span className={lblText}>Invoice date</span><input value={invDate} onChange={(e) => setInvDate(e.target.value)} type="date" className={field} style={fieldStyle} /></label>
+          <label className={lbl}><span className={lblText}>Invoice date</span><DateField value={invDate} onChange={setInvDate} className={field} style={fieldStyle} /></label>
           <label className={lbl}><span className={lblText}>Terms (days)</span><input value={terms} onChange={(e) => setTerms(e.target.value)} type="number" min={0} className={field} style={fieldStyle} /></label>
           <label className={lbl}><span className={lblText}>Paid now (₹)</span><input value={paid} onChange={(e) => setPaid(e.target.value)} type="number" min={0} className={field} style={fieldStyle} placeholder="0" /></label>
-          <label className={lbl}><span className={lblText}>Paid date</span><input value={paidDate} onChange={(e) => setPaidDate(e.target.value)} type="date" className={field} style={fieldStyle} /></label>
+          <label className={lbl}><span className={lblText}>Paid date</span><DateField value={paidDate} onChange={setPaidDate} className={field} style={fieldStyle} /></label>
           <label className="col-span-2 flex items-center gap-2 text-[13px] font-semibold text-ink-muted"><input type="checkbox" checked={isNew} onChange={(e) => setIsNew(e.target.checked)} /> New customer (credit acquisition to owner)</label>
           <div className="col-span-2"><button type="submit" disabled={pending} className="rounded-xl px-5 py-2.5 text-white text-[14px] font-bold disabled:opacity-60" style={{ background: "linear-gradient(135deg, #0A6CFF, #0047B3)" }}>{pending ? "Saving…" : "Record sale"}</button></div>
         </form>
@@ -92,7 +93,7 @@ export function DataEntry({ employees }: { employees: EmployeeOption[] }) {
         >
           <label className={lbl}><span className={lblText}>Invoice #</span><input value={rInvNo} onChange={(e) => setRInvNo(e.target.value)} className={field} style={fieldStyle} placeholder="INV-1234" /></label>
           <label className={lbl}><span className={lblText}>Amount received (₹)</span><input value={rAmount} onChange={(e) => setRAmount(e.target.value)} type="number" min={0} className={field} style={fieldStyle} /></label>
-          <label className={lbl}><span className={lblText}>Received on</span><input value={rDate} onChange={(e) => setRDate(e.target.value)} type="date" className={field} style={fieldStyle} /></label>
+          <label className={lbl}><span className={lblText}>Received on</span><DateField value={rDate} onChange={setRDate} className={field} style={fieldStyle} /></label>
           <button type="submit" disabled={pending} className="rounded-xl px-5 py-2.5 text-white text-[14px] font-bold disabled:opacity-60" style={{ background: "linear-gradient(135deg, #12b6a0, #0b7268)" }}>{pending ? "Saving…" : "Record collection"}</button>
         </form>
       </section>

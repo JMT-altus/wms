@@ -78,7 +78,7 @@ describe("week columns", () => {
 
   it("day headings read as the sheet's", () => {
     expect(WEEK.days.map(dayName)).toEqual(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]);
-    expect(dayLabel("2026-11-05")).toBe("5-Nov");
+    expect(dayLabel("2026-11-05")).toBe("05/11/26");
     expect(monthDates("2026-02")).toHaveLength(28);
     expect(monthDates("2028-02")).toHaveLength(29);
   });

@@ -100,7 +100,7 @@ describe("a new comment carries the signed-in author and the server's time", () 
     expect(e.createdAt.getTime()).toBeLessThanOrEqual(after + 5_000);
     // …and it is shown as exactly what was stored
     expect(commentAuthor(e)).toEqual({ name: "Asha Rao", userId: ids.asha, known: true });
-    expect(commentDate(e.createdAt)).toMatch(/^\d{2}-[A-Z][a-z]{2}-\d{4}$/);
+    expect(commentDate(e.createdAt)).toMatch(/^\d{2}\/\d{2}\/\d{2}$/);
     expect(commentTime(e.createdAt)).toMatch(/^\d{2}:\d{2} (AM|PM) IST$/);
   });
 

@@ -1,25 +1,32 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import { formatInrExact } from "@/lib/collections/money";
+import { commitmentLabel } from "@/lib/collections/commitment-display";
+import { fmtDate, fmtDateTime } from "@/lib/dates";
+import { DateField } from "@/components/ui/date-field";
 import { getCompanyCommitment, saveCompanyCommitment } from "@/app/(collection-module)/collection/commitments/actions";
-import type { Commitment } from "@/lib/queries/collection-commitments";
+import type { Commitment, CommitmentEntry } from "@/lib/queries/collection-commitments";
 import { CommentList, type CommentEntry } from "@/components/collections/comment-list";
 import { POPUP_HEADING, POPUP_SECTION, POPUP_VALUE } from "@/components/collections/popup-style";
 
 const FIELD = "w-full rounded-lg border border-hairline-strong bg-white px-2.5 py-1.5 text-[13.5px] text-ink-strong";
-const day = (iso: string) => {
-  const [y, m, d] = iso.split("-").map(Number) as [number, number, number];
-  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric", timeZone: "UTC" });
-};
 
 /**
- * Committed amount + committed date for one company, in the party popup.
+ * Committed amount + committed date for one company, in the party popup, with
+ * the history of every commitment recorded for it.
+ *
  * Rendered only for holders of collection.commitments.view or .edit. The
  * figures are fetched here, on open, through an action that requires
  * collection.commitments.view — they are never part of the tracker page's
- * data, so no one else's browser ever receives them. The form shows only with
- * collection.commitments.edit; both actions check again on the server.
+ * data for anyone else. The form shows only with collection.commitments.edit;
+ * both actions check again on the server.
+ *
+ * The stored commitments are append-only: each "Record" is a new row, so the
+ * history is the real sequence of what was recorded, by whom and when — never
+ * the current value repeated. The newest row is what the Collection Amount
+ * Confirmation column shows, so after a save the Tracker is refreshed.
  */
 export function CommitmentSection({
   companyId,
@@ -30,7 +37,7 @@ export function CommitmentSection({
 }: {
   companyId: string;
   companyName: string;
-  /** collection.commitments.view: fetch and show the recorded commitment. */
+  /** collection.commitments.view: fetch and show the recorded commitment and its history. */
   canView?: boolean;
   /** collection.commitments.edit: show the form to record one. */
   canEdit?: boolean;
@@ -41,10 +48,12 @@ export function CommitmentSection({
    */
   comments: CommentEntry[];
 }) {
+  const router = useRouter();
   // Without collection.commitments.view nothing is fetched, so there is nothing to wait for.
-  const [state, setState] = React.useState<{ loading: boolean; commitment: Commitment | null; storageReady: boolean; error: string | null }>({
+  const [state, setState] = React.useState<{ loading: boolean; commitment: Commitment | null; history: CommitmentEntry[]; storageReady: boolean; error: string | null }>({
     loading: canView,
     commitment: null,
+    history: [],
     storageReady: true,
     error: null,
   });
@@ -53,16 +62,35 @@ export function CommitmentSection({
   const [saving, setSaving] = React.useState(false);
   const [formError, setFormError] = React.useState<string | null>(null);
 
+  const load = React.useCallback(async (): Promise<boolean> => {
+    try {
+      const res = await getCompanyCommitment(companyId);
+      setState(
+        res.ok
+          ? { loading: false, commitment: res.commitment, history: res.history ?? [], storageReady: res.storageReady, error: null }
+          : { loading: false, commitment: null, history: [], storageReady: true, error: res.error },
+      );
+      return res.ok;
+    } catch {
+      setState({ loading: false, commitment: null, history: [], storageReady: true, error: "Could not load the commitment." });
+      return false;
+    }
+  }, [companyId]);
+
   React.useEffect(() => {
     if (!canView) return;
     let cancelled = false;
     getCompanyCommitment(companyId)
       .then((res) => {
         if (cancelled) return;
-        setState(res.ok ? { loading: false, commitment: res.commitment, storageReady: res.storageReady, error: null } : { loading: false, commitment: null, storageReady: true, error: res.error });
+        setState(
+          res.ok
+            ? { loading: false, commitment: res.commitment, history: res.history ?? [], storageReady: res.storageReady, error: null }
+            : { loading: false, commitment: null, history: [], storageReady: true, error: res.error },
+        );
       })
       .catch(() => {
-        if (!cancelled) setState({ loading: false, commitment: null, storageReady: true, error: "Could not load the commitment." });
+        if (!cancelled) setState({ loading: false, commitment: null, history: [], storageReady: true, error: "Could not load the commitment." });
       });
     return () => {
       cancelled = true;
@@ -88,6 +116,9 @@ export function CommitmentSection({
         setState((s) => ({ ...s, commitment: res.commitment }));
         setAmount("");
         setDate("");
+        // The saved row is now the current commitment: reload the history here and the Tracker column behind the popup.
+        if (canView) await load();
+        router.refresh();
       }
     } catch {
       setFormError("The commitment could not be saved. Please try again.");
@@ -108,16 +139,44 @@ export function CommitmentSection({
       ) : !canView ? (
         <p className="mt-1.5 text-[12.5px] text-ink-subtle">You can record a commitment but not view recorded ones.</p>
       ) : (
-        <dl className="mt-1.5 grid grid-cols-2 gap-x-4 gap-y-1 text-[13.5px]">
-          <div className="min-w-0">
-            <dt className={POPUP_HEADING}>Committed amount</dt>
-            <dd className={POPUP_VALUE}>{state.commitment ? formatInrExact(state.commitment.amount) : "Not recorded"}</dd>
-          </div>
-          <div className="min-w-0">
-            <dt className={POPUP_HEADING}>Committed date</dt>
-            <dd className={POPUP_VALUE}>{state.commitment ? day(state.commitment.committedDate) : "Not recorded"}</dd>
-          </div>
-        </dl>
+        <>
+          <dl className="mt-1.5 grid grid-cols-2 gap-x-4 gap-y-1 text-[13.5px]">
+            <div className="min-w-0">
+              <dt className={POPUP_HEADING}>Committed amount</dt>
+              <dd className={POPUP_VALUE}>{state.commitment ? formatInrExact(state.commitment.amount) : "Not recorded"}</dd>
+            </div>
+            <div className="min-w-0">
+              <dt className={POPUP_HEADING}>Committed date</dt>
+              <dd className={POPUP_VALUE}>{state.commitment ? fmtDate(state.commitment.committedDate) : "Not recorded"}</dd>
+            </div>
+          </dl>
+          <p className="mt-1 text-[11.5px] leading-snug text-ink-subtle">
+            Shown in the Collection Amount Confirmation column as {state.commitment ? <span className="tabular-nums">{commitmentLabel(state.commitment)}</span> : "no commitment"}.
+          </p>
+          {state.history.length > 0 && (
+            <div className="mt-2">
+              <p className={POPUP_HEADING}>Commitment history</p>
+              <ol className="mt-0.5 grid max-h-[132px] gap-1 overflow-y-auto pr-0.5" aria-label={`Commitment history for ${companyName}, newest first`}>
+                {state.history.map((h, i) => {
+                  const previous = state.history[i + 1];
+                  return (
+                    <li key={h.id} className="rounded-lg border border-hairline bg-[#F8FAFD] px-2.5 py-1.5 text-[12.5px]" data-current={i === 0 ? "true" : undefined}>
+                      <p className="font-semibold tabular-nums text-ink-strong">
+                        {commitmentLabel(h) ?? "—"}
+                        {i === 0 && <span className="ml-1.5 text-[11px] font-bold uppercase tracking-[0.04em] text-[#047857]">Current</span>}
+                      </p>
+                      <p className="text-ink-subtle">
+                        Recorded {fmtDateTime(h.recordedAt)}
+                        {h.recordedByName ? ` by ${h.recordedByName}` : ""}
+                        {previous ? <span className="tabular-nums"> · previously {commitmentLabel(previous) ?? "—"}</span> : " · first commitment"}
+                      </p>
+                    </li>
+                  );
+                })}
+              </ol>
+            </div>
+          )}
+        </>
       )}
       <div className="mt-2">
         <p className={POPUP_HEADING}>Tracker comments</p>
@@ -141,7 +200,7 @@ export function CommitmentSection({
           </label>
           <label className="block min-w-0 text-[12.5px] font-semibold text-ink-soft">
             Committed date
-            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={`${FIELD} mt-1 tabular-nums`} aria-label={`Committed date for ${companyName}`} />
+            <DateField value={date} onChange={setDate} className={`${FIELD} mt-1 tabular-nums`} aria-label={`Committed date for ${companyName}`} />
           </label>
           <button
             type="button"

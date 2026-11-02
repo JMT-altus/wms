@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { Route } from "next";
 import { Repeat, ArrowRight } from "lucide-react";
-import { format } from "date-fns";
+import { fmtDateWithWeekday } from "@/lib/dates";
 import type { RecurringTemplateRow } from "@/lib/queries/recurring-templates";
 
 interface Props {
@@ -74,7 +74,7 @@ export function RecurringTemplatesList({ rows }: Props) {
                     {r.childCount}
                   </td>
                   <td className="px-4 py-3 text-ink-subtle tabular-nums">
-                    {r.nextChildDueAt ? format(r.nextChildDueAt, "d MMM, EEE") : "—"}
+                    {fmtDateWithWeekday(r.nextChildDueAt, "short") || "—"}
                   </td>
                   <td className="px-4 py-3 text-right">
                     <Link

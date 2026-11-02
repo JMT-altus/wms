@@ -1,6 +1,7 @@
 "use client";
 import * as React from "react";
 import { format, parseISO } from "date-fns";
+import { fmtDate } from "@/lib/dates";
 import type { VelocityPoint } from "@/lib/types";
 import { VelocityChart } from "@/components/charts/velocity-chart";
 import { VelocityHeadline } from "./velocity-headline";
@@ -31,7 +32,7 @@ function bucketByWeek(points: VelocityPoint[]): WeeklyPoint[] {
   return [...buckets.entries()]
     .map(([weekStart, v]) => ({
       weekStart,
-      weekLabel: format(parseISO(weekStart), "MMM d"),
+      weekLabel: fmtDate(weekStart),
       created: v.created,
       completed: v.completed,
     }))

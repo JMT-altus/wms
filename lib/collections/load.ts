@@ -2,7 +2,7 @@ import "server-only";
 import { listAllMasterCompanies } from "@/lib/queries/collection-master";
 import { loadLatestBalances } from "@/lib/queries/collection-balances";
 import { activeTransactionSource } from "./transactions";
-import { isEmptyBalance } from "./balances/visibility";
+import { openClosureCompanyIds } from "@/lib/queries/collection-closures";
 import { inScope, scopeMessage, type CollectionScope } from "./scope";
 import {
   type CollectionTransaction,
@@ -52,13 +52,10 @@ export async function loadCollectionParties(scope: CollectionScope): Promise<Col
   const byMaster = await loadTransactionsByMaster(rows.map((r) => r.id));
   // Debit / Credit come from the LATEST uploaded balance snapshot only; a company
   // missing from it stays blank. Outstanding is never worked out from them.
-  // Whether a company is empty-balance (shown last and muted in the Tracker) is
-  // decided from its MOST RECENT line in any confirmed upload — no line at all
-  // means no amount on either side — so a company a later file leaves out
-  // keeps the state its last confirmed line gave it. Only once an upload has
-  // been confirmed and read: an unavailable source mutes nobody.
-  const balances = await loadLatestBalances();
-  const sourceReady = balances.status === "ok" && balances.snapshot !== null;
+  // Whether a company is in Collection Logs is its OPEN closure episode, written
+  // only by a confirmed upload that gave it ₹0 Debit and ₹0 Credit (and closed
+  // again by one that gave it a balance). It is never inferred here.
+  const [balances, logged] = await Promise.all([loadLatestBalances(), openClosureCompanyIds()]);
 
   const parties: CollectionParty[] = rows.map((r) => {
     const line = balances.byCompany.get(r.id);
@@ -75,15 +72,13 @@ export async function loadCollectionParties(scope: CollectionScope): Promise<Col
       paymentTerms: r.paymentTerms,
       clientMasterLinked: r.customerMasterId !== null,
       transactions: byMaster.get(r.id) ?? [],
-      // Empty-balance: no amount on either side in the confirmed uploads (a
-      // ₹0 / ₹0 line, or no line in any upload). Never while no upload has been
-      // confirmed or the balances could not be read.
-      zeroBalance: isEmptyBalance(balances.latestLineByCompany.get(r.id), sourceReady),
+      // In Collection Logs (an open closure): the Tracker list leaves it out.
+      inLogs: logged.ids.has(r.id),
     };
   });
-  // Every company is returned, empty-balance or not: nothing about them is
-  // written, and the next confirmed upload that includes them decides afresh.
-  // The Tracker orders the empty-balance ones last and mutes them.
+  // Every company in scope is returned, logged or not, so actions that check a
+  // company is in the caller's scope still find it. Only the Tracker's list
+  // leaves the logged ones out.
   return {
     connected: parties.length > 0,
     parties,

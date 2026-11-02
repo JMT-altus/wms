@@ -11,12 +11,9 @@ import { isMissingTable } from "@/lib/queries/collection-master";
  * forward, and snapshots are never added together.
  *
  * Separately, each company's MOST RECENT line across every applied snapshot
- * (`latestLineByCompany`) decides whether the Tracker lists it: a company whose
- * last confirmed figures were ₹0 Debit and ₹0 Credit stays hidden until an
- * upload that includes it gives it a balance, and a company missing from a
- * later file keeps whatever the previous upload decided. The figures shown are
- * still only the latest snapshot's — the look-back is for visibility alone,
- * so no older amount is ever shown as current.
+ * is available as `latestLineByCompany`; no older amount is ever shown as
+ * current. Which companies are in Collection Logs rather than the Tracker is
+ * recorded by the confirmed upload itself (open closure episodes), not here.
  */
 
 type Reader = Pick<typeof db, "select" | "selectDistinctOn">;
@@ -65,8 +62,9 @@ export interface LatestBalances {
   byCompany: Map<string, { debit: number | null; credit: number | null }>;
   /**
    * Each company's most recent line in ANY applied snapshot (the latest one's
-   * where it has one). Decides visibility only — see lib/collections/balances/visibility.ts.
-   * A company in no upload at all has no entry and is never hidden.
+   * where it has one). Whether a company is in Collection Logs is NOT read
+   * from here: that is its open closure episode, written by the confirmed
+   * upload itself (see lib/collections/balances/closures.ts).
    */
   latestLineByCompany: Map<string, { debit: number | null; credit: number | null }>;
 }

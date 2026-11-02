@@ -9,6 +9,7 @@ import {
   type BatchInspection,
   type BatchSummary,
 } from "@/app/(app)/hr/attendance-import/actions";
+import { fmtDateTime } from "@/lib/dates";
 
 /**
  * Previous imports. Reading is always safe. Undo removes only the punches of
@@ -19,8 +20,7 @@ import {
 const CARD = "rounded-xl bg-white p-4 max-md:p-3";
 const LINE = { border: "1px solid #DCE4F0" } as const;
 
-const fmt = (iso: string) =>
-  new Date(iso).toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "Asia/Kolkata" });
+const fmt = (iso: string) => fmtDateTime(iso);
 
 export function AttendanceImportHistory({ batches }: { batches: BatchSummary[] }) {
   const router = useRouter();

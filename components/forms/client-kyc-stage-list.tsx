@@ -17,6 +17,7 @@ import {
   kycCompletionPercent,
 } from "@/lib/masters/kyc-completeness";
 import type { ClientKycStageRow } from "@/lib/queries/client-kyc";
+import { fmtDate } from "@/lib/dates";
 import {
   DataTable,
   Dash,
@@ -49,11 +50,7 @@ const pillClass =
   "text-ink-soft bg-surface-card border border-hairline disabled:opacity-50 whitespace-nowrap";
 
 function formatDate(iso: string | null): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${p(d.getDate())}-${p(d.getMonth() + 1)}-${d.getFullYear()}`;
+  return fmtDate(iso);
 }
 
 export function ClientKycStageList({

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import type { Route } from "next";
 import { SectionHeader } from "@/components/profile/identity/avatar-and-name";
+import { fmtDate } from "@/lib/dates";
 
 export interface ActivityRowProp {
   id: string;
@@ -21,7 +22,7 @@ function relTime(iso: string): string {
   if (hrs < 24) return `${hrs}h ago`;
   const days = Math.round(hrs / 24);
   if (days < 30) return `${days}d ago`;
-  return d.toLocaleDateString();
+  return fmtDate(d);
 }
 
 const KIND_COLOR: Record<ActivityRowProp["kind"], string> = {

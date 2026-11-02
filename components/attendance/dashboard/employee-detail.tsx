@@ -23,6 +23,8 @@ import {
 } from "@/lib/attendance/correction/plan";
 import { adminMarkLeave } from "@/app/(app)/attendance/leave/actions";
 import { fireToast } from "@/lib/toast";
+import { fmtDate, fmtDateWithWeekday, fmtMonth } from "@/lib/dates";
+import { DateField } from "@/components/ui/date-field";
 import {
   ATTENDANCE_CODE_LABELS,
   LEAVE_KINDS,
@@ -38,16 +40,9 @@ import type {
   EmployeeMonthStatus,
 } from "@/lib/queries/attendance-status";
 
-const MONTH_LABELS = [
-  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-];
-const WEEKDAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-
-/** "YYYY-MM-DD" → "06 · Sat" using the row's own weekday (no tz drift). */
+/** "YYYY-MM-DD" → "Sat, 06/11/26" (read from the digits, no tz drift). */
 function dayLabel(row: DayRow): string {
-  const dd = row.logDate.slice(8, 10);
-  return `${dd} · ${WEEKDAY_SHORT[row.weekday] ?? ""}`;
+  return fmtDateWithWeekday(row.logDate, "short");
 }
 
 /** Minutes → "h:mm". */
@@ -187,7 +182,7 @@ export function EmployeeDetailDialog({
     router.refresh();
   }, [load, router]);
 
-  const monthLabel = `${MONTH_LABELS[month - 1] ?? ""} ${year}`;
+  const monthLabel = fmtMonth(`${year}-${String(month).padStart(2, "0")}`);
 
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
@@ -454,7 +449,7 @@ function EditRow({
       return;
     }
     const label = kind === "in" ? "check-in" : "check-out";
-    if (!window.confirm(`Remove the ${label} for ${day.logDate}? The removal and your explanation are kept in the audit history.`)) return;
+    if (!window.confirm(`Remove the ${label} for ${fmtDate(day.logDate)}? The removal and your explanation are kept in the audit history.`)) return;
     await run(
       () => adminDeletePunch({ employeeId, logDate: day.logDate, kind, reason, explanation, snapshot }),
       kind === "in" ? "Check-in removed." : "Check-out removed.",
@@ -741,21 +736,19 @@ function LeaveCompOffPanel({
             </label>
             <label className="block">
               <span className={labelCls}>From</span>
-              <input
-                type="date"
+              <DateField
                 value={startDate}
                 disabled={busy}
-                onChange={(e) => setStartDate(e.target.value)}
+                onChange={setStartDate}
                 className={`${fieldCls} tabular-nums`}
               />
             </label>
             <label className="block">
               <span className={labelCls}>To</span>
-              <input
-                type="date"
+              <DateField
                 value={endDate}
                 disabled={busy}
-                onChange={(e) => setEndDate(e.target.value)}
+                onChange={setEndDate}
                 className={`${fieldCls} tabular-nums`}
               />
             </label>
@@ -802,18 +795,17 @@ function LeaveCompOffPanel({
                   >
                     {openCredits.map((c) => (
                       <option key={c.id} value={c.id}>
-                        {c.earnedDate}
+                        {fmtDate(c.earnedDate)}
                       </option>
                     ))}
                   </select>
                 </label>
                 <label className="block">
                   <span className={labelCls}>Redeem on</span>
-                  <input
-                    type="date"
+                  <DateField
                     value={redeemDate}
                     disabled={busy}
-                    onChange={(e) => setRedeemDate(e.target.value)}
+                    onChange={setRedeemDate}
                     className={`${fieldCls} tabular-nums`}
                   />
                 </label>

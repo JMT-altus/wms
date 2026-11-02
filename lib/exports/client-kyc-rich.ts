@@ -1,4 +1,6 @@
 import { format } from "date-fns";
+import { fmtDate } from "@/lib/dates";
+import { excelDate, type Cell } from "@/lib/exports/xlsx-dates";
 import type { ClientMasterRow } from "@/lib/queries/client-kyc";
 
 /**
@@ -22,12 +24,6 @@ const list = (v: string[] | null | undefined): string =>
 const text = (v: string | number | null | undefined): string =>
   v === null || v === undefined || v === "" ? "" : String(v);
 
-/** yyyy-mm-dd or an ISO timestamp → "12 Jul 2026". */
-const fmtDate = (v: string | null | undefined): string => {
-  if (!v) return "";
-  const d = new Date(v);
-  return Number.isNaN(d.getTime()) ? "" : format(d, "d MMM yyyy");
-};
 
 /** Trade type, derived the same way the Client Master table derives it. */
 const trade = (r: ClientMasterRow): string =>
@@ -38,6 +34,8 @@ export interface KycExportColumn {
   /** Column width in characters, used for the XLSX sheet. */
   width: number;
   value: (r: ClientMasterRow) => string;
+  /** The Excel cell when it should be a genuine date rather than text. */
+  cell?: (r: ClientMasterRow) => Cell;
 }
 
 /**
@@ -87,7 +85,7 @@ export const KYC_EXPORT_COLUMNS: readonly KycExportColumn[] = [
   { header: "Reference", width: 20, value: (r) => text(r.reference) },
   { header: "Other References", width: 22, value: (r) => text(r.otherReferences) },
   { header: "Notes", width: 34, value: (r) => text(r.notes) },
-  { header: "Onboarded", width: 14, value: (r) => fmtDate(r.createdAt) },
+  { header: "Onboarded", width: 14, value: (r) => fmtDate(r.createdAt), cell: (r) => excelDate(r.createdAt) },
 ];
 
 export const KYC_EXPORT_HEADERS: readonly string[] = KYC_EXPORT_COLUMNS.map(
@@ -96,6 +94,11 @@ export const KYC_EXPORT_HEADERS: readonly string[] = KYC_EXPORT_COLUMNS.map(
 
 export function toKycRowArray(row: ClientMasterRow): string[] {
   return KYC_EXPORT_COLUMNS.map((c) => c.value(row));
+}
+
+/** The XLSX row: dates as real date cells (dd/mm/yy), everything else as text. */
+export function toKycRowCells(row: ClientMasterRow): Cell[] {
+  return KYC_EXPORT_COLUMNS.map((c) => (c.cell ? c.cell(row) : c.value(row)));
 }
 
 /** "client-kyc-2026-08-31.xlsx" */

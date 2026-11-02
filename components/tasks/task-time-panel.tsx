@@ -11,6 +11,7 @@ import {
   formatDuration,
 } from "@/lib/tasks/time-math";
 import type { TaskSessionRow } from "@/lib/tasks/time-store";
+import { fmtDateTime } from "@/lib/dates";
 
 interface Props {
   taskId: string;
@@ -28,15 +29,7 @@ interface Props {
 }
 
 function timeLabel(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleString("en-IN", {
-    timeZone: "Asia/Kolkata",
-    day: "numeric",
-    month: "short",
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  return fmtDateTime(iso);
 }
 
 /**

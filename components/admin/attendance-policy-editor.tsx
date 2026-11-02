@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { fireToast } from "@/lib/toast";
 import type { PolicyDef, PolicyValue } from "@/lib/attendance/policy";
 import { saveAttendancePolicy } from "@/app/(admin)/admin/attendance-policy/actions";
+import { DateField } from "@/components/ui/date-field";
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const FIELD = "rounded-md border border-[#CBD5E1] px-3 py-2 text-[14px]";
@@ -86,11 +87,10 @@ export function PolicyRow({
           </label>
           <label className="block text-[13px] font-medium text-ink-soft">
             Effective from
-            <input
-              type="date"
+            <DateField
               value={effective}
               min={`${today.slice(0, 7)}-01`}
-              onChange={(e) => setEffective(e.target.value)}
+              onChange={setEffective}
               className={`${FIELD} mt-1 block`}
             />
           </label>

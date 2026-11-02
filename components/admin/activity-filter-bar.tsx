@@ -5,6 +5,7 @@ import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { useTransition } from "react";
 import { Calendar, Users, RotateCcw, SlidersHorizontal, Loader2, Sparkles, Layers, Download } from "lucide-react";
 import { MultiSelect } from "@/components/ui/multi-select";
+import { DateField } from "@/components/ui/date-field";
 import { dotColorFor } from "@/components/tasks/audit-event-meta";
 import { TASK_EVENT_TYPES, type TaskEventType } from "@/lib/events";
 
@@ -174,10 +175,9 @@ export function ActivityFilterBar({ employees, initial }: Props) {
         <label className="filter-chip">
           <Calendar size={16} className="text-ink-subtle" strokeWidth={2} />
           <span className="text-[12px] uppercase tracking-wide text-ink-subtle">From</span>
-          <input
-            type="date"
+          <DateField
             value={from}
-            onChange={(e) => setFrom(e.target.value)}
+            onChange={setFrom}
             className="bg-transparent outline-none text-chip text-ink-strong tabular-nums"
             style={{ minWidth: 130 }}
           />
@@ -185,10 +185,9 @@ export function ActivityFilterBar({ employees, initial }: Props) {
         <label className="filter-chip">
           <Calendar size={16} className="text-ink-subtle" strokeWidth={2} />
           <span className="text-[11px] uppercase tracking-wide text-ink-subtle">To</span>
-          <input
-            type="date"
+          <DateField
             value={to}
-            onChange={(e) => setTo(e.target.value)}
+            onChange={setTo}
             className="bg-transparent outline-none text-chip text-ink-strong tabular-nums"
             style={{ minWidth: 130 }}
           />

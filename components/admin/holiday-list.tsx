@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import * as Dialog from "@radix-ui/react-dialog";
 import { MoreHorizontal, Pencil, Power, Trash2 } from "lucide-react";
 import { fireToast } from "@/lib/toast";
+import { fmtDate } from "@/lib/dates";
+import { DateField } from "@/components/ui/date-field";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -20,13 +22,6 @@ export interface HolidayItem {
   isActive: boolean;
   /** An optional holiday: each person may take one; not a day off for everyone. */
   isOptional: boolean;
-}
-
-/** "12 Aug 2026" from a YYYY-MM-DD string (no timezone drift). */
-function prettyDate(iso: string): string {
-  const [y, m, d] = iso.split("-").map(Number);
-  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-  return `${String(d).padStart(2, "0")} ${months[(m ?? 1) - 1]} ${y}`;
 }
 
 export function HolidayList({
@@ -171,7 +166,7 @@ function HolidayRow({
       style={{ background: rowIndex % 2 === 1 ? "rgba(15, 23, 42, 0.012)" : undefined }}
     >
       <td className="px-5 py-4 text-ink-strong font-medium tabular-nums whitespace-nowrap">
-        {prettyDate(item.holidayDate)}
+        {fmtDate(item.holidayDate)}
       </td>
       <td className="px-5 py-4 text-ink-soft">
         {item.label}
@@ -313,11 +308,10 @@ function CreateHolidayDialog({
           </Dialog.Description>
           <form onSubmit={onSubmit} className="space-y-4">
             <HolidayField label="Date">
-              <input
+              <DateField
                 required
-                type="date"
                 value={holidayDate}
-                onChange={(e) => setHolidayDate(e.target.value)}
+                onChange={setHolidayDate}
                 className="w-full rounded-md border border-[#CBD5E1] px-3.5 py-2.5 text-[15px] tabular-nums"
               />
             </HolidayField>
@@ -408,7 +402,7 @@ function EditHolidayDialog({
             Edit holiday
           </Dialog.Title>
           <Dialog.Description className="text-[15px] text-[#64748B] mb-4">
-            {prettyDate(item.holidayDate)}
+            {fmtDate(item.holidayDate)}
           </Dialog.Description>
           <form onSubmit={onSubmit} className="space-y-4">
             <HolidayField label="Label">

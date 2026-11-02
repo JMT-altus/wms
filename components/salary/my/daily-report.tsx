@@ -5,6 +5,7 @@ import { ChevronDown, ChevronUp, ListChecks } from "lucide-react";
 import type { DailyReport, DailyWeek } from "@/lib/salary/daily-report";
 import { STATUS_GROUP_LABEL, formatMinutes, type StatusGroup } from "@/lib/attendance/overview";
 import { days, inrPaise, signedPaise } from "@/lib/salary/money";
+import { fmtDate, fmtDateRange } from "@/lib/dates";
 import { ACCENT, BORDER_SOFT, CARD, NAVY, SLATE, TONE, type Tone } from "@/components/attendance/overview/theme";
 
 const GROUP_TONE: Record<StatusGroup, Tone> = {
@@ -19,8 +20,6 @@ const GROUP_TONE: Record<StatusGroup, Tone> = {
   open: "amber",
 };
 const WEEKDAY = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const DATE_FMT = new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short", year: "numeric", timeZone: "UTC" });
-const fmtDate = (ymd: string) => DATE_FMT.format(new Date(`${ymd}T12:00:00Z`)).replace(/ /g, "-");
 const money = (p: number | null) => (p === null ? "—" : inrPaise(p));
 
 /**
@@ -173,7 +172,7 @@ function WeekBlock({ w, open, onToggle, filter, hasRun }: { w: DailyWeek; open: 
             Week {w.index}
           </span>
           <span className="ml-3 text-[13px] tabular-nums" style={{ color: SLATE }}>
-            {fmtDate(w.start)} – {fmtDate(w.end)}
+            {fmtDateRange(w.start, w.end)}
           </span>
           <span className="block text-[12px]" style={{ color: SLATE }}>
             {summary}

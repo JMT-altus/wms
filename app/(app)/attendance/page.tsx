@@ -2,6 +2,7 @@ import { DashboardHeader } from "@/components/layout/header";
 import { DashboardFooter } from "@/components/layout/footer";
 import { requireUser } from "@/lib/auth/current";
 import { localDateString } from "@/lib/format";
+import { fmtDateRange } from "@/lib/dates";
 import {
   getEarliestAttendanceYear,
   loadAttendanceOverview,
@@ -56,22 +57,9 @@ function labelForDate(date: string): string {
   return DATE_BADGE_FMT.format(new Date(`${date}T12:00:00Z`));
 }
 
-const RANGE_FMT = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", timeZone: "UTC" });
-const RANGE_YEAR_FMT = new Intl.DateTimeFormat("en-IN", {
-  day: "numeric",
-  month: "short",
-  year: "numeric",
-  timeZone: "UTC",
-});
-
-/** "1 Oct – 9 Oct 2026": the dates the KPI figures cover. */
+/** "01/10/26 – 09/10/26": the dates the KPI figures cover. */
 function rangeLabel(r: { start: string; end: string }): string {
-  const at = (ymd: string) => new Date(`${ymd}T12:00:00Z`);
-  const sameYear = r.start.slice(0, 4) === r.end.slice(0, 4);
-  const start = (sameYear ? RANGE_FMT : RANGE_YEAR_FMT).format(at(r.start));
-  return r.start === r.end
-    ? RANGE_YEAR_FMT.format(at(r.end))
-    : `${start} – ${RANGE_YEAR_FMT.format(at(r.end))}`;
+  return fmtDateRange(r.start, r.end);
 }
 
 export default async function AttendancePage({ searchParams }: PageProps) {

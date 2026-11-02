@@ -3,6 +3,7 @@ import { and, eq, desc, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { incentiveLedger, incentivePeriods, leadBatches, leadConversions, clientMeetings, testimonials, employees, salesOrders, customers, invoices } from "@/db/schema";
 import { SALES_BH_SCHEME } from "@/lib/incentives";
+import { fmtMonth } from "@/lib/dates";
 
 export interface PendingSale { orderId: string; invoiceId: string | null; customer: string; owner: string; category: string; valuePaise: number; bookedAt: string; }
 
@@ -66,9 +67,7 @@ export function currentPeriodIST(now: Date = new Date()): string {
 
 /** "2026-07" → "JUL 2026". */
 export function periodLabel(period: string): string {
-  const [y, m] = period.split("-").map(Number);
-  const month = new Date(Date.UTC(y!, (m ?? 1) - 1, 1)).toLocaleString("en-US", { month: "short", timeZone: "UTC" });
-  return `${month.toUpperCase()} ${y}`;
+  return fmtMonth(period).toUpperCase();
 }
 
 export interface PayoutRow { employeeId: string; employeeName: string; totalPaise: number; }

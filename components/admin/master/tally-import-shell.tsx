@@ -23,6 +23,8 @@ import {
 } from "lucide-react";
 import { CenterDialog } from "@/components/ui/center-dialog";
 import { fireToast } from "@/lib/toast";
+import { fmtDate, fmtDateTime } from "@/lib/dates";
+import { DateField } from "@/components/ui/date-field";
 import { TALLY_CATEGORIES, TALLY_LIMITS, type TallyCategoryKey } from "@/lib/tally/categories";
 import { checkMapping, findHeaderRow, mappingIsUsable, suggestMapping, type TallyMapping } from "@/lib/tally/mapping";
 import { chunkRows, planRows, summarize, type PlannedRow, type RawRow, type TallyDirection } from "@/lib/tally/plan";
@@ -87,7 +89,7 @@ function Tile({ label, value, tone }: { label: string; value: number; tone?: str
   );
 }
 
-const when = (d: Date | string | null) => (d ? new Date(d).toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "Asia/Kolkata" }) : "—");
+const when = (d: Date | string | null) => fmtDateTime(d) || "—";
 
 export function TallyImportShell({ canImport = false, storageReady = true, history = [] }: { canImport?: boolean; storageReady?: boolean; history?: HistoryRow[] }) {
   const router = useRouter();
@@ -423,7 +425,7 @@ export function TallyImportShell({ canImport = false, storageReady = true, histo
                 <div className="mt-3 flex flex-wrap gap-3">
                   <label className="grid gap-1 text-[12.5px] font-semibold text-ink-muted">
                     Balances as of
-                    <input type="date" aria-label="Balances as of" className={FIELD} value={asOfDate} onChange={(e) => (setAsOfDate(e.target.value), resetChecks())} />
+                    <DateField aria-label="Balances as of" className={FIELD} value={asOfDate} onChange={(v) => (setAsOfDate(v), resetChecks())} />
                   </label>
                   <label className="grid gap-1 text-[12.5px] font-semibold text-ink-muted">
                     These are
@@ -600,7 +602,7 @@ export function TallyImportShell({ canImport = false, storageReady = true, histo
                       <td className="px-2 py-1">{b.fileName}</td>
                       <td className="px-2 py-1">{TALLY_CATEGORIES[b.category as TallyCategoryKey]?.label ?? b.category}</td>
                       <td className="whitespace-nowrap px-2 py-1">
-                        {b.financialYears.length ? b.financialYears.join(", ") : b.asOfDate ? `As of ${b.asOfDate}` : "—"}
+                        {b.financialYears.length ? b.financialYears.join(", ") : b.asOfDate ? `As of ${fmtDate(b.asOfDate)}` : "—"}
                         {b.isHistorical ? " · historical" : ""}
                       </td>
                       <td className="px-2 py-1">{b.uploadedBy ?? "—"}</td>

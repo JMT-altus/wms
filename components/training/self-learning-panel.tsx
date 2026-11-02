@@ -8,6 +8,8 @@ import {
   type SelfLearningKind,
 } from "@/db/enums";
 import type { SelfLearningMonth } from "@/lib/queries/training";
+import { fmtDate } from "@/lib/dates";
+import { DateField } from "@/components/ui/date-field";
 import { deleteSelfLearning, logSelfLearning } from "@/app/(app)/training/actions";
 import { EmptyState, Panel, ProgressBar, TRAINING_ACCENT, TRAINING_ACCENT_SOFT } from "./ui";
 
@@ -165,10 +167,9 @@ export function SelfLearningPanel({
               </div>
               <div>
                 <Label>Date</Label>
-                <input
-                  type="date"
+                <DateField
                   value={entryDate}
-                  onChange={(e) => setEntryDate(e.target.value)}
+                  onChange={setEntryDate}
                   className="w-full rounded-chip px-3.5 h-11 bg-surface-soft border border-hairline outline-none text-[15px] text-ink-strong"
                 />
               </div>
@@ -266,7 +267,7 @@ export function SelfLearningPanel({
                           {e.source}
                         </p>
                         <p className="mt-1 text-ink-subtle" style={{ fontSize: 13 }}>
-                          {e.entryDate} · {e.minutes} min
+                          {fmtDate(e.entryDate)} · {e.minutes} min
                           {!evidenced && (
                             <span
                               className="ml-2 font-bold"

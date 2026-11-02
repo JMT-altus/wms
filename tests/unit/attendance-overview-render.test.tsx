@@ -56,8 +56,8 @@ describe("AttendanceOverview", () => {
   });
 
   it("shows the dates the figures cover next to the heading", () => {
-    render(<AttendanceOverview kpis={kpis} selector={selector} rangeLabel="1 Oct – 9 Oct 2026" />);
-    expect(screen.getByText(/1 Oct – 9 Oct 2026/)).toBeTruthy();
+    render(<AttendanceOverview kpis={kpis} selector={selector} rangeLabel="01/10/26 – 09/10/26" />);
+    expect(screen.getByText(/01\/10\/26 – 09\/10\/26/)).toBeTruthy();
   });
 
   it("marks a month with no working days as not available rather than inventing a balance", () => {
@@ -280,10 +280,15 @@ describe("UpcomingHolidays", () => {
     expect(container.querySelector("summary")).toBeTruthy();
   });
 
-  it("shows the full date, e.g. 20 October 2026, with the weekday", () => {
-    render(<UpcomingHolidays holidays={rows} today={today} />);
-    expect(screen.getByText(/20 October 2026/)).toBeTruthy();
-    expect(screen.getByText(/10 October 2026/)).toBeTruthy();
+  it("shows the weekday alone under the name: the day and month already sit on the left", () => {
+    const { container } = render(<UpcomingHolidays holidays={rows} today={today} />);
+    expect(screen.getByText("Tuesday")).toBeTruthy(); // 20 Oct 2026
+    expect(screen.getByText("Saturday")).toBeTruthy(); // 10 Oct 2026
+    expect(screen.queryByText(/20 October 2026/)).toBeNull();
+    expect(screen.queryByText(/October 2026/)).toBeNull();
+    expect(container.textContent).not.toContain(" · ");
+    expect(screen.getByText("20")).toBeTruthy(); // the green block still carries the date
+    expect(screen.getAllByText("Oct")).toHaveLength(2);
   });
 
   it("badges an optional holiday and shows the policy note; mandatory ones get neither", () => {

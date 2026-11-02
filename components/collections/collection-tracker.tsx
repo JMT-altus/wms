@@ -6,8 +6,8 @@ import type { Route } from "next";
 import { ArrowDown, ArrowUp, Search, Upload } from "lucide-react";
 import { CenterDialog } from "@/components/ui/center-dialog";
 import { formatInr } from "@/lib/format";
+import { fmtDate } from "@/lib/dates";
 import { NOT_CONNECTED_MESSAGE, type TransactionSourceInfo } from "@/lib/collections/source";
-import { orderZeroBalanceLast, zeroBalanceNote } from "@/lib/collections/balances/visibility";
 import { partyOverdue } from "@/lib/collections/overdue";
 import { OverdueBadge, overdueRowStyle, useBusinessToday } from "./overdue-display";
 import { UNASSIGNED_PERSON, filterRows, personOf, sortRows, type PartyRow, type SortKey, type TrackerFilters } from "@/lib/collections/derive";
@@ -16,6 +16,7 @@ import { TrackerComments } from "./tracker-comments";
 import { SalespersonScorecard } from "./salesperson-scorecards";
 import type { ScorecardView } from "@/lib/collections/scorecards";
 import { ConfirmedAmountControl, EscalateControl } from "./review-controls";
+import { commitmentLabel } from "@/lib/collections/commitment-display";
 import { CoordinatorControl } from "./coordinator-control";
 // Loaded only when Bulk Upload is opened, so the Tracker page itself stays as light as before.
 const TrackerBulkUpload = React.lazy(() => import("./tracker-bulk-upload").then((m) => ({ default: m.TrackerBulkUpload })));
@@ -25,10 +26,6 @@ const CARD = { border: "1px solid var(--color-hairline-strong)", boxShadow: "0 1
 const SELECT = "h-8 rounded-lg border border-hairline-strong bg-white px-2.5 text-[13px] text-ink-strong";
 
 const money = (n: number | null) => (n === null ? "—" : formatInr(n));
-const short = (iso: string) => {
-  const [y, m, d] = iso.split("-").map(Number) as [number, number, number];
-  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-GB", { day: "2-digit", month: "short", timeZone: "UTC" });
-};
 
 /**
  * The Collection Tracker: one row per party, as listed by the accounting source.
@@ -47,6 +44,7 @@ export function CollectionTracker({
   today: initialToday,
   emptyMessage = NOT_CONNECTED_MESSAGE,
   scopeNote,
+  logsNote,
   transactionSource,
   canSeeCommitments = false,
   canEditCommitments = false,
@@ -73,6 +71,11 @@ export function CollectionTracker({
   emptyMessage?: string;
   /** Whose companies these are, when not every company (a linked Sales Coordinator's own) — decided on the server. */
   scopeNote?: string;
+  /**
+   * How many companies in the viewer's scope are in Collection Logs (₹0 Debit and ₹0 Credit in a confirmed upload),
+   * and the Logs link when the viewer may open it (collection.logs.view). Absent when there are none.
+   */
+  logsNote?: { count: number; href: string | null };
   /** The transaction source, so the detail can say when none is approved. */
   transactionSource?: TransactionSourceInfo;
   /** collection.commitments.view — decided on the server from the signed session, like every flag below. */
@@ -135,13 +138,8 @@ export function CollectionTracker({
     () => [...new Set(rows.map(personOf).filter((p): p is string => Boolean(p)))].sort((a, b) => a.localeCompare(b)),
     [rows],
   );
-  // Filter, sort, THEN put the zero-balance companies last (each group keeps the chosen sort), THEN page — so a page
-  // never shows a ₹0/₹0 company above a normal one, and the count is of exactly what is listed.
-  const shown = React.useMemo(
-    () => orderZeroBalanceLast(sortRows(filterRows(rows, filters, today), sort.key, sort.dir)),
-    [rows, filters, sort, today],
-  );
-  const zeroBalanceCount = React.useMemo(() => rows.filter((r) => r.zeroBalance).length, [rows]);
+  // Filter, sort, THEN page, so the count is of exactly what is listed.
+  const shown = React.useMemo(() => sortRows(filterRows(rows, filters, today), sort.key, sort.dir), [rows, filters, sort, today]);
   const pages = Math.max(1, Math.ceil(shown.length / PAGE));
   const safePage = Math.min(page, pages - 1);
   const slice = shown.slice(safePage * PAGE, safePage * PAGE + PAGE);
@@ -200,9 +198,17 @@ export function CollectionTracker({
           {scopeNote}
         </p>
       )}
-      {zeroBalanceCount > 0 && (
-        <p aria-label="Empty-balance companies" className="mb-3 rounded-lg border border-hairline bg-[#F8FAFD] px-3 py-2 text-[12.5px] text-ink-subtle">
-          {zeroBalanceNote(zeroBalanceCount)}
+      {logsNote && logsNote.count > 0 && (
+        <p aria-label="Companies in Collection Logs" className="mb-3 rounded-lg border border-hairline bg-[#F8FAFD] px-3 py-2 text-[12.5px] text-ink-subtle">
+          {logsNote.count} {logsNote.count === 1 ? "company has" : "companies have"} ₹0 Debit and ₹0 Credit in the latest upload that included {logsNote.count === 1 ? "it, so it is" : "them, so they are"} in{" "}
+          {logsNote.href ? (
+            <a href={logsNote.href} className="font-semibold text-[#0B4FB8] underline-offset-2 hover:underline">
+              Collection Logs
+            </a>
+          ) : (
+            "Collection Logs"
+          )}
+          . {logsNote.count === 1 ? "It returns" : "They return"} here automatically when an upload gives {logsNote.count === 1 ? "it" : "them"} a Debit or Credit.
         </p>
       )}
       {setupHints.length > 0 && (
@@ -279,7 +285,7 @@ export function CollectionTracker({
           </button>
         )}
         <span className={`text-[12.5px] text-ink-subtle tabular-nums${canImportBalances ? "" : " ml-auto"}`}>
-          {connected ? `${shown.length} part${shown.length === 1 ? "y" : "ies"}${shown.some((r) => r.zeroBalance) ? ` (${shown.filter((r) => r.zeroBalance).length} with no balance, shown last)` : ""}` : ""}
+          {connected ? `${shown.length} part${shown.length === 1 ? "y" : "ies"}` : ""}
         </span>
       </div>
 
@@ -336,9 +342,7 @@ export function CollectionTracker({
                 <tr
                   key={r.partyName}
                   data-overdue={od.level}
-                  data-zero-balance={r.zeroBalance ? "true" : undefined}
-                  // An empty-balance company (no Debit or Credit in the confirmed uploads) is muted, not removed: every control in the row still works.
-                  className={`border-t border-[#EEF1F6] ${od.level !== "none" ? "" : "hover:bg-[#F7F9FD]"} ${r.zeroBalance ? "opacity-60 saturate-50 hover:opacity-100" : ""}`}
+                  className={`border-t border-[#EEF1F6] ${od.level !== "none" ? "" : "hover:bg-[#F7F9FD]"}`}
                   style={overdueRowStyle(od.level)}
                 >
                   <td className="px-3 py-2">
@@ -349,11 +353,6 @@ export function CollectionTracker({
                     >
                       {r.partyName}
                     </button>
-                    {r.zeroBalance && (
-                      <span className="ml-2 inline-block rounded-pill px-1.5 py-px align-middle text-[10.5px] font-bold uppercase tracking-[0.04em] text-ink-subtle" style={{ border: "1px solid var(--color-hairline-strong)" }} title="No Debit or Credit in the confirmed uploads">
-                        No balance
-                      </span>
-                    )}
                     <OverdueBadge level={od.level} daysOverdue={od.daysOverdue} />
                   </td>
                   <td className="px-3 py-2 text-right tabular-nums">{money(r.debit)}</td>
@@ -373,12 +372,18 @@ export function CollectionTracker({
                     )}
                   </td>
                   <td className="px-3 py-2 tabular-nums">
-                    {r.nextFollowupDate ? short(r.nextFollowupDate) : <span className="text-ink-subtle">—</span>}
+                    {r.nextFollowupDate ? fmtDate(r.nextFollowupDate) : <span className="text-ink-subtle">—</span>}
                   </td>
                   <td className="px-3 py-2 text-ink-soft">
                     <TrackerComments companyName={r.partyName} history={r.history} editorId={canWriteFollowUps ? commentEditorId : null} />
                   </td>
                   <td className="px-3 py-2">
+                    {r.commitment !== undefined && (
+                      // The popup's commitment, for those allowed to see it: the same stored value, never a second entry.
+                      <p className="mb-1 text-[13px] font-semibold tabular-nums text-ink-strong" aria-label={`Commitment for ${r.partyName}`} data-commitment={r.commitment ? "set" : "none"}>
+                        {commitmentLabel(r.commitment) ?? <span className="font-normal text-ink-subtle">No commitment recorded</span>}
+                      </p>
+                    )}
                     {r.masterId ? (
                       <ConfirmedAmountControl companyId={r.masterId} companyName={r.partyName} current={r.confirmedAmount ?? null} storageReady={amountStorageReady} canSet={canSetConfirmation} />
                     ) : (

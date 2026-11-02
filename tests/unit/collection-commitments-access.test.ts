@@ -61,7 +61,7 @@ vi.mock("@/lib/auth/field-access", () => ({
 vi.mock("@/lib/db", () => {
   const chain = (): unknown => {
     const c: Record<string, unknown> = {};
-    for (const k of ["from", "where", "orderBy", "limit", "innerJoin", "as"]) c[k] = () => c;
+    for (const k of ["from", "where", "orderBy", "limit", "innerJoin", "leftJoin", "as"]) c[k] = () => c;
     c.then = (res: (v: unknown) => unknown) => Promise.resolve(h.selects.shift() ?? []).then(res);
     return c;
   };
@@ -165,7 +165,8 @@ describe("the actions, with the capabilities", () => {
     owner();
     h.selects = [[{ amount: "125000.50", committedDate: "2026-11-05", recordedAt: new Date("2026-10-19T05:00:00Z") }]];
     const r = await getCompanyCommitment(COMPANY);
-    expect(r).toEqual({ ok: true, storageReady: true, commitment: { amount: "125000.50", committedDate: "2026-11-05", recordedAt: new Date("2026-10-19T05:00:00Z") } });
+    // The current row, and the history behind it (its own read; none queued here).
+    expect(r).toEqual({ ok: true, storageReady: true, history: [], commitment: { amount: "125000.50", committedDate: "2026-11-05", recordedAt: new Date("2026-10-19T05:00:00Z") } });
   });
 
   it("validate the input on the server", async () => {
@@ -309,12 +310,15 @@ describe("tracker page payload", () => {
     expect(h.dbCalls).toEqual([]);
   });
 
-  it("tells a holder's popup it may fetch, still without putting figures in the page data", async () => {
+  it("tells a holder's popup it may fetch, and puts THEIR current commitment on each row (the column's value) — read with the capability", async () => {
     const { default: Page } = await import("@/app/(collection-module)/collection/tracker/page");
     owner();
     const props = findProps(await Page(), "CollectionTracker")!;
     expect(props.canSeeCommitments).toBe(true);
-    expect(JSON.stringify(props.rows)).not.toMatch(/committed|commitment/i);
+    // The latest commitment per company is read (selectDistinctOn) only because the viewer holds collection.commitments.view.
+    expect(h.dbCalls).toContain("selectDistinctOn");
+    expect((props.rows as { commitment?: unknown }[]).every((r) => r.commitment === null)).toBe(true); // none recorded in this fixture
+    expect(JSON.stringify(props.rows)).not.toMatch(/committedDate|"amount"/);
     // and the collection person on the row is the Collection Master coordinator
     expect((props.rows as { collectionPerson: string }[])[0]!.collectionPerson).toBe("Mihir");
     // the Sales Coordinator editor needs its own capability (not granted here)

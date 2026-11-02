@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import type { Route } from "next";
 import { formatInrCompactPaise } from "@/lib/format";
+import { fmtDate } from "@/lib/dates";
 import type { SaleRow } from "@/lib/queries/incentive-views";
 
 const SALE_STATUS: Record<SaleRow["status"], { label: string; bg: string; fg: string }> = {
@@ -48,7 +49,7 @@ export function SalesTable({ sales }: { sales: SaleRow[] }) {
                 <span className="inline-flex items-center justify-center rounded-md px-1.5 py-0.5 text-[10.5px] font-extrabold mr-2" style={{ background: "rgba(10,108,255,0.08)", color: "#0a47b3" }}>{s.category}</span>
                 <span className="font-bold text-ink-strong text-[13.5px] group-hover:underline">{s.customer}</span>
                 {s.invoiceNo && <span className="text-ink-subtle text-[12.5px] font-semibold"> · {s.invoiceNo}</span>}
-                <span className="text-ink-subtle text-[12px]"> · {s.bookedAt}</span>
+                <span className="text-ink-subtle text-[12px]"> · {fmtDate(s.bookedAt)}</span>
                 {!s.confirmed && <span className="ml-2 inline-flex items-center rounded-full px-2 py-0.5 text-[9.5px] font-extrabold tracking-[0.08em]" style={{ background: "rgba(245,158,11,0.16)", color: "#b45309" }}>PENDING</span>}
               </div>
               <span className="text-right pr-6 font-bold text-ink-strong text-[13.5px]" style={{ fontVariantNumeric: "tabular-nums" }}>{formatInrCompactPaise(s.valuePaise)}</span>

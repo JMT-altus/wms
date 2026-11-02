@@ -1,6 +1,8 @@
 // Pure period helpers for the salary module. No DB. The canonical `month`
 // string is "YYYY-MM" (e.g. "2026-04"); everything keys on it.
 
+import { fmtMonth } from "@/lib/dates";
+
 /** Financial-year label for a YYYY-MM month (Apr–Mar). "2026-04" → "FY 26-27". */
 export function fyForMonth(month: string): string {
   const [y, m] = month.split("-").map(Number) as [number, number];
@@ -18,10 +20,5 @@ export function daysInMonth(month: string): number {
 
 /** Human label "Apr 2026" for a YYYY-MM month. */
 export function monthLabel(month: string): string {
-  const [y, m] = month.split("-").map(Number) as [number, number];
-  return new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString("en-IN", {
-    month: "short",
-    year: "numeric",
-    timeZone: "UTC",
-  });
+  return fmtMonth(month);
 }

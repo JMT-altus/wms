@@ -42,6 +42,12 @@ export interface PartyRow extends CollectionParty {
   confirmedAmount?: { amount: string; recordedAt: Date; recordedByName: string | null } | null;
   /** The open escalation awaiting review, if any (who and when — no commitment data). */
   openEscalation?: { escalatedAt: Date; escalatedByName: string | null } | null;
+  /**
+   * The current commitment (newest recorded amount and committed date), shown in the Collection Amount
+   * Confirmation column. Present ONLY for holders of collection.commitments.view: the page never sends it to
+   * anyone else. null = none recorded; undefined = not allowed to see.
+   */
+  commitment?: { amount: string; committedDate: string; recordedAt: Date; recordedByName: string | null } | null;
 }
 
 /**

@@ -36,6 +36,7 @@ import type {
   SendDigestEmailArgs,
 } from "@/emails/notifications/types";
 import { getStatusDisplayMap } from "@/lib/queries/status-display";
+import { fmtDateWithWeekday } from "@/lib/dates";
 import { type TaskStatus } from "@/db/enums";
 import type { ChipTone } from "@/emails/notifications/_notification-layout";
 
@@ -511,19 +512,11 @@ interface RenderContext {
   statusDisplay: Awaited<ReturnType<typeof getStatusDisplayMap>>;
 }
 
-/** Friendly "Sat, Jun 14, 2026" for a YYYY-MM-DD attendance log date. Falls
+/** Friendly "Sat, 14/06/26" for a YYYY-MM-DD attendance log date. Falls
  *  back to the raw string if it isn't a parseable date. */
 function attendanceDateLabel(ymd: string | undefined): string {
   if (!ymd) return "—";
-  const d = new Date(`${ymd}T00:00:00Z`);
-  if (Number.isNaN(d.getTime())) return ymd;
-  return new Intl.DateTimeFormat("en-US", {
-    timeZone: "UTC",
-    weekday: "short",
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  }).format(d);
+  return fmtDateWithWeekday(ymd, "short") || ymd;
 }
 
 function renderNotificationTemplate(ctx: RenderContext): ReactElement | null {

@@ -2,6 +2,7 @@ import "server-only";
 import { and, asc, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { db } from "@/lib/db";
+import { fmtMonth } from "@/lib/dates";
 import {
   employees,
   selfLearningEntries,
@@ -267,11 +268,7 @@ export async function getSelfLearningMonth(
     minutesLogged,
     targetMinutes: selfLearningTargetMin,
     remaining: Math.max(0, selfLearningTargetMin - minutesLogged),
-    monthLabel: new Date(`${start}T00:00:00Z`).toLocaleDateString("en-US", {
-      month: "long",
-      year: "numeric",
-      timeZone: "UTC",
-    }),
+    monthLabel: fmtMonth(start),
   };
 }
 

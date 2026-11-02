@@ -277,7 +277,7 @@ describe("importing through the real actions fills the sections", () => {
     expect((await ledger.getOutstandingLine(v, "payable", pay.rows[0]!.id))?.party).toMatchObject({ kind: "vendor", name: "Vendor One" });
     const page = await html(pages.outstanding({ params: Promise.resolve({ view: "receivables" }), searchParams: sp() }));
     expect(page).toContain("Snapshot shown");
-    expect(page).toContain("31-10-2026");
+    expect(page).toContain("31/10/26");
     expect(page).toContain("latest");
     expect(page).toContain("Other snapshots");
     expect(page).not.toContain("Vendor One");

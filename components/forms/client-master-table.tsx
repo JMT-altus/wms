@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import type { ClientMasterRow } from "@/lib/queries/client-kyc";
 import { formatInr } from "@/lib/format";
+import { fmtDate } from "@/lib/dates";
 import { deleteMasterCustomer } from "@/app/(masters-module)/masters/actions";
 import {
   reactivateClients,
@@ -71,10 +72,7 @@ function hasGstin(r: ClientMasterRow): boolean {
 }
 
 function formatDate(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "—";
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${p(d.getDate())}-${p(d.getMonth() + 1)}-${d.getFullYear()}`;
+  return fmtDate(iso) || "—";
 }
 
 /** Distinct values across a multi-value column, for its filter chip. */

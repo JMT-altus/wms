@@ -6,6 +6,8 @@ import * as Dialog from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
 import { fireToast } from "@/lib/toast";
 import { formatInr } from "@/lib/format";
+import { fmtDate } from "@/lib/dates";
+import { DateField } from "@/components/ui/date-field";
 import { saveFollowUp } from "@/app/(collection-module)/collection/actions";
 import type { PartyRow } from "@/lib/collections/derive";
 import type { TransactionSourceInfo } from "@/lib/collections/source";
@@ -17,15 +19,6 @@ import { POPUP_HEADING, POPUP_SECTION, POPUP_VALUE } from "@/components/collecti
 const FIELD = "w-full rounded-lg border border-hairline-strong bg-white px-2.5 py-1.5 text-[13.5px] text-ink-strong";
 
 const money = (n: number | null) => (n === null ? "—" : formatInr(n));
-const day = (iso: string) => {
-  const [y, m, d] = iso.split("-").map(Number) as [number, number, number];
-  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    timeZone: "UTC",
-  });
-};
 
 /**
  * One party, in a compact panel: the figures from the accounting source
@@ -124,7 +117,7 @@ export function PartyDetailDialog({
               <dl className="grid grid-cols-2 gap-x-4 gap-y-2.5 rounded-lg border border-hairline bg-[#F8FAFD] px-3 py-2.5 text-[13.5px] sm:grid-cols-3">
                 <Fact label="Sales coordinator" value={row.coordinatorLabel ?? "Unassigned"} />
                 <Fact label="Payment terms" value={row.paymentTerms ?? "Not given"} />
-                <Fact label="Next follow-up" value={row.nextFollowupDate ? day(row.nextFollowupDate) : "Not set"} />
+                <Fact label="Next follow-up" value={row.nextFollowupDate ? fmtDate(row.nextFollowupDate) : "Not set"} />
                 <Fact label="Debit amount" value={money(row.debit)} />
                 <Fact label="Credit amount" value={money(row.credit)} />
                 <Fact label="Collection person" value={row.collectionPerson ?? "Not assigned"} />
@@ -148,11 +141,10 @@ export function PartyDetailDialog({
                 <div className="grid gap-2 sm:grid-cols-[160px_minmax(0,1fr)]">
                   <label className="block text-[12.5px] font-semibold text-ink-soft">
                     Next follow-up date
-                    <input
-                      type="date"
+                    <DateField
                       value={date}
                       min={today}
-                      onChange={(e) => setDate(e.target.value)}
+                      onChange={setDate}
                       className={`${FIELD} mt-1 tabular-nums`}
                     />
                   </label>
@@ -203,7 +195,7 @@ export function PartyDetailDialog({
                     {row.history.map((h) => (
                       <li key={h.id} className="rounded-lg border border-hairline bg-[#F8FAFD] px-2.5 py-1.5 text-[12.5px]">
                         <CommentAudit entry={h} variant="full" />
-                        {h.nextFollowupDate && <p className="mt-0.5 tabular-nums text-ink-subtle">Next follow-up: {day(h.nextFollowupDate)}</p>}
+                        {h.nextFollowupDate && <p className="mt-0.5 tabular-nums text-ink-subtle">Next follow-up: {fmtDate(h.nextFollowupDate)}</p>}
                       </li>
                     ))}
                   </ul>
@@ -247,7 +239,7 @@ function Transactions({ row, today, source }: { row: PartyRow; today: string; so
               <span className="font-semibold text-ink-strong">{t.reference ?? "No reference"}</span>
               <span className="tabular-nums">{money(t.amount)}</span>
               <span className="tabular-nums text-ink-soft">Outstanding {money(t.outstanding)}</span>
-              <span className="tabular-nums text-ink-soft">Due {t.dueDate ? day(t.dueDate) : "—"}</span>
+              <span className="tabular-nums text-ink-soft">Due {t.dueDate ? fmtDate(t.dueDate) : "—"}</span>
               {t.status && <span className="text-ink-subtle">{t.status}</span>}
               {od.level !== "none" && (
                 <span

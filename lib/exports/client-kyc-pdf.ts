@@ -1,5 +1,5 @@
 import PDFDocument from "pdfkit";
-import { format } from "date-fns";
+import { fmtDateTime } from "@/lib/dates";
 import type { ClientMasterRow } from "@/lib/queries/client-kyc";
 import { KYC_PDF_COLUMNS } from "@/lib/exports/client-kyc-rich";
 
@@ -159,7 +159,7 @@ function drawMasthead(
     .fillColor(INK_SUBTLE)
     .text(
       `JMT Drive Solutions  ·  ${s.total} clients  ·  ${s.active} active  ·  ` +
-        `${s.exporters} export  ·  Generated ${format(new Date(), "d MMM yyyy, HH:mm")} by ${s.generatedBy}`,
+        `${s.exporters} export  ·  Generated ${fmtDateTime(new Date())} by ${s.generatedBy}`,
       left,
       doc.y + 2,
     );

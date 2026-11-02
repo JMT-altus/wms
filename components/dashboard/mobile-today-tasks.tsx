@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { CriticalBadge } from "@/components/ui/critical-badge";
 import { PRIORITY_LABELS } from "@/db/enums";
+import { fmtDate } from "@/lib/dates";
 import type { TaskStatus, StatusColorToken } from "@/db/enums";
 import type { MyTodayTask } from "@/lib/queries/my-day";
 
@@ -159,7 +160,7 @@ function TodayCard({
   const tone = statusTones[task.status] ?? "slate";
   const dueLabel = task.overdue
     ? task.dueAt
-      ? `Due ${new Intl.DateTimeFormat("en-IN", { timeZone: TZ, day: "numeric", month: "short" }).format(task.dueAt)}`
+      ? `Due ${fmtDate(task.dueAt, { tz: TZ })}`
       : "Overdue"
     : "Due today";
 

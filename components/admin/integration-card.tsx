@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { Loader2, CheckCircle2, AlertCircle } from "lucide-react";
 import type { IntegrationStatus } from "@/lib/queries/integration-health";
+import { fmtDateTime } from "@/lib/dates";
 import { sendIntegrationTestAction } from "@/app/(admin)/admin/settings/actions";
 
 const TITLES: Record<IntegrationStatus["channel"], string> = {
@@ -67,17 +68,7 @@ export function IntegrationCard({ status }: { status: IntegrationStatus }) {
             {/* Deterministic format — bare toLocaleString() differs between
                 server and browser locales and hydration-crashed the whole
                 settings page (regenerating, and wiping, the General form). */}
-            {status.lastSuccessAt
-              ? new Intl.DateTimeFormat("en-IN", {
-                  timeZone: "Asia/Kolkata",
-                  day: "2-digit",
-                  month: "short",
-                  year: "numeric",
-                  hour: "2-digit",
-                  minute: "2-digit",
-                  hour12: true,
-                }).format(new Date(status.lastSuccessAt))
-              : "—"}
+            {fmtDateTime(status.lastSuccessAt) || "—"}
           </dd>
         </div>
       </dl>

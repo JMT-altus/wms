@@ -1,4 +1,5 @@
-import { format } from "date-fns";
+import { fmtDate } from "@/lib/dates";
+import { excelDate, type Cell } from "@/lib/exports/xlsx-dates";
 import { STATUS_LABELS_FALLBACK } from "@/lib/format";
 import { PRIORITY_LABELS, type ApprovalStatus } from "@/db/enums";
 import type { TaskExportRow } from "@/lib/queries/tasks";
@@ -7,7 +8,8 @@ import type { TaskExportRow } from "@/lib/queries/tasks";
  * Rich-export columns shared between XLSX and PDF task exports.
  *
  * Both routes display human-readable labels (status, priority, approval)
- * and date-fns-formatted dates rather than raw enum values + ISO strings.
+ * and dd/mm/yy dates rather than raw enum values + ISO strings; the XLSX
+ * carries the dates as real date cells (see toRichRowCells).
  * The CSV export at /tasks/export keeps its raw enum-based payload so
  * downstream automations (Zapier, scripts) aren't broken — these two
  * formats are designed for humans.
@@ -34,8 +36,6 @@ const APPROVAL_LABEL: Record<ApprovalStatus, string> = {
   transferred: "Transferred",
 };
 
-const fmtDate = (d: Date | null | undefined): string =>
-  d ? format(d, "MMM d, yyyy") : "";
 
 export interface RichRow {
   clientName: string;
@@ -81,6 +81,24 @@ export function toRichRowArray(t: TaskExportRow): string[] {
     r.dueDate,
     r.revisedTargetDate,
     r.createdAt,
+    r.tags,
+  ];
+}
+
+/** Same columns for the XLSX, with the three dates as genuine Excel dates (dd/mm/yy). */
+export function toRichRowCells(t: TaskExportRow): Cell[] {
+  const r = toRichRow(t);
+  return [
+    r.clientName,
+    r.subject,
+    r.status,
+    r.approvalStatus,
+    r.priority,
+    r.doer,
+    r.initiator,
+    excelDate(t.dueAt),
+    excelDate(t.revisedTargetDate),
+    excelDate(t.createdAt),
     r.tags,
   ];
 }

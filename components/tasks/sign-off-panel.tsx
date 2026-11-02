@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { BadgeCheck, Check, Loader2, ShieldCheck, X } from "lucide-react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { decideTaskApproval } from "@/app/(app)/tasks/approval-actions";
+import { fmtDate } from "@/lib/dates";
 import {
   canSignOff,
   SIGN_OFF_BLOCK_MESSAGES,
@@ -33,15 +34,7 @@ interface Props {
 }
 
 function dateLabel(iso: string | null): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleDateString("en-IN", {
-    timeZone: "Asia/Kolkata",
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
+  return fmtDate(iso);
 }
 
 /**

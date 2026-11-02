@@ -5,8 +5,6 @@ import { ACCENT, ACCENT_TEXT, BORDER_SOFT, CARD, NAVY, SLATE, TONE } from "./the
 
 const MONTH_FMT = new Intl.DateTimeFormat("en-IN", { month: "short", timeZone: "UTC" });
 const WEEKDAY_FMT = new Intl.DateTimeFormat("en-IN", { weekday: "long", timeZone: "UTC" });
-/** "26 January 2026" */
-const FULL_FMT = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
 const YEAR_FMT = new Intl.DateTimeFormat("en-IN", { year: "numeric", timeZone: "UTC" });
 
 /** A calendar date has no clock; noon UTC keeps every formatter on the same day. */
@@ -101,10 +99,9 @@ export function UpcomingHolidays({
                         </span>
                       )}
                     </div>
+                    {/* The day and month already sit on the left; only the weekday is new here. */}
                     <div className="text-[12.5px] mt-0.5" style={{ color: SLATE }}>
                       {WEEKDAY_FMT.format(at(h.holidayDate))}
-                      <span aria-hidden> · </span>
-                      {FULL_FMT.format(at(h.holidayDate))}
                     </div>
                   </div>
                   <span

@@ -35,6 +35,7 @@ import { SubjectSelect } from "./subject-select";
 import { Select } from "@/components/ui/select";
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
 import { DictateButton } from "@/components/ui/dictate-button";
+import { DateField } from "@/components/ui/date-field";
 
 type EmployeeOption = { id: string; name: string };
 
@@ -512,7 +513,7 @@ export function NewTaskForm({ employees, clients, subjects, projectNodes = [], d
 
   const submit = handleSubmit((values) => {
     setError(null);
-    // The <input type="date"> gives YYYY-MM-DD; convert to ISO at noon UTC
+    // The DateField gives YYYY-MM-DD; convert to ISO at noon UTC
     // so timezone wrap-arounds don't push the due into the wrong day.
     const dueIso = values.dueAt
       ? new Date(`${values.dueAt}T12:00:00.000Z`).toISOString()
@@ -921,11 +922,23 @@ export function NewTaskForm({ employees, clients, subjects, projectNodes = [], d
           label={planTaskLevel ? "Target Date" : "Due Date"}
           required={!isComplete}
         >
-          <input
-            id="nt-due"
-            type="date"
-            className="nt-input"
-            {...register("dueAt", { onChange: () => setDueTouched(true) })}
+          <Controller
+            control={control}
+            name="dueAt"
+            render={({ field }) => (
+              <DateField
+                id="nt-due"
+                className="nt-input"
+                name={field.name}
+                ref={field.ref}
+                value={field.value ?? ""}
+                onBlur={field.onBlur}
+                onChange={(v) => {
+                  field.onChange(v);
+                  setDueTouched(true);
+                }}
+              />
+            )}
           />
         </Field>
       </div>

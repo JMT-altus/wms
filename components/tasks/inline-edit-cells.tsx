@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import * as Popover from "@radix-ui/react-popover";
 import { ChevronDown, Check, Loader2, Search } from "lucide-react";
 import { format, differenceInCalendarDays } from "date-fns";
+import { fmtDate } from "@/lib/dates";
+import { DateField } from "@/components/ui/date-field";
 import { EmployeeAvatar } from "@/components/ui/employee-avatar";
 import { CriticalBadge } from "@/components/ui/critical-badge";
 import { fireToast } from "@/lib/toast";
@@ -42,10 +44,10 @@ function dueColor(dueAt: Date | null, status: TaskStatus): { color: string; labe
   return { color: "var(--color-ink-muted)", label: "", strong: false };
 }
 
-function safeDate(value: Date | null, pattern: string): string {
+function safeDate(value: Date | null): string {
   if (!value) return "—";
   const d = value instanceof Date ? value : new Date(value as unknown as string);
-  return Number.isNaN(d.getTime()) ? "—" : format(d, pattern);
+  return fmtDate(d) || "—";
 }
 function toYmd(value: Date | null): string {
   if (!value) return "";
@@ -313,7 +315,7 @@ export function InlineDueCell({
       className="inline-flex flex-col items-center leading-tight"
       title={
         revised && dueAt
-          ? `Revised target. Originally committed ${safeDate(dueAt, "d MMM yyyy")}.`
+          ? `Revised target. Originally committed ${safeDate(dueAt)}.`
           : undefined
       }
     >
@@ -321,7 +323,7 @@ export function InlineDueCell({
         className="text-body-lg tabular-nums"
         style={{ color: u.color, fontWeight: u.strong ? 700 : undefined }}
       >
-        {safeDate(shown, "MMM d")}
+        {safeDate(shown)}
         {revised && (
           <span
             aria-label="Revised target date"
@@ -383,11 +385,10 @@ export function InlineDueCell({
           <label className="block text-[12px] font-bold text-ink-subtle uppercase tracking-[0.06em] mb-1.5">
             Due date
           </label>
-          <input
+          <DateField
             autoFocus
-            type="date"
             defaultValue={toYmd(shown)}
-            onChange={(e) => void commit(e.target.value)}
+            onChange={(v) => void commit(v)}
             className="h-10 px-3 rounded-chip border border-hairline bg-surface-soft text-[14px] outline-none focus:border-altus-red"
           />
         </Popover.Content>

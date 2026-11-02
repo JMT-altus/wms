@@ -175,14 +175,14 @@ describe("preview", () => {
     expect(res.preview.mapped).toEqual([
       { sourceKey: "1", employeeId: A, name: "Alpha One", email: "alpha@example.com", firstDate: "2026-04-01", lastDate: "2026-04-01", ready: 2, duplicate: 0, mismatch: 0 },
     ]);
-    expect(res.preview.punchDates).toMatchObject({ first: "2026-04-01", distinct: 1, label: "April 2026" });
+    expect(res.preview.punchDates).toMatchObject({ first: "2026-04-01", distinct: 1, label: "Apr 2026" });
     expect(h.transactions).toBe(0);
   });
 
   it("warns when the file name month differs from the punch dates", async () => {
     h.selects = [[EMPLOYEES_AB[0]], []];
     const res = await previewAttendanceImport(payload({ "1": A, "2": "skip" }, { fileName: "Report Aug26.xlsx" }));
-    expect(res.ok && res.preview.periodWarnings[0]).toMatch(/file name says August 2026, but the dates inside the file are April 2026/);
+    expect(res.ok && res.preview.periodWarnings[0]).toMatch(/file name says Aug 2026, but the dates inside the file are Apr 2026/);
   });
 });
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { X } from "lucide-react";
+import { DateField } from "@/components/ui/date-field";
 
 // ── Pure helpers (unit-testable; no React/DOM) ──────────────────────────────
 
@@ -108,10 +109,9 @@ export function RowsEditor({
             key={r.id}
             className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_1fr_auto] gap-2 items-center"
           >
-            <input
-              type="date"
+            <DateField
               value={r.dueDate}
-              onChange={(e) => setRow(r.id, { dueDate: e.target.value })}
+              onChange={(v) => setRow(r.id, { dueDate: v })}
               className={INPUT_CLASS}
               aria-label="Installment due date"
             />

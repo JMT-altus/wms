@@ -97,7 +97,7 @@ describe("the task text", () => {
     const text = weeklyTaskDescription("2026-11-02", dueAtFor("2026-11-02"), `https://wms.example.test${TRACKER_PATH}`);
     expect(WEEKLY_TASK_TITLE).toBe("Complete Weekly Collection Tracker Bulk Upload");
     expect(text).toContain("2026-11-02 to Sunday 2026-11-08");
-    expect(text).toContain("Fri, 6 Nov 2026");
+    expect(text).toContain("Fri, 06/11/26");
     expect(text).toContain("https://wms.example.test/collection/tracker");
     expect(text).toMatch(/Preview upload/);
     expect(text).toMatch(/completed automatically when the upload is confirmed/);

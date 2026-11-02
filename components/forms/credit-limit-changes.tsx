@@ -3,6 +3,7 @@
 import * as React from "react";
 import { ArrowDownRight, ArrowUpRight, CircleSlash, Sparkles } from "lucide-react";
 import { formatInr } from "@/lib/format";
+import { fmtDateTime } from "@/lib/dates";
 import type { CreditLimitChange } from "@/lib/masters/credit-limit";
 import type { ClientMasterRow } from "@/lib/queries/client-kyc";
 import type { EmployeeOption } from "@/lib/queries/employees";
@@ -46,10 +47,7 @@ const LABEL = {
 } as const;
 
 function when(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "—";
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${p(d.getDate())}-${p(d.getMonth() + 1)}-${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`;
+  return fmtDateTime(iso) || "—";
 }
 
 const money = (v: string | null) => (v === null ? "—" : formatInr(Number(v)));

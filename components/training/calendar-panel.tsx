@@ -3,6 +3,8 @@ import * as React from "react";
 import { CalendarPlus, Clock, MapPin, Trash2, UserCheck, Users, X, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import type { SessionRow } from "@/lib/queries/training";
+import { fmtDateWithWeekday, fmtTime } from "@/lib/dates";
+import { DateField } from "@/components/ui/date-field";
 import {
   cancelSession,
   createSession,
@@ -127,14 +129,7 @@ function SessionCard({
   const [pending, startTransition] = React.useTransition();
   const presentSet = React.useMemo(() => new Set(present), [present]);
 
-  const when = session.scheduledAt.toLocaleString("en-IN", {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  const when = `${fmtDateWithWeekday(session.scheduledAt, "short")}, ${fmtTime(session.scheduledAt)}`;
 
   function run(fn: () => Promise<{ ok: boolean; error?: string }>, msg: string) {
     startTransition(async () => {
@@ -287,7 +282,10 @@ function ScheduleForm({
   onClose: () => void;
 }) {
   const [title, setTitle] = React.useState("");
-  const [scheduledAt, setScheduledAt] = React.useState("");
+  // Entered as a dd/mm/yy date and a clock time; sent as the same "yyyy-mm-ddThh:mm" as before.
+  const [scheduledDate, setScheduledDate] = React.useState("");
+  const [scheduledTime, setScheduledTime] = React.useState("");
+  const scheduledAt = scheduledDate && scheduledTime ? `${scheduledDate}T${scheduledTime}` : "";
   const [durationMin, setDurationMin] = React.useState(60);
   const [trainerId, setTrainerId] = React.useState("");
   const [location, setLocation] = React.useState("");
@@ -336,13 +334,23 @@ function ScheduleForm({
             />
           </Field>
           <Field label="When">
-            <input
-              type="datetime-local"
-              value={scheduledAt}
-              onChange={(e) => setScheduledAt(e.target.value)}
-              required
-              className="w-full rounded-chip px-3.5 h-11 bg-surface-soft border border-hairline outline-none text-[15px] text-ink-strong"
-            />
+            <div className="flex gap-2">
+              <DateField
+                value={scheduledDate}
+                onChange={setScheduledDate}
+                required
+                aria-label="Session date"
+                className="flex-1 rounded-chip px-3.5 h-11 bg-surface-soft border border-hairline outline-none text-[15px] text-ink-strong"
+              />
+              <input
+                type="time"
+                value={scheduledTime}
+                onChange={(e) => setScheduledTime(e.target.value)}
+                required
+                aria-label="Session time"
+                className="w-[7.5rem] rounded-chip px-3.5 h-11 bg-surface-soft border border-hairline outline-none text-[15px] text-ink-strong tabular-nums"
+              />
+            </div>
           </Field>
           <Field label="Duration (minutes)">
             <input

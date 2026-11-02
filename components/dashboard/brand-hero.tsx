@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { useOnline } from "@/lib/use-online";
+import { fmtDateWithWeekday, fmtTime } from "@/lib/dates";
 
 /**
  * Brand header band across the very top of every app page — a full-bleed navy
@@ -25,12 +26,8 @@ export function BrandHero({ companyName = "JMT DRIVE SOLUTIONS" }: { companyName
     return () => clearInterval(id);
   }, []);
 
-  const dateLabel = now
-    ? now.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" })
-    : "";
-  const timeLabel = now
-    ? now.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: false })
-    : "";
+  const dateLabel = now ? fmtDateWithWeekday(now, "long") : "";
+  const timeLabel = now ? fmtTime(now) : "";
 
   // Hidden on the hub (its own header) and focus mode (distraction-free).
   if (pathname === "/hub" || pathname.includes("/focus")) return null;

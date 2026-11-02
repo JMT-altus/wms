@@ -65,13 +65,12 @@ export interface CollectionParty {
   /** Records from the transaction source; empty while no source is approved. */
   transactions?: CollectionTransaction[];
   /**
-   * Empty balance: the confirmed uploads give the company no amount on either
-   * side — its most recent line is ₹0 / ₹0, or it has no line in any upload
-   * (shown as — / —). The Tracker shows it last and muted (see
-   * lib/collections/balances/visibility.ts). Never set while no upload has been
-   * confirmed or the balances could not be read. The company itself is untouched.
+   * In Collection Logs: the company has an open closure episode, recorded by a
+   * confirmed upload that gave it ₹0 Debit and ₹0 Credit (see
+   * lib/collections/balances/closures.ts). The Tracker list leaves it out until
+   * an upload gives it a balance again. The company itself is untouched.
    */
-  zeroBalance?: boolean;
+  inLogs?: boolean;
 }
 
 export interface CollectionSource {

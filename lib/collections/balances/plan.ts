@@ -13,8 +13,10 @@ import { toPaise } from "../money";
  *     unmatched companies to the Collection Master (as Unassigned) in a separate,
  *     explicitly confirmed step — see missingCompanies — and preview again.
  *   - Debit and Credit are taken exactly as the file has them. A negative value
- *     is kept and flagged, never re-signed. Non-numeric text, more than two
- *     decimals, or both cells blank → the row is rejected.
+ *     is kept and flagged, never re-signed. A cell holding only a dash ("-",
+ *     "–" or "—", the way accounting exports print a nil amount) is zero.
+ *     Non-numeric text, more than two decimals, or both cells blank → the row
+ *     is rejected.
  *   - The same company twice with identical figures: the first row counts, the
  *     repeat is flagged and ignored. With different figures: every row of that
  *     company is rejected, so no guess is made about which one is right.
@@ -136,6 +138,8 @@ export type MoneyParse = { kind: "blank" } | { kind: "ok"; paise: number } | { k
 export function parseMoney(text: string): MoneyParse {
   const s = text.trim();
   if (s === "") return { kind: "blank" };
+  // A lone dash is how Tally and other ledgers print a nil amount: zero, not text.
+  if (/^[-–—]$/.test(s)) return { kind: "ok", paise: 0 };
   const m = MONEY_TEXT.exec(s.replace(/,/g, ""));
   if (!m) return { kind: "error", reason: `"${s.slice(0, 40)}" is not a number` };
   const negative = m[1] === "-";

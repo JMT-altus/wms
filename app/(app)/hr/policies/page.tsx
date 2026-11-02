@@ -5,6 +5,7 @@ import { PolicyUploadForm } from "@/components/salary/policy-upload-form";
 import { PolicyLibrary, type PolicyCardData } from "@/components/hr/policy-library";
 import { SignaturePad } from "@/components/salary/signature-pad";
 import { requireUser } from "@/lib/auth/current";
+import { fmtDate, fmtDateTime } from "@/lib/dates";
 import {
   getCurrentPolicy,
   getMyConsent,
@@ -12,19 +13,6 @@ import {
 } from "@/lib/queries/salary-policy";
 
 export const dynamic = "force-dynamic";
-
-const fmtDate = (d: Date) =>
-  d.toLocaleString("en-IN", {
-    dateStyle: "medium",
-    timeStyle: "short",
-    timeZone: "Asia/Kolkata",
-  });
-
-/** "05-Oct-2026", in IST, for the card badges. */
-const fmtShort = (d: Date) =>
-  d
-    .toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric", timeZone: "Asia/Kolkata" })
-    .replace(/ /g, "-");
 
 /** The warm off-white the reference page sits on, and the border its cards share. */
 const GROUND = "#F7F6F3";
@@ -48,11 +36,11 @@ export default async function SalaryPolicyPage() {
         {
           id: policy.id,
           title: "Salary Policy",
-          subtitle: `Version ${policy.version} · Published ${fmtShort(policy.createdAt)}`,
+          subtitle: `Version ${policy.version} · Published ${fmtDate(policy.createdAt)}`,
           version: policy.version,
           fileName: policy.storagePath.split("/").pop() ?? "",
           downloadUrl: policy.url,
-          signed: myConsent ? { label: `Signed · ${fmtShort(myConsent.signedAt)}` } : null,
+          signed: myConsent ? { label: `Signed · ${fmtDate(myConsent.signedAt)}` } : null,
           signHref: "#policy-document",
         },
       ]
@@ -130,7 +118,7 @@ export default async function SalaryPolicyPage() {
                       You have acknowledged this policy
                     </p>
                     <p className="text-[13px] text-ink-subtle mt-0.5">
-                      Signed {fmtDate(myConsent.signedAt)} ({myConsent.signatureKind === "draw" ? "drawn" : "uploaded"} signature)
+                      Signed {fmtDateTime(myConsent.signedAt)} ({myConsent.signatureKind === "draw" ? "drawn" : "uploaded"} signature)
                     </p>
                   </div>
                 </div>
@@ -184,7 +172,7 @@ export default async function SalaryPolicyPage() {
                                 )}
                               </td>
                               <td className="px-6 py-3 text-right tabular-nums text-ink-soft">
-                                {r.signedAt ? fmtDate(r.signedAt) : "—"}
+                                {r.signedAt ? fmtDateTime(r.signedAt) : "—"}
                               </td>
                             </tr>
                           ))}

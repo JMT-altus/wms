@@ -172,7 +172,7 @@ describe("the review page shows each escalation's own reason", () => {
     expect(within(reasonOf(alpha) as HTMLElement).getByText("Reason for Escalation")).toBeTruthy();
     expect(reasonOf(alpha).textContent).toBe("Reason for EscalationCustomer disputes the invoice amount.");
     expect(reasonOf(beta).textContent).toBe("Reason for EscalationCheque bounced twice.\nNeeds a call from management.");
-    expect(within(alpha).getByText("Escalated by: Asha · 27-Oct-2026 · 01:35 PM IST")).toBeTruthy();
+    expect(within(alpha).getByText("Escalated by: Asha · 27/10/26 · 01:35 PM IST")).toBeTruthy();
   });
   it("an escalation raised before reasons existed says so honestly — nothing is invented", () => {
     render(<CommitmentsTable rows={[row("c-old", "Old Co", null)]} today="2026-10-27" showCommitments={false} />);

@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { format, parseISO } from "date-fns";
+import { fmtDate } from "@/lib/dates";
 import type { VelocityPoint } from "@/lib/types";
 
 const W = 640;
@@ -131,7 +131,7 @@ export function KpiTrendChart({ points }: { points: VelocityPoint[] }) {
           }}
         >
           <p className="text-[13px] font-bold text-ink-strong">
-            {format(parseISO(active.date), "d MMM yyyy")}
+            {fmtDate(active.date)}
           </p>
           <p className="mt-1 flex items-center gap-1.5 text-[12.5px] text-ink-soft">
             <span
@@ -157,7 +157,7 @@ export function KpiTrendChart({ points }: { points: VelocityPoint[] }) {
       {/* Axis ends + legend, on one line: the range is the two dates, and the
           legend explains the two strokes without a boxed key. */}
       <div className="mt-1.5 flex items-center justify-between gap-3 text-[11.5px] font-semibold text-ink-subtle">
-        <span className="tabular-nums">{format(parseISO(series[0]!.date), "d MMM yyyy")}</span>
+        <span className="tabular-nums">{fmtDate(series[0]!.date)}</span>
         <span className="flex items-center gap-3">
           <span className="inline-flex items-center gap-1.5">
             <span
@@ -177,7 +177,7 @@ export function KpiTrendChart({ points }: { points: VelocityPoint[] }) {
           </span>
         </span>
         <span className="tabular-nums">
-          {format(parseISO(series[series.length - 1]!.date), "d MMM yyyy")}
+          {fmtDate(series[series.length - 1]!.date)}
         </span>
       </div>
     </div>

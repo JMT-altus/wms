@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { requestDataExport } from "@/app/(app)/profile/actions";
 import { fireToast } from "@/lib/toast";
+import { fmtDateTime } from "@/lib/dates";
 import { SectionHeader } from "./avatar-and-name";
 
 export interface DataExportRow {
@@ -106,8 +107,7 @@ export function DataExportCard({ recent }: Props) {
   }
 
   function fmt(iso: string | null) {
-    if (!iso) return "—";
-    return new Date(iso).toLocaleString();
+    return fmtDateTime(iso) || "—";
   }
 
   return (

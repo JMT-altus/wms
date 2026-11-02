@@ -1,4 +1,5 @@
-import { format } from "date-fns";
+import { fmtDate } from "@/lib/dates";
+import { excelDate, type Cell } from "@/lib/exports/xlsx-dates";
 import { OUTSTANDING_CYCLE_LABELS, type OutstandingCycle } from "@/db/enums";
 import type { DerivedInstallment } from "@/lib/outstanding/types";
 import type { CollectionDisplayRow } from "@/lib/queries/outstanding";
@@ -6,7 +7,7 @@ import type { CollectionDisplayRow } from "@/lib/queries/outstanding";
 /**
  * Shared column definitions + row mappers for the Outstanding exports
  * (XLSX + PDF). Mirrors lib/exports/tasks-rich.ts — human-readable labels
- * and dd-MMM-yyyy dates rather than raw enum/ISO values.
+ * and dd/mm/yy dates rather than raw enum/ISO values (real date cells in the XLSX).
  *
  * The blank-template headers (26 Outstanding columns / 7 Collection columns)
  * match the legacy sheet import format so a downloaded template can be
@@ -33,23 +34,29 @@ export function cycleLabel(cycle: string | undefined): string {
   return OUTSTANDING_CYCLE_LABELS[cycle as OutstandingCycle] ?? cycle;
 }
 
+/** "yyyy-mm-dd" → "02/11/26"; an unreadable value is passed through so it is still visible. */
 export function fmtDue(iso: string | null | undefined): string {
   if (!iso) return "";
-  const d = new Date(`${iso}T00:00:00`);
-  return Number.isNaN(d.getTime()) ? iso : format(d, "dd-MMM-yyyy");
+  return fmtDate(iso) || iso;
 }
+
+/** How a date column is written: text for the PDF, a genuine date cell for Excel. */
+export type DateCells = "text" | "excel";
+const dateCell = (iso: string | null | undefined, mode: DateCells): Cell =>
+  mode === "excel" ? excelDate(iso) || fmtDue(iso) : fmtDue(iso);
 
 /** Positional array — preserves OUTSTANDING_ENTRY_HEADERS order. */
 export function toEntryRowArray(
   e: DerivedInstallment,
   index: number,
-): (string | number)[] {
+  dates: DateCells = "text",
+): Cell[] {
   return [
     index + 1,
     e.clientName,
     e.productName ?? "",
     cycleLabel(e.cycle),
-    fmtDue(e.dueDate),
+    dateCell(e.dueDate, dates),
     e.balance,
     e.state === "overdue" ? e.daysOverdue : "",
     e.entityName ?? "",
@@ -73,7 +80,8 @@ export const COLLECTION_EXPORT_HEADERS = [
 export function toCollectionRowArray(
   c: CollectionDisplayRow,
   index: number,
-): (string | number)[] {
+  dates: DateCells = "text",
+): Cell[] {
   return [
     index + 1,
     c.clientName,
@@ -81,7 +89,7 @@ export function toCollectionRowArray(
     c.paymentMode ?? "",
     c.responsible ?? "",
     c.comments ?? "",
-    fmtDue(c.collectedAt),
+    dateCell(c.collectedAt, dates),
   ];
 }
 

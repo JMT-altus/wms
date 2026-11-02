@@ -14,6 +14,7 @@ import { listActiveClientNames } from "@/lib/queries/clients";
 import { listActiveDepartmentNames } from "@/lib/queries/departments";
 import { parseTaskFilters } from "@/lib/task-filters";
 import { isDoneLate } from "@/lib/task-late";
+import { fmtDate, fmtWeekday } from "@/lib/dates";
 import { requireUser } from "@/lib/auth/current";
 import { getStatusDisplayMap } from "@/lib/queries/status-display";
 import { TASK_STATUSES, isDeprecatedStatus } from "@/db/enums";
@@ -103,8 +104,8 @@ export default async function AgendaPage({ searchParams }: PageProps) {
     const d = new Date(now.getTime() + i * 24 * 60 * 60 * 1000);
     const ymd = istYmd(d);
     const label =
-      i === 0 ? "Today" : i === 1 ? "Tomorrow" : d.toLocaleDateString("en-US", { weekday: "short", timeZone: TZ });
-    const sub = d.toLocaleDateString("en-US", { day: "numeric", month: "short", timeZone: TZ });
+      i === 0 ? "Today" : i === 1 ? "Tomorrow" : fmtWeekday(d, "short", TZ);
+    const sub = fmtDate(d, { tz: TZ });
     return { ymd, label, sub };
   });
 

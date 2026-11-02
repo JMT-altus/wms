@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Search } from "lucide-react";
 import { formatInr } from "@/lib/format";
 import { formatInrExact, toPaise } from "@/lib/collections/money";
+import { fmtDate } from "@/lib/dates";
 import { CommentList, type CommentEntry } from "@/components/collections/comment-list";
 import { partyOverdue, type OverdueInput } from "@/lib/collections/overdue";
 import { OverdueBadge, overdueRowStyle, useBusinessToday } from "@/components/collections/overdue-display";
@@ -51,10 +52,6 @@ export interface CommitmentView {
 const CARD = { border: "1px solid var(--color-hairline-strong)", boxShadow: "0 1px 2px rgba(15,23,42,0.05)" } as const;
 const SELECT = "h-8 rounded-lg border border-hairline-strong bg-white px-2.5 text-[13px] text-ink-strong";
 const UNASSIGNED = "__unassigned__";
-const day = (iso: string) => {
-  const [y, m, d] = iso.split("-").map(Number) as [number, number, number];
-  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric", timeZone: "UTC" });
-};
 const DASH = <span className="text-ink-subtle">—</span>;
 
 /** Pure filter, shared with the tests: search on company, person and comment text, and a person filter. */
@@ -236,7 +233,7 @@ export function CommitmentsTable({
                     {showCommitments && (
                       <>
                         <td className="px-3 py-2 text-right tabular-nums">{r.amount === null ? <span className="text-ink-subtle">Not recorded</span> : formatInrExact(r.amount)}</td>
-                        <td className="px-3 py-2 tabular-nums">{r.committedDate === null ? <span className="text-ink-subtle">Not recorded</span> : day(r.committedDate)}</td>
+                        <td className="px-3 py-2 tabular-nums">{r.committedDate === null ? <span className="text-ink-subtle">Not recorded</span> : fmtDate(r.committedDate)}</td>
                       </>
                     )}
                     <td className="px-3 py-2">{r.collectionPerson ?? <span className="text-ink-subtle">Unassigned</span>}</td>
@@ -247,7 +244,7 @@ export function CommitmentsTable({
                     <td className="px-3 py-2 text-right tabular-nums">
                       {typeof r.outstanding === "number" ? formatInr(r.outstanding) : <span className="text-ink-subtle" title="No outstanding amount from an approved transaction source">—</span>}
                     </td>
-                    <td className="px-3 py-2 tabular-nums">{dates.length ? dates.map((d) => <span key={d} className="block">{day(d)}</span>) : DASH}</td>
+                    <td className="px-3 py-2 tabular-nums">{dates.length ? dates.map((d) => <span key={d} className="block">{fmtDate(d)}</span>) : DASH}</td>
                     <td className="px-3 py-2 text-ink-soft">
                       <CommentList comments={r.comments} label={`Comments for ${r.companyName}, newest first`} />
                     </td>

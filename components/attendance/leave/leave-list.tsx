@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { fireToast } from "@/lib/toast";
+import { fmtDate } from "@/lib/dates";
 import {
   LEAVE_KIND_LABELS,
   LEAVE_STATUS_LABELS,
@@ -18,13 +19,6 @@ const STATUS_STYLE: Record<LeaveStatus, { bg: string; fg: string }> = {
   rejected:  { bg: "rgba(10,108,255,0.10)",    fg: "#0751BE" },
   cancelled: { bg: "rgba(15,23,42,0.06)",   fg: "#64748B" },
 };
-
-/** "12 Aug 2026" from YYYY-MM-DD (no timezone drift). */
-function prettyDate(iso: string): string {
-  const [y, m, d] = iso.split("-").map(Number);
-  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-  return `${String(d).padStart(2, "0")} ${months[(m ?? 1) - 1]} ${y}`;
-}
 
 export function LeaveList({
   rows,
@@ -130,7 +124,7 @@ function LeaveCard({
             </span>
           </div>
           <p className="text-[14px] text-ink-soft mt-1.5 tabular-nums">
-            {prettyDate(row.startDate)} → {prettyDate(row.endDate)}
+            {fmtDate(row.startDate)} → {fmtDate(row.endDate)}
             <span className="text-ink-subtle">
               {" "}· {row.days} day{row.days === 1 ? "" : "s"}
             </span>
@@ -147,14 +141,14 @@ function LeaveCard({
             </p>
           )}
           <p className="text-[12.5px] text-ink-subtle mt-1.5">
-            Submitted {row.createdAt.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric", timeZone: "Asia/Kolkata" })}
+            Submitted {fmtDate(row.createdAt)}
             {row.approverName ? ` · Approver: ${row.approverName}` : ""}
           </p>
           {row.status !== "pending" && row.decidedAt && (
             <p className="text-[12.5px] text-ink-subtle mt-0.5">
               {LEAVE_STATUS_LABELS[row.status]}
               {row.decidedByName ? ` by ${row.decidedByName}` : ""} on{" "}
-              {row.decidedAt.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric", timeZone: "Asia/Kolkata" })}
+              {fmtDate(row.decidedAt)}
             </p>
           )}
           {row.decisionNote && (

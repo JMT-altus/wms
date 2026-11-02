@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, CheckCircle2, Loader2, UploadCloud, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Download, Loader2, UploadCloud, XCircle } from "lucide-react";
 import type { BalanceSheet } from "@/lib/collections/balances/workbook";
 import { missingCompanies, type BalanceRowStatus, type PlannedBalanceRow } from "@/lib/collections/balances/plan";
 import {
@@ -13,6 +13,8 @@ import {
   type BalanceImportResult,
   type BalancePreview,
 } from "@/app/(collection-module)/collection/tracker/bulk-actions";
+import { fmtDate } from "@/lib/dates";
+import { BALANCE_TEMPLATE_FILENAME, BALANCE_TEMPLATE_HINT, BALANCE_TEMPLATE_PATH, SAMPLE_ROW_PREFIX, countSampleRows } from "@/lib/collections/balances/template";
 // Paise are shown: a difference of a few paise must stay visible in the preview.
 const inr2 = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const formatInr = (n: number) => inr2.format(n);
@@ -51,11 +53,7 @@ const STATUS_TONE: Record<BalanceRowStatus, { bg: string; fg: string }> = {
 };
 
 const money = (n: number | null) => (n === null ? "—" : formatInr(n));
-const day = (iso: string | null) => {
-  if (!iso) return null;
-  const [y, m, d] = iso.split("-").map(Number) as [number, number, number];
-  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric", timeZone: "UTC" });
-};
+const day = (iso: string | null) => (iso ? fmtDate(iso) : null);
 const period = (from: string | null, to: string | null) => (from && to ? `${day(from)} to ${day(to)}` : "not printed in the file");
 
 function Tile({ label, value, tone }: { label: string; value: number; tone?: string }) {
@@ -270,6 +268,15 @@ export function TrackerBulkUpload({
         <p className="mt-1 text-[12.5px] text-ink-subtle tabular-nums">
           Skipped: {result.skipped.unmatched} not in the Collection Master · {result.skipped.duplicates} repeats · {result.skipped.conflicts} conflicting duplicates · {result.skipped.rejected} invalid.
         </p>
+        {result.movement.status === "ok" ? (
+          <p className="mt-1 text-[12.5px] text-ink-subtle tabular-nums" aria-label="Moved by this upload">
+            Moved to Collection Logs (₹0 Debit and ₹0 Credit): {result.movement.toLogs} · Back to the Collection Tracker (a balance again): {result.movement.toTracker}.
+          </p>
+        ) : (
+          <p className="mt-1 text-[12.5px] font-semibold text-[#92400E]">
+            Collection Logs storage isn&apos;t set up in this database (migration 0119), so no company was moved. The balances were uploaded as usual.
+          </p>
+        )}
         <div className="mt-4 flex justify-end">
           <button type="button" className={BTN} style={PRIMARY} onClick={onClose}>
             Done
@@ -285,6 +292,12 @@ export function TrackerBulkUpload({
         <h3 id="bu-file" className="text-[14px] font-bold text-ink-strong">
           1. Choose the Tally customer summary
         </h3>
+        <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg px-4 py-3" style={{ border: "1px solid #CFE0FF", background: "#F3F8FF" }}>
+          <a href={BALANCE_TEMPLATE_PATH} download={BALANCE_TEMPLATE_FILENAME} className={BTN} style={PRIMARY}>
+            <Download size={15} aria-hidden /> Download Sample Excel Template
+          </a>
+          <p className="min-w-[220px] flex-1 text-[12.5px] leading-snug text-ink-muted">{BALANCE_TEMPLATE_HINT}</p>
+        </div>
         <label htmlFor="bu-input" className="mt-2 flex cursor-pointer items-center gap-3 rounded-lg px-4 py-3" style={{ border: "1.5px dashed #BFD0EA", background: "#F8FAFF" }}>
           <UploadCloud size={22} strokeWidth={1.8} className="shrink-0 text-[#0A6CFF]" aria-hidden />
           <span className="min-w-0">
@@ -314,6 +327,15 @@ export function TrackerBulkUpload({
               {sheet.sourceTotal ? ` · Grand Total as read in your browser: Debit ${sheet.sourceTotal.debit || "—"}, Credit ${sheet.sourceTotal.credit || "—"}` : " · no Grand Total row"}
             </p>
           </div>
+        )}
+        {sheet && countSampleRows(sheet.rows) > 0 && (
+          <p role="status" className="mt-2 flex items-start gap-2 rounded-lg px-3 py-2 text-[12.5px] font-semibold" style={{ background: "#FFFBEB", border: "1px solid #FCD9A0", color: "#92400E" }}>
+            <AlertTriangle size={15} className="mt-0.5 shrink-0" aria-hidden />
+            <span>
+              This file still has {countSampleRows(sheet.rows)} sample row{countSampleRows(sheet.rows) === 1 ? "" : "s"} from the template (names starting &ldquo;{SAMPLE_ROW_PREFIX}&rdquo;). They are examples only and match no
+              company, so they are skipped. Delete them from the file before uploading, and do not add them to the Collection Master.
+            </span>
+          </p>
         )}
         <div className="mt-3 flex flex-wrap items-center gap-3">
           <button type="button" className={BTN} style={sheet && busy === null ? PRIMARY : MUTED} disabled={!sheet || busy !== null} onClick={() => void check()}>
@@ -349,7 +371,7 @@ export function TrackerBulkUpload({
               {preview.replacement.previous ? (
                 <>
                   Replaced: {preview.replacement.previous.fileName ?? "an earlier file"} ({period(preview.replacement.previous.periodFrom, preview.replacement.previous.periodTo)}, uploaded{" "}
-                  {day(preview.replacement.previous.uploadedAt.slice(0, 10))}, {preview.replacement.previous.companies} companies). The earlier snapshot is kept for audit.
+                  {fmtDate(preview.replacement.previous.uploadedAt)}, {preview.replacement.previous.companies} companies). The earlier snapshot is kept for audit.
                 </>
               ) : (
                 "There is no earlier upload."

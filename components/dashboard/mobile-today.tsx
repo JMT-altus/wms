@@ -8,6 +8,7 @@ import {
 import type { TaskStatus, StatusColorToken } from "@/db/enums";
 import type { MyTodayTask } from "@/lib/queries/my-day";
 import { MobileTodayTasks } from "./mobile-today-tasks";
+import { fmtDateWithWeekday } from "@/lib/dates";
 
 const TZ = "Asia/Kolkata";
 
@@ -46,12 +47,7 @@ export function MobileToday({
   );
   const greeting =
     hourIst < 12 ? "Good morning" : hourIst < 17 ? "Good afternoon" : "Good evening";
-  const dateLabel = new Intl.DateTimeFormat("en-IN", {
-    timeZone: TZ,
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-  }).format(now);
+  const dateLabel = fmtDateWithWeekday(now, "long", { tz: TZ });
 
   const overdue = tasks.filter((t) => t.overdue);
   const dueToday = tasks.filter((t) => !t.overdue);

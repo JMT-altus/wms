@@ -48,19 +48,23 @@ describe("party popup", () => {
     const section = await screen.findByRole("region", { name: "Commitment" });
     expect(a.get).toHaveBeenCalledWith(COMPANY);
     await waitFor(() => expect(within(section).getByText("₹1,25,000")).toBeTruthy());
-    expect(within(section).getByText("05 Nov 2026")).toBeTruthy();
+    expect(within(section).getByText("05/11/26")).toBeTruthy();
   });
 
   it("a holder of collection.commitments.edit records a new commitment through the capability-checked action", async () => {
-    a.save.mockResolvedValue({ ok: true, commitment: { amount: "90000.00", committedDate: "2026-11-20", recordedAt: new Date() } });
+    const saved = { amount: "90000.00", committedDate: "2026-11-20", recordedAt: new Date() };
+    a.save.mockResolvedValue({ ok: true, commitment: saved });
     render(<CollectionTracker rows={rows} connected storageReady today="2026-10-19" canSeeCommitments canEditCommitments />);
     fireEvent.click(screen.getByRole("button", { name: "Alpha Traders" }));
     await screen.findByText("₹1,25,000");
     fireEvent.change(screen.getByLabelText("Committed amount for Alpha Traders"), { target: { value: "90000" } });
     fireEvent.change(screen.getByLabelText("Committed date for Alpha Traders"), { target: { value: "2026-11-20" } });
+    // After the save the popup re-reads the commitment and its history from the server.
+    a.get.mockResolvedValue({ ok: true, storageReady: true, commitment: saved, history: [{ id: "k2", ...saved, recordedByName: "V" }] });
     fireEvent.click(screen.getByRole("button", { name: "Record" }));
     await waitFor(() => expect(a.save).toHaveBeenCalledWith({ companyId: COMPANY, amount: "90000", committedDate: "2026-11-20" }));
     expect(await screen.findByText("₹90,000")).toBeTruthy();
+    expect(a.get).toHaveBeenCalledTimes(2);
   });
 
   it("shows the Collection Master coordinator as the collection person, and filters by it (incl. Unassigned)", () => {
@@ -89,7 +93,7 @@ describe("owner's commitments table", () => {
     }
     const alpha = screen.getByText("Alpha Traders").closest("tr")!;
     expect(within(alpha).getByText("₹1,25,000")).toBeTruthy();
-    expect(within(alpha).getByText("05 Nov 2026")).toBeTruthy();
+    expect(within(alpha).getByText("05/11/26")).toBeTruthy();
     expect(within(alpha).getByText("Mihir")).toBeTruthy();
     expect(within(screen.getByText("Gamma Ltd").closest("tr")!).getByText("Unassigned")).toBeTruthy();
   });

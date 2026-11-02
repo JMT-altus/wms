@@ -8,14 +8,13 @@ import type { DashboardInsights, DashboardData } from "@/lib/types";
 import { SectionHeader } from "./section-header";
 import { SectionShareActions, type SectionReportInput } from "./section-share";
 import { SearchToggle, SortButton } from "./status-table";
+import { fmtDate } from "@/lib/dates";
 
 type SortKey = "title" | "assignee" | "daysLate" | "dueAt" | "completedAt";
 
 const TITLE = "Delivered on Time";
 const MONO = { fontFamily: "var(--font-mono-display), ui-monospace, monospace" } as const;
 
-const fmtDate = (iso: string) =>
-  new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "short", timeZone: "Asia/Kolkata" });
 
 /** The gauge's colour follows the rate: warning red, then amber, then JMT green. */
 function gaugeColor(pct: number) {

@@ -3,6 +3,7 @@
 import * as React from "react";
 import { AlertTriangle, CheckCircle2, Loader2, XCircle } from "lucide-react";
 import { Select } from "@/components/ui/select";
+import { DateField } from "@/components/ui/date-field";
 import {
   CORRECTION_REASONS,
   EXPLANATION_MAX,
@@ -188,15 +189,14 @@ export function AttendanceCorrectionPanel({ people = [], today }: { people?: Cor
           </label>
           <label className="block">
             <span className="mb-1 block text-[12px] font-bold text-ink-soft">Attendance date</span>
-            <input
-              type="date"
+            <DateField
               className={FIELD}
               value={date}
               max={today}
               aria-label="Attendance date"
-              onChange={(e) => {
-                setDate(e.target.value);
-                void load(employeeId, e.target.value);
+              onChange={(v) => {
+                setDate(v);
+                void load(employeeId, v);
               }}
             />
           </label>

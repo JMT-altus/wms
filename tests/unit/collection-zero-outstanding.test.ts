@@ -19,6 +19,7 @@ const h = vi.hoisted(() => ({
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/queries/collection-master", () => ({ listAllMasterCompanies: async () => h.master }));
 vi.mock("@/lib/queries/collection-balances", () => ({ loadLatestBalances: async () => h.balances }));
+vi.mock("@/lib/queries/collection-closures", () => ({ openClosureCompanyIds: async () => ({ storageReady: true, ids: new Set<string>() }) }));
 vi.mock("@/lib/collections/transactions", async (orig) => {
   const real = await orig<typeof import("@/lib/collections/transactions")>();
   return { ...real, activeTransactionSource: () => h.source ?? real.NO_TRANSACTION_SOURCE };
@@ -94,16 +95,14 @@ describe("₹0 outstanding with a (hypothetical) approved source — what the cu
   });
 });
 
-describe("no code path writes a closure or moves a company to Collection Logs", () => {
-  it("nothing inserts into or updates the closures table; the closure queries only read", () => {
+describe("outstanding never closes a collection; only a confirmed Bulk Upload moves a company to Collection Logs", () => {
+  it("the closure queries only read; the follow-up, commitment and review code never touch closures", () => {
     const closures = read(CLOSURES_QUERIES);
     expect(closures).not.toMatch(/\.(insert|update|delete)\(/);
     for (const f of [
       "app/(collection-module)/collection/actions.ts",
       "app/(collection-module)/collection/commitments/actions.ts",
-      "app/(collection-module)/collection/tracker/bulk-actions.ts",
       "lib/queries/collection-review.ts",
-      "lib/collections/load.ts",
     ]) {
       expect(read(f).includes(CLOSURES_SYMBOL) || read(f).includes(CLOSURES_TABLE), f).toBe(false);
     }

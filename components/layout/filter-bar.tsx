@@ -7,6 +7,7 @@ import { HEADER_VIEW_SLOT_ID } from "@/lib/header-slots";
 import * as Popover from "@radix-ui/react-popover";
 import { DayPicker, type DateRange } from "react-day-picker";
 import { format, parseISO } from "date-fns";
+import { fmtDateRange } from "@/lib/dates";
 import {
   Calendar,
   Users,
@@ -274,14 +275,7 @@ export function FilterBar({
     setApproval([]);
   }
 
-  const fmt = (s: string) => {
-    try {
-      return format(parseISO(s), "MMM d");
-    } catch {
-      return s;
-    }
-  };
-  const formattedRange = `${fmt(start)} → ${fmt(end)}`;
+  const formattedRange = fmtDateRange(start, end) || `${start} – ${end}`;
 
   /** Picking specific employees in the MultiSelect implies "specific" mode;
    *  clearing them returns the chip to "default" (My tasks) for non-admins. */

@@ -47,7 +47,7 @@ describe("visibility", () => {
   it("the comment layout is unchanged: header format in the row, and the reviewer's yellow in the full history", () => {
     renderAs("me");
     const mine = screen.getByText(/Note c7/).closest("[data-comment-audit]")!;
-    expect(mine.textContent).toBe("User: Name me · Date & Time: 07-Oct-2026, 11:30 AM ISTComment: Note c7");
+    expect(mine.textContent).toBe("User: Name me · Date & Time: 07/10/26, 11:30 AM ISTComment: Note c7");
     // Only the latest comment is in the row; the reviewer's (c6) is in "See all comments".
     expect(screen.queryByText(/Note c6/)).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "See all 7 comments for Alpha Traders" }));

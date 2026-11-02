@@ -42,6 +42,8 @@ import {
   reorderProjectNodes,
 } from "@/app/(app)/projects/actions";
 import { fireToast } from "@/lib/toast";
+import { fmtDate, ymdOf } from "@/lib/dates";
+import { DateField } from "@/components/ui/date-field";
 import type { ProjectTreeNode } from "@/lib/queries/projects";
 import type { EmployeeOption } from "@/lib/queries/employees";
 import { CHILD_KIND, KIND_LABEL, type PlanKind } from "@/lib/plan/levels";
@@ -84,29 +86,9 @@ function pluralize(n: number, one: string, many: string = `${one}s`) {
   return `${n} ${n === 1 ? one : many}`;
 }
 
-/** "12 Jun 2026" — compact, locale-stable, IST. */
-function fmtDate(d: Date | string | null): string {
-  if (!d) return "";
-  const date = typeof d === "string" ? new Date(d) : d;
-  return date.toLocaleDateString("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    timeZone: "Asia/Kolkata",
-  });
-}
-
-/** Date → "YYYY-MM-DD" in IST, for prefilling a <input type=date>. */
+/** Date → "YYYY-MM-DD" in IST, for prefilling the date field. */
 function toYmd(d: Date | string | null): string {
-  if (!d) return "";
-  const date = typeof d === "string" ? new Date(d) : d;
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    timeZone: "Asia/Kolkata",
-  }).format(date);
-  return parts; // en-CA yields YYYY-MM-DD
+  return ymdOf(d);
 }
 
 interface Props {
@@ -1837,11 +1819,10 @@ function TargetDateEditor({ node }: { node: ProjectTreeNode }) {
         Target
       </FieldLabel>
       <div className="relative inline-flex items-center">
-        <input
-          type="date"
+        <DateField
           defaultValue={toYmd(node.targetDate)}
           disabled={pending}
-          onChange={(e) => save(e.target.value || null)}
+          onChange={(v) => save(v || null)}
           className="rounded-md border px-3 py-1.5 text-[14.5px] outline-none focus:border-altus-red disabled:opacity-50 tabular-nums"
           style={{
             borderColor: "var(--color-hairline-strong)",

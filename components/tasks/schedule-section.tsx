@@ -4,6 +4,7 @@ import * as React from "react";
 import { Calendar } from "lucide-react";
 import type { TaskRecurrence } from "@/db/enums";
 import { RecurrenceControl } from "./recurrence-control";
+import { DateField } from "@/components/ui/date-field";
 
 export interface ScheduleValue {
   startsAt: Date | null;
@@ -139,7 +140,7 @@ export function ScheduleSection({ value, onChange, dueDate }: Props) {
         >
           Start
         </span>
-        <input type="date" value={startParts.date} onChange={(e) => setStartDate(e.target.value)} className="nt-input" />
+        <DateField value={startParts.date} onChange={setStartDate} className="nt-input" />
         {!value.allDay && (
           <input type="time" value={startParts.time} onChange={(e) => setStartTime(e.target.value)} className="nt-input" />
         )}
@@ -153,7 +154,7 @@ export function ScheduleSection({ value, onChange, dueDate }: Props) {
         >
           End
         </span>
-        <input type="date" value={endParts.date} onChange={(e) => setEndDate(e.target.value)} className="nt-input" />
+        <DateField value={endParts.date} onChange={setEndDate} className="nt-input" />
         {!value.allDay && (
           <input type="time" value={endParts.time} onChange={(e) => setEndTime(e.target.value)} className="nt-input" />
         )}

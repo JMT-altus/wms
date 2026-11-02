@@ -1,6 +1,7 @@
 import { ATTENDANCE_CODE_LABELS, type AttendanceCode } from "@/db/enums";
 import { buildCalendar, CODE_GROUP, type StatusGroup } from "@/lib/attendance/overview";
 import type { DayRow, MonthSummary } from "@/lib/queries/attendance-status";
+import { fmtMonth } from "@/lib/dates";
 
 /**
  * What the employee's My Salary page shows about a month, worked out from the
@@ -289,10 +290,9 @@ export function buildDailyReport(days: readonly DayRow[], year: number, month: n
 /** The legend group of a day code (re-exported for the report's status pills). */
 export const groupOfCode = (code: AttendanceCode): StatusGroup => CODE_GROUP[code];
 
-/** "Oct 2026" → the month key "2026-10" is the canonical form; this is the display form used across the page. */
+/** "October 2026" → the month key "2026-10" is the canonical form; this is the heading form used across the page. */
 export function monthTitle(month: string): string {
-  const [y, m] = month.split("-").map(Number) as [number, number];
-  return new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString("en-IN", { month: "long", year: "numeric", timeZone: "UTC" });
+  return fmtMonth(month, "long");
 }
 
 /** Neighbouring months of a "YYYY-MM" key. */

@@ -70,7 +70,7 @@ describe("KYC export columns", () => {
     expect(at("TCS Applicable")).toBe("No");
     expect(at("Status")).toBe("Active");
     expect(at("Products")).toBe("Gearbox, Coupling");
-    expect(at("Onboarded")).toBe("15 Jul 2026");
+    expect(at("Onboarded")).toBe("15/07/26");
   });
 
   it("derives Trade from the export flag, case- and space-insensitively", () => {

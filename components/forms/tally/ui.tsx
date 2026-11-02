@@ -3,6 +3,8 @@ import type { ReactNode } from "react";
 import type { Route } from "next";
 import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, ArrowUpDown, Search } from "lucide-react";
 import { formatInrPaise } from "@/lib/format";
+import { fmtDate, fmtDateTime } from "@/lib/dates";
+import { DateField } from "@/components/ui/date-field";
 import { PAGE_SIZES, listHref, pageCount, rangeLabel, toggleSort, type ListParams } from "@/lib/tally/list-params";
 import type { BatchOption } from "@/lib/queries/tally-ledger";
 
@@ -24,13 +26,12 @@ const FIELD = "h-9 rounded-lg border border-hairline-strong bg-white px-2 text-[
 
 /* ── formatting ──────────────────────────────────────────────────────────── */
 
-/** yyyy-mm-dd → dd-mm-yyyy, the date form every WMS table uses. */
+/** yyyy-mm-dd → dd/mm/yy, the date form every WMS table uses. */
 export function fmtDay(ymd: string | null | undefined): string {
-  if (!ymd) return "—";
-  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(ymd);
-  return m ? `${m[3]}-${m[2]}-${m[1]}` : ymd;
+  return fmtDate(ymd) || "—";
 }
-export const fmtWhen = (d: Date | string | null | undefined) => (d ? new Date(d).toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "Asia/Kolkata" }) : "—");
+/** A stored timestamp → "dd/mm/yy, hh:mm AM" on the Indian clock. */
+export const fmtWhen = (d: Date | string | null | undefined) => fmtDateTime(d) || "—";
 export const shortId = (id: string) => id.slice(0, 8);
 
 export function Money({ paise, strong = false }: { paise: number | null | undefined; strong?: boolean }) {
@@ -155,11 +156,11 @@ export function FilterBar({ base, params, spec }: { base: string; params: ListPa
         <>
           <label className="flex flex-col gap-1 text-[11.5px] font-bold uppercase tracking-[0.06em] text-ink-subtle">
             {spec.dates.label} from
-            <input type="date" name="from" defaultValue={params.from ?? ""} className={FIELD} />
+            <DateField name="from" defaultValue={params.from ?? ""} className={FIELD} />
           </label>
           <label className="flex flex-col gap-1 text-[11.5px] font-bold uppercase tracking-[0.06em] text-ink-subtle">
             to
-            <input type="date" name="to" defaultValue={params.to ?? ""} className={FIELD} />
+            <DateField name="to" defaultValue={params.to ?? ""} className={FIELD} />
           </label>
         </>
       )}

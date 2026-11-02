@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { Route } from "next";
 import { requireAdmin } from "@/lib/auth/current";
 import { localDateString } from "@/lib/format";
+import { fmtDate } from "@/lib/dates";
 import { POLICY_DEFS, getPolicyDef, resolvePolicy } from "@/lib/attendance/policy";
 import { computeWorkingDays } from "@/lib/attendance/payroll-rules";
 import { listPolicyChanges, listPolicyHistory, loadMonthHolidays } from "@/lib/queries/attendance-policy";
@@ -80,11 +81,11 @@ export default async function AttendancePolicyPage() {
                   <p className="font-semibold text-ink-strong">{def?.label ?? h.key}</p>
                   <p className="text-ink-soft tabular-nums">
                     {def ? describeValue(def, h.previousValue) : String(h.previousValue)} →{" "}
-                    {def ? describeValue(def, h.value) : String(h.value)} · from {h.effectiveFrom}
+                    {def ? describeValue(def, h.value) : String(h.value)} · from {fmtDate(h.effectiveFrom)}
                   </p>
                   <p className="text-ink-subtle">
                     {h.reason} · {h.changedByName ?? "Unknown"} ·{" "}
-                    {h.createdAt.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric", timeZone: "Asia/Kolkata" })}
+                    {fmtDate(h.createdAt)}
                   </p>
                 </li>
               );

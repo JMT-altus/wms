@@ -288,8 +288,8 @@ describe("dates are local, never UTC", () => {
   it("formatPlanDate reads a bare YYYY-MM-DD as a LOCAL day", () => {
     // new Date("2026-06-12") is UTC midnight and renders as the 11th west of
     // Greenwich. This is the bug the hand-parse exists to avoid.
-    expect(formatPlanDate("2026-06-12")).toBe("12-Jun-2026");
-    expect(formatPlanDate(new Date(2026, 0, 5))).toBe("05-Jan-2026");
+    expect(formatPlanDate("2026-06-12")).toBe("12/06/26");
+    expect(formatPlanDate(new Date(2026, 0, 5))).toBe("05/01/26");
     expect(formatPlanDate(null)).toBe("");
     expect(formatPlanDate("")).toBe("");
   });

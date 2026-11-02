@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/auth/current";
 import { getCustomerDetail } from "@/lib/queries/incentive-customer";
 import { formatInrPaise, formatInrCompactPaise } from "@/lib/format";
+import { fmtDate } from "@/lib/dates";
 import { PageHead } from "@/components/incentive/empty-state";
 
 export const dynamic = "force-dynamic";
@@ -30,7 +31,7 @@ export default async function CustomerPage({ params }: { params: Promise<{ custo
       <PageHead
         eyebrow={`CUSTOMER${c.isNewCustomer ? " · NEW" : ""}`}
         title={c.name}
-        sub={c.owner ? `Owned by ${c.owner}${c.firstTransactionAt ? ` · first deal ${c.firstTransactionAt}` : ""}` : "Unassigned"}
+        sub={c.owner ? `Owned by ${c.owner}${c.firstTransactionAt ? ` · first deal ${fmtDate(c.firstTransactionAt)}` : ""}` : "Unassigned"}
         right={<span className="inline-flex items-center rounded-full px-3.5 py-1.5" style={{ background: `${relColor}22`, color: relColor, fontSize: 11.5, fontWeight: 800, letterSpacing: "0.1em" }}>{reliability.toUpperCase()}{c.avgDaysLate != null ? ` · ${c.avgDaysLate}D AVG` : ""}</span>}
       />
 
@@ -58,7 +59,7 @@ export default async function CustomerPage({ params }: { params: Promise<{ custo
                 <div className="min-w-0">
                   <span className="inline-flex items-center justify-center rounded-md px-1.5 py-0.5 text-[10.5px] font-extrabold mr-2" style={{ background: "rgba(10,108,255,0.08)", color: "#0a47b3" }}>{d.category}</span>
                   <span className="font-bold text-ink-strong text-[13.5px] group-hover:underline">{d.invoiceNo ?? "Invoice"}</span>
-                  <span className="text-ink-subtle text-[12px]"> · {d.bookedAt}</span>
+                  <span className="text-ink-subtle text-[12px]"> · {fmtDate(d.bookedAt)}</span>
                 </div>
                 <span className="text-right pr-6 font-bold text-ink-strong text-[13.5px]" style={{ fontVariantNumeric: "tabular-nums" }}>{formatInrCompactPaise(d.valuePaise)}</span>
                 <span className="text-right pr-6"><span className="inline-flex items-center rounded-full px-2.5 py-1 text-[10.5px] font-extrabold" style={{ background: st.bg, color: st.fg }}>{st.label}</span></span>

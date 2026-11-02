@@ -166,7 +166,7 @@ describe("ensureWeeklyTask — one task per reporting week", () => {
     expect(sent).toHaveLength(1);
     expect(sent[0]).toMatchObject({ userId: MIHIR, kind: "task_assigned", taskId: r.row.taskId });
     expect(sent[0]!.title).toContain(WEEKLY_TASK_TITLE);
-    expect(sent[0]!.title).toContain("Fri, 6 Nov 2026");
+    expect(sent[0]!.title).toContain("Fri, 06/11/26");
     expect(sent[0]!.body).toContain("https://wms.example.test/collection/tracker");
   });
 

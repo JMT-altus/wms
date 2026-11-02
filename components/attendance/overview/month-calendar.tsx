@@ -9,6 +9,7 @@ import {
   type StatusGroup,
 } from "@/lib/attendance/overview";
 import type { DayRow } from "@/lib/queries/attendance-status";
+import { fmtMonth } from "@/lib/dates";
 import {
   ACCENT,
   ACCENT_SOFT,
@@ -50,12 +51,6 @@ const GROUP_TONE: Record<StatusGroup, Tone> = {
 
 /** Only the days that are an exception to "present" carry a background tint. */
 const TINTED: ReadonlySet<StatusGroup> = new Set(["half", "absent", "leave", "open", "offwork", "compoff"]);
-
-const MONTH_NAME = new Intl.DateTimeFormat("en-IN", {
-  month: "long",
-  year: "numeric",
-  timeZone: "UTC",
-});
 
 const CODE_SHORT: Record<string, string> = {
   P: "P",
@@ -104,7 +99,7 @@ export function MonthCalendar({
   error?: boolean;
 }) {
   const weeks = error ? [] : buildCalendar(days, year, month, today);
-  const title = MONTH_NAME.format(new Date(Date.UTC(year, month - 1, 1)));
+  const title = fmtMonth(`${year}-${String(month).padStart(2, "0")}`, "long");
   const navBtn =
     "grid place-items-center rounded-lg size-9 transition-colors duration-150 hover:bg-[#F3F6FA] hover:text-[#172B4D] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0D9488] active:bg-[#E9EEF5] motion-reduce:transition-none";
   const navOff = "grid place-items-center rounded-lg size-9 opacity-35 cursor-not-allowed";

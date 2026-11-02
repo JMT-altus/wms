@@ -12,6 +12,8 @@
  * written to a column it starts drifting from the tree it describes.
  */
 
+import { fmtDate } from "@/lib/dates";
+
 /** The six levels, outermost first. Index is the depth. */
 export const PLAN_KINDS = [
   "project",
@@ -436,33 +438,22 @@ export function combineDateTime(
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
-const MONTHS = [
-  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-];
-
 /**
- * "12-Jun-2026".
+ * "12/06/26" — the WMS standard date.
  *
- * A bare `YYYY-MM-DD` is read as a LOCAL day: `new Date("2026-06-12")` is UTC
- * midnight, which renders as the 11th anywhere west of Greenwich. The plan
- * carries plain dates, so this parses them by hand rather than handing them
- * to the Date constructor.
+ * A bare `YYYY-MM-DD` is read from its digits, never through the Date
+ * constructor (`new Date("2026-06-12")` is UTC midnight, which renders as the
+ * 11th anywhere west of Greenwich). A Date is read as a LOCAL day, which is
+ * how the plan builds them.
  */
 export function formatPlanDate(value: Date | string | null | undefined): string {
   if (!value) return "";
-  let d: Date | null;
   if (typeof value === "string") {
-    d = combineDateTime(value.slice(0, 10));
-    if (!d) {
-      const parsed = new Date(value);
-      d = Number.isNaN(parsed.getTime()) ? null : parsed;
-    }
-  } else {
-    d = Number.isNaN(value.getTime()) ? null : value;
+    const bare = fmtDate(value.slice(0, 10));
+    return bare || fmtDate(value);
   }
-  if (!d) return "";
-  return `${String(d.getDate()).padStart(2, "0")}-${MONTHS[d.getMonth()]}-${d.getFullYear()}`;
+  if (Number.isNaN(value.getTime())) return "";
+  return fmtDate(toYmd(value));
 }
 
 /**

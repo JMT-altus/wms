@@ -1,5 +1,5 @@
 import "server-only";
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, isNull } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { db } from "@/lib/db";
 import {
@@ -18,8 +18,8 @@ import type { ConfirmationValue } from "@/lib/collections/review";
 /**
  * Collection Logs — READ-ONLY. Closure episodes (migration 0119) and the
  * history that already exists for a company. Nothing in this file writes: there
- * is no close, reopen, edit or delete here, and automatic closure is not built
- * (no outstanding-balance source is approved yet).
+ * is no close, reopen, edit or delete here. Episodes are written only by a
+ * confirmed Bulk Upload, through lib/queries/collection-closures-write.ts.
  *
  * Each read takes a proof of its own capability (lib/auth/capability.ts):
  * collection.logs.view for the log itself; restricted history keeps its own
@@ -86,6 +86,22 @@ const tidy = (r: Awaited<ReturnType<typeof closureQuery>>[number]): ClosureRow =
   closedByName: r.closedByName ?? null,
   reopenedByName: r.reopenedByName ?? null,
 });
+
+/**
+ * The companies currently in Collection Logs: those with an OPEN closure
+ * episode. The Tracker leaves them out of its list. Ids only (no figures, no
+ * history), read by the Tracker loader after collection.view. A missing table
+ * reads as storageReady: false, and then nobody is in Collection Logs.
+ */
+export async function openClosureCompanyIds(): Promise<{ storageReady: boolean; ids: Set<string> }> {
+  try {
+    const rows = await db.select({ companyId: collectionClosures.companyId }).from(collectionClosures).where(isNull(collectionClosures.reopenedAt));
+    return { storageReady: true, ids: new Set(rows.map((r) => r.companyId)) };
+  } catch (err) {
+    if (isMissingTable(err)) return { storageReady: false, ids: new Set() };
+    throw err;
+  }
+}
 
 /** Every closure episode, newest first (open and reopened alike). */
 export async function listClosures(_viewer: CapabilityProof<"collection.logs.view">): Promise<{ storageReady: boolean; rows: ClosureRow[] }> {

@@ -1,3 +1,5 @@
+import { fmtDateWithWeekday } from "@/lib/dates";
+
 /**
  * DCC — the scheduling engine.
  *
@@ -356,10 +358,9 @@ export function pctOf(done: number, due: number): number {
   return Math.round((done / due) * 100);
 }
 
-/** "Sat, 12 Jul" — the date stepper's label. */
+/** "Sat, 12/07/26" — the date stepper's label. */
 export function shortDateLabel(iso: string): string {
-  const d = fromIsoDate(iso);
-  return d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
+  return fmtDateWithWeekday(iso, "short");
 }
 
 /** A fill counts as "filled" if it carries any of status, value or note. */

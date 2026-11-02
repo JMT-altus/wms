@@ -204,7 +204,7 @@ describe("refresh after adding or editing a comment", () => {
     const alpha = row("Alpha Traders");
     expect(notesIn(alpha)).toEqual(["a7"]);
     expect(alpha.textContent).toContain("Alpha Traders note a7 (corrected)");
-    expect(within(alpha).getByText(/Edited 28-Oct-2026/)).toBeTruthy();
+    expect(within(alpha).getByText(/Edited 28\/10\/26/)).toBeTruthy();
   });
 
   it("an older comment is still editable and deletable by its author from the full history", () => {

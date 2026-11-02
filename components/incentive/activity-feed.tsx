@@ -1,4 +1,5 @@
 import { formatInrPaise } from "@/lib/format";
+import { fmtDateTime } from "@/lib/dates";
 
 export interface FeedRow { actor: string | null; action: string; detail: Record<string, unknown>; at: Date; }
 
@@ -20,7 +21,7 @@ export function ActivityFeed({ rows }: { rows: FeedRow[] }) {
             <span className="font-bold text-ink-strong">{a.actor ?? "Someone"}</span> <span className="text-ink-muted">{ACTION[a.action] ?? a.action}</span>
             {typeof a.detail.amountPaise === "number" && <span className="text-ink-muted"> · {formatInrPaise(a.detail.amountPaise as number)}</span>}
             {typeof a.detail.customer === "string" && <span className="text-ink-muted"> · {a.detail.customer as string}</span>}
-            <div className="text-ink-subtle text-[11.5px] mt-0.5">{a.at.toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}</div>
+            <div className="text-ink-subtle text-[11.5px] mt-0.5">{fmtDateTime(a.at)}</div>
           </div>
         </div>
       ))}

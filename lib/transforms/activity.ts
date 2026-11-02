@@ -1,4 +1,5 @@
 import { format, isToday, isYesterday } from "date-fns";
+import { fmtDate } from "@/lib/dates";
 import { TASK_EVENT_TYPES, type TaskEventType } from "@/lib/events";
 import type { TaskStatus } from "@/db/enums";
 
@@ -104,7 +105,7 @@ export type DayGroup = {
 /**
  * Splits a newest-first event list into per-day buckets, preserving the
  * incoming order within each bucket.  Bucket label is "Today" / "Yesterday"
- * / "May 12, 2026".  Pure transform — no `now` dependency beyond date-fns'
+ * / "12/05/26".  Pure transform — no `now` dependency beyond date-fns'
  * built-in today/yesterday helpers.
  */
 export function groupByDay(events: ActivityRow[]): DayGroup[] {
@@ -128,7 +129,7 @@ export function groupByDay(events: ActivityRow[]): DayGroup[] {
 function dayLabel(d: Date): string {
   if (isToday(d)) return "Today";
   if (isYesterday(d)) return "Yesterday";
-  return format(d, "MMM d, yyyy");
+  return fmtDate(d);
 }
 
 /**

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import * as Dialog from "@radix-ui/react-dialog";
 import { Select } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
+import { DateField } from "@/components/ui/date-field";
 import { fireToast } from "@/lib/toast";
 import { upsertSalaryProfile } from "@/app/(admin)/admin/salary-profiles/actions";
 import type { SalaryProfileRow } from "@/lib/queries/salary";
@@ -160,10 +161,9 @@ export function SalaryProfileDialog({
             </Field>
 
             <Field label="Probation end" hint="Leave blank if not on probation.">
-              <input
-                type="date"
+              <DateField
                 value={probationEnd}
-                onChange={(e) => setProbationEnd(e.target.value)}
+                onChange={setProbationEnd}
                 className={INPUT_CLASS}
               />
             </Field>

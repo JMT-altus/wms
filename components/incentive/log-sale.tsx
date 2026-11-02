@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { recordSale } from "@/app/(app)/incentive/actions";
+import { DateField } from "@/components/ui/date-field";
 
 const CATS: { code: "A" | "B" | "C" | "N" | "I" | "R" | "V"; label: string }[] = [
   { code: "A", label: "A · Major sale" },
@@ -68,10 +69,10 @@ export function LogSale() {
         </label>
         <label><span className={lblText}>Amount (₹)</span><input value={amount} onChange={(e) => setAmount(e.target.value)} type="number" min={0} className={field} style={fieldStyle} placeholder="e.g. 1500000" /></label>
         <label><span className={lblText}>Invoice #</span><input value={invNo} onChange={(e) => setInvNo(e.target.value)} className={field} style={fieldStyle} placeholder="INV-1234" /></label>
-        <label><span className={lblText}>Invoice date</span><input value={invDate} onChange={(e) => setInvDate(e.target.value)} type="date" className={field} style={fieldStyle} /></label>
+        <label><span className={lblText}>Invoice date</span><DateField value={invDate} onChange={setInvDate} className={field} style={fieldStyle} /></label>
         <label><span className={lblText}>Terms (days)</span><input value={terms} onChange={(e) => setTerms(e.target.value)} type="number" min={0} className={field} style={fieldStyle} /></label>
         <label><span className={lblText}>Paid now (₹)</span><input value={paid} onChange={(e) => setPaid(e.target.value)} type="number" min={0} className={field} style={fieldStyle} placeholder="0" /></label>
-        <label><span className={lblText}>Paid date</span><input value={paidDate} onChange={(e) => setPaidDate(e.target.value)} type="date" className={field} style={fieldStyle} /></label>
+        <label><span className={lblText}>Paid date</span><DateField value={paidDate} onChange={setPaidDate} className={field} style={fieldStyle} /></label>
         <label className="flex items-center gap-2 text-[13px] font-semibold text-ink-muted pt-5"><input type="checkbox" checked={isNew} onChange={(e) => setIsNew(e.target.checked)} /> New customer</label>
         <div className="col-span-3 max-md:col-span-1 flex items-center gap-3">
           <button type="submit" disabled={pending} className="rounded-xl px-5 py-2.5 text-white text-[14px] font-bold disabled:opacity-60" style={{ background: "linear-gradient(135deg, #0A6CFF, #0047B3)" }}>{pending ? "Saving…" : "Log sale"}</button>

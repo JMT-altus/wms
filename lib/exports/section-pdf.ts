@@ -1,5 +1,6 @@
 import PDFDocument from "pdfkit";
 import { format } from "date-fns";
+import { fmtDateTime } from "@/lib/dates";
 
 /** A dashboard section, flattened to what a page can hold: a heading, a line
  *  of context, and a grid. Whatever the section looks like on screen — chips,
@@ -142,7 +143,7 @@ export async function renderSectionPdf(
       .font("Helvetica")
       .fontSize(8.5)
       .text(
-        `Generated ${format(generatedAt, "d MMM yyyy, h:mm a")} by ${meta.generatedBy}`,
+        `Generated ${fmtDateTime(generatedAt)} by ${meta.generatedBy}`,
         left,
         y + 2,
       );

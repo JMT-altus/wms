@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import type { Route } from "next";
 import { ArrowLeft } from "lucide-react";
+import { fmtDate } from "@/lib/dates";
 
 interface Props {
   eyebrow: string;
@@ -19,11 +20,7 @@ interface Props {
  * directly from the login form footer or share the URL with peers.
  */
 export function LegalShell({ eyebrow, title, lastUpdated, intro, children }: Props) {
-  const formatted = new Date(lastUpdated).toLocaleDateString("en-IN", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
+  const formatted = fmtDate(lastUpdated) || lastUpdated;
 
   return (
     <div className="min-h-screen bg-[var(--color-canvas-base)]">

@@ -131,7 +131,7 @@ describe("company popup", () => {
     const section = await screen.findByRole("region", { name: "Commitment" });
     await within(section).findByText("₹1,25,000");
     const list = within(section).getByLabelText("Tracker comments for Alpha Traders, newest first");
-    expect(list.textContent).toBe("User: Asha · Date & Time: 15-Oct-2026, 11:30 AM ISTComment: Cheque promisedUser: Asha · Date & Time: 10-Oct-2026, 11:30 AM ISTComment: First call — will pay next week");
+    expect(list.textContent).toBe("User: Asha · Date & Time: 15/10/26, 11:30 AM ISTComment: Cheque promisedUser: Asha · Date & Time: 10/10/26, 11:30 AM ISTComment: First call — will pay next week");
     expect(list.textContent).not.toMatch(/Disputed invoice/); // another company's comment
     expect(h.getCommitment).toHaveBeenCalledTimes(1); // comments came with the row — no extra fetch
   });
@@ -156,13 +156,13 @@ describe("company popup", () => {
   it("the Tracker's Comments column shows the latest comment with its author, user id, date and time (IST); the rest are in See all", () => {
     render(<CollectionTracker rows={trackerRows} connected storageReady today="2026-10-19" />);
     const alpha = screen.getByRole("button", { name: "Alpha Traders" }).closest("tr")!;
-    expect(within(alpha).getByLabelText("Comments, newest first").textContent).toBe("User: Asha · Date & Time: 15-Oct-2026, 11:30 AM ISTComment: Cheque promised");
+    expect(within(alpha).getByLabelText("Comments, newest first").textContent).toBe("User: Asha · Date & Time: 15/10/26, 11:30 AM ISTComment: Cheque promised");
     fireEvent.click(within(alpha).getByRole("button", { name: "See all 2 comments for Alpha Traders" }));
     const all = screen.getByRole("list", { name: "All comments for Alpha Traders, newest first" });
     expect(all.querySelectorAll('[data-comment-audit="full"]')).toHaveLength(2);
-    expect(all.textContent).toContain("15-Oct-2026, 11:30 AM IST");
+    expect(all.textContent).toContain("15/10/26, 11:30 AM IST");
     expect(all.textContent).toContain("Cheque promised");
-    expect(all.textContent).toContain("10-Oct-2026, 11:30 AM IST");
+    expect(all.textContent).toContain("10/10/26, 11:30 AM IST");
     expect(all.textContent).toContain("First call — will pay next week");
     expect(all.textContent!.indexOf("Cheque promised")).toBeLessThan(all.textContent!.indexOf("First call"));
     expect(all.textContent).not.toMatch(/Disputed invoice/); // another company's comment
@@ -243,7 +243,7 @@ describe("owner's table", () => {
   it("shows a Comments column with the company's comments, and a dash when there are none", () => {
     render(<CommitmentsTable rows={views} today="2026-10-19" />);
     expect(screen.getByRole("columnheader", { name: "Comments" })).toBeTruthy();
-    expect(screen.getByLabelText("Comments for Alpha Traders, newest first").textContent).toBe("User: Asha · Date & Time: 15-Oct-2026, 11:30 AM ISTComment: Cheque promised");
+    expect(screen.getByLabelText("Comments for Alpha Traders, newest first").textContent).toBe("User: Asha · Date & Time: 15/10/26, 11:30 AM ISTComment: Cheque promised");
     const gamma = screen.getByText("Gamma Ltd").closest("tr")!;
     expect(gamma.lastElementChild!.textContent).toBe("—");
   });

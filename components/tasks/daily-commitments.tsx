@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import { setTaskRevisedTargetDate, setTaskStatus } from "@/app/(app)/tasks/actions";
 import { fireToast } from "@/lib/toast";
+import { fmtDate, fmtDateWithWeekday, fmtWeekday } from "@/lib/dates";
 import type { DayPlanTask, PlanTask } from "@/lib/queries/my-day";
 import { PRIORITY_LABELS, type TaskStatus } from "@/db/enums";
 
@@ -61,10 +62,7 @@ function addDays(ymd: string, n: number): string {
 }
 const daysBetween = (a: string, b: string) =>
   Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86_400_000);
-const fmtDay = (ymd: string) =>
-  new Date(`${ymd}T00:00:00Z`)
-    .toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric", timeZone: "UTC" })
-    .replace(/ /g, "-");
+const fmtDay = (ymd: string) => fmtDate(ymd);
 
 /** Calendar icon that opens the browser date picker; picking a day calls onPick(yyyy-mm-dd). */
 function ReschedulePicker({
@@ -375,12 +373,9 @@ export function DailyCommitments({
       if (diff === 0) return "Today";
       if (diff === 1) return "Tomorrow";
       if (diff === 2) return "Day After";
-      return new Date(`${ymd}T00:00:00Z`).toLocaleDateString("en-GB", { weekday: "short", timeZone: "UTC" });
+      return fmtWeekday(ymd, "short");
     };
-    const sub = (ymd: string) =>
-      new Date(`${ymd}T00:00:00Z`)
-        .toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" })
-        .toUpperCase();
+    const sub = (ymd: string) => fmtDateWithWeekday(ymd, "short").toUpperCase();
     const goDay = (ymd: string) => setParam("day", ymd === todayYmd ? null : ymd);
     const list = shown.filter(
       (t) => outcomes[t.id] !== "tomorrow" && outcomes[t.id] !== "dayafter" && !dismissed.has(t.id),
@@ -621,12 +616,9 @@ export function DailyCommitments({
       if (diff === 0) return "Today";
       if (diff === 1) return "Tomorrow";
       if (diff === 2) return "Day After";
-      return new Date(`${ymd}T00:00:00Z`).toLocaleDateString("en-GB", { weekday: "short", timeZone: "UTC" });
+      return fmtWeekday(ymd, "short");
     };
-    const sub = (ymd: string) =>
-      new Date(`${ymd}T00:00:00Z`)
-        .toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" })
-        .toUpperCase();
+    const sub = (ymd: string) => fmtDateWithWeekday(ymd, "short").toUpperCase();
 
     const planned = planFor(day);
     const before = planTasks.filter((t) => t.dueYmd < day);

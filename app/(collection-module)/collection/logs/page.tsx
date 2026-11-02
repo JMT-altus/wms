@@ -6,11 +6,11 @@ import { collectionScopeFor } from "@/lib/collections/scope-server";
 import { CollectionLogsList, LogsLoadError, LogsShell } from "@/components/collections/collection-logs";
 
 /**
- * Collection Logs — companies whose collection was closed, newest first, with
- * each closure episode's time (IST), reason, final outstanding, source and
- * whether it was later reopened. READ-ONLY: nothing here closes, reopens, edits
- * or deletes anything, and nothing writes closures yet (automatic closure waits
- * for an approved outstanding-balance source), so today the page is honestly empty.
+ * Collection Logs — companies a confirmed Bulk Upload gave ₹0 Debit and ₹0
+ * Credit, newest first, with each episode's time (IST), final figures, source
+ * and whether a later upload returned it to the Tracker. READ-ONLY: this page
+ * closes, reopens, edits or deletes nothing. The only writer is the confirmed
+ * Bulk Upload (lib/queries/collection-closures-write.ts).
  *
  * Needs collection.logs.view, checked on the server from the signed session
  * before any data is read; without it the page is a plain "not found". Loading

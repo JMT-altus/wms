@@ -1,4 +1,5 @@
 import { addDays, formatWeekLabel, istYmd, mondayOf, weekEnd } from "@/lib/weekly-goals/week";
+import { fmtDateWithWeekday } from "@/lib/dates";
 
 /**
  * The weekly Bulk Upload policy — pure date rules, no database.
@@ -86,9 +87,9 @@ export const STATE_LABEL: Record<WeeklyTaskState, string> = {
 /** "Nov 3 – Nov 9, 2026" */
 export const weekLabel = (weekStart: string): string => formatWeekLabel(weekStart);
 
-/** "Fri, 7 Nov 2026" */
+/** "Fri, 07/11/26" (IST) */
 export function formatDueDay(dueAt: Date): string {
-  return dueAt.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Kolkata" });
+  return fmtDateWithWeekday(dueAt, "short");
 }
 
 /** The task description — instructions and the link, with the week spelled out. */

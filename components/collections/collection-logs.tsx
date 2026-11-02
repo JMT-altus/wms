@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { Route } from "next";
 import type { ReactNode } from "react";
 import { commentDate, commentTime } from "@/lib/collections/comment-audit";
+import { fmtDate } from "@/lib/dates";
 import { formatInrExact } from "@/lib/collections/money";
 import { CommentAudit, type CommentEntry } from "@/components/collections/comment-list";
 import type { ClosureRow, CommitmentHistoryRow, ConfirmationHistoryRow, EscalationHistoryRow } from "@/lib/queries/collection-closures";
@@ -17,25 +18,28 @@ import type { ClosureRow, CommitmentHistoryRow, ConfirmationHistoryRow, Escalati
  */
 
 export const CLOSE_REASON_LABEL: Record<ClosureRow["closeReason"], string> = {
-  outstanding_zero: "Outstanding reached zero",
+  outstanding_zero: "Debit and Credit both zero",
 };
 export const REOPEN_REASON_LABEL: Record<NonNullable<ClosureRow["reopenReason"]>, string> = {
-  outstanding_positive: "Outstanding became positive again",
+  outstanding_positive: "Debit or Credit no longer zero",
 };
 
 export const LOGS_EMPTY_MESSAGE =
-  "No collection has been closed yet. Companies appear here once their collection is closed; automatic closure waits for an approved outstanding-balance source, so nothing is closed today.";
+  "No company is in Collection Logs yet. A company moves here automatically when a confirmed Bulk Upload gives it ₹0 Debit and ₹0 Credit, and returns to the Collection Tracker when a later upload gives it a balance.";
 
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] as const;
+/** Friendly names for the sources that record a closure; anything else is shown as its key. */
+export const CLOSE_SOURCE_LABEL: Record<string, string> = {
+  "tracker-balances-upload": "Collection Tracker Bulk Upload",
+};
+
 const NOTICE = { background: "#FFFBEB", border: "1px solid #FCD9A0", color: "#92400E" } as const;
 
-/** "27-Oct-2026 · 01:35 PM IST" for a stored timestamp. */
+/** "27/10/26 · 01:35 PM IST" for a stored timestamp. */
 export const istDateTime = (d: Date): string => `${commentDate(d)} · ${commentTime(d)}`;
 
-/** A calendar date as stored ("2026-10-27" → "27-Oct-2026") — no timezone shift. */
+/** A calendar date as stored ("2026-10-27" → "27/10/26") — no timezone shift. */
 export function calendarDate(iso: string): string {
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
-  return m ? `${m[3]}-${MONTHS[Number(m[2]) - 1]}-${m[1]}` : iso;
+  return fmtDate(iso) || iso;
 }
 
 /** Exact rupees from stored numeric text, keeping a sign the source wrote. */
@@ -68,7 +72,7 @@ function StatusBadge({ row }: { row: Pick<ClosureRow, "reopenedAt"> }) {
 function Source({ sourceKey, sourceRef }: { sourceKey: string; sourceRef: string | null }) {
   return (
     <span className="block">
-      <span className="font-mono text-[12px] text-ink-soft">{sourceKey}</span>
+      <span className={CLOSE_SOURCE_LABEL[sourceKey] ? "text-[12.5px] text-ink-soft" : "font-mono text-[12px] text-ink-soft"}>{CLOSE_SOURCE_LABEL[sourceKey] ?? sourceKey}</span>
       {sourceRef && <span className="block break-all font-mono text-[11.5px] text-ink-subtle">{sourceRef}</span>}
     </span>
   );

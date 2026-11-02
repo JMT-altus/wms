@@ -3,6 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import * as Dialog from "@radix-ui/react-dialog";
+import { DateField } from "@/components/ui/date-field";
 import { AlertTriangle, Download, FileSpreadsheet, X } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -458,12 +459,9 @@ export function BulkUploadDialog({ tree, branch, roster, onClose, onDone }: Prop
                                     </select>
                                   </Td>
                                   <Td>
-                                    <input
-                                      type="date"
+                                    <DateField
                                       value={r.targetDate ?? ""}
-                                      onChange={(e) =>
-                                        patchRow(r.key, { targetDate: e.target.value || null })
-                                      }
+                                      onChange={(v) => patchRow(r.key, { targetDate: v || null })}
                                       className="w-full rounded-md px-1 h-7 text-[12.5px] outline-none"
                                       style={{
                                         ...TABULAR,

@@ -2,7 +2,8 @@ import { describedLabel } from "@/lib/display-label";
 import * as React from "react";
 import Link from "next/link";
 import type { Route } from "next";
-import { format, formatDistanceToNow } from "date-fns";
+import { formatDistanceToNow } from "date-fns";
+import { fmtDate, fmtDateWithWeekday } from "@/lib/dates";
 import { Calendar, ChevronRight, Sparkles, ArrowRight } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
 import type { TaskDetail as TaskDetailModel } from "@/lib/queries/tasks";
@@ -299,11 +300,11 @@ function DuePill({ dueAt, overdue }: { dueAt: Date; overdue: boolean }) {
         border: `1px solid rgba(${rgb}, ${overdue ? 0.30 : 0.16})`,
         fontWeight: 700,
       }}
-      title={format(dueAt, "EEE, MMM d, yyyy")}
+      title={fmtDateWithWeekday(dueAt, "short")}
     >
       <Calendar size={14} strokeWidth={2.4} />
       {overdue ? "Overdue · " : "Due "}
-      {format(dueAt, "MMM d")}
+      {fmtDate(dueAt)}
     </span>
   );
 }

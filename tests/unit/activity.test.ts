@@ -99,9 +99,9 @@ describe("groupByDay", () => {
     expect(groups[1]?.events.map((e) => e.id)).toEqual(["r3"]);
   });
 
-  it("labels older dates as MMM d, yyyy", () => {
+  it("labels older dates as dd/mm/yy", () => {
     const old = new Date("2024-01-15T12:00:00Z");
     const groups = groupByDay([makeRow({ createdAt: old })]);
-    expect(groups[0]?.label).toMatch(/Jan 15, 2024/);
+    expect(groups[0]?.label).toBe("15/01/24");
   });
 });

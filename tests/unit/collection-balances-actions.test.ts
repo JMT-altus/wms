@@ -85,6 +85,8 @@ vi.mock("@/lib/queries/collection-balances", () => ({
 }));
 // The weekly compulsory task's completion hook (its rules have their own tests): here we only
 // check WHEN the import calls it, and with what.
+// The Tracker / Collection Logs movement has its own real-database tests (collection-logs-movement.db.test.ts).
+vi.mock("@/lib/queries/collection-closures-write", () => ({ applyClosureMovement: async () => ({ status: "ok", toLogs: 0, toTracker: 0 }) }));
 vi.mock("@/lib/collections/weekly-upload/server", () => ({
   completeWeeklyUploadAfterImport: (...x: unknown[]) => (h.weeklyComplete as unknown as (...a: unknown[]) => unknown)(...x),
 }));

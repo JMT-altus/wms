@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/auth/current";
 import { getDealDetail } from "@/lib/queries/incentive-deal";
 import { formatInrPaise } from "@/lib/format";
+import { fmtDate, fmtDateTime } from "@/lib/dates";
 import { PageHead } from "@/components/incentive/empty-state";
 import { DealActions } from "@/components/incentive/deal-actions";
 
@@ -39,7 +40,7 @@ export default async function DealPage({ params }: { params: Promise<{ invoiceId
       <PageHead
         eyebrow={`DEAL · CATEGORY ${deal.category}${deal.invoiceNo ? ` · ${deal.invoiceNo}` : ""}`}
         title={deal.customer}
-        sub={`Owned by ${deal.owner} · booked ${deal.bookedAt}`}
+        sub={`Owned by ${deal.owner} · booked ${fmtDate(deal.bookedAt)}`}
         right={<span className="inline-flex items-center rounded-full px-3.5 py-1.5" style={{ background: st.bg, color: st.fg, fontSize: 11.5, fontWeight: 800, letterSpacing: "0.14em" }}>{st.label}{deal.daysPastTerms > 0 ? ` · ${deal.daysPastTerms}D` : ""}</span>}
       />
 
@@ -87,9 +88,9 @@ export default async function DealPage({ params }: { params: Promise<{ invoiceId
         <section className="rounded-[18px] p-5" style={{ background: "#fff", border: "1px solid rgba(15,23,42,0.08)" }}>
           <h2 className="text-display-xs text-ink-strong mb-4">Timeline</h2>
           <div className="grid gap-3">
-            <Ev color="#0a6cff" date={deal.bookedAt} title="Booked" sub={`Category ${deal.category}`} />
-            <Ev color="#6366F1" date={deal.invoiceDate} title="Invoiced" sub={`${deal.termsDays}-day terms · due ${deal.dueDate}`} />
-            {deal.receipts.map((r, i) => <Ev key={i} color="#22b563" date={r.receivedAt} title="Payment received" sub={formatInrPaise(r.amountPaise)} />)}
+            <Ev color="#0a6cff" date={fmtDate(deal.bookedAt)} title="Booked" sub={`Category ${deal.category}`} />
+            <Ev color="#6366F1" date={fmtDate(deal.invoiceDate)} title="Invoiced" sub={`${deal.termsDays}-day terms · due ${fmtDate(deal.dueDate)}`} />
+            {deal.receipts.map((r, i) => <Ev key={i} color="#22b563" date={fmtDate(r.receivedAt)} title="Payment received" sub={formatInrPaise(r.amountPaise)} />)}
             {deal.outstandingPaise > 0 && <Ev color="#b45309" date="now" title={`${formatInrPaise(deal.outstandingPaise)} outstanding`} sub={deal.daysPastTerms > 0 ? `${deal.daysPastTerms} days past terms` : "within terms"} />}
           </div>
         </section>
@@ -107,7 +108,7 @@ export default async function DealPage({ params }: { params: Promise<{ invoiceId
                   <div className="text-[13px] leading-[1.5]">
                     <span className="font-bold text-ink-strong">{a.actor ?? "Someone"}</span> <span className="text-ink-muted">{ACTION_LABEL[a.action] ?? a.action}</span>
                     {typeof a.detail.amountPaise === "number" && <span className="text-ink-muted"> · {formatInrPaise(a.detail.amountPaise as number)}</span>}
-                    <div className="text-ink-subtle text-[11.5px] mt-0.5">{a.at.toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}</div>
+                    <div className="text-ink-subtle text-[11.5px] mt-0.5">{fmtDateTime(a.at)}</div>
                   </div>
                 </div>
               ))}

@@ -2,10 +2,11 @@ import * as XLSX from "xlsx";
 import { canAccessModule } from "@/lib/auth/module-access";
 import { listClientMasterRows } from "@/lib/queries/client-kyc";
 import { MAX_EXPORT_ROWS, EXPORT_TOO_LARGE } from "@/lib/exports/csv";
+import { sheetFromRows, type Cell } from "@/lib/exports/xlsx-dates";
 import {
   KYC_EXPORT_COLUMNS,
   KYC_EXPORT_HEADERS,
-  toKycRowArray,
+  toKycRowCells,
   kycExportFilename,
 } from "@/lib/exports/client-kyc-rich";
 
@@ -44,8 +45,8 @@ export async function GET(): Promise<Response> {
     );
   }
 
-  const aoa: string[][] = [[...KYC_EXPORT_HEADERS], ...rows.map(toKycRowArray)];
-  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  const aoa: Cell[][] = [[...KYC_EXPORT_HEADERS], ...rows.map(toKycRowCells)];
+  const ws = sheetFromRows(aoa);
   ws["!cols"] = KYC_EXPORT_COLUMNS.map((c) => ({ wch: c.width }));
 
   const wb = XLSX.utils.book_new();

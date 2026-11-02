@@ -11,39 +11,21 @@
  * attributed to whoever is looking at it.
  */
 
+import { fmtDate, fmtTime } from "@/lib/dates";
+
 /** The application's business timezone (the same one every Collection screen uses). */
 export const COMMENT_TIME_ZONE = "Asia/Kolkata";
 export const HISTORICAL_AUTHOR = "Historical author unavailable";
 export const UNAVAILABLE_USER_ID = "Unavailable";
 
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] as const;
-
-const partsFmt = new Intl.DateTimeFormat("en-GB", {
-  timeZone: COMMENT_TIME_ZONE,
-  year: "numeric",
-  month: "2-digit",
-  day: "2-digit",
-  hour: "2-digit",
-  minute: "2-digit",
-  hourCycle: "h23",
-});
-
-function istParts(d: Date): { year: string; month: number; day: string; hour: number; minute: string } {
-  const get = (type: Intl.DateTimeFormatPartTypes) => partsFmt.formatToParts(d).find((p) => p.type === type)?.value ?? "";
-  return { year: get("year"), month: Number(get("month")), day: get("day"), hour: Number(get("hour")), minute: get("minute") };
-}
-
-/** "27-Oct-2026" — the calendar day in IST. Month names are fixed so they never vary with the runtime's locale data. */
+/** "27/10/26" — the calendar day in IST, in the app's DD/MM/YY standard. */
 export function commentDate(d: Date): string {
-  const p = istParts(d);
-  return `${p.day}-${MONTHS[p.month - 1]}-${p.year}`;
+  return fmtDate(d, { tz: COMMENT_TIME_ZONE });
 }
 
 /** "01:35 PM IST" — the clock time in IST. */
 export function commentTime(d: Date): string {
-  const p = istParts(d);
-  const h12 = p.hour % 12 === 0 ? 12 : p.hour % 12;
-  return `${String(h12).padStart(2, "0")}:${p.minute} ${p.hour < 12 ? "AM" : "PM"} IST`;
+  return `${fmtTime(d, { tz: COMMENT_TIME_ZONE })} IST`;
 }
 
 export interface CommentAuthorSource {

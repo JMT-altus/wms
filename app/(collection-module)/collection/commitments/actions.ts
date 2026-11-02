@@ -8,7 +8,7 @@ import { collectionMasterCompanies } from "@/db/schema";
 import { getCollectionCapability, requireCollectionCapability } from "@/lib/auth/capability";
 import { rateLimitOrError } from "@/lib/rate-limit";
 import { CommitmentInput } from "@/lib/collections/validate";
-import { getCommitment, recordCommitment, type Commitment } from "@/lib/queries/collection-commitments";
+import { getCommitment, listCommitments, recordCommitment, type Commitment, type CommitmentEntry } from "@/lib/queries/collection-commitments";
 import { isMissingTable } from "@/lib/queries/collection-master";
 import { CloseEscalationInput } from "@/lib/collections/review";
 import { closeEscalationById } from "@/lib/queries/collection-review";
@@ -39,15 +39,16 @@ type Result<T> = ({ ok: true } & T) | { ok: false; error: string };
 const NOT_READY = "Commitment storage isn't set up yet (migration 0114 is pending), so nothing was saved.";
 const CompanyId = z.string().uuid("Choose a company.");
 
-/** The current commitment for one Collection Master company. */
-export async function getCompanyCommitment(rawCompanyId: unknown): Promise<Result<{ commitment: Commitment | null; storageReady: boolean }>> {
+/** The current commitment for one Collection Master company, with every earlier one (newest first) — the popup's history. */
+export async function getCompanyCommitment(rawCompanyId: unknown): Promise<Result<{ commitment: Commitment | null; history: CommitmentEntry[]; storageReady: boolean }>> {
   const viewer = await requireCollectionCapability("collection.commitments.view");
   const id = CompanyId.safeParse(rawCompanyId);
   if (!id.success) return { ok: false, error: "Choose a company." };
   if (!(await companyInScope(id.data))) return { ok: false, error: "That company isn't in the Collection Master." };
   try {
     const r = await getCommitment(viewer, id.data);
-    return { ok: true, commitment: r.commitment, storageReady: r.storageReady };
+    const h = r.storageReady ? await listCommitments(viewer, id.data) : { rows: [] };
+    return { ok: true, commitment: r.commitment, history: h.rows, storageReady: r.storageReady };
   } catch {
     console.error("[collection-commitments] read failed");
     return { ok: false, error: "Could not load the commitment. Please try again." };

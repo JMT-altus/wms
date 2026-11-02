@@ -4,6 +4,7 @@ import { canAccessModule } from "@/lib/auth/module-access";
 import { parseOutstandingFilters } from "@/lib/outstanding/filters";
 import { loadOutstandingDashboard } from "@/lib/queries/outstanding";
 import { todayISO, rollingHorizon } from "@/lib/outstanding/horizon";
+import { sheetFromRows } from "@/lib/exports/xlsx-dates";
 import {
   OUTSTANDING_ENTRY_HEADERS,
   COLLECTION_EXPORT_HEADERS,
@@ -94,11 +95,10 @@ export async function GET(request: Request): Promise<Response> {
 
   const wb = XLSX.utils.book_new();
 
-  const entrySheet = XLSX.utils.aoa_to_sheet([
+  const entrySheet = sheetFromRows([
     [...OUTSTANDING_ENTRY_HEADERS],
-    ...entries.map((e, i) => toEntryRowArray(e, i)),
-  ]);
-  entrySheet["!cols"] = [
+    ...entries.map((e, i) => toEntryRowArray(e, i, "excel")),
+  ], [
     { wch: 6 }, // S. No.
     { wch: 28 }, // Client
     { wch: 20 }, // Product
@@ -109,14 +109,13 @@ export async function GET(request: Request): Promise<Response> {
     { wch: 18 }, // Entity
     { wch: 18 }, // Responsible
     { wch: 10 }, // Status
-  ];
+  ]);
   XLSX.utils.book_append_sheet(wb, entrySheet, "Outstanding Entries");
 
-  const collSheet = XLSX.utils.aoa_to_sheet([
+  const collSheet = sheetFromRows([
     [...COLLECTION_EXPORT_HEADERS],
-    ...collectionEntries.map((c, i) => toCollectionRowArray(c, i)),
-  ]);
-  collSheet["!cols"] = [
+    ...collectionEntries.map((c, i) => toCollectionRowArray(c, i, "excel")),
+  ], [
     { wch: 6 }, // S. No.
     { wch: 28 }, // Client
     { wch: 14 }, // Amount
@@ -124,7 +123,7 @@ export async function GET(request: Request): Promise<Response> {
     { wch: 18 }, // Responsible
     { wch: 30 }, // Comments
     { wch: 14 }, // Collected At
-  ];
+  ]);
   XLSX.utils.book_append_sheet(wb, collSheet, "Collections");
 
   return xlsxResponse(wb, outstandingExportFilename("xlsx", "data"));

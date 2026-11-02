@@ -5,6 +5,8 @@
  * the file name — a file called "Aug26" has held April rows.
  */
 
+import { MONTH_SHORT, fmtDate, fmtMonth } from "@/lib/dates";
+
 export interface DateSummary {
   first: string | null;
   last: string | null;
@@ -12,19 +14,12 @@ export interface DateSummary {
   distinct: number;
   /** Distinct yyyy-mm values, sorted. */
   months: string[];
-  /** "April 2026", or "March 2026 – April 2026 (2 months)". */
+  /** "Apr 2026", or "Mar 2026 – Apr 2026 (2 months)". */
   label: string;
 }
 
-const MONTH_NAMES = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
-];
-
 export function monthLabel(ym: string): string {
-  const [y, m] = ym.split("-");
-  const name = MONTH_NAMES[Number(m) - 1];
-  return name ? `${name} ${y}` : ym;
+  return fmtMonth(ym) || ym;
 }
 
 export function summarizeDates(dates: Iterable<string | null | undefined>): DateSummary {
@@ -82,12 +77,12 @@ export function periodWarnings(opts: {
       return m === fm.month && (fm.year === null || y === fm.year);
     });
     if (!hit) {
-      const named = `${MONTH_NAMES[fm.month - 1]}${fm.year ? ` ${fm.year}` : ""}`;
+      const named = fm.year ? fmtMonth(`${fm.year}-${String(fm.month).padStart(2, "0")}`) : MONTH_SHORT[fm.month - 1] ?? "";
       out.push(`The file name says ${named}, but the dates inside the file are ${dates.label}. The dates in the file are what will be imported.`);
     }
   }
   if (declared && dates.first && dates.last && (dates.first < declared.from || dates.last > declared.to)) {
-    out.push(`Some rows fall outside the file's own reporting period (${declared.from} to ${declared.to}).`);
+    out.push(`Some rows fall outside the file's own reporting period (${fmtDate(declared.from)} to ${fmtDate(declared.to)}).`);
   }
   return out;
 }

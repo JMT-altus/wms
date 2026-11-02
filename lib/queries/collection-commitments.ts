@@ -1,7 +1,7 @@
 import "server-only";
-import { desc, eq, sql } from "drizzle-orm";
+import { desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { collectionCommitments, collectionMasterCompanies } from "@/db/schema";
+import { collectionCommitments, collectionMasterCompanies, employees } from "@/db/schema";
 import type { CapabilityProof } from "@/lib/auth/capability";
 import { isMissingTable } from "@/lib/queries/collection-master";
 
@@ -23,6 +23,12 @@ export interface Commitment {
   /** YYYY-MM-DD */
   committedDate: string;
   recordedAt: Date;
+}
+
+/** One recorded commitment with who recorded it — the popup's history and the Tracker column. */
+export interface CommitmentEntry extends Commitment {
+  id: string;
+  recordedByName: string | null;
 }
 
 export interface OwnerCommitmentRow extends Commitment {
@@ -51,6 +57,70 @@ export async function getCommitment(
     return { storageReady: true, commitment: row ? { ...row, amount: String(row.amount) } : null };
   } catch (err) {
     if (isMissingTable(err)) return { storageReady: false, commitment: null };
+    throw err;
+  }
+}
+
+/**
+ * Every commitment ever recorded for one company, newest first — the popup's
+ * history. Append-only storage means nothing here was ever overwritten: each
+ * row is one "Record" with its amount, date, time and employee.
+ */
+export async function listCommitments(
+  _viewer: CapabilityProof<"collection.commitments.view">,
+  companyId: string,
+): Promise<{ storageReady: boolean; rows: CommitmentEntry[] }> {
+  try {
+    const rows = await db
+      .select({
+        id: collectionCommitments.id,
+        amount: collectionCommitments.committedAmount,
+        committedDate: collectionCommitments.committedDate,
+        recordedAt: collectionCommitments.recordedAt,
+        recordedByName: employees.name,
+      })
+      .from(collectionCommitments)
+      .leftJoin(employees, eq(employees.id, collectionCommitments.recordedById))
+      .where(eq(collectionCommitments.companyId, companyId))
+      .orderBy(desc(collectionCommitments.recordedAt), desc(collectionCommitments.id));
+    return { storageReady: true, rows: rows.map((r) => ({ ...r, amount: String(r.amount), recordedByName: r.recordedByName ?? null })) };
+  } catch (err) {
+    if (isMissingTable(err)) return { storageReady: false, rows: [] };
+    throw err;
+  }
+}
+
+/**
+ * The current commitment of each of the given companies — what the Collection
+ * Amount Confirmation column shows. Read only with a collection.commitments.view
+ * proof, for the companies the caller's Tracker already lists.
+ */
+export async function latestCommitments(
+  _viewer: CapabilityProof<"collection.commitments.view">,
+  companyIds: string[],
+): Promise<{ storageReady: boolean; byCompany: Map<string, CommitmentEntry> }> {
+  const byCompany = new Map<string, CommitmentEntry>();
+  if (companyIds.length === 0) return { storageReady: true, byCompany };
+  try {
+    for (let i = 0; i < companyIds.length; i += 1000) {
+      const rows = await db
+        .selectDistinctOn([collectionCommitments.companyId], {
+          companyId: collectionCommitments.companyId,
+          id: collectionCommitments.id,
+          amount: collectionCommitments.committedAmount,
+          committedDate: collectionCommitments.committedDate,
+          recordedAt: collectionCommitments.recordedAt,
+          recordedByName: employees.name,
+        })
+        .from(collectionCommitments)
+        .leftJoin(employees, eq(employees.id, collectionCommitments.recordedById))
+        .where(inArray(collectionCommitments.companyId, companyIds.slice(i, i + 1000)))
+        .orderBy(collectionCommitments.companyId, desc(collectionCommitments.recordedAt), desc(collectionCommitments.id));
+      for (const r of rows) byCompany.set(r.companyId, { id: r.id, amount: String(r.amount), committedDate: r.committedDate, recordedAt: r.recordedAt, recordedByName: r.recordedByName ?? null });
+    }
+    return { storageReady: true, byCompany };
+  } catch (err) {
+    if (isMissingTable(err)) return { storageReady: false, byCompany };
     throw err;
   }
 }
