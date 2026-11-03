@@ -68,6 +68,15 @@ export function followUpDateError(dateIso: string | null | undefined, todayIso: 
  * verified session. No rule about past or future dates is applied: none has
  * been given.
  */
+/** A reviewer's comment on an open escalation. `token` is made once per dialog, so a repeated click can't save it twice. */
+export const ReviewerCommentInput = z
+  .object({
+    escalationId: z.string().uuid("Choose an escalation."),
+    note: z.string().trim().min(1, "A comment can't be empty.").max(2000, "Comments are limited to 2,000 characters."),
+    token: z.string().uuid("Reload the page and try again."),
+  })
+  .strict();
+
 export const CommitmentInput = z
   .object({
     companyId: z.string().uuid("Choose a company."),

@@ -14,7 +14,7 @@ import { BORDER, NAVY } from "@/components/attendance/overview/theme";
  * server), so the page renders this only for administrators; the server checks
  * again regardless. A disbursed month is refused by the server and said so.
  */
-export function RecalculateButton({ month, employeeId, monthLabel, disabledReason }: { month: string; employeeId: string; monthLabel: string; disabledReason?: string }) {
+export function RecalculateButton({ month, employeeId, monthLabel, disabledReason, label = "Recalculate my salary" }: { month: string; employeeId: string; monthLabel: string; disabledReason?: string; /** The admin Employee Salary Report says "Recalculate salary". */ label?: string }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const run = () =>
@@ -37,7 +37,7 @@ export function RecalculateButton({ month, employeeId, monthLabel, disabledReaso
       style={{ border: `1px solid ${BORDER}`, color: NAVY }}
     >
       {pending ? <Loader2 size={15} className="animate-spin" aria-hidden /> : <RefreshCw size={15} aria-hidden />}
-      {pending ? "Recalculating…" : "Recalculate my salary"}
+      {pending ? "Recalculating…" : label}
     </button>
   );
 }

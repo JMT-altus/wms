@@ -94,6 +94,24 @@ describe("navigation", () => {
     expect(collectionNav(false, false)).toEqual([]);
   });
 
+  it("Commitments and Escalations are two separate rail entries, each shown only with its own capability", () => {
+    const hrefs = (items: ReadonlyArray<{ href: string }>) => items.map((i) => String(i.href));
+    // navFor(commitments page key, collection.view, logs.view, escalation.review)
+    expect(hrefs(collectionNav(true, true, true, true))).toEqual(["/collection/dashboard", "/collection/tracker", "/collection/master", "/collection/commitments", "/collection/escalations", "/collection/logs"]);
+    expect(hrefs(collectionNav(true, true, false, false))).not.toContain("/collection/escalations");
+    expect(hrefs(collectionNav(false, true, false, true))).toEqual(["/collection/dashboard", "/collection/tracker", "/collection/master", "/collection/escalations"]);
+    const labels = collectionNav(true, true, true, true).map((i) => i.label);
+    expect(labels).toContain("Commitments");
+    expect(labels).toContain("Escalations");
+    expect(labels.some((l) => /&/.test(l))).toBe(false); // the combined entry is gone
+    // Without collection.view the restricted pages still list, with the heading.
+    expect(collectionNav(false, false, false, true)[0]).toMatchObject({ label: "Escalations", groupLabel: "Collection" });
+    const layout = read("app/(collection-module)/collection/layout.tsx");
+    expect(layout).toMatch(/showEscalations = caps\["collection\.escalation\.review"\]/);
+    expect(layout).toMatch(/showCommitments = caps\["collection\.commitments\.page"\]/);
+    expect(() => read("app/(collection-module)/collection/escalations/page.tsx")).not.toThrow();
+  });
+
   it("the Forms rail no longer carries any Collection section — Client KYC, the masters and the Tally ledgers only", () => {
     const hrefs = formsNav(true).map((i) => String(i.href));
     expect(hrefs.length).toBeGreaterThan(0);

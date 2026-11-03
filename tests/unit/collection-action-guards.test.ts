@@ -65,6 +65,11 @@ vi.mock("@/lib/queries/collection-review", () => ({
   latestConfirmations: touch("latestConfirmations"),
   openEscalations: touch("openEscalations"),
 }));
+vi.mock("@/lib/queries/collection-marks", () => ({
+  activeMarks: touch("activeMarks"),
+  setCompanyMark: touch("setCompanyMark"),
+  clearCompanyMark: touch("clearCompanyMark"),
+}));
 vi.mock("@/lib/queries/collection-master", () => ({
   isMissingTable: () => false,
   assignCoordinatorLabel: touch("assignCoordinatorLabel"),
@@ -87,10 +92,13 @@ vi.mock("@/components/collections/commitments-table", () => ({ CommitmentsTable:
 import * as tracker from "@/app/(collection-module)/collection/actions";
 import * as commitments from "@/app/(collection-module)/collection/commitments/actions";
 import * as master from "@/app/(collection-module)/collection/master/actions";
+import * as marks from "@/app/(collection-module)/collection/marks-actions";
 
 const CO = "11111111-1111-4111-8111-111111111111";
 const ALL = [
   "collection.view",
+  "collection.priority.set",
+  "collection.done.set",
   "collection.master.import",
   "collection.followup.write",
   "collection.confirmation.set",
@@ -118,6 +126,10 @@ const ACTIONS: [string, string, () => Promise<unknown>][] = [
   ["getCompanyCommitment", "collection.commitments.view", () => commitments.getCompanyCommitment(CO)],
   ["saveCompanyCommitment", "collection.commitments.edit", () => commitments.saveCompanyCommitment({ companyId: CO, amount: "5000", committedDate: "2026-11-05" })],
   ["closeEscalation", "collection.escalation.close", () => commitments.closeEscalation({ escalationId: CO })],
+  ["setCompanyMarks (priority)", "collection.priority.set", () => marks.setCompanyMarks({ companyIds: [CO], kind: "priority", active: true })],
+  ["setCompanyMarks (remove priority)", "collection.priority.set", () => marks.setCompanyMarks({ companyIds: [CO], kind: "priority", active: false })],
+  ["setCompanyMarks (done)", "collection.done.set", () => marks.setCompanyMarks({ companyIds: [CO], kind: "done", active: true })],
+  ["setCompanyMarks (undo done)", "collection.done.set", () => marks.setCompanyMarks({ companyIds: [CO], kind: "done", active: false })],
 ];
 
 const PAGES: [string, string[], () => Promise<unknown>, RegExp][] = [

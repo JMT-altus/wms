@@ -7,6 +7,8 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 // escalation column, with their server actions MOCKED: the UI shows only what
 // the server answered, never a default "Yes".
 const a = vi.hoisted(() => ({ confirm: vi.fn(), escalate: vi.fn(), close: vi.fn(), refresh: vi.fn() }));
+vi.mock("@/app/(collection-module)/collection/scorecard-actions", () => ({ getScorecardEscalations: vi.fn() }));
+vi.mock("@/app/(collection-module)/collection/marks-actions", () => ({ setCompanyMarks: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: a.refresh }) }));
 vi.mock("@/lib/toast", () => ({ fireToast: vi.fn() }));
 vi.mock("@/app/(collection-module)/collection/actions", () => ({
@@ -45,12 +47,11 @@ const yesNo = (over: Partial<Parameters<typeof ConfirmationControl>[0]> = {}) =>
 const select = () => screen.getByLabelText("Collection Amount Confirmation for Alpha Traders") as HTMLSelectElement;
 
 describe("Collection Amount Confirmation — the Tracker column", () => {
-  it("keeps its heading and shows the confirmed-amount text field, not the Yes/No dropdown", () => {
+  it("keeps its heading and shows neither the confirmed-amount text field nor the Yes/No dropdown", () => {
     render(<CollectionTracker rows={[party()]} connected storageReady today="2026-10-19" />);
     expect(screen.getByRole("columnheader", { name: "Collection Amount Confirmation" })).toBeTruthy();
-    const field = screen.getByLabelText("Collection Amount Confirmation for Alpha Traders") as HTMLInputElement;
-    expect(field.tagName).toBe("INPUT");
-    expect(field.placeholder).toBe("Enter confirmed amount");
+    expect(screen.queryByLabelText("Collection Amount Confirmation for Alpha Traders")).toBeNull();
+    expect(screen.queryByPlaceholderText("Enter confirmed amount")).toBeNull();
     expect(screen.queryByRole("combobox", { name: /Collection Amount Confirmation/ })).toBeNull();
   });
 });

@@ -10,6 +10,8 @@ vi.setConfig({ testTimeout: 30_000 });
 
 // The Tracker's Bulk Upload button and dialog, with the server actions MOCKED.
 const a = vi.hoisted(() => ({ preview: vi.fn(), run: vi.fn(), add: vi.fn(), refresh: vi.fn() }));
+vi.mock("@/app/(collection-module)/collection/scorecard-actions", () => ({ getScorecardEscalations: vi.fn() }));
+vi.mock("@/app/(collection-module)/collection/marks-actions", () => ({ setCompanyMarks: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: a.refresh }) }));
 vi.mock("@/lib/toast", () => ({ fireToast: vi.fn() }));
 vi.mock("@/app/(collection-module)/collection/actions", () => ({ saveFollowUp: vi.fn(), setCollectionConfirmation: vi.fn(), escalateForReview: vi.fn() }));

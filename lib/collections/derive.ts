@@ -1,4 +1,5 @@
 import type { CollectionParty } from "@/lib/collections/source";
+import { STATE_RANK, markStateOf, type CompanyMarks, type MarkState } from "@/lib/collections/marks";
 
 /**
  * Pure helpers for the Collection screens. No database, no clock, and no
@@ -23,6 +24,8 @@ export interface FollowUpEntry {
    * in code. Their comments are highlighted for every viewer.
    */
   authorIsReviewer?: boolean;
+  /** Set when this comment is a reviewer's answer to an escalation (Escalations → Add Comment): the escalation it answers. */
+  reviewerEscalationId?: string | null;
   /** The latest edit of the note, if any (from the employee_events audit trail). */
   editedAt?: Date | null;
   editedByName?: string | null;
@@ -48,6 +51,11 @@ export interface PartyRow extends CollectionParty {
    * anyone else. null = none recorded; undefined = not allowed to see.
    */
   commitment?: { amount: string; committedDate: string; recordedAt: Date; recordedByName: string | null } | null;
+  /**
+   * The company's active MARK AS PRIORITY / COLLECTION DONE marks (migration
+   * 0125), read on the server. null / absent = none: an ordinary pending row.
+   */
+  marks?: CompanyMarks | null;
 }
 
 /**
@@ -117,11 +125,14 @@ export interface TrackerFilters {
   collectionPerson: string; // "" = all, UNASSIGNED_PERSON = none assigned
   /** "" = all, "none" = no follow-up date set, "due" = date today or earlier. */
   followUp: "" | "none" | "due";
+  /** "" = all; else only companies in that group (markStateOf — done beats priority). */
+  status?: "" | MarkState;
 }
 
 export function filterRows(rows: PartyRow[], f: TrackerFilters, todayIso: string): PartyRow[] {
   const q = f.query.trim().toLowerCase();
   return rows.filter((r) => {
+    if (f.status && markStateOf(r.marks) !== f.status) return false;
     if (q) {
       const hay = [r.partyName, personOf(r) ?? "", ...r.history.map((h) => h.note ?? "")]
         .join(" ")
@@ -137,7 +148,13 @@ export function filterRows(rows: PartyRow[], f: TrackerFilters, todayIso: string
 
 export type SortKey = "party" | "debit" | "credit" | "person" | "next";
 
-/** Nulls sort last in both directions, so a blank never leads the list. */
+/**
+ * Three groups first — priority companies on top, pending in the middle,
+ * collection-done at the bottom (markStateOf: done beats priority) — and the
+ * chosen column within each group, in either direction. Ordinary sorting can
+ * therefore never push a priority row below a pending one, or lift a done row.
+ * Nulls sort last in both directions, so a blank never leads its group.
+ */
 export function sortRows(rows: PartyRow[], key: SortKey, dir: "asc" | "desc"): PartyRow[] {
   const sign = dir === "asc" ? 1 : -1;
   const val = (r: PartyRow): string | number | null =>
@@ -151,6 +168,8 @@ export function sortRows(rows: PartyRow[], key: SortKey, dir: "asc" | "desc"): P
             ? (personOf(r)?.toLowerCase() ?? null)
             : r.nextFollowupDate;
   return [...rows].sort((a, b) => {
+    const group = STATE_RANK[markStateOf(a.marks)] - STATE_RANK[markStateOf(b.marks)];
+    if (group !== 0) return group;
     const x = val(a);
     const y = val(b);
     if (x === null && y === null) return 0;

@@ -25,6 +25,7 @@ export function NetPayCard({
   stale,
   selector,
   action,
+  subjectName,
 }: {
   run: SalaryRunRow | null;
   monthTitle: string;
@@ -36,6 +37,8 @@ export function NetPayCard({
   selector: ReactNode;
   /** "Recalculate my salary", for those who may. */
   action?: ReactNode;
+  /** Set on the admin's Employee Salary Report: the wording names this employee instead of "you". */
+  subjectName?: string;
 }) {
   const role = [designation, entity].filter(Boolean).join(" · ");
   return (
@@ -78,9 +81,13 @@ export function NetPayCard({
               No salary run for {monthTitle} yet
             </p>
             <p className="mt-1 max-w-[60ch] text-[13.5px]" style={{ color: SLATE }}>
-              {hasProfile
-                ? "Your salary for this month hasn't been generated. HR generates salaries from the month's attendance; your attendance below is still live."
-                : "No salary profile (CTC) is set for your login, so a salary can't be calculated. Ask HR to set one up."}
+              {subjectName
+                ? hasProfile
+                  ? `${subjectName}'s salary for this month hasn't been generated. Salaries are generated from the month's attendance; the attendance below is still live.`
+                  : `No salary profile (CTC) is set for ${subjectName}, so a salary can't be calculated.`
+                : hasProfile
+                  ? "Your salary for this month hasn't been generated. HR generates salaries from the month's attendance; your attendance below is still live."
+                  : "No salary profile (CTC) is set for your login, so a salary can't be calculated. Ask HR to set one up."}
             </p>
             {role && (
               <p className="mt-2 text-[13.5px]" style={{ color: SLATE }}>
@@ -95,7 +102,7 @@ export function NetPayCard({
         <p role="status" className="mt-4 flex items-start gap-2 rounded-lg px-3 py-2 text-[13px] font-semibold" style={{ background: "#FFFBEB", border: "1px solid #FCD9A0", color: "#92400E" }}>
           <AlertTriangle size={15} className="mt-0.5 shrink-0" aria-hidden />
           <span>
-            Your attendance for this month changed after this salary was calculated (payable days {stale.savedPayableDays} → {stale.nowPayableDays}
+            {subjectName ? `${subjectName}'s` : "Your"} attendance for this month changed after this salary was calculated (payable days {stale.savedPayableDays} → {stale.nowPayableDays}
             {stale.savedLateMarks !== stale.nowLateMarks ? `, late marks ${stale.savedLateMarks} → ${stale.nowLateMarks}` : ""}). The figure above is the saved one; HR recalculates it
             before payment.
           </span>

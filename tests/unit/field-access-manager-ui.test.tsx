@@ -40,12 +40,14 @@ describe("permission matrix — Collections", () => {
   it("lists the Collection capabilities under their own heading, marking the six sensitive ones", () => {
     render(<FieldAccessManager matrix={matrix} />);
     expect(screen.getByRole("rowheader", { name: "Collections" })).toBeTruthy();
-    // 7 Collection capabilities (incl. the Tracker's Bulk Upload and the Commitments & Escalations page) + the 3 Leave approvals ones + Tally import, all explicit-grant-only.
-    expect(within(screen.getByRole("table")).getAllByText("Sensitive")).toHaveLength(11);
-    for (const l of ["Collections — Assign Sales Coordinator", "Collection Tracker — Company Popup — Commitment Section: View", "Collection Tracker — Company Popup — Commitment Section: Record", "Collection — Commitments & Escalations Page Access", "Collections — Review escalations", "Collections — Close escalations", "Collection Tracker — Bulk Upload"]) {
+    // 8 Collection capabilities (incl. the Tracker's Bulk Upload, the Commitments page and Collection Done) + the 3 Leave approvals ones + Tally import, all explicit-grant-only.
+    expect(within(screen.getByRole("table")).getAllByText("Sensitive")).toHaveLength(12);
+    for (const l of ["Collections — Assign Sales Coordinator", "Collection Tracker — Company Popup — Commitment Section: View", "Collection Tracker — Company Popup — Commitment Section: Record", "Collection — Commitments Page Access", "Collections — Review escalations", "Collections — Close escalations", "Collection Tracker — Bulk Upload", "Collection Tracker — Collection Done"]) {
       expect(within(row(l)).getByText("Sensitive")).toBeTruthy();
     }
     expect(within(row("Collections — Escalate for review")).queryByText("Sensitive")).toBeNull();
+    // Mark as Priority is ordinary (like Follow-ups): configurable here, but not explicit-grant-only.
+    expect(within(row("Collection Tracker — Mark as Priority")).queryByText("Sensitive")).toBeNull();
   });
 
   it("Collection Tracker — Bulk Upload: a super-admin grants and revokes it per person through the matrix; nobody else can", async () => {

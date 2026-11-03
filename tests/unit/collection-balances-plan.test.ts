@@ -33,14 +33,14 @@ describe("buildBalancePlan", () => {
     expect(p.summary).toMatchObject({ matched: 1, unmatched: 1, rejected: 0 });
   });
 
-  it("rejects non-numeric values and rows with both cells blank", () => {
+  it("rejects non-numeric values; a row with both cells blank is a ₹0 / ₹0 line, not an error", () => {
     const p = buildBalancePlan([row(1, "A", "x"), row(2, "A2"), row(3, "A3", "", "5")], master("A", "A2", "A3"), null);
     expect(byRow(p, 1).status).toBe("rejected");
     expect(byRow(p, 1).messages[0]!.text).toMatch(/Debit: .*not a number/);
-    expect(byRow(p, 2)).toMatchObject({ status: "rejected" });
-    expect(byRow(p, 2).messages[0]!.text).toMatch(/Both Debit and Credit are blank/);
+    expect(byRow(p, 2)).toMatchObject({ status: "matched", debit: 0, credit: 0, debitPaise: 0, creditPaise: 0 });
+    expect(byRow(p, 2).messages[0]).toEqual({ level: "info", text: "Debit and Credit are both blank: read as ₹0 / ₹0." });
     expect(byRow(p, 3).status).toBe("matched");
-    expect(p.summary.rejected).toBe(2);
+    expect(p.summary.rejected).toBe(1);
   });
 
   it("keeps negatives as written and flags them", () => {

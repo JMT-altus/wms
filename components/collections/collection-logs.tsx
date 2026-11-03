@@ -30,6 +30,7 @@ export const LOGS_EMPTY_MESSAGE =
 /** Friendly names for the sources that record a closure; anything else is shown as its key. */
 export const CLOSE_SOURCE_LABEL: Record<string, string> = {
   "tracker-balances-upload": "Collection Tracker Bulk Upload",
+  "tracker-balances-backfill": "Clean-up of companies with no balance",
 };
 
 const NOTICE = { background: "#FFFBEB", border: "1px solid #FCD9A0", color: "#92400E" } as const;

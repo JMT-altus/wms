@@ -8,7 +8,7 @@ import { ACCENT, BORDER_SOFT, CARD, NAVY, SLATE } from "@/components/attendance/
 import { PaymentStatusPill } from "./status-pill";
 
 /** Every salary run this employee has, newest first; each row opens that month. */
-export function SalaryHistoryCard({ history, current, basePath = "/my-salary" }: { history: SalaryRunRow[]; current: string; basePath?: string }) {
+export function SalaryHistoryCard({ history, current, basePath = "/my-salary", subjectName }: { history: SalaryRunRow[]; current: string; basePath?: string; /** The admin's Employee Salary Report: name the employee instead of "you". */ subjectName?: string }) {
   return (
     <section className="rounded-xl p-6 max-md:p-4" style={CARD} aria-labelledby="hist-title">
       <h2 id="hist-title" className="flex items-center gap-2 text-[11.5px] font-bold uppercase tracking-[0.12em]" style={{ color: SLATE }}>
@@ -16,7 +16,7 @@ export function SalaryHistoryCard({ history, current, basePath = "/my-salary" }:
       </h2>
       {history.length === 0 ? (
         <p className="mt-4 text-[14px]" style={{ color: SLATE }}>
-          No salary has been generated for you yet. Months appear here once HR generates them.
+          {subjectName ? `No salary has been generated for ${subjectName} yet.` : "No salary has been generated for you yet."} Months appear here once HR generates them.
         </p>
       ) : (
         <ul className="mt-3" aria-label="Salary history">

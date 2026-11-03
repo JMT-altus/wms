@@ -142,6 +142,14 @@ describe("the commitment in the Collection Amount Confirmation column", () => {
       ["125000.50", "2026-11-04", "Asha"],
       ["100000.00", "2026-11-04", "Asha"],
     ]);
+    // The Tracker column's record is the popup's latest history record — same amount, date, time and recorder.
+    const row = (await tracker()).rows["Alpha Traders"]!.commitment!;
+    expect({ amount: row.amount, committedDate: row.committedDate, recordedAt: row.recordedAt.getTime(), recordedByName: row.recordedByName }).toEqual({
+      amount: g.history[0]!.amount,
+      committedDate: g.history[0]!.committedDate,
+      recordedAt: g.history[0]!.recordedAt.getTime(),
+      recordedByName: g.history[0]!.recordedByName,
+    });
     // Newest first, each with its own time.
     expect(g.history[0]!.recordedAt.getTime()).toBeGreaterThanOrEqual(g.history[1]!.recordedAt.getTime());
     expect(g.history[1]!.recordedAt.getTime()).toBeGreaterThanOrEqual(g.history[2]!.recordedAt.getTime());

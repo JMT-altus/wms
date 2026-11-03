@@ -14,9 +14,15 @@ import { toPaise } from "../money";
  *     explicitly confirmed step — see missingCompanies — and preview again.
  *   - Debit and Credit are taken exactly as the file has them. A negative value
  *     is kept and flagged, never re-signed. A cell holding only a dash ("-",
- *     "–" or "—", the way accounting exports print a nil amount) is zero.
- *     Non-numeric text, more than two decimals, or both cells blank → the row
- *     is rejected.
+ *     "–" or "—", the way accounting exports print a nil amount) is zero, and
+ *     so is a blank cell: a row that names a company with Debit and Credit
+ *     both blank is stored as a ₹0.00 / ₹0.00 line (a stored line always
+ *     carries a figure — collection_balance_lines_value_check). A leading
+ *     rupee sign is allowed ("₹1,25,000.00").
+ *     Non-numeric text (including "Dr" / "Cr" suffixes or brackets, whose
+ *     sign would be a guess) or more than two decimals → the row is rejected.
+ *   - A sheet whose rows have NO amount at all in either column is refused as
+ *     a whole: that is a misread layout, not a list of nil balances.
  *   - The same company twice with identical figures: the first row counts, the
  *     repeat is flagged and ignored. With different figures: every row of that
  *     company is rejected, so no guess is made about which one is right.
@@ -78,7 +84,7 @@ export interface PaisePair {
  * missing or changed customer.
  */
 export interface TotalsVerification {
-  status: "ok" | "missing" | "unreadable" | "mismatch";
+  status: "ok" | "missing" | "unreadable" | "mismatch" | "no-amounts";
   tolerancePaise: number;
   /** source − rows, in paise; null without a readable source total. */
   differencePaise: { debit: number; credit: number } | null;
@@ -136,8 +142,9 @@ export type MoneyParse = { kind: "blank" } | { kind: "ok"; paise: number } | { k
  * the range where a JS number is an exact integer.
  */
 export function parseMoney(text: string): MoneyParse {
-  const s = text.trim();
-  if (s === "") return { kind: "blank" };
+  // A leading rupee sign is formatting, not part of the number.
+  const s = text.trim().replace(/^₹\s*/, "");
+  if (s === "") return text.trim() === "" ? { kind: "blank" } : { kind: "error", reason: `"${text.trim().slice(0, 40)}" is not a number` };
   // A lone dash is how Tally and other ledgers print a nil amount: zero, not text.
   if (/^[-–—]$/.test(s)) return { kind: "ok", paise: 0 };
   const m = MONEY_TEXT.exec(s.replace(/,/g, ""));
@@ -208,12 +215,13 @@ export function buildBalancePlan(
       status = "rejected";
       messages.push({ level: "error", text: `Credit: ${c.reason}.` });
     }
-    if (d.kind === "blank" && c.kind === "blank") {
-      status = "rejected";
-      messages.push({ level: "error", text: "Both Debit and Credit are blank." });
+    if (d.kind === "blank" && c.kind === "blank" && status !== "rejected") {
+      messages.push({ level: "info", text: "Debit and Credit are both blank: read as ₹0 / ₹0." });
     }
-    const debitPaise = d.kind === "ok" ? d.paise : null;
-    const creditPaise = c.kind === "ok" ? c.paise : null;
+    // Both cells blank: the file names the company with no amount, which is ₹0 on each side.
+    const bothBlank = d.kind === "blank" && c.kind === "blank";
+    const debitPaise = d.kind === "ok" ? d.paise : bothBlank ? 0 : null;
+    const creditPaise = c.kind === "ok" ? c.paise : bothBlank ? 0 : null;
     const negative = (debitPaise ?? 0) < 0 || (creditPaise ?? 0) < 0;
     if (negative && status !== "rejected") messages.push({ level: "warning", text: "Negative value kept exactly as in the file." });
     return {
@@ -327,6 +335,9 @@ export function buildBalancePlan(
       differencePaise: diffPaise,
       message: `The rows don't add up to the file's Grand Total (Debit off by ₹${inr(diffPaise.debit)}, Credit off by ₹${inr(diffPaise.credit)}; allowed ₹${inr(tolerancePaise)} for rounding). A row may be missing, invalid or altered. Nothing can be imported.`,
     };
+  } else if (input.length > 0 && input.every((r) => parseMoney(r.debit).kind !== "ok" && parseMoney(r.credit).kind !== "ok")) {
+    // Every row is blank (or unreadable) on both sides: the Debit / Credit columns weren't read, so nothing is trusted.
+    verification = { status: "no-amounts", tolerancePaise, differencePaise: diffPaise, message: "No row in the file has a Debit or Credit amount, so its columns may not have been read correctly. Nothing can be imported." };
   } else {
     verification = { status: "ok", tolerancePaise, differencePaise: diffPaise, message: null };
   }

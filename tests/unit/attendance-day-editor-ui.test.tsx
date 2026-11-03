@@ -57,7 +57,10 @@ afterEach(cleanup);
 
 async function openRow() {
   render(<EmployeeDetailDialog open onOpenChange={() => {}} employeeId="e1" employeeName="Alpha One" year={2026} month={9} />);
-  fireEvent.click(await screen.findByRole("button", { name: /Edit/ }));
+  // The weekly report: open the week holding 10/09/26 (Mon 7 – Sun 13), then that day's actions, then Edit.
+  fireEvent.click(await screen.findByRole("button", { name: /Week 2/ }));
+  fireEvent.click(screen.getByRole("button", { name: "Manage 10/09/26" }));
+  fireEvent.click(screen.getByRole("button", { name: /Edit/ }));
   await waitFor(() => expect(a.lookup).toHaveBeenCalledWith({ employeeId: "e1", logDate: "2026-09-10" }));
 }
 

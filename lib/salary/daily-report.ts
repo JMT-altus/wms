@@ -254,7 +254,9 @@ export function buildDailyReport(days: readonly DayRow[], year: number, month: n
         isToday: c.isToday,
         inAt: c.inAt,
         outAt: c.outAt,
-        workedMinutes: c.workedMinutes,
+        // Hours only for a day with BOTH punches (see lib/attendance/weekly-report.ts): with a check-out missing the
+        // grader measures to the end of the day, which is not time worked. Display only — pay follows dayValue.
+        workedMinutes: c.inAt && c.outAt ? c.workedMinutes : 0,
         dayValue,
         earnedPaise: run ? dayPaise(run, dayValue) : null,
         late: Boolean(d?.late),

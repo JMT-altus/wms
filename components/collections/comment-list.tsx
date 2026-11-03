@@ -2,10 +2,21 @@ import type { FollowUpEntry } from "@/lib/collections/derive";
 import { commentAuthor, commentDate, commentTime } from "@/lib/collections/comment-audit";
 
 /** A comment as the screens need it — the follow-up's note, when, and by whom (id and name). */
-export type CommentEntry = Pick<FollowUpEntry, "id" | "note" | "createdAt" | "createdById" | "createdByName" | "authorIsReviewer" | "editedAt" | "editedByName">;
+export type CommentEntry = Pick<FollowUpEntry, "id" | "note" | "createdAt" | "createdById" | "createdByName" | "authorIsReviewer" | "editedAt" | "editedByName" | "reviewerEscalationId">;
 
 /** Comments by the escalation reviewer (authorIsReviewer, resolved on the server) have a yellow background for every viewer. */
 export const REVIEWER_COMMENT_CLASS = "bg-[#FFF3B0]";
+
+/** A reviewer's answer to an escalation (Escalations → Add Comment): a violet block, labelled, with dark text. */
+export const ESCALATION_REPLY_CLASS = "rounded-md border-l-4 border-[#7C3AED] bg-[#F5F3FF] px-2";
+
+function ReviewerLabel({ name }: { name: string }) {
+  return (
+    <span className="block text-[11px] font-bold uppercase tracking-[0.04em] text-[#5B21B6]" data-reviewer-label>
+      Reviewer Comment — {name}
+    </span>
+  );
+}
 
 /** "Edited 28-Oct-2026 · 03:10 PM IST by …" — from the audit trail; nothing when never edited. */
 function EditedNote({ entry }: { entry: Pick<CommentEntry, "editedAt" | "editedByName"> }) {
@@ -33,19 +44,28 @@ export function CommentAudit({
   entry,
   variant = "compact",
 }: {
-  entry: Pick<CommentEntry, "note" | "createdAt" | "createdById" | "createdByName" | "authorIsReviewer" | "editedAt" | "editedByName">;
+  entry: Pick<CommentEntry, "note" | "createdAt" | "createdById" | "createdByName" | "authorIsReviewer" | "editedAt" | "editedByName" | "reviewerEscalationId">;
   variant?: "compact" | "full";
 }) {
-  const reviewer = entry.authorIsReviewer === true;
+  // A reply to an escalation is its own kind (violet, labelled); otherwise a reviewer's ordinary comment keeps its yellow.
+  const reply = typeof entry.reviewerEscalationId === "string";
+  const reviewer = !reply && entry.authorIsReviewer === true;
   const author = commentAuthor(entry);
   const dateTime = `${commentDate(entry.createdAt)}, ${commentTime(entry.createdAt)}`;
+  const tone = reply ? ` ${ESCALATION_REPLY_CLASS}` : reviewer ? ` rounded px-1 ${REVIEWER_COMMENT_CLASS}` : "";
   if (variant === "full") {
     return (
       <dl
-        className={`grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5 text-[13px]${reviewer ? ` rounded px-1 ${REVIEWER_COMMENT_CLASS}` : ""}`}
+        className={`grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5 text-[13px]${tone}`}
         data-comment-audit="full"
         data-reviewer-comment={reviewer ? "true" : undefined}
+        data-escalation-reply={reply ? "true" : undefined}
       >
+        {reply && (
+          <dd className="col-span-2 py-0.5">
+            <ReviewerLabel name={author.name} />
+          </dd>
+        )}
         <dt className="text-ink-subtle">User:</dt>
         <dd className={author.known ? "font-semibold text-ink-strong" : "italic text-ink-subtle"}>{author.name}</dd>
         <dt className="text-ink-subtle">Date &amp; Time:</dt>
@@ -66,10 +86,12 @@ export function CommentAudit({
   }
   return (
     <span
-      className={`block border-b border-hairline py-1 last:border-b-0${reviewer ? ` rounded px-1 ${REVIEWER_COMMENT_CLASS}` : ""}`}
+      className={`block border-b border-hairline py-1 last:border-b-0${tone}`}
       data-comment-audit="compact"
       data-reviewer-comment={reviewer ? "true" : undefined}
+      data-escalation-reply={reply ? "true" : undefined}
     >
+      {reply && <ReviewerLabel name={author.name} />}
       <span className="block text-[11.5px] leading-snug text-ink-subtle">
         <span>
           User: <span className={author.known ? "font-semibold text-ink-soft" : "italic"}>{author.name}</span>

@@ -68,7 +68,10 @@ const COMPANIES: [name: string, key: string, coordinator: string | null, terms: 
 ];
 const ALL = COMPANIES.map((c) => c[0]).sort();
 
-const cellPaise = (v: string) => (v.trim() === "" || /^[-–—]$/.test(v.trim()) ? 0 : Math.round(Number(v) * 100));
+const cellPaise = (v: string) => {
+  const s = v.trim().replace(/^₹\s*/, "").replace(/,/g, "");
+  return s === "" || /^[-–—]$/.test(s) ? 0 : Math.round(Number(s) * 100);
+};
 /** The sheet's raw cells, as the browser sends them, with a Grand Total that matches the rows. */
 const grid = (rows: [string, string, string][], total?: [string, string]) => {
   const sum = (i: 1 | 2) => (rows.reduce((t, r) => t + cellPaise(r[i]), 0) / 100).toFixed(2);
@@ -167,30 +170,33 @@ describe("before any upload", () => {
 });
 
 describe("the first confirmed upload moves", () => {
-  it("1–3, 7, 8, 10: 0/0 → Logs; a non-zero Debit or Credit stays; dashes are zero; one blank beside a zero is zero; both blank moves nothing; unmatched rows touch no one", async () => {
+  it("dash/dash, 0/0, blank/blank and any mix → Logs; Credit 50000 with Debit '-' and Debit 25000 with Credit '-' stay; formatted amounts read; unmatched rows touch no one", async () => {
     const r = await upload([
-      ["Alpha Traders", "0.00", "0.00"], // 1: Tracker → Logs
-      ["Beta Works", "500.00", "0.00"], // 2: Debit 500 → stays
-      ["Gamma Pvt Ltd", "0.00", "500.00"], // 3: Credit 500 → stays
-      ["Delta Co", "-", "-"], // 7: dashes are zero → Logs
-      ["Eta Inc", "0", ""], // 8: a blank beside a zero is zero on that side (the importer's own rule) → Logs
-      ["Theta Ltd", "", ""], // 8: both blank: the row is rejected, so nothing is known and nothing moves
+      // Columns: [name, Debit, Credit].
+      ["Alpha Traders", "0.00", "0.00"], // Credit 0, Debit 0 → Logs
+      ["Beta Works", "₹25,000.00", "-"], // Debit 25000 (formatted), Credit "-" → stays
+      ["Gamma Pvt Ltd", "-", "50000"], // Credit 50000, Debit "-" → stays
+      ["Delta Co", "-", "-"], // Credit "-", Debit "-" → Logs
+      ["Eta Inc", "0", ""], // a blank beside a zero → Logs
+      ["Theta Ltd", "", ""], // both blank: the file names the company with no amount → ₹0 / ₹0 → Logs
       ["Kappa Unknown Co", "0.00", "0.00"], // 10: not in the Collection Master: skipped, moves nobody
       ["Iota LLP", "-10.00", "0.00"], // a negative is a balance, not zero → stays
       // Zeta Ltd and Alpha Traders Pvt Ltd are not in the file at all
     ]);
-    expect(r.movement).toEqual({ status: "ok", toLogs: 3, toTracker: 0 });
-    expect(r.skipped).toMatchObject({ unmatched: 1, rejected: 1 });
-    expect(await openClosures()).toEqual(["Alpha Traders", "Delta Co", "Eta Inc"]);
+    expect(r.movement).toEqual({ status: "ok", toLogs: 4, toTracker: 0 });
+    expect(r.skipped).toMatchObject({ unmatched: 1, rejected: 0 });
+    expect(await openClosures()).toEqual(["Alpha Traders", "Delta Co", "Eta Inc", "Theta Ltd"]);
     const t = await tracker();
-    expect(t.names).toEqual(inTracker(["Alpha Traders", "Delta Co", "Eta Inc"]));
+    expect(t.names).toEqual(inTracker(["Alpha Traders", "Delta Co", "Eta Inc", "Theta Ltd"]));
+    expect(t.rows["Beta Works"]).toMatchObject({ debit: 25000, credit: 0 });
+    expect(t.rows["Gamma Pvt Ltd"]).toMatchObject({ debit: 0, credit: 50000 });
     expect(t.names).toContain("Alpha Traders Pvt Ltd"); // 11: a similar name is a different company and was not moved
     expect(t.names).toContain("Zeta Ltd"); // absent from the file: not moved
-    expect(t.names).toContain("Theta Ltd"); // unknown balance: not moved
-    expect(t.logsNote).toEqual({ count: 3, href: "/collection/logs" });
+    expect(t.logsNote).toEqual({ count: 4, href: "/collection/logs" });
     // 15: Collection Logs lists them, with the upload's figures, source and as-of date.
     const l = await logs();
-    expect(l.open).toEqual(["Alpha Traders", "Delta Co", "Eta Inc"]);
+    expect(l.open).toEqual(["Alpha Traders", "Delta Co", "Eta Inc", "Theta Ltd"]);
+    expect(l.all.find((x) => x.companyName === "Theta Ltd")).toMatchObject({ finalDebit: "0.00", finalCredit: "0.00" }); // both blank in the file → ₹0 / ₹0
     const alpha = l.all.find((x) => x.companyName === "Alpha Traders")!;
     expect(alpha).toMatchObject({ companyId: ids["Alpha Traders"], finalDebit: "0.00", finalCredit: "0.00", closeSourceKey: "tracker-balances-upload", asOfDate: "2026-10-31" });
     expect(alpha.closeSourceRef).toBe(r.snapshotId);
@@ -215,26 +221,26 @@ describe("the next confirmed upload moves them back, automatically", () => {
       ["Beta Works", "0.00", "0.00"], // Tracker → Logs
     ]);
     expect(r.movement).toEqual({ status: "ok", toLogs: 1, toTracker: 2 });
-    expect(await openClosures()).toEqual(["Beta Works", "Eta Inc"]);
+    expect(await openClosures()).toEqual(["Beta Works", "Eta Inc", "Theta Ltd"]);
     // Eta has exactly one episode, still open; Alpha and Delta have theirs, reopened.
     expect((await closures()).filter((c) => c.company === "Eta Inc")).toEqual([{ company: "Eta Inc", reopened: false }]);
     expect((await closures()).filter((c) => c.company === "Alpha Traders")).toEqual([{ company: "Alpha Traders", reopened: true }]);
     const t = await tracker();
-    expect(t.names).toEqual(inTracker(["Beta Works", "Eta Inc"]));
+    expect(t.names).toEqual(inTracker(["Beta Works", "Eta Inc", "Theta Ltd"]));
     // 12: Alpha came back with everything: same id, figures from this upload, coordinator, payment terms, its comment.
     expect(t.rows["Alpha Traders"]).toMatchObject({ masterId: ids["Alpha Traders"], debit: 0, credit: 5000, collectionPerson: "MANGESH", nextFollowupDate: "2099-01-15" });
     expect(JSON.stringify(t.rows["Alpha Traders"])).toContain("Called while in Logs");
     expect(t.rows["Delta Co"]).toMatchObject({ debit: 2500, credit: 0 });
     // 15: the Logs history keeps the reopened episodes.
     const l = await logs();
-    expect(l.open).toEqual(["Beta Works", "Eta Inc"]);
+    expect(l.open).toEqual(["Beta Works", "Eta Inc", "Theta Ltd"]);
     expect(l.all.filter((x) => x.reopenedAt !== null).map((x) => x.companyName).sort()).toEqual(["Alpha Traders", "Delta Co"]);
   });
 
   it("a company left out of a later partial upload stays where it was, in either section", async () => {
     const r = await upload([["Gamma Pvt Ltd", "0.00", "700.00"]]);
     expect(r.movement).toEqual({ status: "ok", toLogs: 0, toTracker: 0 });
-    expect(await openClosures()).toEqual(["Beta Works", "Eta Inc"]);
+    expect(await openClosures()).toEqual(["Beta Works", "Eta Inc", "Theta Ltd"]); // absent from the file: Logs and Tracker both unchanged
   });
 
   it("a company that goes to zero again gets a NEW episode; the old one stays in the history", async () => {
@@ -254,7 +260,7 @@ describe("the next confirmed upload moves them back, automatically", () => {
     expect([a.movement.toLogs, b.movement.toLogs]).toEqual([1, 0]);
     expect((await closures()).length).toBe(before.closures + 1);
     expect((await master()).length).toBe(before.companies);
-    expect(await openClosures()).toEqual(["Beta Works", "Eta Inc", "Iota LLP"]);
+    expect(await openClosures()).toEqual(["Beta Works", "Eta Inc", "Iota LLP", "Theta Ltd"]);
   });
 });
 
@@ -293,6 +299,18 @@ describe("only a committed upload moves anyone", () => {
     expect(await closures()).toEqual(before.closures);
   });
 
+  it("a sheet whose rows have no amount at all (a misread layout) is refused and moves nobody, though every cell blank would read as zero", async () => {
+    const before = { snapshots: await snapshots(), closures: await closures() };
+    const blank: [string, string, string][] = [["Alpha Traders", "", ""], ["Gamma Pvt Ltd", "", ""], ["Delta Co", "", ""]];
+    const p = await bulk.previewCollectionBalances(body(blank, ["", ""]));
+    if (!p.ok) throw new Error(p.error);
+    expect(p.preview.summary.verification.status).toBe("no-amounts");
+    const r = await bulk.importCollectionBalances({ ...body(blank, ["", ""]), previousSnapshotId: p.preview.replacement.previous?.id ?? null, expected: p.preview.summary.fingerprint, confirm: true });
+    expect(r).toMatchObject({ ok: false, error: expect.stringMatching(/No row in the file has a Debit or Credit amount/) });
+    expect(await snapshots()).toBe(before.snapshots);
+    expect(await closures()).toEqual(before.closures);
+  });
+
   it("9: a write that fails part-way rolls the movement back with the balances", async () => {
     const before = { snapshots: await snapshots(), closures: await closures() };
     // Make the closure write fail inside the transaction (a constraint the movement can't satisfy), then restore it.
@@ -313,7 +331,7 @@ describe("only a committed upload moves anyone", () => {
 
 describe("14: who sees what", () => {
   it("a Sales Coordinator sees only their own companies, in the Tracker and in Collection Logs; a super-admin scope sees all", async () => {
-    await upload([["Theta Ltd", "0.00", "0.00"]]); // RIYA's company → Logs
+    await upload([["Theta Ltd", "0.00", "0.00"]]); // RIYA's company, already in Logs, stays there
     const allOpen = await openClosures();
     expect(allOpen).toContain("Theta Ltd");
     as(staff, false);

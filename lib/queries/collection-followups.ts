@@ -25,6 +25,12 @@ export const COMMENT_EDITED_EVENT = "collection_comment_edited";
  * the follow-up row is never changed or removed; this event (with the full original comment) hides it.
  */
 export const COMMENT_DELETED_EVENT = "collection_comment_deleted";
+/**
+ * The employee_events type written, in the same transaction, when a reviewer answers an escalation with a
+ * comment (addEscalationComment). The comment itself is an ordinary follow-up row (author = the reviewer);
+ * this event marks it as a reviewer comment and links it to its escalation: { followupId, escalationId, companyId, token }.
+ */
+export const REVIEWER_COMMENT_EVENT = "collection_reviewer_comment";
 
 /** The capability whose holders' comments are highlighted — the escalation reviewer. Nobody is named in code. */
 export const HIGHLIGHT_CAPABILITY = "collection.escalation.review";
@@ -55,9 +61,11 @@ async function reviewerAuthorIds(authorIds: string[]): Promise<Set<string>> {
  * comments again. Only a missing employee_events table reads as "no events" —
  * then no edit or deletion can ever have been recorded.
  */
-async function commentEvents(): Promise<{ edits: Map<string, { editedAt: Date; editedByName: string | null }>; deleted: Set<string> }> {
+async function commentEvents(): Promise<{ edits: Map<string, { editedAt: Date; editedByName: string | null }>; deleted: Set<string>; reviewer: Map<string, string> }> {
   const edits = new Map<string, { editedAt: Date; editedByName: string | null }>();
   const deleted = new Set<string>();
+  /** follow-up id → the escalation it answers (reviewer comments). */
+  const reviewer = new Map<string, string>();
   let rows;
   try {
     const editor = alias(employees, "editor");
@@ -65,20 +73,23 @@ async function commentEvents(): Promise<{ edits: Map<string, { editedAt: Date; e
       .select({ eventType: employeeEvents.eventType, toValue: employeeEvents.toValue, createdAt: employeeEvents.createdAt, editorName: editor.name })
       .from(employeeEvents)
       .leftJoin(editor, eq(editor.id, employeeEvents.actorId))
-      .where(inArray(employeeEvents.eventType, [COMMENT_EDITED_EVENT, COMMENT_DELETED_EVENT]))
+      .where(inArray(employeeEvents.eventType, [COMMENT_EDITED_EVENT, COMMENT_DELETED_EVENT, REVIEWER_COMMENT_EVENT]))
       .orderBy(desc(employeeEvents.createdAt));
   } catch (err) {
-    if (isMissingTable(err)) return { edits, deleted };
+    if (isMissingTable(err)) return { edits, deleted, reviewer };
     console.error("[collection-followups] could not read comment edits/deletions");
     throw err;
   }
   for (const r of rows) {
     const id = (r.toValue as { followupId?: unknown } | null)?.followupId;
     if (typeof id !== "string") continue;
-    if (r.eventType === COMMENT_DELETED_EVENT) deleted.add(id);
+    if (r.eventType === REVIEWER_COMMENT_EVENT) {
+      const escalationId = (r.toValue as { escalationId?: unknown }).escalationId;
+      if (typeof escalationId === "string") reviewer.set(id, escalationId);
+    } else if (r.eventType === COMMENT_DELETED_EVENT) deleted.add(id);
     else if (!edits.has(id)) edits.set(id, { editedAt: r.createdAt, editedByName: r.editorName ?? null });
   }
-  return { edits, deleted };
+  return { edits, deleted, reviewer };
 }
 
 /**
@@ -111,7 +122,7 @@ export async function listFollowUps(): Promise<FollowUpsResult> {
     throw err;
   }
   const authors = [...new Set(rows.map((r) => r.createdById).filter((id): id is string => !!id))];
-  const [reviewers, { edits, deleted }] = await Promise.all([reviewerAuthorIds(authors), commentEvents()]);
+  const [reviewers, { edits, deleted, reviewer }] = await Promise.all([reviewerAuthorIds(authors), commentEvents()]);
   const entries: FollowUpEntry[] = [];
   for (const r of rows) {
     const isDeleted = deleted.has(r.id);
@@ -123,6 +134,7 @@ export async function listFollowUps(): Promise<FollowUpsResult> {
       authorIsReviewer: !!r.createdById && reviewers.has(r.createdById),
       editedAt: edit?.editedAt ?? null,
       editedByName: edit?.editedByName ?? null,
+      reviewerEscalationId: reviewer.get(r.id) ?? null,
     });
   }
   return { entries, storageReady: true };

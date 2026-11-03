@@ -16,6 +16,8 @@ const h = vi.hoisted(() => ({
   getCommitment: vi.fn(),
 }));
 
+vi.mock("@/app/(collection-module)/collection/scorecard-actions", () => ({ getScorecardEscalations: vi.fn() }));
+vi.mock("@/app/(collection-module)/collection/marks-actions", () => ({ setCompanyMarks: vi.fn() }));
 vi.mock("server-only", () => ({}));
 // Company visibility (lib/collections/scope-server.ts) is not under test here: every company is in scope. The real
 // resolver, over real coordinator links, is covered by tests/integration/collection-tracker-scope.db.test.ts.
@@ -210,8 +212,10 @@ describe("commitments page (collection.commitments.view)", () => {
       ["Beta Corp", ["Disputed invoice 114"]],
       ["Gamma Ltd", []],
     ]);
-    // Only note, time and author (id and name) travel — not the party name or other fields.
-    expect(Object.keys(rows[0]!.comments[0]!).sort()).toEqual(["createdAt", "createdById", "createdByName", "id", "note"]);
+    // Only note, time, author (id and name) and whether it is a reviewer's reply to an escalation (the violet label —
+    // the same flag every Tracker user sees on that comment) travel — not the party name or other fields.
+    expect(Object.keys(rows[0]!.comments[0]!).sort()).toEqual(["createdAt", "createdById", "createdByName", "id", "note", "reviewerEscalationId"]);
+    expect(rows[0]!.comments[0]!.reviewerEscalationId).toBeNull();
     expect(rows[0]!.comments[0]).toMatchObject({ createdById: "emp-asha", createdByName: "Asha" });
   });
 

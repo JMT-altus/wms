@@ -7,11 +7,11 @@ import { buildBalancePlan, parseMoney } from "@/lib/collections/balances/plan";
 const line = (companyId: string, debitPaise: number | null, creditPaise: number | null): UploadedLine => ({ companyId, debitPaise, creditPaise });
 
 describe("a line's balance", () => {
-  it("zero only when both sides are zero; a blank side beside a zero is zero; both blank is unknown", () => {
+  it("zero when both sides are zero, dash (read as 0) or blank, in any mix; anything else on either side is a balance", () => {
     expect(lineBalance(line("a", 0, 0))).toBe("zero");
     expect(lineBalance(line("a", 0, null))).toBe("zero");
     expect(lineBalance(line("a", null, 0))).toBe("zero");
-    expect(lineBalance(line("a", null, null))).toBe("unknown");
+    expect(lineBalance(line("a", null, null))).toBe("zero"); // both blank: the importer reads a blank cell as zero
     expect(lineBalance(line("a", 50000, 0))).toBe("non-zero");
     expect(lineBalance(line("a", 0, 50000))).toBe("non-zero");
     expect(lineBalance(line("a", -1000, 0))).toBe("non-zero"); // a negative is a balance
@@ -31,7 +31,7 @@ describe("planClosures — the examples table", () => {
       line("inLogs2", 250000, 0), // Logs, Debit 2500 → Tracker
       line("inLogs3", 0, 0), // Logs, 0 / 0 → Logs
       line("inLogs4", 0, 0), // Logs, "-" / "-" (read as 0 / 0) → Logs
-      line("unknown", null, null), // can't be determined → nothing
+      line("unknown", 0.5, 0), // not whole paise (the plan never makes one) → nothing
     ],
     open,
   );
@@ -66,11 +66,43 @@ describe("dashes are the importer's zero", () => {
     expect(plan.toWrite.map((r) => [r.debitPaise, r.creditPaise])).toEqual([[0, 0]]);
     expect(lineBalance({ debitPaise: plan.toWrite[0]!.debitPaise, creditPaise: plan.toWrite[0]!.creditPaise })).toBe("zero");
   });
-  it("a row with both cells blank is still rejected, so nothing about that company is known", () => {
+  it("a row with both cells blank is a ₹0 / ₹0 line (stored as 0.00 / 0.00: a stored line always carries a figure)", () => {
+    const companies = new Map([["deltaco", { id: "d", companyName: "Delta Co" }], ["alphatraders", { id: "a", companyName: "Alpha Traders" }]]);
+    const plan = buildBalancePlan(
+      [
+        { rowNo: 5, name: "Delta Co", debit: "", credit: "" },
+        { rowNo: 6, name: "Alpha Traders", debit: "100", credit: "" },
+      ],
+      companies,
+      { debit: "100", credit: "" },
+    );
+    expect(plan.summary.verification.status).toBe("ok");
+    expect(plan.summary.rejected).toBe(0);
+    expect(plan.toWrite.map((r) => [r.name, r.debitPaise, r.creditPaise])).toEqual([
+      ["Delta Co", 0, 0],
+      ["Alpha Traders", 10000, null],
+    ]);
+    expect(plan.toWrite[0]!.messages[0]!.text).toMatch(/both blank: read as ₹0 \/ ₹0/);
+    expect(lineBalance(plan.toWrite[0]!)).toBe("zero");
+  });
+
+  it("a sheet with no amount on any row is refused as a whole — a misread layout never moves anyone", () => {
     const companies = new Map([["deltaco", { id: "d", companyName: "Delta Co" }]]);
-    const plan = buildBalancePlan([{ rowNo: 5, name: "Delta Co", debit: "", credit: "" }], companies, { debit: "0", credit: "0" });
-    expect(plan.toWrite).toEqual([]);
-    expect(plan.summary.rejected).toBe(1);
+    for (const total of [{ debit: "", credit: "" }, { debit: "0", credit: "0" }]) {
+      const plan = buildBalancePlan([{ rowNo: 5, name: "Delta Co", debit: "", credit: "" }], companies, total);
+      expect(plan.summary.verification.status).toBe("no-amounts");
+    }
+    // One real amount anywhere (even ₹0) is enough to trust the columns.
+    expect(buildBalancePlan([{ rowNo: 5, name: "Delta Co", debit: "0", credit: "" }], companies, { debit: "0", credit: "" }).summary.verification.status).toBe("ok");
+  });
+
+  it("formatted amounts: grouping commas and a leading rupee sign; signs that would be a guess are refused", () => {
+    expect(parseMoney("₹50,000")).toEqual({ kind: "ok", paise: 5000000 });
+    expect(parseMoney("₹ 1,25,000.50")).toEqual({ kind: "ok", paise: 12500050 });
+    expect(parseMoney("25,000.00")).toEqual({ kind: "ok", paise: 2500000 });
+    expect(parseMoney("₹")).toMatchObject({ kind: "error" });
+    expect(parseMoney("50000 Dr")).toMatchObject({ kind: "error" });
+    expect(parseMoney("(500)")).toMatchObject({ kind: "error" });
   });
 });
 

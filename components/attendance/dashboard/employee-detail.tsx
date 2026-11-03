@@ -23,14 +23,14 @@ import {
 } from "@/lib/attendance/correction/plan";
 import { adminMarkLeave } from "@/app/(app)/attendance/leave/actions";
 import { fireToast } from "@/lib/toast";
-import { fmtDate, fmtDateWithWeekday, fmtMonth } from "@/lib/dates";
+import { fmtDate, fmtDateWithWeekday, fmtMonth, todayYmd } from "@/lib/dates";
+import { buildAttendanceReport } from "@/lib/attendance/weekly-report";
+import { AttendanceWeeklyReport } from "@/components/attendance/dashboard/attendance-weekly-report";
 import { DateField } from "@/components/ui/date-field";
 import {
-  ATTENDANCE_CODE_LABELS,
   LEAVE_KINDS,
   LEAVE_KIND_LABELS,
   PUNCH_REASONS,
-  type AttendanceCode,
   type LeaveKind,
   type PunchReason,
 } from "@/db/enums";
@@ -43,50 +43,6 @@ import type {
 /** "YYYY-MM-DD" → "Sat, 06/11/26" (read from the digits, no tz drift). */
 function dayLabel(row: DayRow): string {
   return fmtDateWithWeekday(row.logDate, "short");
-}
-
-/** Minutes → "h:mm". */
-function hmm(mins: number): string {
-  if (!mins) return "—";
-  const h = Math.floor(mins / 60);
-  const m = mins % 60;
-  return `${h}:${String(m).padStart(2, "0")}`;
-}
-
-const CODE_STYLE: Record<string, { bg: string; fg: string }> = {
-  P: { bg: "var(--color-green-bg)", fg: "var(--color-green-deep)" },
-  "H/D": { bg: "var(--color-amber-bg)", fg: "var(--color-amber-deep)" },
-  A: { bg: "var(--color-red-bg)", fg: "var(--color-red-deep)" },
-  "W/O": { bg: "var(--color-surface-track)", fg: "var(--color-ink-soft)" },
-  incomplete: { bg: "var(--color-surface-track)", fg: "var(--color-ink-soft)" },
-  // Phase B codes — holiday=indigo, worked-holiday=green, leave=blue/grey,
-  // comp-off=teal.
-  H: { bg: "var(--color-indigo-bg)", fg: "var(--color-indigo-deep)" },
-  HP: { bg: "var(--color-green-bg)", fg: "var(--color-green-deep)" },
-  "H-H/D": { bg: "var(--color-indigo-bg)", fg: "var(--color-indigo-deep)" },
-  PL: { bg: "var(--color-blue-bg)", fg: "var(--color-blue-deep)" },
-  LWP: { bg: "var(--color-slate-bg)", fg: "var(--color-slate-deep)" },
-  CO: { bg: "var(--color-teal-bg)", fg: "var(--color-teal-deep)" },
-};
-
-function codeLabel(code: DayRow["code"]): string {
-  if (code === "–") return "Not joined";
-  return ATTENDANCE_CODE_LABELS[code as AttendanceCode] ?? code;
-}
-
-function CodePill({ code }: { code: DayRow["code"] }) {
-  if (code === "–") {
-    return <span className="text-ink-subtle">—</span>;
-  }
-  const s = CODE_STYLE[code] ?? CODE_STYLE["W/O"]!;
-  return (
-    <span
-      className="inline-flex items-center rounded-full px-2.5 py-1 font-bold whitespace-nowrap"
-      style={{ fontSize: 12, background: s.bg, color: s.fg }}
-    >
-      {codeLabel(code)}
-    </span>
-  );
 }
 
 function FlagPill({ label, tone }: { label: string; tone: "red" | "amber" | "blue" }) {
@@ -183,6 +139,8 @@ export function EmployeeDetailDialog({
   }, [load, router]);
 
   const monthLabel = fmtMonth(`${year}-${String(month).padStart(2, "0")}`);
+  // "Today" on the dashboard's reporting clock (IST): which days are past, which are upcoming.
+  const today = todayYmd();
 
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
@@ -218,109 +176,60 @@ export function EmployeeDetailDialog({
               {error}
             </div>
           ) : data ? (
-            <div className="overflow-x-auto -mx-1">
-              <table className="w-full border-collapse">
-                <thead>
-                  <tr
-                    className="border-b"
-                    style={{ borderColor: "var(--color-hairline-strong)" }}
-                  >
-                    <Th>Date</Th>
-                    <Th>In</Th>
-                    <Th>Out</Th>
-                    <Th align="right">Worked</Th>
-                    <Th>Code</Th>
-                    <Th>Flags</Th>
-                    <Th align="right">Manage</Th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.days.map((d) => {
-                    const notJoined = d.code === "–";
-                    const isEditing = editingDate === d.logDate;
-                    if (isEditing && employeeId) {
-                      return (
-                        <EditRow
-                          key={d.logDate}
-                          employeeId={employeeId}
-                          day={d}
-                          busy={busy}
-                          setBusy={setBusy}
-                          onCancel={() => setEditingDate(null)}
-                          onDone={afterMutation}
-                        />
-                      );
-                    }
+            <div className="-mx-1">
+              {/* The month week by week: Date · Day · Status · Check-in · Check-out · Work hours. A date opens that day's
+                  existing actions (edit punches through the audited correction, comp-off) in a row beneath it. */}
+              <AttendanceWeeklyReport
+                report={buildAttendanceReport(data.days, year, month, today)}
+                today={today}
+                manage={(row) => {
+                  const d = row.day!;
+                  if (editingDate === d.logDate && employeeId) {
                     return (
-                      <tr
-                        key={d.logDate}
-                        className="border-t"
-                        style={{
-                          borderColor: "var(--color-hairline)",
-                          background: d.isWeeklyOff
-                            ? "rgba(15,23,42,0.012)"
-                            : undefined,
-                          opacity: notJoined ? 0.55 : 1,
-                        }}
-                      >
-                        <td
-                          className="px-3 py-2.5 font-semibold text-ink-strong whitespace-nowrap tabular-nums"
-                          style={{ fontSize: 14 }}
-                        >
-                          {dayLabel(d)}
-                        </td>
-                        <Td>{d.inAt ?? "—"}</Td>
-                        <Td>{d.outAt ?? "—"}</Td>
-                        <Td align="right">{hmm(d.workedMinutes)}</Td>
-                        <td className="px-3 py-2.5">
-                          <CodePill code={d.code} />
-                        </td>
-                        <td className="px-3 py-2.5">
-                          <span className="inline-flex flex-wrap items-center gap-1.5">
-                            {d.late && !d.lateWaived && (
-                              <FlagPill label="Late" tone="red" />
-                            )}
-                            {d.lateWaived && (
-                              <FlagPill label="Late · waived" tone="amber" />
-                            )}
-                            {d.leftEarly && (
-                              <FlagPill label="Left early" tone="blue" />
-                            )}
-                          </span>
-                        </td>
-                        <td className="px-3 py-2.5 text-right">
-                          {!notJoined && (
-                            <div className="inline-flex items-center justify-end gap-1.5">
-                              {employeeId && isConvertible(d) && (
-                                <ConvertButton
-                                  employeeId={employeeId}
-                                  earnedDate={d.logDate}
-                                  onDone={afterMutation}
-                                />
-                              )}
-                              <button
-                                type="button"
-                                onClick={() => setEditingDate(d.logDate)}
-                                className="inline-flex items-center gap-1.5 rounded-md border border-hairline bg-surface-card py-1.5 px-2.5 text-[12px] font-semibold text-ink-soft hover:text-ink-strong hover:border-hairline-strong transition-colors"
-                              >
-                                {d.inAt || d.outAt ? (
-                                  <>
-                                    <Pencil size={13} strokeWidth={2.2} /> Edit
-                                  </>
-                                ) : (
-                                  <>
-                                    <Plus size={13} strokeWidth={2.2} /> Add
-                                  </>
-                                )}
-                              </button>
-                            </div>
-                          )}
-                        </td>
-                      </tr>
+                      <table className="w-full border-collapse">
+                        <tbody>
+                          <EditRow
+                            employeeId={employeeId}
+                            day={d}
+                            busy={busy}
+                            setBusy={setBusy}
+                            onCancel={() => setEditingDate(null)}
+                            onDone={afterMutation}
+                          />
+                        </tbody>
+                      </table>
                     );
-                  })}
-                </tbody>
-              </table>
+                  }
+                  return (
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="inline-flex flex-wrap items-center gap-1.5">
+                        <span className="text-[12px] font-semibold text-ink-soft">{dayLabel(d)}</span>
+                        {d.late && !d.lateWaived && <FlagPill label="Late" tone="red" />}
+                        {d.lateWaived && <FlagPill label="Late · waived" tone="amber" />}
+                        {d.leftEarly && <FlagPill label="Left early" tone="blue" />}
+                      </span>
+                      <span className="inline-flex items-center justify-end gap-1.5">
+                        {employeeId && isConvertible(d) && <ConvertButton employeeId={employeeId} earnedDate={d.logDate} onDone={afterMutation} />}
+                        <button
+                          type="button"
+                          onClick={() => setEditingDate(d.logDate)}
+                          className="inline-flex items-center gap-1.5 rounded-md border border-hairline bg-surface-card py-1.5 px-2.5 text-[12px] font-semibold text-ink-soft hover:text-ink-strong hover:border-hairline-strong transition-colors"
+                        >
+                          {d.inAt || d.outAt ? (
+                            <>
+                              <Pencil size={13} strokeWidth={2.2} /> Edit
+                            </>
+                          ) : (
+                            <>
+                              <Plus size={13} strokeWidth={2.2} /> Add
+                            </>
+                          )}
+                        </button>
+                      </span>
+                    </div>
+                  );
+                }}
+              />
               {employeeId && (
                 <LeaveCompOffPanel
                   employeeId={employeeId}
@@ -861,39 +770,5 @@ function DeleteLink({ onClick, disabled }: { onClick: () => void; disabled: bool
     >
       <Trash2 size={12} strokeWidth={2.2} /> Delete
     </button>
-  );
-}
-
-function Th({
-  children,
-  align = "left",
-}: {
-  children: React.ReactNode;
-  align?: "left" | "right";
-}) {
-  return (
-    <th
-      className="px-3 pb-2.5 uppercase font-bold tracking-[0.06em] text-ink-subtle whitespace-nowrap"
-      style={{ fontSize: 11, textAlign: align }}
-    >
-      {children}
-    </th>
-  );
-}
-
-function Td({
-  children,
-  align = "left",
-}: {
-  children: React.ReactNode;
-  align?: "left" | "right";
-}) {
-  return (
-    <td
-      className="px-3 py-2.5 font-semibold text-ink-soft tabular-nums whitespace-nowrap"
-      style={{ fontSize: 14, textAlign: align }}
-    >
-      {children}
-    </td>
   );
 }

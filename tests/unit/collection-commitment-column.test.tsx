@@ -5,6 +5,8 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 // The commitment in the Collection Amount Confirmation column and the popup's commitment history. Server actions MOCKED;
 // the real server-side gates are in tests/integration/collection-commitment-column.db.test.ts.
 const a = vi.hoisted(() => ({ get: vi.fn(), save: vi.fn(), setAmount: vi.fn(), refresh: vi.fn() }));
+vi.mock("@/app/(collection-module)/collection/scorecard-actions", () => ({ getScorecardEscalations: vi.fn() }));
+vi.mock("@/app/(collection-module)/collection/marks-actions", () => ({ setCompanyMarks: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: a.refresh }) }));
 vi.mock("@/lib/toast", () => ({ fireToast: vi.fn() }));
 vi.mock("@/app/(collection-module)/collection/actions", () => ({ saveFollowUp: vi.fn(), setCollectionConfirmation: vi.fn(), setConfirmedAmount: (...x: unknown[]) => a.setAmount(...x), escalateForReview: vi.fn(), assignSalesCoordinator: vi.fn() }));
@@ -45,14 +47,18 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("the Collection Amount Confirmation column", () => {
-  it("shows the popup's commitment as '₹1,00,000 – 04/11/26' for a holder, 'No commitment recorded' when there is none, and keeps the existing field", () => {
+  it("shows the popup's commitment as '₹1,00,000 – 04/11/26' for a holder, 'No commitment recorded' when there is none, and no input field", () => {
     render(<CollectionTracker rows={asHolder(base)} connected storageReady today={TODAY} canSeeCommitments />);
     expect(screen.getByRole("columnheader", { name: "Collection Amount Confirmation" })).toBeTruthy();
     const alpha = within(cell("Alpha Traders"));
-    expect(alpha.getByLabelText("Commitment for Alpha Traders").textContent).toBe("₹1,00,000 – 04/11/26");
-    expect(alpha.getByLabelText("Collection Amount Confirmation for Alpha Traders")).toBeTruthy(); // the existing field, unchanged
+    // The popup's latest record: amount – date, CURRENT, and when and by whom it was recorded.
+    expect(alpha.getByLabelText("Commitment for Alpha Traders").textContent).toBe("₹1,00,000 – 04/11/26CurrentRecorded 03/11/26, 03:45 PM by Asha");
+    expect(alpha.getByText("Current").className).toMatch(/uppercase/);
+    expect(alpha.queryByLabelText("Collection Amount Confirmation for Alpha Traders")).toBeNull(); // the "Enter confirmed amount" field is gone
+    expect(cell("Alpha Traders").querySelector("input, select, textarea")).toBeNull();
     const beta = within(cell("Beta Works"));
     expect(beta.getByLabelText("Commitment for Beta Works").textContent).toBe("No commitment recorded");
+    expect(cell("Beta Works").querySelector("input")).toBeNull();
     // No extra column was added.
     expect(screen.getAllByRole("columnheader").map((h) => h.textContent)).not.toContain("Commitment");
   });
@@ -61,36 +67,58 @@ describe("the Collection Amount Confirmation column", () => {
     render(<CollectionTracker rows={base} connected storageReady today={TODAY} />);
     expect(screen.queryByLabelText("Commitment for Alpha Traders")).toBeNull();
     expect(document.body.textContent).not.toContain("1,00,000");
-    expect(within(cell("Alpha Traders")).getByLabelText("Collection Amount Confirmation for Alpha Traders")).toBeTruthy();
+    expect(cell("Alpha Traders").textContent).toBe("—");
+    expect(cell("Alpha Traders").querySelector("input")).toBeNull();
   });
 
-  it("the value comes from the row the page built — it is never typed again, and the field is a separate, untouched value", () => {
+  it("the value comes from the row the page built — never typed again; a stored confirmed amount puts no field back", () => {
     render(<CollectionTracker rows={asHolder(base).map((r) => (r.masterId === ALPHA ? { ...r, confirmedAmount: { amount: "999.00", recordedAt: T1, recordedByName: "Asha" } } : r))} connected storageReady today={TODAY} canSeeCommitments />);
     const alpha = within(cell("Alpha Traders"));
-    expect(alpha.getByLabelText("Commitment for Alpha Traders").textContent).toBe("₹1,00,000 – 04/11/26");
-    expect((alpha.getByLabelText("Collection Amount Confirmation for Alpha Traders") as HTMLInputElement).value).toBe("999.00");
+    expect(alpha.getByLabelText("Commitment for Alpha Traders").textContent).toBe("₹1,00,000 – 04/11/26CurrentRecorded 03/11/26, 03:45 PM by Asha");
+    expect(alpha.queryByLabelText("Collection Amount Confirmation for Alpha Traders")).toBeNull();
+    expect(cell("Alpha Traders").textContent).not.toContain("999");
+  });
+});
+
+describe("the column and the popup show the same latest record", () => {
+  it("the Tracker cell and the popup's Commitment History render identical text for the latest commitment", async () => {
+    render(<CollectionTracker rows={asHolder(base)} connected storageReady today={TODAY} canSeeCommitments />);
+    const column = screen.getByLabelText("Commitment for Alpha Traders").textContent;
+    fireEvent.click(screen.getByRole("button", { name: "Alpha Traders" }));
+    const list = await screen.findByRole("list", { name: "Commitment history for Alpha Traders: the latest record" });
+    expect(within(list).getByRole("listitem").textContent).toBe(column);
+    expect(column).toBe("₹1,00,000 – 04/11/26CurrentRecorded 03/11/26, 03:45 PM by Asha");
+  });
+
+  it("a newer commitment, once the page re-reads it, shows in the column exactly as the popup shows it", async () => {
+    const newer = { amount: "1500000.00", committedDate: "2026-11-04", recordedAt: new Date("2026-11-02T13:04:00Z"), recordedByName: "Altus Corp" };
+    a.get.mockResolvedValue({ ok: true, storageReady: true, commitment: newer, history: [{ id: "k9", ...newer }, ...history] });
+    render(<CollectionTracker rows={asHolder(base).map((r) => (r.masterId === ALPHA ? { ...r, commitment: newer } : r))} connected storageReady today={TODAY} canSeeCommitments />);
+    expect(screen.getByLabelText("Commitment for Alpha Traders").textContent).toBe("₹15,00,000 – 04/11/26CurrentRecorded 02/11/26, 06:34 PM by Altus Corp");
+    fireEvent.click(screen.getByRole("button", { name: "Alpha Traders" }));
+    const list = await screen.findByRole("list", { name: /Commitment history/ });
+    expect(within(list).getByRole("listitem").textContent).toBe(screen.getAllByLabelText("Commitment for Alpha Traders")[0]!.textContent);
   });
 });
 
 describe("the popup's commitment history", () => {
-  it("lists every recorded commitment newest first, with when, who and the previous value — not the current value repeated", async () => {
+  it("shows exactly one record — the latest — with its amount, date, Current label, time and who; older ones are not shown", async () => {
     render(<CollectionTracker rows={asHolder(base)} connected storageReady today={TODAY} canSeeCommitments />);
     fireEvent.click(screen.getByRole("button", { name: "Alpha Traders" }));
-    const list = await screen.findByRole("list", { name: "Commitment history for Alpha Traders, newest first" });
+    const list = await screen.findByRole("list", { name: "Commitment history for Alpha Traders: the latest record" });
     const items = within(list).getAllByRole("listitem");
-    expect(items).toHaveLength(2);
+    expect(items).toHaveLength(1);
     expect(items[0]!.textContent).toContain("₹1,00,000 – 04/11/26");
     expect(items[0]!.textContent).toContain("Current");
     expect(items[0]!.textContent).toContain("Recorded 03/11/26, 03:45 PM by Asha");
-    expect(items[0]!.textContent).toContain("previously ₹75,000 – 28/10/26");
-    expect(items[1]!.textContent).toContain("₹75,000 – 28/10/26");
-    expect(items[1]!.textContent).toContain("Recorded 01/11/26, 10:00 AM by Bala");
-    expect(items[1]!.textContent).toContain("first commitment");
-    expect(items[1]!.textContent).not.toContain("Current");
+    // The older record (still returned by the server, still stored) is not displayed anywhere in the section.
+    const section = screen.getByRole("region", { name: "Commitment" });
+    expect(section.textContent).not.toContain("75,000");
+    expect(section.textContent).not.toContain("Bala");
     expect(screen.getByText(/Shown in the Collection Amount Confirmation column as/).textContent).toContain("₹1,00,000 – 04/11/26");
   });
 
-  it("recording a new commitment reloads the history (the earlier one stays) and refreshes the Tracker behind the popup", async () => {
+  it("recording a new commitment shows it as the one latest record and refreshes the Tracker behind the popup", async () => {
     const next = { amount: "90000.00", committedDate: "2026-11-20", recordedAt: new Date("2026-11-03T12:00:00Z"), recordedByName: "Asha" };
     a.save.mockResolvedValue({ ok: true, commitment: next });
     render(<CollectionTracker rows={asHolder(base)} connected storageReady today={TODAY} canSeeCommitments canEditCommitments />);
@@ -101,11 +129,10 @@ describe("the popup's commitment history", () => {
     fireEvent.change(screen.getByLabelText("Committed date for Alpha Traders"), { target: { value: "2026-11-20" } });
     fireEvent.click(screen.getByRole("button", { name: "Record" }));
     await waitFor(() => expect(a.save).toHaveBeenCalledWith({ companyId: ALPHA, amount: "90000", committedDate: "2026-11-20" }));
-    await waitFor(() => expect(within(screen.getByRole("list", { name: /Commitment history/ })).getAllByRole("listitem")).toHaveLength(3));
-    const items = within(screen.getByRole("list", { name: /Commitment history/ })).getAllByRole("listitem");
-    expect(items[0]!.textContent).toContain("₹90,000 – 20/11/26");
-    expect(items[0]!.textContent).toContain("previously ₹1,00,000 – 04/11/26");
-    expect(items[1]!.textContent).toContain("₹1,00,000 – 04/11/26");
+    // The newly recorded commitment replaces the shown one; the server still returns all three (nothing is dropped).
+    await waitFor(() => expect(within(screen.getByRole("list", { name: /Commitment history/ })).getByRole("listitem").textContent).toContain("₹90,000 – 20/11/26"));
+    expect(within(screen.getByRole("list", { name: /Commitment history/ })).getAllByRole("listitem")).toHaveLength(1);
+    expect(screen.getByRole("region", { name: "Commitment" }).textContent).not.toContain("₹1,00,000 – 04/11/26 ");
     expect(a.get).toHaveBeenCalledTimes(2); // on open, and again after the save
     expect(a.refresh).toHaveBeenCalled(); // the Tracker column re-reads the newest row
   });
@@ -119,7 +146,9 @@ describe("the popup's commitment history", () => {
     fireEvent.change(screen.getByLabelText("Committed date for Alpha Traders"), { target: { value: "2026-11-20" } });
     fireEvent.click(screen.getByRole("button", { name: "Record" }));
     expect(await screen.findByRole("alert")).toBeTruthy();
-    expect(within(screen.getByRole("list", { name: /Commitment history/ })).getAllByRole("listitem")).toHaveLength(2);
+    const items = within(screen.getByRole("list", { name: /Commitment history/ })).getAllByRole("listitem");
+    expect(items).toHaveLength(1);
+    expect(items[0]!.textContent).toContain("₹1,00,000 – 04/11/26"); // unchanged
     expect(a.refresh).not.toHaveBeenCalled();
   });
 

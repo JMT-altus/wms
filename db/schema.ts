@@ -4268,3 +4268,36 @@ export type DccItemSubject = typeof dccItemSubjects.$inferSelect;
 export type DccEntry = typeof dccEntries.$inferSelect;
 export type NewDccEntry = typeof dccEntries.$inferInsert;
 export type DccReview = typeof dccReviews.$inferSelect;
+
+/**
+ * Collection company marks (migration 0125) — MARK AS PRIORITY and COLLECTION
+ * DONE in the Collection Tracker. One row per mark EPISODE: who marked the
+ * company (kind 'priority' or 'done') and when, and — once reversed — who
+ * cleared it and when. Reversing never deletes; marking again starts a new row.
+ * The current state is the episodes with no cleared_at (at most one per kind
+ * per company, enforced by the partial unique index). A person's decision only:
+ * never written or cleared by an import, a Bulk Upload, a closure or a balance.
+ * See db/migrations/0125_collection_company_marks.sql.
+ */
+export const collectionCompanyMarks = pgTable(
+  "collection_company_marks",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => collectionMasterCompanies.id, { onDelete: "restrict" }),
+    kind: text("kind").$type<"priority" | "done">().notNull(),
+    setById: uuid("set_by_id").references(() => employees.id, { onDelete: "set null" }),
+    setAt: timestamp("set_at", { withTimezone: true }).notNull().defaultNow(),
+    clearedById: uuid("cleared_by_id").references(() => employees.id, { onDelete: "set null" }),
+    clearedAt: timestamp("cleared_at", { withTimezone: true }),
+  },
+  (t) => [
+    uniqueIndex("collection_company_marks_one_active_uq").on(t.companyId, t.kind).where(sql`${t.clearedAt} IS NULL`),
+    index("collection_company_marks_company_idx").on(t.companyId, t.setAt.desc().nullsFirst()),
+    check("collection_company_marks_kind_check", sql`${t.kind} IN ('priority', 'done')`),
+    check("collection_company_marks_cleared_check", sql`${t.clearedAt} IS NULL OR ${t.clearedAt} >= ${t.setAt}`),
+  ],
+);
+
+export type CollectionCompanyMark = typeof collectionCompanyMarks.$inferSelect;

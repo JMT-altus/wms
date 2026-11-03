@@ -104,7 +104,8 @@ const sheetGrid = (opts: { total?: string[] | null; extra?: string[][] } = {}): 
   ["", "Debit", "Credit"],
   ["Alpha Traders", "100", ""],
   ["Beta Works", "200", "50"],
-  ["Not In Master", "", ""],
+  // An invalid row (text where an amount belongs). A row with both cells blank would be a valid ₹0 / ₹0 line.
+  ["Not In Master", "n/a", ""],
   ...(opts.extra ?? []),
   ...(opts.total === null ? [] : [opts.total ?? ["Grand Total", "300", "50"]]),
 ];

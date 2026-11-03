@@ -15,7 +15,7 @@ import { CARD, NAVY, SLATE, TONE, type ToneColors } from "@/components/attendanc
  * whole active roster's totals (`employees` says how many) — every employee's
  * month added up, nothing averaged or estimated.
  */
-export function AttendanceSummaryCards({ a, error, scope = "me", employees }: { a: AttendanceCards | null; error?: boolean; scope?: "me" | "roster"; employees?: number }) {
+export function AttendanceSummaryCards({ a, error, scope = "me", employees, subjectName }: { a: AttendanceCards | null; error?: boolean; scope?: "me" | "roster"; employees?: number; /** The admin's Employee Salary Report: name the employee instead of "your". */ subjectName?: string }) {
   if (error || !a) {
     return (
       <section className="rounded-xl p-6 max-md:p-4" style={CARD} aria-label="Attendance summary">
@@ -78,7 +78,7 @@ export function AttendanceSummaryCards({ a, error, scope = "me", employees }: { 
               {a.daysWorked} <span className="text-[18px] font-bold" style={{ color: SLATE }}>/ {a.workingDays}</span>
             </>
           }
-          sub={roster ? `full days, of the roster's working days so far` : "full days, of your working days so far"}
+          sub={roster ? `full days, of the roster's working days so far` : subjectName ? "full days, of their working days so far" : "full days, of your working days so far"}
           testId="days-worked"
         />
         <Card icon={<Clock3 size={18} aria-hidden />} tone={TONE.amber} label="Half days" value={a.halfDays} sub="counted as half a day each" testId="half-days" />

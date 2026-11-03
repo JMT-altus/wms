@@ -980,8 +980,8 @@ export const PERMISSION_FIELDS = [
     // grant only — never implied by admin or super-admin status, and never by
     // the popup keys.
     key: "collection.commitments.page",
-    label: "Collection — Commitments & Escalations Page Access",
-    hint: "Open the Commitments & Escalations page from the Collection sidebar (all companies' commitments and open escalations). Separate from the company popup's Commitment section: holding one never gives the other.",
+    label: "Collection — Commitments Page Access",
+    hint: "Open the Commitments page from the Collection sidebar (all companies' recorded commitments; seeing them also needs Commitment Section: View). Separate from the company popup's Commitment section: holding one never gives the other. Escalations have their own page, opened with Review escalations.",
     defaultAllowed: false,
     group: "Collections",
     sensitive: true,
@@ -1018,6 +1018,32 @@ export const PERMISSION_FIELDS = [
     hint: "Open Collection Logs: companies whose collection was closed, with their history (read-only).",
     defaultAllowed: false,
     group: "Collections",
+  },
+  {
+    // MARK AS PRIORITY in the Collection Tracker (and removing it). Ordinary,
+    // like Follow-ups: admins hold it through the admin bypass unless denied;
+    // a specific person can be granted it. Who holds it decides who can mark —
+    // nobody is named in code.
+    key: "collection.priority.set",
+    label: "Collection Tracker — Mark as Priority",
+    hint: "Mark a company as a priority in the Collection Tracker (yellow, at the top of the list) and remove the mark again. Who marked it and when is recorded.",
+    defaultAllowed: false,
+    group: "Collections",
+  },
+  {
+    // COLLECTION DONE in the Collection Tracker (and undoing it). Sensitive —
+    // explicit grant only, never implied by admin or super-admin status: it
+    // moves a company to the bottom of everyone's Tracker. Not the ₹0-balance
+    // rule (Collection Logs): a person's decision only, reversible, and it
+    // changes no other record.
+    key: "collection.done.set",
+    label: "Collection Tracker — Collection Done",
+    hint: "Mark a company's collection as done in the Collection Tracker (faded, at the bottom of the list) and undo it. The company stays in the Tracker with everything recorded; nothing moves to Collection Logs. Who marked or undid it and when is recorded.",
+    defaultAllowed: false,
+    group: "Collections",
+    sensitive: true,
+    adminBypass: false,
+    superAdminBypass: false,
   },
   // ── Daily Compliance Checklist (DCC). Ordinary keys: admins hold them through
   // the admin bypass; a specific person or everyone can be granted them. A

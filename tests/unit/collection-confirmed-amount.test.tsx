@@ -6,6 +6,8 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 // the Tracker, with the server actions MOCKED: what the field accepts, what it refuses before calling the server, and what it
 // shows. The real action, SQL and permissions are covered in tests/integration/collection-confirmed-amounts.db.test.ts.
 const a = vi.hoisted(() => ({ amount: vi.fn(), confirm: vi.fn(), escalate: vi.fn(), refresh: vi.fn() }));
+vi.mock("@/app/(collection-module)/collection/scorecard-actions", () => ({ getScorecardEscalations: vi.fn() }));
+vi.mock("@/app/(collection-module)/collection/marks-actions", () => ({ setCompanyMarks: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: a.refresh }) }));
 vi.mock("@/lib/toast", () => ({ fireToast: vi.fn() }));
 vi.mock("@/app/(collection-module)/collection/actions", () => ({
@@ -18,6 +20,7 @@ vi.mock("@/app/(collection-module)/collection/commitments/actions", () => ({ get
 
 import { CollectionTracker } from "@/components/collections/collection-tracker";
 import { CommitmentsTable, type CommitmentView } from "@/components/collections/commitments-table";
+import { ConfirmedAmountControl } from "@/components/collections/review-controls";
 import { buildRows, type PartyRow } from "@/lib/collections/derive";
 import { CONFIRMED_AMOUNT_PLACEHOLDER, ConfirmedAmountInput, parseConfirmedAmount } from "@/lib/collections/review";
 
@@ -79,30 +82,40 @@ describe("parseConfirmedAmount — the one rule the field and the server share",
   });
 });
 
-describe("the Collection Amount Confirmation column (Tracker)", () => {
-  it("keeps its heading, shows a text field with the placeholder and no dropdown; the other columns are unchanged", () => {
+describe("the Collection Amount Confirmation column (Tracker): the commitment only, no field", () => {
+  it("keeps its heading and the other columns; shows no text field, placeholder or dropdown", () => {
     render(<CollectionTracker rows={[party()]} connected storageReady today="2026-10-19" />);
-    expect(screen.getByRole("columnheader", { name: "Collection Amount Confirmation" })).toBeTruthy();
-    const f = field();
-    expect(f.tagName).toBe("INPUT");
-    expect(f.type).toBe("text");
-    expect(f.getAttribute("inputmode")).toBe("decimal");
-    expect(f.placeholder).toBe(CONFIRMED_AMOUNT_PLACEHOLDER);
-    expect(f.placeholder).toBe("Enter confirmed amount");
-    expect(f.value).toBe("");
-    expect(f.disabled).toBe(false);
-    expect(screen.queryByRole("combobox", { name: /Collection Amount Confirmation/ })).toBeNull();
-    expect(field().closest("td")!.querySelector("select")).toBeNull();
-    expect(document.body.textContent).not.toMatch(/Unavailable|Not set/);
-    for (const h of ["Party name", "Debit", "Credit", "Collection person", "Next follow-up", "Comments", "Collection Amount Confirmation", "Escalation"]) {
-      expect(screen.getByRole("columnheader", { name: new RegExp(h, "i") })).toBeTruthy();
-    }
     expect(screen.getAllByRole("columnheader").map((h) => h.textContent)).toEqual(["Party name", "Debit", "Credit", "Collection person (Sales coordinator)", "Next follow-up", "Comments", "Collection Amount Confirmation", "Escalation"]);
+    expect(screen.queryByLabelText("Collection Amount Confirmation for Alpha Traders")).toBeNull();
+    expect(screen.queryByPlaceholderText(CONFIRMED_AMOUNT_PLACEHOLDER)).toBeNull();
+    expect(screen.queryByRole("button", { name: "Save confirmed amount for Alpha Traders" })).toBeNull();
+    const cell = screen.getByRole("button", { name: "Alpha Traders" }).closest("tr")!.querySelectorAll("td")[6]!;
+    expect(cell.querySelector("input, select, textarea")).toBeNull();
+    expect(cell.textContent).toBe("—"); // nothing sent about commitments to this viewer
   });
 
+  it("a holder sees '₹15,00,000 – 04/11/26 CURRENT' with when and by whom, or 'No commitment recorded' — and still no field", () => {
+    const cell = () => screen.getByRole("button", { name: "Alpha Traders" }).closest("tr")!.querySelectorAll("td")[6]!;
+    render(<CollectionTracker rows={[party({ commitment: { amount: "1500000.00", committedDate: "2026-11-04", recordedAt: new Date("2026-11-02T13:04:00Z"), recordedByName: "Altus Corp" } })]} connected storageReady today="2026-10-19" canSeeCommitments />);
+    expect(cell().textContent).toBe("₹15,00,000 – 04/11/26CurrentRecorded 02/11/26, 06:34 PM by Altus Corp");
+    expect(cell().querySelector("input")).toBeNull();
+    cleanup();
+    render(<CollectionTracker rows={[party({ commitment: null })]} connected storageReady today="2026-10-19" canSeeCommitments />);
+    expect(cell().textContent).toBe("No commitment recorded");
+    expect(cell().querySelector("input")).toBeNull();
+  });
+
+  it("even an existing confirmed amount puts no field back in the row (the stored value is untouched)", () => {
+    render(<CollectionTracker rows={[party({ confirmedAmount: { amount: "25450.50", recordedAt: new Date(), recordedByName: "Asha" } })]} connected storageReady today="2026-10-19" />);
+    expect(screen.queryByLabelText("Collection Amount Confirmation for Alpha Traders")).toBeNull();
+    expect(a.amount).not.toHaveBeenCalled();
+  });
+});
+
+describe("the confirmed-amount field component (no longer in the Tracker row; kept, with its own rules)", () => {
   it("a valid amount is sent to the server in canonical form once Save is pressed, then shown as saved", async () => {
     a.amount.mockResolvedValue({ ok: true });
-    render(<CollectionTracker rows={[party()]} connected storageReady today="2026-10-19" />);
+    render(<ConfirmedAmountControl companyId={CO} companyName="Alpha Traders" current={null} storageReady />);
     expect(saveButton()).toBeNull(); // nothing to save yet
     type("₹25,450.50");
     expect(saveButton()).toBeTruthy();
@@ -116,14 +129,14 @@ describe("the Collection Amount Confirmation column (Tracker)", () => {
 
   it("Enter in the field saves too", async () => {
     a.amount.mockResolvedValue({ ok: true });
-    render(<CollectionTracker rows={[party()]} connected storageReady today="2026-10-19" />);
+    render(<ConfirmedAmountControl companyId={CO} companyName="Alpha Traders" current={null} storageReady />);
     type("1200");
     fireEvent.submit(field().closest("form")!);
     await waitFor(() => expect(a.amount).toHaveBeenCalledWith({ companyId: CO, amount: "1200.00" }));
   });
 
   it("an invalid or negative amount is refused in the browser — the server is never called", async () => {
-    render(<CollectionTracker rows={[party()]} connected storageReady today="2026-10-19" />);
+    render(<ConfirmedAmountControl companyId={CO} companyName="Alpha Traders" current={null} storageReady />);
     for (const [typed, message] of [
       ["-500", /can't be negative/],
       ["abc", /Enter the amount in rupees/],
@@ -143,7 +156,7 @@ describe("the Collection Amount Confirmation column (Tracker)", () => {
 
   it("a refusal from the server is shown and the field keeps what was typed", async () => {
     a.amount.mockResolvedValue({ ok: false, error: "Confirmed amounts can't be stored yet (migration 0123 is pending), so nothing was saved." });
-    render(<CollectionTracker rows={[party()]} connected storageReady today="2026-10-19" />);
+    render(<ConfirmedAmountControl companyId={CO} companyName="Alpha Traders" current={null} storageReady />);
     type("500");
     fireEvent.click(saveButton()!);
     expect((await screen.findByRole("alert")).textContent).toMatch(/migration 0123/);
@@ -153,12 +166,12 @@ describe("the Collection Amount Confirmation column (Tracker)", () => {
 
   it("shows the saved amount, who entered it and when, for every Tracker user; a holder may change it, others see it read-only", () => {
     const current = { amount: "25450.50", recordedAt: new Date("2026-10-19T05:00:00Z"), recordedByName: "Asha" };
-    render(<CollectionTracker rows={[party({ confirmedAmount: current })]} connected storageReady today="2026-10-19" />);
+    render(<ConfirmedAmountControl companyId={CO} companyName="Alpha Traders" current={current} storageReady />);
     expect(field().value).toBe("25450.50");
     expect(screen.getByText(/₹25,450\.50 · Asha, 19\/10\/26/)).toBeTruthy();
     expect(saveButton()).toBeNull();
     cleanup();
-    render(<CollectionTracker rows={[party({ confirmedAmount: current })]} connected storageReady today="2026-10-19" canSetConfirmation={false} />);
+    render(<ConfirmedAmountControl companyId={CO} companyName="Alpha Traders" current={current} storageReady canSet={false} />);
     expect(field().value).toBe("25450.50");
     expect(field().disabled).toBe(true);
     expect(screen.getByText("You can view this but not change it.")).toBeTruthy();
@@ -167,11 +180,10 @@ describe("the Collection Amount Confirmation column (Tracker)", () => {
     expect(a.amount).not.toHaveBeenCalled();
   });
 
-  it("is read-only and says why while migration 0123 isn't applied; the escalation control is independent of it", () => {
-    render(<CollectionTracker rows={[party()]} connected storageReady today="2026-10-19" amountStorageReady={false} />);
+  it("is read-only and says why while migration 0123 isn't applied", () => {
+    render(<ConfirmedAmountControl companyId={CO} companyName="Alpha Traders" current={null} storageReady={false} />);
     expect(field().disabled).toBe(true);
     expect(screen.getByText(/migration 0123 is pending/)).toBeTruthy();
-    expect((screen.getByRole("button", { name: "Escalate Alpha Traders" }) as HTMLButtonElement).disabled).toBe(false);
   });
 });
 

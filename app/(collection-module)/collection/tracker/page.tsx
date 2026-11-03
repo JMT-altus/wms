@@ -16,6 +16,7 @@ import { capabilityHolders } from "@/lib/queries/collection-setup";
 import { latestConfirmations, latestConfirmedAmounts, openEscalations } from "@/lib/queries/collection-review";
 import { listCoordinatorOptions } from "@/lib/queries/collection-master";
 import { latestCommitments } from "@/lib/queries/collection-commitments";
+import { activeMarks } from "@/lib/queries/collection-marks";
 
 export const dynamic = "force-dynamic";
 
@@ -58,12 +59,15 @@ export default async function CollectionTrackerPage() {
   // The commitment (amount – date) shown in the same column is restricted: it is read only with a proof of
   // collection.commitments.view, for the companies in this person's scope, and sent to nobody else.
   const commitmentViewer = caps["collection.commitments.view"] ? await getCollectionCapability("collection.commitments.view") : null;
-  const [confirmations, confirmedAmounts, escalations, coordinatorOptions, commitments] = await Promise.all([
+  // The MARK AS PRIORITY / COLLECTION DONE marks (migration 0125) are visible to every Tracker user — they decide
+  // the row's group and colour for everyone; only setting them needs the two mark capabilities.
+  const [confirmations, confirmedAmounts, escalations, coordinatorOptions, commitments, marks] = await Promise.all([
     latestConfirmations(companyIds),
     latestConfirmedAmounts(companyIds),
     openEscalations(companyIds),
     caps["collection.coordinator.assign"] ? listCoordinatorOptions() : null,
     commitmentViewer ? latestCommitments(commitmentViewer, companyIds) : null,
+    activeMarks(companyIds),
   ]);
   const rows = buildRows(source.parties, followUps.entries).map((r) => {
     const c = r.masterId ? confirmations.byCompany.get(r.masterId) : undefined;
@@ -76,6 +80,7 @@ export default async function CollectionTrackerPage() {
       confirmation: c ? { value: c.value, recordedAt: c.recordedAt, recordedByName: c.recordedByName } : null,
       confirmedAmount: a ? { amount: a.amount, recordedAt: a.recordedAt, recordedByName: a.recordedByName } : null,
       openEscalation: e ? { escalatedAt: e.escalatedAt, escalatedByName: e.escalatedByName } : null,
+      marks: r.masterId ? (marks.byCompany.get(r.masterId) ?? null) : null,
     };
   });
 
@@ -107,8 +112,17 @@ export default async function CollectionTrackerPage() {
     scorecard = identity.status === "unconfigured" ? { status: "unmapped" } : { status: identity.status };
   }
 
+  // The Collection person filter's starting choice. A viewer who sees EVERY company (scope "all") but is themselves
+  // linked to a Sales Coordinator label starts on their own label, so the Tracker opens on their own companies; the
+  // dropdown still offers "All collection persons" and every other coordinator — the scope, not the filter, decides
+  // what may be seen. A linked coordinator (scope "coordinator") already sees only their own companies, so nothing
+  // changes for them; an all-scope viewer with no link starts on everyone, as before. The label comes from the
+  // super-admin-kept link, never from a name or an email address.
+  const defaultCollectionPerson = scope.kind === "all" && identity.status === "linked" ? identity.label : undefined;
+
   const openEscalationCount = escalations.byCompany.size;
-  const reviewQueue = caps["collection.escalation.review"] && caps["collection.commitments.page"] ? { openCount: openEscalationCount, href: "/collection/commitments" } : undefined;
+  // The review queue is the Escalations page, which every reviewer may open.
+  const reviewQueue = caps["collection.escalation.review"] ? { openCount: openEscalationCount, href: "/collection/escalations" } : undefined;
   // Super-admins only (the existing rule): what to grant, and where, when work is waiting for nobody.
   const me = await getCurrentEmployee();
   const setupHints =
@@ -142,6 +156,7 @@ export default async function CollectionTrackerPage() {
         today={localDateString("Asia/Kolkata")}
         emptyMessage={source.message}
         scopeNote={scopeNote(scope) ?? undefined}
+        defaultCollectionPerson={defaultCollectionPerson}
         logsNote={loggedCount > 0 ? { count: loggedCount, href: caps["collection.logs.view"] ? "/collection/logs" : null } : undefined}
         transactionSource={source.transactions}
         // Yes/no flags only. Commitment figures are never part of this page's
@@ -154,6 +169,9 @@ export default async function CollectionTrackerPage() {
         canEscalate={caps["collection.escalation.create"]}
         canImportBalances={caps["collection.balances.import"]}
         canAddMasterCompanies={caps["collection.master.import"]}
+        canSetPriority={caps["collection.priority.set"]}
+        canSetDone={caps["collection.done.set"]}
+        marksStorageReady={marks.storageReady}
         balancesProblem={source.balances?.status === "error" ? (source.balances.errorCode ?? "unknown") : undefined}
         reviewStorageReady={confirmations.storageReady && escalations.storageReady}
         amountStorageReady={confirmedAmounts.storageReady}

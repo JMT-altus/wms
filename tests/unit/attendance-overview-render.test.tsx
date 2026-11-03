@@ -8,6 +8,7 @@ import { PeriodSelect } from "@/components/attendance/overview/period-select";
 import { WelcomeHero } from "@/components/attendance/overview/welcome-hero";
 import { MonthCalendar } from "@/components/attendance/overview/month-calendar";
 import { UpcomingHolidays } from "@/components/attendance/overview/upcoming-holidays";
+import { AttendanceReport } from "@/components/attendance/overview/attendance-report";
 import { computeOverview } from "@/lib/attendance/overview";
 import type { DayRow } from "@/lib/queries/attendance-status";
 
@@ -36,22 +37,31 @@ const kpis = computeOverview(days, { start: "2026-10-01", end: today }, 540);
 describe("AttendanceOverview", () => {
   const selector = <div data-testid="selector">month + year</div>;
 
-  it("renders the selector slot, no old period filters, and all six KPI cards", () => {
-    render(<AttendanceOverview kpis={kpis} selector={selector} />);
+  it("renders the selector slot, no old period filters, and the four KPI cards — no hours cards", () => {
+    const { container } = render(<AttendanceOverview kpis={kpis} selector={selector} />);
     expect(screen.getByTestId("selector")).toBeTruthy();
     for (const old of ["This Week", "This Month", "Last Month", "Last 3 Months"]) {
       expect(screen.queryByText(old)).toBeNull();
     }
-    for (const label of ["Salary Lost", "Hours Worked", "Hours Balance", "Effective Days Worked", "Half Days", "Grace + Condoned"]) {
+    for (const label of ["Salary Lost", "Effective Days Worked", "Half Days", "Grace + Condoned"]) {
       expect(screen.getByText(label)).toBeTruthy();
     }
+    // Hours are not tracked for employees: no hours cards, no hours figures, no hours progress bar.
+    for (const gone of ["Hours Worked", "Hours Balance", "Less than expected", "Ahead of expected"]) {
+      expect(screen.queryByText(gone)).toBeNull();
+    }
+    expect(container.textContent).not.toMatch(/\d+h( \d+m)?\b|Expected \d+h/);
+    // Four cards fill the grid exactly (4 across on wide screens, 2 × 2 below): no empty cell.
+    expect(container.querySelectorAll("article.att-kpi")).toHaveLength(4);
+    expect(container.querySelector("article.att-kpi")!.parentElement!.className).toMatch(/lg:grid-cols-4/);
+    expect(container.querySelector("article.att-kpi")!.parentElement!.className).toMatch(/sm:grid-cols-2/);
     // 1 absent day + a half day lost.
     expect(screen.getByText("1.5 days")).toBeTruthy();
   });
 
-  it("shows actual vs expected for hours and days", () => {
+  it("shows actual vs expected for days only — never for hours", () => {
     render(<AttendanceOverview kpis={kpis} selector={selector} />);
-    expect(screen.getByText(/Actual 13h 30m \/ Expected/)).toBeTruthy();
+    expect(screen.queryByText(/Actual 13h 30m \/ Expected/)).toBeNull();
     expect(screen.getByText(/Actual 1.5 \/ Expected/)).toBeTruthy();
   });
 
@@ -60,10 +70,10 @@ describe("AttendanceOverview", () => {
     expect(screen.getByText(/01\/10\/26 – 09\/10\/26/)).toBeTruthy();
   });
 
-  it("marks a month with no working days as not available rather than inventing a balance", () => {
+  it("marks a month with no working days as such rather than inventing figures", () => {
     const empty = computeOverview([], { start: "2026-11-01", end: "2026-10-09" }, 540);
     render(<AttendanceOverview kpis={empty} selector={selector} notStarted />);
-    expect(screen.getByText("Not available yet")).toBeTruthy();
+    expect(screen.getByText("No working days yet")).toBeTruthy();
     expect(screen.getByText(/hasn.t started yet/i)).toBeTruthy();
   });
 
@@ -79,7 +89,7 @@ describe("WelcomeHero", () => {
     render(
       <WelcomeHero
         greeting="Good to see you, Asha"
-        subtitle="Your attendance, working hours and monthly summary at a glance."
+        subtitle="Your attendance and monthly summary at a glance."
         dateLabel="Fri, 09 Oct 2026"
       />,
     );
@@ -125,7 +135,7 @@ describe("PeriodSelect", () => {
 });
 
 describe("MonthCalendar", () => {
-  it("renders the month, weekday headers, a weekly hours column, nav links and a legend", () => {
+  it("renders the month, weekday headers, nav links and a legend — and no weekly hours column", () => {
     render(
       <MonthCalendar days={days} year={2026} month={10} today={today}
         prevHref="/attendance?y=2026&m=9" nextHref="/attendance?y=2026&m=11" todayHref="/attendance" />,
@@ -138,8 +148,11 @@ describe("MonthCalendar", () => {
     for (const g of ["Present", "Half Day", "Absent", "Holiday", "Weekly Off", "Worked on off day", "Leave"]) {
       expect(within(legend).getByText(g)).toBeTruthy();
     }
-    // Week of Thu 1 – Sun 4: one 9h Present + a holiday.
-    expect(screen.getAllByText("9h").length).toBeGreaterThan(0);
+    // The 9h worked that week is no longer shown anywhere: no "Hrs" column, no hours in a day's hover text.
+    expect(screen.queryByText("Hrs")).toBeNull();
+    expect(screen.queryByText("9h")).toBeNull();
+    expect(screen.queryByText(/weekly hours/i)).toBeNull();
+    for (const el of document.querySelectorAll("[title]")) expect(el.getAttribute("title")).not.toMatch(/worked/);
   });
 
   it("draws the neighbouring months' dates faded, with no status", () => {
@@ -164,7 +177,7 @@ describe("MonthCalendar", () => {
     expect(cell.style.gridColumn).toBe("7");
     expect(cell.style.background).toMatch(/#F1F3F5|rgb\(241, 243, 245\)/i);
     // One band is the same grid template the rows use, so it lines up with them.
-    expect(band.style.gridTemplateColumns).toBe("repeat(7, minmax(0, 1fr)) 60px");
+    expect(band.style.gridTemplateColumns).toBe("repeat(7, minmax(0, 1fr))"); // seven day columns: no hours column
     // It sits behind the header and the weeks.
     expect(band.className).toMatch(/absolute/);
     expect(band.className).toMatch(/z-0/);
@@ -226,16 +239,37 @@ describe("the /attendance page", () => {
     expect(src).not.toMatch(/parsePeriod|periodRange|PeriodKey|sp\.p\b/);
     expect(src).toMatch(/parseYearMonth\(sp\.y, sp\.m, today\)/);
     expect(src).not.toMatch(/Altus|Nishant/);
-    expect(src).toMatch(/Your attendance, working hours and monthly summary at a glance\./);
+    expect(src).toMatch(/Your attendance and monthly summary at a glance\./);
+    expect(src).not.toMatch(/working hours/);
   });
 
-  it("keeps the sections in the agreed order: welcome, overview, calendar, holidays", () => {
+  it("keeps the sections in the agreed order: welcome, overview, calendar, holidays, then the Attendance Report", () => {
     const src = readFileSync(path.resolve(__dirname, "../../app/(app)/attendance/page.tsx"), "utf8");
     const at = (s: string) => src.indexOf(s);
     expect(at("greetingFor(me.name)")).toBeGreaterThan(0);
     expect(at("<AttendanceOverview")).toBeGreaterThan(at("greetingFor(me.name)"));
     expect(at("<MonthCalendar")).toBeGreaterThan(at("<AttendanceOverview"));
     expect(at("<UpcomingHolidays")).toBeGreaterThan(at("<MonthCalendar"));
+    // The report sits after the calendar-and-holidays row (outside it, so it spans the full width) and before </main>.
+    const row = src.lastIndexOf("</div>", at("<AttendanceReport"));
+    expect(at("<AttendanceReport")).toBeGreaterThan(at("<UpcomingHolidays"));
+    expect(row).toBeGreaterThan(at("<UpcomingHolidays"));
+    expect(at("</main>")).toBeGreaterThan(at("<AttendanceReport"));
+    // Same days and month as the calendar: one source, so they always agree and follow the month selector.
+    expect(src).toMatch(/<AttendanceReport days=\{overview\?\.days \?\? \[\]\} year=\{calYear\} month=\{calMonth\}/);
+  });
+
+  it("the Attendance Report shows the month summary, the weeks and the MONTH TOTAL from the page's days", () => {
+    const { container } = render(<AttendanceReport days={days} year={2026} month={10} today={today} />);
+    expect(screen.getByRole("heading", { name: "Attendance Report" })).toBeTruthy();
+    expect(screen.getByLabelText("Month summary").textContent).toMatch(/Work hours/);
+    expect(container.querySelectorAll('button[aria-expanded]').length).toBeGreaterThanOrEqual(4);
+    expect(screen.getByLabelText("Month total").textContent).toMatch(/Month total/);
+    const open = container.querySelector('[id^="attendance-week-"] table')!;
+    expect([...open.querySelectorAll("th")].map((h) => h.textContent)).toEqual(["Date", "Day", "Status", "Check-in", "Check-out", "Work hours"]);
+    cleanup();
+    render(<AttendanceReport days={[]} year={2026} month={10} today={today} error />);
+    expect(screen.getByText(/couldn.t load this month/i)).toBeTruthy();
   });
 
   it("ends where its content ends: no reserved gap above the shared footer", () => {

@@ -366,7 +366,10 @@ function RunRow({ row, check }: { row: SalaryRunRow; check?: StaleCheck }) {
   return (
     <tr className="tabular-nums" style={{ borderTop: `1px solid ${BORDER_SOFT}`, background: tone?.bg, color: NAVY }} data-payment-status={status}>
       <td className="px-2 py-2 font-semibold whitespace-nowrap">
-        {row.employeeName}
+        {/* The name opens this employee's Employee Salary Report for this month (admin page, same access as this one). */}
+        <Link href={`/salary/employee/${row.employeeId}?month=${row.month}` as Route} className="underline-offset-2 hover:underline" title={`Open ${row.employeeName}'s salary report`}>
+          {row.employeeName}
+        </Link>
         <StaleBadge check={check} />
         {row.source !== "generated" && (
           <span className="ml-2 rounded-full px-1.5 text-[10.5px] font-bold" style={{ background: TONE.slate.bg, color: TONE.slate.fg }}>

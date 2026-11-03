@@ -11,7 +11,7 @@ import { partyOverdue, type OverdueInput } from "@/lib/collections/overdue";
 import { OverdueBadge, overdueRowStyle, useBusinessToday } from "@/components/collections/overdue-display";
 import { confirmationLabel, type ConfirmationValue } from "@/lib/collections/review";
 import { commentDate, commentTime } from "@/lib/collections/comment-audit";
-import { closeEscalation } from "@/app/(collection-module)/collection/commitments/actions";
+import { addEscalationComment, closeEscalation } from "@/app/(collection-module)/collection/commitments/actions";
 
 /**
  * One company on the commitments and escalations page: a recorded commitment, an open
@@ -113,6 +113,109 @@ function CloseEscalationButton({ escalationId, companyName }: { escalationId: st
   );
 }
 
+/** A one-time key for one comment dialog: a repeated click sends the same key, and the server saves it once. */
+const newToken = (): string =>
+  typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+    ? crypto.randomUUID()
+    : "10000000-1000-4000-8000-100000000000".replace(/[018]/g, (c) => (Number(c) ^ (Math.random() * 16) >> (Number(c) / 4)).toString(16));
+
+/**
+ * Add Comment on an open escalation (collection.escalation.review, checked again
+ * by the action). A small inline form: Save Comment / Cancel, nothing empty.
+ * Saving never closes the escalation; Close stays a separate button.
+ */
+function AddReviewerCommentButton({ escalationId, companyName }: { escalationId: string; companyName: string }) {
+  const router = useRouter();
+  const [open, setOpen] = React.useState(false);
+  const [note, setNote] = React.useState("");
+  const [token, setToken] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const [saved, setSaved] = React.useState(false);
+
+  function start() {
+    setOpen(true);
+    setNote("");
+    setError(null);
+    setSaved(false);
+    setToken(newToken());
+  }
+  async function save(e?: React.FormEvent) {
+    e?.preventDefault();
+    if (busy) return;
+    if (!note.trim()) {
+      setError("A comment can't be empty.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await addEscalationComment({ escalationId, note: note.trim(), token });
+      if (!res.ok) setError(res.error);
+      else {
+        setOpen(false);
+        setNote("");
+        setSaved(true);
+        router.refresh();
+      }
+    } catch {
+      setError("The comment could not be saved. Please try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!open) {
+    return (
+      <>
+        <button
+          type="button"
+          onClick={start}
+          aria-label={`Add a reviewer comment for ${companyName}`}
+          className="mt-1 mr-1.5 h-7 rounded-md border border-[#C4B5FD] bg-[#F5F3FF] px-2 text-[12px] font-semibold text-[#5B21B6] hover:bg-[#EDE9FE]"
+        >
+          Add Comment
+        </button>
+        {saved && (
+          <p role="status" className="mt-0.5 text-[11.5px] font-semibold text-[#047857]">
+            Comment saved. The escalation is still open.
+          </p>
+        )}
+      </>
+    );
+  }
+  return (
+    <form onSubmit={(e) => void save(e)} className="mt-1 block max-w-[320px] rounded-md border border-[#C4B5FD] bg-[#F5F3FF] p-2" aria-label={`Reviewer comment for ${companyName}`}>
+      <label className="block text-[11px] font-bold uppercase tracking-[0.04em] text-[#5B21B6]">
+        Reviewer comment
+        <textarea
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          maxLength={2000}
+          rows={3}
+          autoFocus
+          disabled={busy}
+          aria-label={`Reviewer comment text for ${companyName}`}
+          className="mt-1 block w-full rounded-md border border-hairline-strong bg-white px-2 py-1.5 text-[13px] font-normal normal-case tracking-normal text-ink-strong"
+        />
+      </label>
+      {error && (
+        <p role="alert" className="mt-1 text-[11.5px] font-semibold text-[#B91C1C]">
+          {error}
+        </p>
+      )}
+      <span className="mt-1.5 flex gap-1.5">
+        <button type="submit" disabled={busy || !note.trim()} className="h-7 rounded-md px-2.5 text-[12px] font-semibold text-white disabled:opacity-50" style={{ background: "#6D28D9" }}>
+          {busy ? "Saving…" : "Save Comment"}
+        </button>
+        <button type="button" onClick={() => setOpen(false)} disabled={busy} className="h-7 rounded-md border border-hairline-strong px-2.5 text-[12px] font-semibold text-ink-strong disabled:opacity-50">
+          Cancel
+        </button>
+      </span>
+    </form>
+  );
+}
+
 /**
  * Recorded commitments and open escalations, each with its collection person,
  * confirmation, outstanding (when the source supplies it), due dates with the
@@ -128,6 +231,7 @@ export function CommitmentsTable({
   showCommitments = true,
   showEscalations = true,
   canClose = true,
+  canComment = false,
   emptyMessage = "No commitments or open escalations yet.",
 }: {
   rows: CommitmentView[];
@@ -135,6 +239,8 @@ export function CommitmentsTable({
   showCommitments?: boolean;
   showEscalations?: boolean;
   canClose?: boolean;
+  /** collection.escalation.review (the Escalations page): Add Comment on each open escalation. */
+  canComment?: boolean;
   /** Shown when there are no rows at all (what "empty" means depends on what the viewer may see). */
   emptyMessage?: string;
 }) {
@@ -266,7 +372,10 @@ export function CommitmentsTable({
                           </span>
                           <span className="block text-ink-subtle">Confirmation then: {confirmationLabel(r.escalation.confirmationAtEscalation)}</span>
                           <span className="block text-ink-subtle">Confirmed amount then: {r.escalation.confirmedAmountAtEscalation ? formatInrExact(r.escalation.confirmedAmountAtEscalation) : "Not entered"}</span>
-                          {canClose && <CloseEscalationButton escalationId={r.escalation.id} companyName={r.companyName} />}
+                          <span className="block">
+                            {canComment && <AddReviewerCommentButton escalationId={r.escalation.id} companyName={r.companyName} />}
+                            {canClose && <CloseEscalationButton escalationId={r.escalation.id} companyName={r.companyName} />}
+                          </span>
                         </>
                       ) : (
                         DASH

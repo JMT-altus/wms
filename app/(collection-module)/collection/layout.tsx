@@ -23,8 +23,10 @@ export default async function CollectionLayout({ children }: { children: ReactNo
   const settings = await getOrgSettings();
   // Only decides which nav links show; every Collection page and action checks again.
   const caps = await getCollectionCapabilities();
-  // The Commitments & Escalations page has its own key; the popup section's keys never show it.
+  // The Commitments page has its own key; the popup section's keys never show it.
   const showCommitments = caps["collection.commitments.page"];
+  // The Escalations page is for reviewers.
+  const showEscalations = caps["collection.escalation.review"];
   const showCollection = caps["collection.view"];
   const showLogs = caps["collection.logs.view"];
 
@@ -32,8 +34,8 @@ export default async function CollectionLayout({ children }: { children: ReactNo
     <>
       <IdleTimerClient timeoutMinutes={settings.idleTimeoutMinutes} />
       <div className="min-h-screen flex max-md:block app-wallpaper">
-        <CollectionSidebar userName={me.name} showCommitments={showCommitments} showCollection={showCollection} showLogs={showLogs} />
-        <CollectionMobileNav showCommitments={showCommitments} showCollection={showCollection} showLogs={showLogs} />
+        <CollectionSidebar userName={me.name} showCommitments={showCommitments} showEscalations={showEscalations} showCollection={showCollection} showLogs={showLogs} />
+        <CollectionMobileNav showCommitments={showCommitments} showEscalations={showEscalations} showCollection={showCollection} showLogs={showLogs} />
         <div className="flex-1 min-w-0 max-md:flex max-md:flex-col">
           {/* The app's slim header bar, same as every other module carries. */}
           <DashboardHeader generatedAt={new Date()} />

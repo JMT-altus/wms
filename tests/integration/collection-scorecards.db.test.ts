@@ -144,3 +144,44 @@ describe("the salesperson's card from real counts", () => {
     });
   });
 });
+
+describe("the detail lists behind the two numbers", () => {
+  it("each list is exactly the records its number counts", async () => {
+    for (const label of ["BK", "SV", "Nobody"]) {
+      const rows = await q.listEscalationsForSalesperson(PROOF, label);
+      const counts = await forLabel(label);
+      expect(rows).toHaveLength(counts.escalated);
+      expect(rows.filter((r) => r.resolvedByReviewer)).toHaveLength(counts.resolvedByReviewer);
+      expect(new Set(rows.map((r) => r.id)).size).toBe(rows.length); // each record once
+      expect(rows.every((r) => r.coordinatorLabel === label)).toBe(true);
+    }
+  });
+
+  it("'solved' rows are closed by the reviewer; open, other closers and unknown closers stay out", async () => {
+    const rows = await q.listEscalationsForSalesperson(PROOF, "BK");
+    const solved = rows.filter((r) => r.resolvedByReviewer);
+    expect(solved.map((r) => [r.companyName, r.status, r.closedByName])).toEqual([
+      ["Alpha", "closed", "reviewer"],
+      ["Alpha", "closed", "reviewer"],
+    ]);
+    const others = rows.filter((r) => !r.resolvedByReviewer).map((r) => `${r.companyName}:${r.status}:${r.closedByName ?? "-"}`).sort();
+    expect(others).toEqual(["Alpha:closed:closerAdmin", "Alpha:open:-", "Beta:closed:-"]);
+  });
+
+  it("carries the columns the views show: company, coordinator, reason, escalated by/at, closed at", async () => {
+    const [first] = await q.listEscalationsForSalesperson(PROOF, "SV");
+    expect(first).toMatchObject({ companyName: "Gamma", coordinatorLabel: "SV", reason: "test", escalatedByName: "staff" });
+    expect(first!.escalatedAt).toBeInstanceOf(Date);
+    const solved = (await q.listEscalationsForSalesperson(PROOF, "SV")).find((r) => r.resolvedByReviewer)!;
+    expect(solved.closedAt).toBeInstanceOf(Date);
+  });
+
+  it("missing escalation storage reads as an empty list", async () => {
+    await pg.exec(`alter table collection_escalations rename to collection_escalations_hidden`);
+    try {
+      expect(await q.listEscalationsForSalesperson(PROOF, "BK")).toEqual([]);
+    } finally {
+      await pg.exec(`alter table collection_escalations_hidden rename to collection_escalations`);
+    }
+  });
+});

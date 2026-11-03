@@ -9,14 +9,14 @@
  *     closure episode is recorded (unless it already has one).
  *   - Debit or Credit not zero (either side, negative included) → the company
  *     belongs in the Tracker: an open closure, if any, is marked reopened.
- *   - Neither figure known → nothing moves. (The balance plan already rejects a
- *     row with both cells blank, so such a line is never written; this is the
- *     guard in depth.)
+ *   - A figure that isn't whole paise → nothing moves (guard in depth: the
+ *     plan never produces one).
  *
  * Zero follows the importer's own rules: amounts are whole paise, so 0, 0.00
  * and -0.00 are zero; a lone dash is read as 0 by the importer; a blank cell
- * beside a zero on the other side is zero on that side, exactly as the plan
- * sums it.
+ * is zero on that side, exactly as the plan sums it, so a row naming the
+ * company with both cells blank is a ₹0 / ₹0 line. (The plan refuses a sheet
+ * with no amounts at all, so a misread layout can't move anyone.)
  *
  * Only companies in the upload are looked at. A company the file leaves out
  * keeps whatever state it had, and a company in no upload at all is never
@@ -34,7 +34,6 @@ export type LineBalance = "zero" | "non-zero" | "unknown";
 
 export function lineBalance(l: Pick<UploadedLine, "debitPaise" | "creditPaise">): LineBalance {
   const { debitPaise: d, creditPaise: c } = l;
-  if (d === null && c === null) return "unknown";
   if ((d !== null && !Number.isInteger(d)) || (c !== null && !Number.isInteger(c))) return "unknown";
   return (d ?? 0) === 0 && (c ?? 0) === 0 ? "zero" : "non-zero";
 }
@@ -46,7 +45,7 @@ export interface ClosurePlan {
   reopen: UploadedLine[];
   /** Already where they belong: logged and still zero, or in the Tracker and not zero. */
   unchanged: number;
-  /** Lines whose balance can't be determined; never moved. */
+  /** Lines whose figures aren't whole paise; never moved. */
   unknown: number;
 }
 

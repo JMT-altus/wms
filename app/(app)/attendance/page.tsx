@@ -21,6 +21,7 @@ import { AttendanceOverview } from "@/components/attendance/overview/kpi-cards";
 import { MonthCalendar } from "@/components/attendance/overview/month-calendar";
 import { PeriodSelect } from "@/components/attendance/overview/period-select";
 import { UpcomingHolidays } from "@/components/attendance/overview/upcoming-holidays";
+import { AttendanceReport } from "@/components/attendance/overview/attendance-report";
 import { WelcomeHero } from "@/components/attendance/overview/welcome-hero";
 import { PAGE_GROUND } from "@/components/attendance/overview/theme";
 
@@ -113,12 +114,12 @@ export default async function AttendancePage({ searchParams }: PageProps) {
     <>
       <DashboardHeader generatedAt={new Date()} />
       <div style={{ background: PAGE_GROUND }}>
-        <main className="mx-auto max-w-[1200px] px-8 max-md:px-4 pt-7 pb-10 max-md:pb-8 grid gap-6">
+        <main className="mx-auto max-w-[1200px] px-8 max-md:px-4 pt-7 pb-10 max-md:pb-8 grid grid-cols-[minmax(0,1fr)] gap-6">
           {/* A. Welcome — light, no surface of its own */}
           <div className="att-rise" style={{ ["--att-delay" as string]: "0ms" }}>
             <WelcomeHero
               greeting={greetingFor(me.name)}
-              subtitle="Your attendance, working hours and monthly summary at a glance."
+              subtitle="Your attendance and monthly summary at a glance."
               dateLabel={labelForDate(today)}
             />
           </div>
@@ -162,6 +163,11 @@ export default async function AttendancePage({ searchParams }: PageProps) {
               error={overview === null}
             />
             <UpcomingHolidays holidays={holidays ?? []} today={today} error={holidays === null} />
+          </div>
+
+          {/* E. Attendance Report — beneath the whole calendar-and-holidays row, full width; the same days and month as the calendar. */}
+          <div className="att-rise min-w-0" style={{ ["--att-delay" as string]: "180ms" }}>
+            <AttendanceReport days={overview?.days ?? []} year={calYear} month={calMonth} today={today} error={overview === null} />
           </div>
         </main>
       </div>

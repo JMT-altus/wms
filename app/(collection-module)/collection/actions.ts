@@ -134,6 +134,7 @@ export async function editFollowUpComment(input: unknown): Promise<ActionResult>
   if (outcome.changed) {
     revalidatePath("/collection/tracker");
     revalidatePath("/collection/commitments");
+    revalidatePath("/collection/escalations");
     revalidatePath("/collection/dashboard");
   }
   return { ok: true };
@@ -222,6 +223,7 @@ export async function deleteFollowUpComment(input: unknown): Promise<ActionResul
   if (outcome.changed) {
     revalidatePath("/collection/tracker");
     revalidatePath("/collection/commitments");
+    revalidatePath("/collection/escalations");
     revalidatePath("/collection/dashboard");
   }
   return { ok: true };
@@ -260,6 +262,7 @@ export async function setCollectionConfirmation(input: unknown): Promise<ActionR
   }
   revalidatePath("/collection/tracker");
   revalidatePath("/collection/commitments");
+  revalidatePath("/collection/escalations");
   return { ok: true };
 }
 
@@ -298,6 +301,7 @@ export async function setConfirmedAmount(input: unknown): Promise<ActionResult> 
   }
   revalidatePath("/collection/tracker");
   revalidatePath("/collection/commitments");
+  revalidatePath("/collection/escalations");
   return { ok: true };
 }
 
@@ -335,6 +339,7 @@ export async function escalateForReview(input: unknown): Promise<ActionResult> {
   }
   revalidatePath("/collection/tracker");
   revalidatePath("/collection/commitments");
+  revalidatePath("/collection/escalations");
   return { ok: true };
 }
 
@@ -383,6 +388,7 @@ export async function assignSalesCoordinator(input: unknown): Promise<ActionResu
       revalidatePath("/collection/tracker");
       revalidatePath("/collection/dashboard");
       revalidatePath("/collection/commitments");
+      revalidatePath("/collection/escalations");
       revalidatePath("/collection/master");
     }
     return { ok: true, changed: outcome.changed };

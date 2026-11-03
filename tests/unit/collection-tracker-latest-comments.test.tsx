@@ -17,6 +17,9 @@ const h = vi.hoisted(() => ({
   edit: vi.fn(),
   refresh: vi.fn(),
 }));
+vi.mock("@/lib/queries/collection-marks", () => ({ activeMarks: async () => ({ storageReady: true, byCompany: new Map() }) }));
+vi.mock("@/app/(collection-module)/collection/scorecard-actions", () => ({ getScorecardEscalations: vi.fn() }));
+vi.mock("@/app/(collection-module)/collection/marks-actions", () => ({ setCompanyMarks: vi.fn() }));
 vi.mock("server-only", () => ({}));
 // Company visibility (lib/collections/scope-server.ts) is not under test here: every company is in scope. The real
 // resolver, over real coordinator links, is covered by tests/integration/collection-tracker-scope.db.test.ts.

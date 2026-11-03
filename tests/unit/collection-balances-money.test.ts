@@ -60,10 +60,14 @@ describe("parseMoney — exact", () => {
   });
 
   it("refuses malformed text", () => {
-    for (const s of ["abc", "12 Dr", "(500)", "1e9", "1E9", "+5", ".5", "5.", "1.2.3", "₹100", "1 000", "--5", "0x10", "Infinity", "NaN"]) {
+    for (const s of ["abc", "12 Dr", "(500)", "1e9", "1E9", "+5", ".5", "5.", "1.2.3", "₹", "1 000", "--5", "0x10", "Infinity", "NaN"]) {
       expect(parseMoney(s)).toMatchObject({ kind: "error" });
     }
     expect(parseMoney("   ")).toEqual({ kind: "blank" });
+    // A leading rupee sign is formatting: the number after it is read exactly.
+    expect(parseMoney("₹100")).toEqual({ kind: "ok", paise: 10000 });
+    expect(parseMoney("₹-")).toEqual({ kind: "ok", paise: 0 }); // a formatted nil
+    expect(parseMoney("₹ 1,25,000.50")).toEqual({ kind: "ok", paise: 12500050 });
   });
 });
 

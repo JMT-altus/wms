@@ -341,6 +341,9 @@ describe("closures are written in exactly one place: the confirmed Bulk Upload",
         // The one writer, called only from the confirmed import (below), and the Tracker loader that reads open episodes.
         "lib/queries/collection-closures-write.ts",
         "lib/collections/balances/closures.ts",
+        // The one-time clean-up of existing — / — and ₹0 / ₹0 companies, run only by scripts/backfill-collection-logs.ts.
+        "lib/collections/balances/logs-backfill.ts",
+        "tests/integration/collection-logs-backfill.db.test.ts",
         "app/(collection-module)/collection/tracker/bulk-actions.ts",
         "lib/collections/load.ts",
         "tests/integration/collection-closures-migration.db.test.ts",
@@ -350,6 +353,10 @@ describe("closures are written in exactly one place: the confirmed Bulk Upload",
         "tests/unit/collection-source.test.ts",
         "tests/unit/collection-zero-outstanding.test.ts",
         "tests/unit/collection-logs.test.tsx",
+        // Company marks (0125): the migration's notes say a closure never touches a mark, and its test proves it by
+        // writing a closure beside one. Neither reads or writes closures in app code.
+        "db/migrations/0125_collection_company_marks.sql",
+        "tests/integration/collection-marks.db.test.ts",
       ].sort(),
     );
   });

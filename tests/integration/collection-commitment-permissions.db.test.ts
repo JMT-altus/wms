@@ -63,6 +63,7 @@ let commitments: typeof import("@/app/(collection-module)/collection/commitments
 let tracker: typeof import("@/app/(collection-module)/collection/actions");
 let CollectionLayout: (typeof import("@/app/(collection-module)/collection/layout"))["default"];
 let CommitmentsPage: (typeof import("@/app/(collection-module)/collection/commitments/page"))["default"];
+let EscalationsPage: (typeof import("@/app/(collection-module)/collection/escalations/page"))["default"];
 let TrackerPage: (typeof import("@/app/(collection-module)/collection/tracker/page"))["default"];
 const ids: Record<string, string> = {};
 let ALPHA = "";
@@ -96,7 +97,7 @@ function findProps(node: ReactNode, name: string): Record<string, unknown> | nul
 /** What the rail is told (the real layout decides from the real resolver). */
 const rail = async () => {
   const tree = await CollectionLayout({ children: null });
-  return findProps(tree, "CollectionSidebar") as { showCommitments: boolean; showCollection: boolean } | null;
+  return findProps(tree, "CollectionSidebar") as { showCommitments: boolean; showEscalations: boolean; showCollection: boolean } | null;
 };
 /** What the Tracker page tells the popup. */
 const popupFlags = async () => {
@@ -135,6 +136,7 @@ beforeAll(async () => {
   tracker = await import("@/app/(collection-module)/collection/actions");
   CollectionLayout = (await import("@/app/(collection-module)/collection/layout")).default;
   CommitmentsPage = (await import("@/app/(collection-module)/collection/commitments/page")).default;
+  EscalationsPage = (await import("@/app/(collection-module)/collection/escalations/page")).default;
   TrackerPage = (await import("@/app/(collection-module)/collection/tracker/page")).default;
 }, 180_000);
 afterAll(async () => {
@@ -152,10 +154,10 @@ describe("the registry", () => {
     const by = Object.fromEntries(PERMISSION_FIELDS.map((f) => [f.key, f]));
     expect(by["collection.commitments.view"]).toMatchObject({ label: "Collection Tracker — Company Popup — Commitment Section: View", group: "Collections", sensitive: true, defaultAllowed: false, adminBypass: false, superAdminBypass: false });
     expect(by["collection.commitments.edit"]).toMatchObject({ label: "Collection Tracker — Company Popup — Commitment Section: Record", group: "Collections", sensitive: true, defaultAllowed: false });
-    expect(by["collection.commitments.page"]).toMatchObject({ label: "Collection — Commitments & Escalations Page Access", group: "Collections", sensitive: true, defaultAllowed: false, adminBypass: false, superAdminBypass: false });
+    expect(by["collection.commitments.page"]).toMatchObject({ label: "Collection — Commitments Page Access", group: "Collections", sensitive: true, defaultAllowed: false, adminBypass: false, superAdminBypass: false });
     // No name, email or identity anywhere in the registry entries or the guards.
     const read = (p: string) => readFileSync(resolve(__dirname, "../..", p), "utf8");
-    for (const p of ["db/enums.ts", "app/(collection-module)/collection/commitments/page.tsx", "app/(collection-module)/collection/commitments/actions.ts", "app/(collection-module)/collection/layout.tsx", "lib/auth/capability.ts"]) {
+    for (const p of ["db/enums.ts", "app/(collection-module)/collection/commitments/page.tsx", "app/(collection-module)/collection/escalations/page.tsx", "lib/collections/review-rows.ts", "app/(collection-module)/collection/commitments/actions.ts", "app/(collection-module)/collection/layout.tsx", "lib/auth/capability.ts"]) {
       expect(read(p), p).not.toMatch(/mihir|@gmail|@jmt/i);
     }
   });
@@ -220,7 +222,7 @@ describe("the company popup's Commitment section (Permission A)", () => {
   });
 });
 
-describe("the Commitments & Escalations page (Permission B)", () => {
+describe("the Commitments page (Permission B) and the separate Escalations page", () => {
   it("is shut by default — rail entry hidden, direct URL not found — for staff, admins and super-admins, whatever else they hold", async () => {
     await grant("collection.commitments.view", "everyone", null, true);
     await grant("collection.commitments.edit", "everyone", null, true);
@@ -230,8 +232,14 @@ describe("the Commitments & Escalations page (Permission B)", () => {
       expect((await rail())?.showCommitments, who).toBe(false);
       expect(await outcome(CommitmentsPage()), who).toBe("not found");
     }
+    // Review opens the separate Escalations page instead (its own rail entry), never the Commitments page.
     as("admin");
-    expect((await popupFlags()).reviewQueue).toBeUndefined(); // a reviewer without the page gets no link to it either
+    expect((await rail())?.showEscalations).toBe(true);
+    expect(await outcome(EscalationsPage())).toBe("opens");
+    expect((await popupFlags()).reviewQueue).toEqual({ openCount: 0, href: "/collection/escalations" });
+    as("staff");
+    expect((await rail())?.showEscalations).toBe(false);
+    expect(await outcome(EscalationsPage())).toBe("not found");
   });
 
   it("an individually authorised employee sees the rail entry and opens the page; revoking it stops the next request", async () => {
@@ -269,19 +277,27 @@ describe("the Commitments & Escalations page (Permission B)", () => {
     await pg.query(`update module_access_grants set allowed = true where subject_id = $1`, [ids.staff]);
   });
 
-  it("the page shows only what the section keys allow: commitments with the popup View key, escalations with Review; closing still needs Close", async () => {
+  it("each page shows only its own records: commitments with the popup View key, escalations with Review on their own page; closing still needs Close", async () => {
     await grant("collection.commitments.page", "employee", ids.staff!, true);
     as("staff");
     let props = findProps(await CommitmentsPage(), "CommitmentsTable")!;
     expect(props).toMatchObject({ showCommitments: false, showEscalations: false, canClose: false, rows: [] });
     await grant("collection.escalation.review", "employee", ids.staff!, true);
+    // Review never adds escalations to the Commitments page; it opens the Escalations page.
     props = findProps(await CommitmentsPage(), "CommitmentsTable")!;
+    expect(props).toMatchObject({ showCommitments: false, showEscalations: false });
+    props = findProps(await EscalationsPage(), "CommitmentsTable")!;
     expect(props).toMatchObject({ showCommitments: false, showEscalations: true, canClose: false });
-    expect((await popupFlags()).reviewQueue).toEqual({ openCount: 0, href: "/collection/commitments" });
+    expect((await popupFlags()).reviewQueue).toEqual({ openCount: 0, href: "/collection/escalations" });
     await grant("collection.commitments.view", "employee", ids.staff!, true);
     props = findProps(await CommitmentsPage(), "CommitmentsTable")!;
-    expect(props).toMatchObject({ showCommitments: true, showEscalations: true });
+    expect(props).toMatchObject({ showCommitments: true, showEscalations: false });
     expect((props.rows as { companyName: string; amount: string | null }[]).map((r) => [r.companyName, r.amount])).toEqual([["Alpha Traders", "125000.50"]]); // the commitment recorded earlier is still there
+    // The Escalations page still reads no commitment, even for someone who may see them.
+    expect((findProps(await EscalationsPage(), "CommitmentsTable")!.rows as unknown[]).length).toBe(0);
+    await grant("collection.escalation.close", "employee", ids.staff!, true);
+    expect(findProps(await EscalationsPage(), "CommitmentsTable")).toMatchObject({ canClose: true });
+    expect(findProps(await CommitmentsPage(), "CommitmentsTable")).toMatchObject({ canClose: false });
   });
 });
 
@@ -297,9 +313,13 @@ describe("the existing workflows and grants", () => {
     expect(await commitments.saveCompanyCommitment({ companyId: ALPHA, amount: "300000", committedDate: "2099-12-01" })).toMatchObject({ ok: true });
     expect(await tracker.escalateForReview({ companyId: ALPHA, reason: "Customer disputes the invoice amount." })).toEqual({ ok: true });
     as("admin");
-    const rows = findProps(await CommitmentsPage(), "CommitmentsTable")!.rows as { companyName: string; amount: string | null; escalation: { id: string; reason: string | null } | null }[];
+    // The commitment on the Commitments page (no escalation there); the escalation on the Escalations page (no amount there).
+    const committed = findProps(await CommitmentsPage(), "CommitmentsTable")!.rows as { companyName: string; amount: string | null; escalation: unknown }[];
+    expect(committed).toHaveLength(1);
+    expect(committed[0]).toMatchObject({ companyName: "Alpha Traders", amount: "300000.00", escalation: null });
+    const rows = findProps(await EscalationsPage(), "CommitmentsTable")!.rows as { companyName: string; amount: string | null; escalation: { id: string; reason: string | null } | null }[];
     expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({ companyName: "Alpha Traders", amount: "300000.00", escalation: { reason: "Customer disputes the invoice amount." } });
+    expect(rows[0]).toMatchObject({ companyName: "Alpha Traders", amount: null, escalation: { reason: "Customer disputes the invoice amount." } });
     expect(await commitments.closeEscalation({ escalationId: rows[0]!.escalation!.id })).toEqual({ ok: true });
     as("staff");
     await expect(commitments.closeEscalation({ escalationId: rows[0]!.escalation!.id })).rejects.toThrow("Forbidden");

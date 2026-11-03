@@ -2,21 +2,16 @@ import type { ReactNode } from "react";
 import {
   BarChart3,
   CalendarCheck,
-  Clock,
-  Gauge,
   Hourglass,
   IndianRupee,
   ShieldCheck,
 } from "lucide-react";
-import {
-  formatDays,
-  formatMinutes,
-  type OverviewKpis,
-} from "@/lib/attendance/overview";
+import { formatDays, type OverviewKpis } from "@/lib/attendance/overview";
 import { ACCENT, BORDER, BORDER_SOFT, CARD, NAVY, SLATE, TONE, type Tone } from "./theme";
 
 /**
- * "How am I doing?" — the six KPI figures for the selected month.
+ * "How am I doing?" — the four KPI figures for the selected month. Hours are not
+ * tracked for employees, so no hours worked or hours balance is shown.
  *
  * One surface, six cells separated by thin rules: no box around each metric.
  * Presentational only — every figure arrives already computed (see
@@ -90,14 +85,13 @@ function KpiGrid({ kpis }: { kpis: OverviewKpis }) {
   ].filter(Boolean) as string[];
 
   const noWorkingDays = kpis.expectedDays === 0;
-  const hoursFill = kpis.expectedMinutes > 0 ? kpis.workedMinutes / kpis.expectedMinutes : null;
   const daysFill = kpis.expectedDays > 0 ? kpis.effectiveDays / kpis.expectedDays : null;
 
   return (
     // `gap-px` over a hairline background draws the separators: the cells are
     // white, so only the gaps show, and nothing has an outline of its own.
     <div
-      className="grid auto-rows-fr grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-px rounded-lg overflow-hidden"
+      className="grid auto-rows-fr grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-px rounded-lg overflow-hidden"
       style={{ background: BORDER, border: `1px solid ${BORDER}` }}
     >
       <Kpi
@@ -107,27 +101,6 @@ function KpiGrid({ kpis }: { kpis: OverviewKpis }) {
         value={`${formatDays(kpis.lostDays)} ${kpis.lostDays === 1 ? "day" : "days"}`}
         sub={lostParts.length > 0 ? lostParts.join(" · ") : "Nothing lost in this period"}
         title="Absent + unpaid-leave days + ½ per half day + the late deduction (½ day per 3 un-waived lates in the month)."
-      />
-      <Kpi
-        icon={<Clock size={16} strokeWidth={2} />}
-        status={null}
-        label="Hours Worked"
-        value={formatMinutes(kpis.workedMinutes)}
-        sub={noWorkingDays ? "No working days yet" : `Actual ${formatMinutes(kpis.workedMinutes)} / Expected ${formatMinutes(kpis.expectedMinutes)}`}
-        fill={hoursFill}
-      />
-      <Kpi
-        icon={<Gauge size={16} strokeWidth={2} />}
-        status={noWorkingDays ? null : kpis.balanceMinutes >= 0 ? "teal" : "coral"}
-        label="Hours Balance"
-        value={noWorkingDays ? "—" : formatMinutes(kpis.balanceMinutes, true)}
-        sub={
-          noWorkingDays
-            ? "Not available yet"
-            : kpis.balanceMinutes >= 0
-              ? "Ahead of expected"
-              : "Less than expected"
-        }
       />
       <Kpi
         icon={<CalendarCheck size={16} strokeWidth={2} />}

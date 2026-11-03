@@ -10,6 +10,7 @@ import {
   ClipboardList,
   Building2,
   HandCoins,
+  ShieldAlert,
   Archive,
   ArrowLeft,
   type LucideIcon,
@@ -68,9 +69,17 @@ const NAV: ReadonlyArray<NavItem> = [
  */
 const COMMITMENTS_ITEM: NavItem = {
   href: `${COLLECTION_BASE}/commitments` as Route,
-  label: "Commitments & Escalations",
-  hint: "Restricted: commitments and reviews",
+  label: "Commitments",
+  hint: "Restricted: recorded commitments",
   icon: HandCoins,
+};
+
+/** Shown only with collection.escalation.review (decided on the server); the page checks again regardless. */
+const ESCALATIONS_ITEM: NavItem = {
+  href: `${COLLECTION_BASE}/escalations` as Route,
+  label: "Escalations",
+  hint: "Restricted: escalations awaiting review",
+  icon: ShieldAlert,
 };
 
 /** Shown only with collection.logs.view (decided on the server); the page checks again regardless. */
@@ -87,9 +96,9 @@ const LOGS_ITEM: NavItem = {
  * every Collection page and action checks on the server. Same signature as the
  * Forms rail's navFor used to have, so the callers and tests carry over.
  */
-export function navFor(showCommitments: boolean, showCollection: boolean, showLogs = false): ReadonlyArray<NavItem> {
+export function navFor(showCommitments: boolean, showCollection: boolean, showLogs = false, showEscalations = false): ReadonlyArray<NavItem> {
   const base = showCollection ? NAV : [];
-  const extra = [showCommitments && COMMITMENTS_ITEM, showLogs && LOGS_ITEM].filter((i): i is NavItem => Boolean(i));
+  const extra = [showCommitments && COMMITMENTS_ITEM, showEscalations && ESCALATIONS_ITEM, showLogs && LOGS_ITEM].filter((i): i is NavItem => Boolean(i));
   if (extra.length === 0) return base;
   // The restricted pages keep the group heading when they are the only entries.
   const items = [...base, ...extra];
@@ -105,15 +114,18 @@ const ACCENT = `linear-gradient(135deg, ${ACCENT_FROM} 0%, ${ACCENT_TO} 100%)`;
 export function CollectionSidebar({
   userName,
   showCommitments = false,
+  showEscalations = false,
   showCollection = true,
   showLogs = false,
 }: {
   userName: string;
   showCommitments?: boolean;
+  /** collection.escalation.review: the Escalations page. */
+  showEscalations?: boolean;
   showCollection?: boolean;
   showLogs?: boolean;
 }) {
-  const items = navFor(showCommitments, showCollection, showLogs);
+  const items = navFor(showCommitments, showCollection, showLogs, showEscalations);
   const pathname = usePathname();
   const collapsed = useRailCollapsed();
 
@@ -201,14 +213,17 @@ export function CollectionSidebar({
 /** The same links as a scrollable strip, for phones where the rail hides. */
 export function CollectionMobileNav({
   showCommitments = false,
+  showEscalations = false,
   showCollection = true,
   showLogs = false,
 }: {
   showCommitments?: boolean;
+  /** collection.escalation.review: the Escalations page. */
+  showEscalations?: boolean;
   showCollection?: boolean;
   showLogs?: boolean;
 }) {
-  const items = navFor(showCommitments, showCollection, showLogs);
+  const items = navFor(showCommitments, showCollection, showLogs, showEscalations);
   const pathname = usePathname();
   return (
     <div className="rail-navy-top md:hidden sticky top-0 z-30 flex items-center gap-2 px-4 py-2.5 overflow-x-auto">

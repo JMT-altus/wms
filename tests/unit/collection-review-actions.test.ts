@@ -30,6 +30,7 @@ const h = vi.hoisted(() => ({
   open: vi.fn(),
 }));
 
+vi.mock("@/lib/queries/collection-marks", () => ({ activeMarks: async () => ({ storageReady: true, byCompany: new Map() }) }));
 vi.mock("server-only", () => ({}));
 // Company visibility (lib/collections/scope-server.ts) is not under test here: every company is in scope. The real
 // resolver, over real coordinator links, is covered by tests/integration/collection-tracker-scope.db.test.ts.
@@ -324,7 +325,7 @@ describe("pages", () => {
     expect(h.latest).not.toHaveBeenCalled();
   });
 
-  it("a reviewer (any holder — nobody is named) sees escalated companies, with no commitment data read or shown", async () => {
+  it("Escalations page: a reviewer (any holder — nobody is named) sees escalated companies, with no commitment data read or shown", async () => {
     h.caps.add("collection.escalation.review");
     h.listOpen.mockResolvedValue({
       storageReady: true,
@@ -332,7 +333,7 @@ describe("pages", () => {
       rows: [{ id: ESCALATION, companyId: COMPANY, companyName: "Alpha Traders", collectionPerson: "MANGESH", escalatedAt: new Date("2026-10-19T06:00:00Z"), escalatedByName: "Asha", confirmationAtEscalation: null, reason: "Customer disputes the invoice amount." }],
     });
     h.latest.mockResolvedValue({ storageReady: true, byCompany: new Map([[COMPANY, { value: "yes", recordedAt: new Date(), recordedByName: "Asha" }]]) });
-    const { default: Page } = await import("@/app/(collection-module)/collection/commitments/page");
+    const { default: Page } = await import("@/app/(collection-module)/collection/escalations/page");
     const props = findProps(await Page(), "CommitmentsTable")!;
     expect(props).toMatchObject({ showCommitments: false, showEscalations: true, canClose: false });
     expect(h.listCommitments).not.toHaveBeenCalled();
@@ -384,13 +385,13 @@ describe("pages", () => {
   it("Tracker: a holder of escalation.review gets the review-queue link with the open count; everyone else gets none", async () => {
     OPEN_ONE();
     h.caps.add("collection.escalation.review");
-    expect((await trackerProps()).reviewQueue).toEqual({ openCount: 1, href: "/collection/commitments" });
+    expect((await trackerProps()).reviewQueue).toEqual({ openCount: 1, href: "/collection/escalations" });
     h.caps.delete("collection.escalation.review");
     expect((await trackerProps()).reviewQueue).toBeUndefined();
-    // A reviewer who cannot open the Commitments & Escalations page gets no link to it either.
+    // The queue is the Escalations page, which Review alone opens: the Commitments page key plays no part.
     h.caps.add("collection.escalation.review");
     h.caps.delete("collection.commitments.page");
-    expect((await trackerProps()).reviewQueue).toBeUndefined();
+    expect((await trackerProps()).reviewQueue).toEqual({ openCount: 1, href: "/collection/escalations" });
   });
 
   it("Tracker: a super-admin is told which grant is missing when escalations or unassigned parties wait for nobody", async () => {
@@ -436,25 +437,26 @@ describe("pages", () => {
       storageReady: true,
       rows: [{ id: ESCALATION, companyId: COMPANY, companyName: "Alpha Traders", collectionPerson: "MANGESH", escalatedAt: new Date("2026-10-19T06:00:00Z"), escalatedByName: "Asha", confirmationAtEscalation: null }],
     });
-    const { default: Page } = await import("@/app/(collection-module)/collection/commitments/page");
+    const { default: Page } = await import("@/app/(collection-module)/collection/escalations/page");
     const rows = findProps(await Page(), "CommitmentsTable")!.rows as { companyName: string; escalation: { id: string } | null }[];
     expect(rows.map((r) => [r.companyName, r.escalation?.id])).toEqual([["Alpha Traders", ESCALATION]]);
   });
 
   it("Review page: a reviewer with an empty queue is told what empty means; a commitments-only viewer is told theirs", async () => {
-    const { default: Page } = await import("@/app/(collection-module)/collection/commitments/page");
+    const { default: Escalations } = await import("@/app/(collection-module)/collection/escalations/page");
+    const { default: Commitments } = await import("@/app/(collection-module)/collection/commitments/page");
     h.caps.add("collection.escalation.review");
-    expect(findProps(await Page(), "CommitmentsTable")!.emptyMessage).toMatch(/No escalations are waiting for review\. When someone escalates a party/);
+    expect(findProps(await Escalations(), "CommitmentsTable")!.emptyMessage).toMatch(/No escalations are waiting for review\. When someone escalates a party/);
     h.caps.delete("collection.escalation.review");
     h.caps.add("collection.commitments.view");
-    expect(findProps(await Page(), "CommitmentsTable")!.emptyMessage).toMatch(/No commitments recorded yet/);
+    expect(findProps(await Commitments(), "CommitmentsTable")!.emptyMessage).toMatch(/No commitments recorded yet/);
   });
 
   it("Review page: a failed load shows a clear error panel — no table, no details, no crash", async () => {
     h.caps.add("collection.escalation.review");
     const err = vi.spyOn(console, "error").mockImplementation(() => {});
     h.listOpen.mockRejectedValue(new Error("password authentication failed for user secret-db-user"));
-    const { default: Page } = await import("@/app/(collection-module)/collection/commitments/page");
+    const { default: Page } = await import("@/app/(collection-module)/collection/escalations/page");
     const tree = await Page();
     expect(findProps(tree, "CommitmentsTable")).toBeNull();
     const html = renderToStaticMarkup(tree as ReactElement);
@@ -473,12 +475,36 @@ describe("pages", () => {
   it("Review page: while migration 0118 is not installed, reviewers are told reasons aren't available (escalations still listed)", async () => {
     h.caps.add("collection.escalation.review");
     h.listOpen.mockResolvedValue({ storageReady: true, reasonStorageReady: false, rows: [{ id: ESCALATION, companyId: COMPANY, companyName: "Alpha Traders", collectionPerson: null, escalatedAt: new Date(), escalatedByName: "Asha", confirmationAtEscalation: null, reason: null }] });
-    const { default: Page } = await import("@/app/(collection-module)/collection/commitments/page");
+    const { default: Page } = await import("@/app/(collection-module)/collection/escalations/page");
     const tree = await Page();
     expect(JSON.stringify(tree)).toMatch(/Escalation reasons aren.+t available yet \(migration 0118 is pending\)/);
     expect((findProps(tree, "CommitmentsTable")!.rows as unknown[]).length).toBe(1);
     h.listOpen.mockResolvedValue({ storageReady: true, reasonStorageReady: true, rows: [] });
     expect(JSON.stringify(await Page())).not.toMatch(/migration 0118/);
+  });
+
+  it("Escalations page: not found without Review — even with the Commitments page key and the popup View key — and reads nothing; Review alone opens it, Close only with Close", async () => {
+    h.caps = new Set(["collection.view", "collection.commitments.page", "collection.commitments.view"]);
+    const { default: Page } = await import("@/app/(collection-module)/collection/escalations/page");
+    await expect(Page()).rejects.toThrow("NEXT_NOT_FOUND");
+    asSuperAdmin(); // no implicit access for a super-admin either
+    await expect(Page()).rejects.toThrow("NEXT_NOT_FOUND");
+    expect(h.listOpen).not.toHaveBeenCalled();
+    expect(h.listCommitments).not.toHaveBeenCalled();
+    h.me = { id: "emp-asha", email: "asha@example.test", isActive: true, isAdmin: true, name: "Asha" };
+    h.caps = new Set(["collection.view", "collection.escalation.review"]);
+    expect(findProps(await Page(), "CommitmentsTable")).toMatchObject({ showCommitments: false, showEscalations: true, canClose: false });
+    h.caps.add("collection.escalation.close");
+    expect(findProps(await Page(), "CommitmentsTable")).toMatchObject({ canClose: true });
+    expect(h.listCommitments).not.toHaveBeenCalled(); // commitments are never read on the Escalations page
+  });
+
+  it("Commitments page: never reads or shows escalations, whatever the person holds", async () => {
+    h.caps = new Set(["collection.view", "collection.commitments.page", "collection.commitments.view", "collection.escalation.review", "collection.escalation.close"]);
+    const { default: Page } = await import("@/app/(collection-module)/collection/commitments/page");
+    const props = findProps(await Page(), "CommitmentsTable")!;
+    expect(props).toMatchObject({ showCommitments: true, showEscalations: false, canClose: false });
+    expect(h.listOpen).not.toHaveBeenCalled();
   });
 
   it("Review page: not found without the page key — even holding the popup View key and Review — and reads nothing; the page key alone opens it with nothing restricted shown", async () => {

@@ -16,7 +16,7 @@ import { BORDER, BORDER_SOFT, NAVY, SLATE, TONE } from "@/components/attendance/
  * deduction itemised, and the numbers behind the gross — monthly CTC, per-day
  * rate, payable days and the late deduction — as computeSalary uses them.
  */
-export function BreakdownCard({ b, source }: { b: Breakdown; source: string }) {
+export function BreakdownCard({ b, source, subjectName }: { b: Breakdown; source: string; /** The admin's Employee Salary Report: name the employee instead of "your". */ subjectName?: string }) {
   const [open, setOpen] = useState(false);
   const row = "flex items-center justify-between gap-4 px-3 py-3 text-[14.5px]";
   const deductions = b.lines.filter((l) => l.kind === "deduction");
@@ -30,7 +30,7 @@ export function BreakdownCard({ b, source }: { b: Breakdown; source: string }) {
     >
       <div className="flex items-center justify-between gap-3">
         <h2 id="bd-title" className="flex items-center gap-2 text-[11.5px] font-bold uppercase tracking-[0.12em]" style={{ color: NAVY }}>
-          <ReceiptText size={15} aria-hidden style={{ color: SLATE }} /> How your salary is calculated
+          <ReceiptText size={15} aria-hidden style={{ color: SLATE }} /> {subjectName ? `How ${subjectName}'s salary is calculated` : "How your salary is calculated"}
         </h2>
         <button
           type="button"

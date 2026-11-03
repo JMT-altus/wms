@@ -4,7 +4,6 @@ import { CalendarRange, ChevronLeft, ChevronRight } from "lucide-react";
 import {
   STATUS_GROUP_LABEL,
   buildCalendar,
-  formatMinutes,
   type CalendarCell,
   type StatusGroup,
 } from "@/lib/attendance/overview";
@@ -25,7 +24,7 @@ import {
 } from "./theme";
 
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;
-const COLUMNS = "repeat(7, minmax(0, 1fr)) 60px";
+const COLUMNS = "repeat(7, minmax(0, 1fr))";
 
 /**
  * Weeks run Monday → Sunday (see `buildCalendar`), so Sunday is always the
@@ -67,9 +66,9 @@ const CODE_SHORT: Record<string, string> = {
 };
 
 /**
- * The month as a Monday-first grid, with each week's hours in a column of its
- * own at the end of its row. Status and hours come straight from the graded
- * days; nothing is re-derived here. The lead and trail days of the neighbouring
+ * The month as a Monday-first grid. Status comes straight from the graded
+ * days; nothing is re-derived here. Hours are not tracked for employees, so no
+ * weekly hours column or worked time is shown. The lead and trail days of the neighbouring
  * months are drawn faded and carry no status, and a day that hasn't happened
  * shows none either unless it's already a known holiday, weekly off or
  * approved leave.
@@ -118,7 +117,7 @@ export function MonthCalendar({
               Monthly Attendance
             </h2>
             <p className="text-[13px] mt-0.5" style={{ color: SLATE }}>
-              Your daily status and weekly hours
+              Your daily status
             </p>
           </div>
         </div>
@@ -186,9 +185,6 @@ export function MonthCalendar({
                   {d}
                 </div>
               ))}
-              <div className="text-center" style={{ color: ACCENT_TEXT }}>
-                Hrs
-              </div>
             </div>
 
             <div className="relative z-10 grid gap-y-0.5 pt-1.5">
@@ -197,16 +193,6 @@ export function MonthCalendar({
                   {w.cells.map((c) => (
                     <DayCell key={c.date} cell={c} />
                   ))}
-                  {/* The weekly total, set off from its days by a single rule. */}
-                  <div
-                    className="grid place-items-center text-[13.5px] font-semibold tabular-nums"
-                    style={{
-                      color: w.workedMinutes > 0 ? NAVY : "#B3BDCB",
-                      borderLeft: `1px solid ${BORDER_SOFT}`,
-                    }}
-                  >
-                    {w.workedMinutes > 0 ? formatMinutes(w.workedMinutes) : "—"}
-                  </div>
                 </div>
               ))}
             </div>
@@ -235,11 +221,10 @@ function DayCell({ cell }: { cell: CalendarCell }) {
 
   const c = cell.group ? TONE[GROUP_TONE[cell.group]] : null;
   const label = cell.group ? STATUS_GROUP_LABEL[cell.group] : "No record";
-  const worked = cell.workedMinutes > 0 ? ` · ${formatMinutes(cell.workedMinutes)} worked` : "";
   const tinted = cell.group != null && TINTED.has(cell.group);
   return (
     <div
-      title={`${cell.date} · ${label}${worked}`}
+      title={`${cell.date} · ${label}`}
       aria-current={cell.isToday ? "date" : undefined}
       className="rounded-md px-2 py-1.5 min-h-[56px] max-md:min-h-[46px] flex flex-col justify-between transition-colors duration-150 hover:bg-[#F1F5F9] motion-reduce:transition-none"
       style={{

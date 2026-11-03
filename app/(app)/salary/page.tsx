@@ -1,3 +1,6 @@
+import Link from "next/link";
+import type { Route } from "next";
+import { UserSearch } from "lucide-react";
 import { DashboardHeader } from "@/components/layout/header";
 import { DashboardFooter } from "@/components/layout/footer";
 import { SalaryImportDialog } from "@/components/salary/salary-import-dialog";
@@ -73,6 +76,13 @@ export default async function SalaryPage({ searchParams }: PageProps) {
               </p>
             </div>
             <div className="flex flex-wrap items-center justify-end gap-2.5 max-md:w-full" role="group" aria-label="Salary actions">
+              <Link
+                href={"/salary/employee" as Route}
+                className="inline-flex h-10 items-center gap-1.5 rounded-lg border border-hairline-strong bg-white px-3.5 text-[13.5px] font-semibold transition-colors hover:bg-surface-track"
+                style={{ color: NAVY }}
+              >
+                <UserSearch size={15} aria-hidden /> Employee report
+              </Link>
               <SalaryImportDialog />
               {rows.length > 0 && generate}
             </div>

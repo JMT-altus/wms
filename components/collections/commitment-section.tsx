@@ -4,11 +4,12 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { formatInrExact } from "@/lib/collections/money";
 import { commitmentLabel } from "@/lib/collections/commitment-display";
-import { fmtDate, fmtDateTime } from "@/lib/dates";
+import { fmtDate } from "@/lib/dates";
 import { DateField } from "@/components/ui/date-field";
 import { getCompanyCommitment, saveCompanyCommitment } from "@/app/(collection-module)/collection/commitments/actions";
 import type { Commitment, CommitmentEntry } from "@/lib/queries/collection-commitments";
 import { CommentList, type CommentEntry } from "@/components/collections/comment-list";
+import { LatestCommitment } from "@/components/collections/latest-commitment";
 import { POPUP_HEADING, POPUP_SECTION, POPUP_VALUE } from "@/components/collections/popup-style";
 
 const FIELD = "w-full rounded-lg border border-hairline-strong bg-white px-2.5 py-1.5 text-[13.5px] text-ink-strong";
@@ -156,23 +157,13 @@ export function CommitmentSection({
           {state.history.length > 0 && (
             <div className="mt-2">
               <p className={POPUP_HEADING}>Commitment history</p>
-              <ol className="mt-0.5 grid max-h-[132px] gap-1 overflow-y-auto pr-0.5" aria-label={`Commitment history for ${companyName}, newest first`}>
-                {state.history.map((h, i) => {
-                  const previous = state.history[i + 1];
-                  return (
-                    <li key={h.id} className="rounded-lg border border-hairline bg-[#F8FAFD] px-2.5 py-1.5 text-[12.5px]" data-current={i === 0 ? "true" : undefined}>
-                      <p className="font-semibold tabular-nums text-ink-strong">
-                        {commitmentLabel(h) ?? "—"}
-                        {i === 0 && <span className="ml-1.5 text-[11px] font-bold uppercase tracking-[0.04em] text-[#047857]">Current</span>}
-                      </p>
-                      <p className="text-ink-subtle">
-                        Recorded {fmtDateTime(h.recordedAt)}
-                        {h.recordedByName ? ` by ${h.recordedByName}` : ""}
-                        {previous ? <span className="tabular-nums"> · previously {commitmentLabel(previous) ?? "—"}</span> : " · first commitment"}
-                      </p>
-                    </li>
-                  );
-                })}
+              {/* Only the newest record is shown; every earlier one stays stored (append-only) for auditing. */}
+              <ol className="mt-0.5 grid gap-1" aria-label={`Commitment history for ${companyName}: the latest record`}>
+                {state.history.slice(0, 1).map((h) => (
+                  <li key={h.id} className="rounded-lg border border-hairline bg-[#F8FAFD] px-2.5 py-1.5 text-[12.5px]" data-current="true">
+                    <LatestCommitment record={h} />
+                  </li>
+                ))}
               </ol>
             </div>
           )}

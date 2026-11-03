@@ -1,5 +1,6 @@
 import type { ScorecardView } from "@/lib/collections/scorecards";
 import { formatInrTwoDecimals } from "@/lib/collections/scorecards";
+import { EscalationMetricButton } from "./scorecard-escalations";
 
 /**
  * The signed-in salesperson's own scorecard, at the top right of the Collection
@@ -77,8 +78,18 @@ export function SalespersonScorecard({ view }: { view: ScorecardView }) {
       <dl className="grid grid-cols-1 gap-x-4 gap-y-2 min-[400px]:grid-cols-2">
         <Metric label={SCORECARD_LABELS.pending} value={o.status === "ok" ? o.clientsPending.toLocaleString("en-IN") : SOURCE_NOT_CONFIGURED} muted={o.status !== "ok"} />
         <Metric label={SCORECARD_LABELS.total} value={o.status === "ok" ? formatInrTwoDecimals(o.totalPaise) : SOURCE_NOT_CONFIGURED} muted={o.status !== "ok"} />
-        <Metric label={SCORECARD_LABELS.escalated} value={escValue(e.status === "ok" ? e.escalated : 0)} muted={e.status !== "ok"} />
-        <Metric label={SCORECARD_LABELS.resolved} value={escValue(e.status === "ok" ? e.resolvedByReviewer : 0)} muted={e.status !== "ok"} />
+        {/* With the figures available, each number opens the very entries it counts. */}
+        {e.status === "ok" ? (
+          <>
+            <EscalationMetricButton metric="escalated" label={SCORECARD_LABELS.escalated} count={e.escalated} />
+            <EscalationMetricButton metric="resolved" label={SCORECARD_LABELS.resolved} count={e.resolvedByReviewer} />
+          </>
+        ) : (
+          <>
+            <Metric label={SCORECARD_LABELS.escalated} value={escValue(0)} muted />
+            <Metric label={SCORECARD_LABELS.resolved} value={escValue(0)} muted />
+          </>
+        )}
       </dl>
       {o.status === "ok" && o.unverifiedClients > 0 && (
         <p className="mt-2 text-[11px] text-ink-subtle">

@@ -5,6 +5,8 @@ import { cleanup, fireEvent, render, screen, within } from "@testing-library/rea
 // Collection comments audit details: who wrote a comment (name + employee id), the
 // date and time in IST, and the comment — in every place comments are shown.
 // Server actions are MOCKED; nothing here reaches a database.
+vi.mock("@/app/(collection-module)/collection/scorecard-actions", () => ({ getScorecardEscalations: vi.fn() }));
+vi.mock("@/app/(collection-module)/collection/marks-actions", () => ({ setCompanyMarks: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 vi.mock("@/lib/toast", () => ({ fireToast: vi.fn() }));
 vi.mock("@/app/(collection-module)/collection/actions", () => ({ saveFollowUp: vi.fn() }));
