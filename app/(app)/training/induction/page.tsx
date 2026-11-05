@@ -1,6 +1,5 @@
 import { Check, ExternalLink, GraduationCap } from "lucide-react";
 import { DashboardHeader } from "@/components/layout/header";
-import { DashboardFooter } from "@/components/layout/footer";
 import { requireUser } from "@/lib/auth/current";
 import { getInductionProgress } from "@/lib/queries/training";
 import { EmptyState, PageHead, Panel, TRAINING_ACCENT } from "@/components/training/ui";
@@ -127,7 +126,6 @@ export default async function InductionPage() {
           </>
         )}
       </main>
-      <DashboardFooter />
     </>
   );
 }

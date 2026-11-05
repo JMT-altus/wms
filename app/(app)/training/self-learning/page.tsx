@@ -1,5 +1,4 @@
 import { DashboardHeader } from "@/components/layout/header";
-import { DashboardFooter } from "@/components/layout/footer";
 import { requireUser } from "@/lib/auth/current";
 import { getSelfLearningMonth, istYmd } from "@/lib/queries/training";
 import { SelfLearningPanel } from "@/components/training/self-learning-panel";
@@ -24,7 +23,6 @@ export default async function SelfLearningPage() {
             to yesterday for someone whose device clock is off. */}
         <SelfLearningPanel month={month} todayYmd={istYmd(new Date())} />
       </main>
-      <DashboardFooter />
     </>
   );
 }

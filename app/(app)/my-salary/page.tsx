@@ -1,5 +1,4 @@
 import { DashboardHeader } from "@/components/layout/header";
-import { DashboardFooter } from "@/components/layout/footer";
 import { requireUser } from "@/lib/auth/current";
 import { localDateString } from "@/lib/format";
 import { loadMySalary } from "@/lib/salary/my-salary";
@@ -108,9 +107,6 @@ export default async function MySalaryPage({ searchParams }: PageProps) {
 
           {data.attendance && <DailySalaryReport report={report} hasRun={Boolean(data.run)} today={today} perDayPaise={breakdown?.detail.perDayPaise ?? null} />}
         </main>
-      </div>
-      <div className="[&>footer]:mt-0">
-        <DashboardFooter />
       </div>
     </>
   );

@@ -1020,6 +1020,23 @@ export const PERMISSION_FIELDS = [
     group: "Collections",
   },
   {
+    // Widens the Collection scope (lib/collections/scope-server.ts) from the
+    // holder's own Sales Coordinator companies to EVERY company — what a
+    // super-admin sees. Sensitive: explicit grant only, never implied by admin
+    // or super-admin status, so nobody's view widens until it is granted. It
+    // only widens WHICH companies the Collection screens list; each screen and
+    // action still needs its own capability (commitments, escalations, assign
+    // Sales Coordinator, …), and holding this grants none of them.
+    key: "collection.tracker.view_all",
+    label: "Collection Tracker — View All Collection Person Data",
+    hint: "See every company in the Collection Tracker and the other Collection screens — those of every Collection Person, plus unassigned ones — instead of only the companies assigned to you. Grants nothing else: commitments, escalations, assigning Sales Coordinators and the other Collection permissions stay separate.",
+    defaultAllowed: false,
+    group: "Collections",
+    sensitive: true,
+    adminBypass: false,
+    superAdminBypass: false,
+  },
+  {
     // MARK AS PRIORITY in the Collection Tracker (and removing it). Ordinary,
     // like Follow-ups: admins hold it through the admin bypass unless denied;
     // a specific person can be granted it. Who holds it decides who can mark —

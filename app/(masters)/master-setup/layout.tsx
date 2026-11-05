@@ -1,4 +1,5 @@
 import type { CSSProperties, ReactNode } from "react";
+import { DashboardFooter } from "@/components/layout/footer";
 import { requireAdmin } from "@/lib/auth/current";
 import { getOrgSettings } from "@/lib/queries/org-settings";
 import { IdleTimerClient } from "@/components/auth/idle-timer-client";
@@ -29,7 +30,7 @@ export default async function MasterSetupLayout({ children }: { children: ReactN
           rendered inside it (see components/masters/theme.ts). The sidebar
           paints the same ramp, so the rail and the page's buttons agree. */}
       <div
-        className="min-h-screen flex max-md:block"
+        className="min-h-screen flex max-md:flex-col"
         style={
           {
             "--masters-accent": ACCENT,
@@ -39,13 +40,14 @@ export default async function MasterSetupLayout({ children }: { children: ReactN
         }
       >
         <MasterSidebar adminName={me.name} />
-        <div className="flex-1 min-w-0 max-md:flex max-md:flex-col">
+        <div className="flex-1 min-w-0 flex flex-col">
         {/* The app's slim header bar, same as every other module, so search /
             Live / account are reachable here too. */}
         <DashboardHeader generatedAt={new Date()} />
           <main className="flex-1 min-w-0 px-10 py-10 max-md:px-4 max-md:py-6">
             <div className="mx-auto max-w-[1280px]">{children}</div>
           </main>
+          <DashboardFooter />
         </div>
       </div>
     </>

@@ -2,7 +2,6 @@ import Link from "next/link";
 import type { Route } from "next";
 import { ArrowLeft } from "lucide-react";
 import { DashboardHeader } from "@/components/layout/header";
-import { DashboardFooter } from "@/components/layout/footer";
 import { requireAdmin } from "@/lib/auth/current";
 import { localDateString } from "@/lib/format";
 import { listReportEmployees } from "@/lib/salary/employee-report";
@@ -39,9 +38,6 @@ export default async function EmployeeSalaryReportIndex() {
             <EmployeeReportPicker employees={people} selectedId={null} month={month} />
           </section>
         </main>
-      </div>
-      <div className="[&>footer]:mt-0">
-        <DashboardFooter />
       </div>
     </>
   );

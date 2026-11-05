@@ -1,6 +1,5 @@
 import { notFound } from "next/navigation";
 import { DashboardHeader } from "@/components/layout/header";
-import { DashboardFooter } from "@/components/layout/footer";
 import { requireUser } from "@/lib/auth/current";
 import { getRun } from "@/lib/queries/salary";
 import { SalaryStatement } from "@/components/salary/my/statement";
@@ -31,9 +30,6 @@ export default async function SalaryStatementPage({ params }: { params: Promise<
         <main className="w-full px-6 pt-6 pb-10 max-md:px-4 lg:px-8 print:p-0">
           <SalaryStatement run={run} backHref={backHref} />
         </main>
-      </div>
-      <div className="print:hidden [&>footer]:mt-0">
-        <DashboardFooter />
       </div>
     </>
   );

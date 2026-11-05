@@ -1,5 +1,4 @@
 import { DashboardHeader } from "@/components/layout/header";
-import { DashboardFooter } from "@/components/layout/footer";
 import { requireUser } from "@/lib/auth/current";
 import { getDccScope, canFill, canManageItems, canReview } from "@/lib/dcc/access";
 import {
@@ -169,7 +168,6 @@ export default async function DccPage({ searchParams }: PageProps) {
           />
         )}
       </main>
-      <DashboardFooter />
     </>
   );
 }

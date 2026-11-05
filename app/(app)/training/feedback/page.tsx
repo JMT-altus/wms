@@ -1,5 +1,4 @@
 import { DashboardHeader } from "@/components/layout/header";
-import { DashboardFooter } from "@/components/layout/footer";
 import { requireUser } from "@/lib/auth/current";
 import { listFeedbackComments, listSessionFeedback } from "@/lib/queries/training";
 import {
@@ -65,7 +64,6 @@ export default async function TrainingFeedbackPage() {
           canSeeAllComments={me.isAdmin}
         />
       </main>
-      <DashboardFooter />
     </>
   );
 }

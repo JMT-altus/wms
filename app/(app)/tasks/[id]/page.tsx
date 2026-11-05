@@ -1,6 +1,5 @@
 import { Suspense } from "react";
 import { DashboardHeader } from "@/components/layout/header";
-import { DashboardFooter } from "@/components/layout/footer";
 import { TaskDetailLoader } from "@/components/tasks/task-detail-loader";
 import { TaskDetailSkeleton } from "@/components/tasks/task-detail-skeleton";
 import { requireUser } from "@/lib/auth/current";
@@ -58,9 +57,6 @@ export default async function TaskDetailPage({ params }: PageProps) {
           />
         </Suspense>
       </main>
-      <div className="[&>footer]:mt-6">
-        <DashboardFooter />
-      </div>
     </>
   );
 }

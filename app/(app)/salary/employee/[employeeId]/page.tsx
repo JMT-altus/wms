@@ -3,7 +3,6 @@ import type { Route } from "next";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { DashboardHeader } from "@/components/layout/header";
-import { DashboardFooter } from "@/components/layout/footer";
 import { requireAdmin } from "@/lib/auth/current";
 import { localDateString } from "@/lib/format";
 import { loadMySalary } from "@/lib/salary/my-salary";
@@ -129,9 +128,6 @@ export default async function EmployeeSalaryReportPage({ params, searchParams }:
 
           {data.attendance && <DailySalaryReport report={report} hasRun={Boolean(data.run)} today={today} perDayPaise={breakdown?.detail.perDayPaise ?? null} />}
         </main>
-      </div>
-      <div className="[&>footer]:mt-0">
-        <DashboardFooter />
       </div>
     </>
   );

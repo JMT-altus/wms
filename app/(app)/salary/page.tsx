@@ -2,7 +2,6 @@ import Link from "next/link";
 import type { Route } from "next";
 import { UserSearch } from "lucide-react";
 import { DashboardHeader } from "@/components/layout/header";
-import { DashboardFooter } from "@/components/layout/footer";
 import { SalaryImportDialog } from "@/components/salary/salary-import-dialog";
 import { GenerateButton } from "@/components/salary/admin/generate-button";
 import { PayrollCard } from "@/components/salary/admin/payroll-card";
@@ -98,9 +97,6 @@ export default async function SalaryPage({ searchParams }: PageProps) {
 
           <PayrollHistoryCard history={history} current={month} />
         </main>
-      </div>
-      <div className="[&>footer]:mt-0">
-        <DashboardFooter />
       </div>
     </>
   );

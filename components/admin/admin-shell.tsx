@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { DashboardFooter } from "@/components/layout/footer";
 import { AdminSidebar } from "./admin-sidebar";
 import { AdminMobileBar } from "./admin-mobile-bar";
 import { DashboardHeader } from "@/components/layout/header";
@@ -25,13 +26,13 @@ export function AdminShell({
   avatarUrl,
 }: Props) {
   return (
-    <div className="min-h-screen flex max-md:block">
+    <div className="min-h-screen flex max-md:flex-col">
       <AdminSidebar
         adminName={adminName}
         adminEmail={adminEmail}
         avatarUrl={avatarUrl}
       />
-      <div className="flex-1 min-w-0 max-md:flex max-md:flex-col">
+      <div className="flex-1 min-w-0 flex flex-col">
         <AdminMobileBar adminName={adminName} adminEmail={adminEmail} />
         {/* The app's slim header bar, same as every other module, so search /
             Live / account are reachable here too. */}
@@ -39,6 +40,7 @@ export function AdminShell({
         <main className="flex-1 min-w-0 px-10 py-10 max-md:px-4 max-md:py-6">
           <div className="mx-auto max-w-[1280px]">{children}</div>
         </main>
+        <DashboardFooter />
       </div>
     </div>
   );

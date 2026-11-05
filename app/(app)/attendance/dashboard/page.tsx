@@ -1,6 +1,5 @@
 import { FileSpreadsheet, FileText } from "lucide-react";
 import { DashboardHeader } from "@/components/layout/header";
-import { DashboardFooter } from "@/components/layout/footer";
 import { requireAdmin } from "@/lib/auth/current";
 import { getMonthDashboard } from "@/lib/queries/attendance-status";
 import { localDateString } from "@/lib/format";
@@ -113,7 +112,6 @@ export default async function AttendanceDashboardPage({ searchParams }: PageProp
           <AttendanceDashboardTable rows={rows} year={year} month={month} />
         )}
       </main>
-      <DashboardFooter />
     </>
   );
 }

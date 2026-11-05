@@ -1,6 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
+import { PoweredByAltus } from "@/components/layout/powered-by";
 import Link from "next/link";
 import type { Route } from "next";
 import { Boxes, Contact, ArrowLeft, type LucideIcon } from "lucide-react";
@@ -151,6 +152,7 @@ export function MastersSidebar({ userName }: { userName: string }) {
         </nav>
 
         <div className="px-3 pb-4 pt-2.5 shrink-0" style={{ borderTop: "1px solid rgba(255,255,255,0.10)" }}>
+          <PoweredByAltus collapsed={collapsed} />
           <Link
             href={"/hub" as Route}
             title={collapsed ? "Back to Hub" : undefined}
@@ -174,6 +176,7 @@ export function MastersMobileNav() {
     <div
       className="rail-navy-top md:hidden sticky top-0 z-30 flex items-center gap-2 px-4 py-2.5 overflow-x-auto"
     >
+      <PoweredByAltus collapsed className="shrink-0 !p-0" />
       <Link
         href={"/hub" as Route}
         aria-label="Back to Hub"

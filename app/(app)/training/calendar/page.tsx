@@ -1,6 +1,5 @@
 import { AlertTriangle } from "lucide-react";
 import { DashboardHeader } from "@/components/layout/header";
-import { DashboardFooter } from "@/components/layout/footer";
 import { requireUser } from "@/lib/auth/current";
 import { listEmployeeOptions } from "@/lib/queries/employees";
 import {
@@ -90,7 +89,6 @@ export default async function TrainingCalendarPage() {
           canCurate={me.isAdmin}
         />
       </main>
-      <DashboardFooter />
     </>
   );
 }

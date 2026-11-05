@@ -1,5 +1,4 @@
 import { DashboardHeader } from "@/components/layout/header";
-import { DashboardFooter } from "@/components/layout/footer";
 import { requireUser } from "@/lib/auth/current";
 import { listMaterialSubjects, listMaterials } from "@/lib/queries/training";
 import { LibraryTable } from "@/components/training/library-table";
@@ -29,7 +28,6 @@ export default async function TrainingLibraryPage() {
         />
         <LibraryTable rows={rows} subjects={subjects} canCurate={me.isAdmin} />
       </main>
-      <DashboardFooter />
     </>
   );
 }

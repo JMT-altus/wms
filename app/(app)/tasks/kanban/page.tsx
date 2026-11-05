@@ -1,5 +1,4 @@
 import { DashboardHeader } from "@/components/layout/header";
-import { DashboardFooter } from "@/components/layout/footer";
 import { FilterBar } from "@/components/layout/filter-bar";
 import { KanbanBoard } from "@/components/tasks/kanban-board";
 import { listBoardTasks, listDistinctSubjects, getTaskById } from "@/lib/queries/tasks";
@@ -156,9 +155,6 @@ export default async function KanbanPage({ searchParams }: PageProps) {
           </div>
         </section>
       </main>
-      <div className="[&>footer]:mt-6">
-        <DashboardFooter />
-      </div>
       {completeTask && (
         <CompleteTaskModal
           taskId={completeTask.id}

@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { DashboardFooter } from "@/components/layout/footer";
 import { requireModuleAccess } from "@/lib/auth/module-access";
 import { getOrgSettings } from "@/lib/queries/org-settings";
 import { IdleTimerClient } from "@/components/auth/idle-timer-client";
@@ -31,10 +32,10 @@ export default async function FormsLayout({ children }: { children: ReactNode })
   return (
     <>
       <IdleTimerClient timeoutMinutes={settings.idleTimeoutMinutes} />
-      <div className="min-h-screen flex max-md:block app-wallpaper">
+      <div className="min-h-screen flex max-md:flex-col app-wallpaper">
         <FormsSidebar userName={me.name} isAdmin={me.isAdmin} />
         <FormsMobileNav isAdmin={me.isAdmin} />
-        <div className="flex-1 min-w-0 max-md:flex max-md:flex-col">
+        <div className="flex-1 min-w-0 flex flex-col">
           {/* The app's slim header bar, same as every (app) page carries, so
               the search / Live / account cluster is reachable from every
               module instead of only the workspace one. */}
@@ -42,6 +43,7 @@ export default async function FormsLayout({ children }: { children: ReactNode })
           <main className="flex-1 min-w-0 px-6 pt-5 pb-6 max-md:px-4 max-md:py-4">
             <div className="mx-auto max-w-[1600px] min-w-0">{children}</div>
           </main>
+          <DashboardFooter />
         </div>
       </div>
     </>

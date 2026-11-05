@@ -1,5 +1,4 @@
 import { DashboardHeader } from "@/components/layout/header";
-import { DashboardFooter } from "@/components/layout/footer";
 import { FilterBar } from "@/components/layout/filter-bar";
 import { TaskSearchProvider } from "@/components/tasks/task-search-context";
 import { MyDayWorkspace } from "@/components/tasks/my-day-workspace";
@@ -172,9 +171,6 @@ export default async function AgendaPage({ searchParams }: PageProps) {
         }
       />
       {/* The footer's own top margin is trimmed for this page only. */}
-      <div className="[&>footer]:mt-6">
-        <DashboardFooter />
-      </div>
     </TaskSearchProvider>
   );
 }

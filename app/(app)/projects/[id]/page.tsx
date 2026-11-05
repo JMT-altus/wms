@@ -3,7 +3,6 @@ import Link from "next/link";
 import type { Route } from "next";
 import { ArrowLeft } from "lucide-react";
 import { DashboardHeader } from "@/components/layout/header";
-import { DashboardFooter } from "@/components/layout/footer";
 import { getNodeContext, listNodeActions } from "@/lib/queries/projects";
 import { getStatusDisplayMap } from "@/lib/queries/status-display";
 import { requireUser } from "@/lib/auth/current";
@@ -91,7 +90,6 @@ export default async function ProjectNodePage({ params }: PageProps) {
           )}
         </div>
       </main>
-      <DashboardFooter />
     </>
   );
 }

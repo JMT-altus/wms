@@ -94,7 +94,9 @@ export const MODULES: ModuleDef[] = [
     accent: { from: "#0A6CFF", to: "#0047B3", ink: "#0A6CFF" },
     items: [
       { href: "/", label: "Dashboard", icon: "LayoutDashboard" },
-      { href: "/tasks/agenda", label: "Daily Commitments", icon: "CalendarDays" },
+      // Daily Commitments (/tasks/agenda) is no longer in the menu. The page, its route and its data stay as they
+      // are (the dashboard card and the G M shortcut still open it); Tasks keeps not matching it, so the Tasks item
+      // is not shown as active there.
       { href: "/tasks", label: "Tasks", icon: "ListTodo", taskCount: true, notMatch: ["/tasks/agenda", "/tasks/kanban"] },
       { href: "/tasks/kanban", label: "Kanban", icon: "SquareKanban" },
       { href: "/weekly-goals", label: "Weekly Goals", icon: "Target" },

@@ -40,9 +40,9 @@ describe("permission matrix — Collections", () => {
   it("lists the Collection capabilities under their own heading, marking the six sensitive ones", () => {
     render(<FieldAccessManager matrix={matrix} />);
     expect(screen.getByRole("rowheader", { name: "Collections" })).toBeTruthy();
-    // 8 Collection capabilities (incl. the Tracker's Bulk Upload, the Commitments page and Collection Done) + the 3 Leave approvals ones + Tally import, all explicit-grant-only.
-    expect(within(screen.getByRole("table")).getAllByText("Sensitive")).toHaveLength(12);
-    for (const l of ["Collections — Assign Sales Coordinator", "Collection Tracker — Company Popup — Commitment Section: View", "Collection Tracker — Company Popup — Commitment Section: Record", "Collection — Commitments Page Access", "Collections — Review escalations", "Collections — Close escalations", "Collection Tracker — Bulk Upload", "Collection Tracker — Collection Done"]) {
+    // 9 Collection capabilities (incl. the Tracker's Bulk Upload, the Commitments page, Collection Done and View All Collection Person Data) + the 3 Leave approvals ones + Tally import, all explicit-grant-only.
+    expect(within(screen.getByRole("table")).getAllByText("Sensitive")).toHaveLength(13);
+    for (const l of ["Collections — Assign Sales Coordinator", "Collection Tracker — Company Popup — Commitment Section: View", "Collection Tracker — Company Popup — Commitment Section: Record", "Collection — Commitments Page Access", "Collections — Review escalations", "Collections — Close escalations", "Collection Tracker — Bulk Upload", "Collection Tracker — Collection Done", "Collection Tracker — View All Collection Person Data"]) {
       expect(within(row(l)).getByText("Sensitive")).toBeTruthy();
     }
     expect(within(row("Collections — Escalate for review")).queryByText("Sensitive")).toBeNull();

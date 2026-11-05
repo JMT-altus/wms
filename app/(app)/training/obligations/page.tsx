@@ -1,6 +1,5 @@
 import { Check, X } from "lucide-react";
 import { DashboardHeader } from "@/components/layout/header";
-import { DashboardFooter } from "@/components/layout/footer";
 import { requireUser } from "@/lib/auth/current";
 import { listObligations } from "@/lib/queries/training";
 import { EmptyState, PageHead, ProgressBar } from "@/components/training/ui";
@@ -127,7 +126,6 @@ export default async function ObligationsPage() {
           </div>
         )}
       </main>
-      <DashboardFooter />
     </>
   );
 }

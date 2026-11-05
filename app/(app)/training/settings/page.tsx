@@ -1,7 +1,6 @@
 import { redirect } from "next/navigation";
 import type { Route } from "next";
 import { DashboardHeader } from "@/components/layout/header";
-import { DashboardFooter } from "@/components/layout/footer";
 import { requireUser } from "@/lib/auth/current";
 import { getTrainingSettings } from "@/lib/queries/training";
 import { TrainingSettingsForm } from "@/components/training/settings-form";
@@ -52,7 +51,6 @@ export default async function TrainingSettingsPage() {
           </ul>
         </Panel>
       </main>
-      <DashboardFooter />
     </>
   );
 }

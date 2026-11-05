@@ -1,5 +1,4 @@
 import { DashboardHeader } from "@/components/layout/header";
-import { DashboardFooter } from "@/components/layout/footer";
 import { requireUser } from "@/lib/auth/current";
 import { ProfileHero } from "@/components/profile/profile-hero";
 import { ProfileShell } from "@/components/profile/profile-shell";
@@ -307,7 +306,6 @@ export default async function ProfilePage() {
           />
         </div>
       </main>
-      <DashboardFooter />
       <style>{`
         @media (max-width: 1024px) {
           .profile-identity-grid {

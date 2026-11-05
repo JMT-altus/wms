@@ -88,14 +88,11 @@ function KpiGrid({ kpis }: { kpis: OverviewKpis }) {
   const daysFill = kpis.expectedDays > 0 ? kpis.effectiveDays / kpis.expectedDays : null;
 
   return (
-    // `gap-px` over a hairline background draws the separators: the cells are
-    // white, so only the gaps show, and nothing has an outline of its own.
-    <div
-      className="grid auto-rows-fr grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-px rounded-lg overflow-hidden"
-      style={{ background: BORDER, border: `1px solid ${BORDER}` }}
-    >
+    // Four tinted cards, each in its own metric colour (the reference look); the figures are unchanged.
+    <div className="grid auto-rows-fr grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 max-md:gap-3">
       <Kpi
-        icon={<IndianRupee size={16} strokeWidth={2} />}
+        icon={<IndianRupee size={18} strokeWidth={2} />}
+        tint="coral"
         status={kpis.lostDays > 0 ? "coral" : null}
         label="Salary Lost"
         value={`${formatDays(kpis.lostDays)} ${kpis.lostDays === 1 ? "day" : "days"}`}
@@ -103,7 +100,8 @@ function KpiGrid({ kpis }: { kpis: OverviewKpis }) {
         title="Absent + unpaid-leave days + ½ per half day + the late deduction (½ day per 3 un-waived lates in the month)."
       />
       <Kpi
-        icon={<CalendarCheck size={16} strokeWidth={2} />}
+        icon={<CalendarCheck size={18} strokeWidth={2} />}
+        tint="teal"
         status={null}
         label="Effective Days Worked"
         value={formatDays(kpis.effectiveDays)}
@@ -111,14 +109,16 @@ function KpiGrid({ kpis }: { kpis: OverviewKpis }) {
         fill={daysFill}
       />
       <Kpi
-        icon={<Hourglass size={16} strokeWidth={2} />}
+        icon={<Hourglass size={18} strokeWidth={2} />}
+        tint="amber"
         status={kpis.halfDays > 0 ? "amber" : null}
         label="Half Days"
         value={String(kpis.halfDays)}
         sub={kpis.halfDays === 0 ? "None in this period" : "In this period"}
       />
       <Kpi
-        icon={<ShieldCheck size={16} strokeWidth={2} />}
+        icon={<ShieldCheck size={18} strokeWidth={2} />}
+        tint="violet"
         status={null}
         label="Grace + Condoned"
         value={String(kpis.graceCondoned)}
@@ -136,6 +136,7 @@ function KpiGrid({ kpis }: { kpis: OverviewKpis }) {
  */
 function Kpi({
   icon,
+  tint,
   status,
   label,
   value,
@@ -144,6 +145,8 @@ function Kpi({
   fill,
 }: {
   icon: ReactNode;
+  /** The card’s own colour family (background tint, edge and icon chip) — decoration only. */
+  tint: Tone;
   status: Tone | null;
   label: string;
   value: string;
@@ -153,21 +156,29 @@ function Kpi({
   fill?: number | null;
 }) {
   const tone = status ? TONE[status] : null;
+  const family = TONE[tint];
   return (
     <article
       title={title}
-      className="att-kpi bg-white p-5 max-sm:p-4 min-w-0 flex flex-col transition-colors duration-150 hover:bg-[#F8FAFC] motion-reduce:transition-none"
+      className="att-kpi rounded-xl p-5 max-sm:p-4 min-w-0 flex gap-3.5 transition-shadow duration-150 hover:shadow-md motion-reduce:transition-none"
+      style={{ background: family.bg, border: `1px solid ${family.solid}33` }}
     >
+      {/* icon chip */}
+      <span
+        aria-hidden
+        className="grid shrink-0 place-items-center rounded-xl"
+        style={{ width: 40, height: 40, background: "#FFFFFF", color: tone ? tone.fg : family.fg, boxShadow: `0 0 0 1px ${family.solid}26` }}
+      >
+        {icon}
+      </span>
+      <div className="min-w-0 flex-1 flex flex-col">
       <div className="flex items-center gap-2 min-w-0">
-        <span aria-hidden className="shrink-0 flex" style={{ color: tone ? tone.fg : ACCENT }}>
-          {icon}
-        </span>
-        <span className="text-[12.5px] font-semibold tracking-[0.01em] truncate" style={{ color: SLATE }}>
+        <span className="text-[13px] font-semibold tracking-[0.01em] truncate" style={{ color: "#334155" }}>
           {label}
         </span>
       </div>
       <div
-        className="mt-3 text-[33px] max-sm:text-[30px] font-bold tabular-nums leading-none tracking-[-0.025em] break-words"
+        className="mt-2 text-[30px] max-sm:text-[27px] font-bold tabular-nums leading-none tracking-[-0.025em] break-words"
         style={{ color: tone ? tone.fg : NAVY }}
       >
         {value}
@@ -190,6 +201,7 @@ function Kpi({
           </div>
         </div>
       )}
+      </div>
     </article>
   );
 }

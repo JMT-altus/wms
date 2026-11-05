@@ -52,7 +52,9 @@ export const PAGE_GROUND = "#F3F6FA";
 export const CARD: CSSProperties = {
   background: "#FFFFFF",
   border: `1px solid ${BORDER}`,
-  boxShadow: "0 1px 2px rgba(23, 43, 77, 0.04)",
+  // One radius for every Employees section card, and a soft lift that separates the card from the page ground.
+  borderRadius: 16,
+  boxShadow: "0 1px 2px rgba(23, 43, 77, 0.04), 0 10px 26px -20px rgba(23, 43, 77, 0.22)",
 };
 
 /* ── Status tones ────────────────────────────────────────────────────────── */

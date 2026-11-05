@@ -1,6 +1,7 @@
 "use client";
 
 import type { CSSProperties } from "react";
+import { PoweredByAltus } from "@/components/layout/powered-by";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import type { Route } from "next";
@@ -219,6 +220,7 @@ export function MasterSidebar({ adminName }: { adminName: string }) {
             <ShieldCheck size={16} strokeWidth={2.2} className="shrink-0" />
             {!collapsed && "Admin Panel"}
           </Link>
+          <PoweredByAltus collapsed={collapsed} />
           <Link
             href={"/hub" as Route}
             title={collapsed ? "Back to Hub" : undefined}

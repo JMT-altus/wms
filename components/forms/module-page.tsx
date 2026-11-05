@@ -1,7 +1,6 @@
 import Link from "next/link";
 import type { Route } from "next";
 import { DashboardHeader } from "@/components/layout/header";
-import { DashboardFooter } from "@/components/layout/footer";
 import { requireUser } from "@/lib/auth/current";
 import { listModuleSubmissions } from "@/lib/queries/modules";
 import { MODULES, type ModuleKey } from "@/lib/forms/modules";
@@ -100,7 +99,6 @@ export async function ModulePage({ module, searchParams }: Props) {
           view={view}
         />
       </main>
-      <DashboardFooter />
     </>
   );
 }

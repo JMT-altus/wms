@@ -1,6 +1,5 @@
 import { BookOpen, Eye, GraduationCap, Star, Users, Video } from "lucide-react";
 import { DashboardHeader } from "@/components/layout/header";
-import { DashboardFooter } from "@/components/layout/footer";
 import { requireUser } from "@/lib/auth/current";
 import { getTrainingDashboard } from "@/lib/queries/training";
 import { EmptyState, PageHead, Panel, ProgressBar, StatCard } from "@/components/training/ui";
@@ -99,7 +98,6 @@ export default async function TrainingDashboardPage() {
           </Panel>
         </div>
       </main>
-      <DashboardFooter />
     </>
   );
 }

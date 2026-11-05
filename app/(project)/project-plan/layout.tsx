@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { DashboardFooter } from "@/components/layout/footer";
 import { requireModuleAccess } from "@/lib/auth/module-access";
 import { getOrgSettings } from "@/lib/queries/org-settings";
 import { IdleTimerClient } from "@/components/auth/idle-timer-client";
@@ -22,10 +23,10 @@ export default async function ProjectPlanLayout({ children }: { children: ReactN
   return (
     <>
       <IdleTimerClient timeoutMinutes={settings.idleTimeoutMinutes} />
-      <div className="min-h-screen flex max-md:block app-wallpaper">
+      <div className="min-h-screen flex max-md:flex-col app-wallpaper">
         <PlanSidebar userName={me.name} />
         <PlanMobileNav />
-        <div className="flex-1 min-w-0 max-md:flex max-md:flex-col">
+        <div className="flex-1 min-w-0 flex flex-col">
           {/* The app's slim header bar, same as every other module carries, so
               the search / account cluster is reachable from here too. */}
           <DashboardHeader generatedAt={new Date()} />
@@ -34,6 +35,7 @@ export default async function ProjectPlanLayout({ children }: { children: ReactN
               {children}
             </div>
           </main>
+          <DashboardFooter />
         </div>
       </div>
     </>

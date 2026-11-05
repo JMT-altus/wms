@@ -1,5 +1,4 @@
 import { DashboardHeader } from "@/components/layout/header";
-import { DashboardFooter } from "@/components/layout/footer";
 import { WeeklyGoalsDashboard } from "@/components/weekly-goals/weekly-goals-dashboard";
 import { requireUser } from "@/lib/auth/current";
 import {
@@ -47,9 +46,6 @@ export default async function WeeklyGoalsDashboardPage() {
         starOfMonth={starMonth}
         myId={me.id}
       />
-      <div className="[&>footer]:mt-6">
-        <DashboardFooter />
-      </div>
     </>
   );
 }

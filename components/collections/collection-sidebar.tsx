@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { PoweredByAltus } from "@/components/layout/powered-by";
 import type { CSSProperties } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
@@ -196,6 +197,7 @@ export function CollectionSidebar({
         </nav>
 
         <div className="px-3 pb-4 pt-2.5 shrink-0" style={{ borderTop: "1px solid rgba(255,255,255,0.10)" }}>
+          <PoweredByAltus collapsed={collapsed} />
           <Link
             href={"/hub" as Route}
             title={collapsed ? "Back to Hub" : undefined}
@@ -227,6 +229,7 @@ export function CollectionMobileNav({
   const pathname = usePathname();
   return (
     <div className="rail-navy-top md:hidden sticky top-0 z-30 flex items-center gap-2 px-4 py-2.5 overflow-x-auto">
+      <PoweredByAltus collapsed className="shrink-0 !p-0" />
       <Link href={"/hub" as Route} aria-label="Back to Hub" className="shrink-0 inline-flex items-center justify-center rounded-pill size-9 text-white/80" style={{ border: "1px solid rgba(255,255,255,0.16)" }}>
         <ArrowLeft size={16} strokeWidth={2.4} />
       </Link>

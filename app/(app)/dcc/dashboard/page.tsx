@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { DashboardHeader } from "@/components/layout/header";
-import { DashboardFooter } from "@/components/layout/footer";
 import { EmployeeAvatar } from "@/components/ui/employee-avatar";
 import { DccTabs } from "@/components/dcc/dcc-tabs";
 import { requireUser } from "@/lib/auth/current";
@@ -42,7 +41,6 @@ export default async function DccDashboardPage() {
             </p>
           </div>
         </main>
-        <DashboardFooter />
       </>
     );
   }
@@ -256,7 +254,6 @@ export default async function DccDashboardPage() {
           )}
         </section>
       </main>
-      <DashboardFooter />
     </>
   );
 }

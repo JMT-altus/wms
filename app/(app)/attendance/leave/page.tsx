@@ -1,5 +1,4 @@
 import { DashboardHeader } from "@/components/layout/header";
-import { DashboardFooter } from "@/components/layout/footer";
 import { requireUser } from "@/lib/auth/current";
 import { getLeaveCapabilityProofs } from "@/lib/auth/capability";
 import { getDefaultLeaveApprover, listMyLeave, listPendingLeaveFor } from "@/lib/queries/leave";
@@ -54,7 +53,6 @@ export default async function LeavePage() {
           </section>
         </div>
       </main>
-      <DashboardFooter />
     </>
   );
 }

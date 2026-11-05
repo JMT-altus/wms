@@ -1,6 +1,5 @@
 import { notFound } from "next/navigation";
 import { DashboardHeader } from "@/components/layout/header";
-import { DashboardFooter } from "@/components/layout/footer";
 import { getLeaveCapabilityProofs } from "@/lib/auth/capability";
 import { listPendingApprovalsFor, type ApprovalRow } from "@/lib/queries/leave";
 import { LeaveList } from "@/components/attendance/leave/leave-list";
@@ -57,7 +56,6 @@ export default async function LeaveApprovalsPage() {
           <LeaveList rows={rows} mode="pending" canDecide={caps.decide !== null} />
         )}
       </main>
-      <DashboardFooter />
     </>
   );
 }

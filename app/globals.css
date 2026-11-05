@@ -3489,6 +3489,53 @@ select.nt-input {
   width: 100%;
 }
 
+/* ── Workhub (/hub) on one screen ─────────────────────────────────────────────
+   The hub fills the window together with the shared copyright line after it:
+   the route template's .app-page becomes a full-height column, the hub takes
+   the spare height, and the line sits at the bottom with no gap above it. A
+   min-height, never a fixed one: on a window too short for everything the page
+   simply scrolls, nothing is clipped. Greeting spacing and size follow the
+   window height. Presentation only. */
+.app-page:has(> .hub-fill) {
+  display: flex;
+  flex-direction: column;
+  min-height: 100svh;
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(180deg, #eef5fd 0%, #e3eefa 55%, #dce9f7 100%);
+}
+/* The hub’s soft washes run on behind the copyright line instead of stopping at its edge. */
+.app-page > .hub-fill {
+  flex: 1 0 auto;
+  width: 100%;
+  overflow: visible !important;
+  background: none !important;
+}
+.app-page > .hub-fill > [aria-hidden] {
+  overflow: visible !important;
+}
+.app-page > .hub-fill + footer {
+  position: relative;
+  z-index: 10;
+  margin-top: 0;
+  border-top: 0;
+  padding-top: 6px;
+  padding-bottom: 10px;
+  background: transparent;
+}
+/* Welcome + cards sit centred in the spare height on tall windows (the space is
+   shared with the gap above the Powered-by strip); on short ones there is no
+   spare height and they keep these minimum gaps. */
+.hub-welcome {
+  margin-top: auto;
+  padding-top: clamp(8px, 3vh, 40px);
+  margin-bottom: clamp(14px, 3.4vh, 40px);
+}
+h1.hub-greeting:not(.brand-wordmark):not(.brand-wordmark-deep) {
+  font-size: clamp(28px, min(3.4vw, 6.2vh), 46px) !important;
+  line-height: 1.12;
+}
+
 /* ── Dashboard filter chips: icon-badge style ────────────────────────────────
    Opt-in through .fb-badge-chips on the FilterBar root (the dashboard). Each chip
    carries its leading icon on a small tinted square, bold label, and turns blue
@@ -3583,4 +3630,177 @@ select.nt-input {
 }
 .tasks-altus .tt-toolbar button {
   border-radius: 10px;
+}
+
+/* ── Tasks table, enterprise grid (Tasks page only: .tasks-altus) ────────────
+   The Product Master look: a rounded white grid in a thin lavender frame, a
+   lavender-tinted header with small uppercase labels, hairline separators
+   between every column and row, roomier even rows and a soft hover.
+   Presentation only — the same table, columns, sorting, selection, paging and
+   row menu. Scoped to .tasks-altus, which only the Tasks page sets, so My Day,
+   Archive and every other table keep their look.
+
+   Separators are inset box-shadows, not borders: in a collapsed-border table a
+   sticky cell's borders stay behind while the cell scrolls, so the frozen Task
+   block and the pinned Actions column would lose their lines. A shadow travels
+   with the cell. Where a pinned cell already carries its own edge shadow
+   (inline), that one wins and the separator is simply not drawn there. */
+.tasks-altus .tt-table {
+  border: 1px solid #c9cdee !important;
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(30, 41, 99, 0.05), 0 10px 28px -22px rgba(52, 60, 160, 0.35) !important;
+}
+.tasks-altus.tasks-dense .tt-table thead th {
+  background: #eef0fb !important;
+  color: #3a3f86 !important;
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 12px 12px;
+  box-shadow: inset -1px 0 0 #dcdff3, inset 0 -1px 0 #c9cdee;
+}
+.tasks-altus.tasks-dense .tt-table thead th:last-child {
+  box-shadow: inset 0 -1px 0 #c9cdee;
+}
+.tasks-altus.tasks-dense .tt-table thead th button {
+  letter-spacing: inherit;
+  text-transform: inherit;
+}
+.tasks-altus.tasks-dense .tt-table thead th button:hover {
+  color: #23286b;
+}
+.tasks-altus.tasks-dense .tt-table tbody td {
+  font-size: 14px;
+  padding: 10px 12px;
+  border-bottom: 0;
+  box-shadow: inset -1px 0 0 #eceef7, inset 0 -1px 0 #e6e8f3;
+}
+.tasks-altus.tasks-dense .tt-table tbody tr:last-child > td {
+  box-shadow: inset -1px 0 0 #eceef7;
+}
+.tasks-altus.tasks-dense .tt-table tbody td:last-child {
+  box-shadow: inset 0 -1px 0 #e6e8f3;
+}
+/* The frozen Task column and the pinned Actions column carry an inline edge
+   shadow (their "frozen" cue). Keep it, and add the grid lines beside it. */
+.tasks-altus.tasks-dense .tt-table tbody td[style*="box-shadow: 10px 0 14px"] {
+  box-shadow: inset -1px 0 0 #dcdff3, inset 0 -1px 0 #e6e8f3, 10px 0 14px -10px rgba(15, 23, 42, 0.18) !important;
+}
+.tasks-altus.tasks-dense .tt-table tbody td[style*="box-shadow: -10px 0 14px"] {
+  box-shadow: inset 0 -1px 0 #e6e8f3, -10px 0 14px -10px rgba(15, 23, 42, 0.14) !important;
+}
+.tasks-altus.tasks-dense .tt-table thead th[style*="box-shadow: 10px 0 14px"] {
+  box-shadow: inset -1px 0 0 #dcdff3, inset 0 -1px 0 #c9cdee, 10px 0 14px -10px rgba(15, 23, 42, 0.18) !important;
+}
+.tasks-altus.tasks-dense .tt-table thead th[style*="box-shadow: -10px 0 14px"] {
+  box-shadow: inset 0 -1px 0 #c9cdee, -10px 0 14px -10px rgba(15, 23, 42, 0.14) !important;
+}
+.tasks-altus .tt-table .task-row {
+  border-bottom: 0;
+}
+.tasks-altus .tt-table .task-row:hover {
+  box-shadow: none;
+}
+.tasks-altus.tasks-dense .tt-table tbody tr:hover > td,
+.tasks-altus .tt-table .task-row:hover > .task-cell-pinned {
+  background-color: #f6f7fe !important;
+}
+.tasks-altus.tasks-dense .tt-table tbody td .text-body,
+.tasks-altus.tasks-dense .tt-table .task-title-link {
+  font-size: 14px;
+  color: #1e2238;
+}
+/* Group headings inside the grid keep the same lavender family. */
+.tasks-altus .tt-table tbody tr:not(.task-row) > td {
+  background: #f7f8fd;
+  box-shadow: inset 0 -1px 0 #dcdff3;
+}
+/* Row ⋯ menu: the reference's small framed square. */
+.tasks-altus .tt-table button[aria-label^="Actions for"] {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid #e0e3f2;
+  background: #ffffff;
+}
+.tasks-altus .tt-table button[aria-label^="Actions for"]:hover {
+  background: #eef0fb;
+  border-color: #c9cdee;
+  color: #23286b;
+}
+/* Toolbar (Group by, Showing, Rows, pager, Columns) in the same frame. */
+.tasks-altus .tt-toolbar {
+  border-color: #dcdff3;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(30, 41, 99, 0.04);
+}
+.tasks-altus .tt-toolbar button,
+.tasks-altus .tt-toolbar select,
+.tasks-altus .tt-toolbar input {
+  border-color: #dcdff3;
+}
+.tasks-altus .tt-toolbar button:not(:disabled):hover {
+  background: #f3f4fd;
+  border-color: #c9cdee;
+}
+
+/* ── Employees module design layer ───────────────────────────────────────────
+   Scoped to the Employees module's pages through the page wrapper's
+   data-module hook (components/layout/app-sidebar.tsx), so no other module
+   changes. One table look for every Employees report and list (Attendance
+   Report, weekly report, employee detail, DCC, DCC Dashboard, Salary runs,
+   My Salary's daily report): a lavender-tinted header with small uppercase
+   labels, hairline separators between rows and columns, a soft row hover and
+   even padding. Cell BACKGROUNDS are never overridden — the DCC grid and the
+   attendance reports colour cells by status. Separators are inset shadows so
+   they travel with sticky cells. Form fields get one radius, border and focus
+   ring. Presentation only. Dialogs render outside the page wrapper and keep
+   their own look. */
+[data-module="employees"] table thead th {
+  background-color: #eef0fb !important;
+  color: #3a3f86 !important;
+  font-size: 11.5px !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding-top: 11px;
+  padding-bottom: 11px;
+  box-shadow: inset -1px 0 0 #dcdff3, inset 0 -1px 0 #c9cdee;
+  border-bottom: 0;
+}
+[data-module="employees"] table thead th:last-child {
+  box-shadow: inset 0 -1px 0 #c9cdee;
+}
+[data-module="employees"] table tbody td {
+  box-shadow: inset -1px 0 0 #eef0f7, inset 0 -1px 0 #e8eaf3;
+}
+[data-module="employees"] table tbody td:last-child {
+  box-shadow: inset 0 -1px 0 #e8eaf3;
+}
+[data-module="employees"] table tbody tr:hover > td:not([style*="background"]) {
+  background-color: #f6f7fe;
+}
+/* The container a table scrolls in: rounded, framed, and scrolling sideways on narrow screens. */
+[data-module="employees"] :is(.overflow-x-auto, .overflow-auto):has(> table) {
+  border-radius: 12px;
+  border: 1px solid #dcdff3;
+  background: #ffffff;
+}
+/* Form fields: one radius, border and focus ring across the module. */
+[data-module="employees"] main :is(select, textarea, input:is([type="text"], [type="search"], [type="date"], [type="month"], [type="number"], [type="email"], [type="tel"], :not([type]))) {
+  border-radius: 10px;
+  border-color: #d5dcea;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+[data-module="employees"] main :is(select, textarea, input):focus-visible {
+  outline: none;
+  border-color: #0d9488;
+  box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.16);
+}
+/* Rail items: one height and alignment, a clear active state. */
+[data-module="employees"].module-rail nav a {
+  min-height: 40px;
+  align-items: center;
 }

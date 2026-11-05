@@ -1,5 +1,4 @@
 import { DashboardHeader } from "@/components/layout/header";
-import { DashboardFooter } from "@/components/layout/footer";
 import { requireUser } from "@/lib/auth/current";
 import { localDateString } from "@/lib/format";
 import { fmtDateRange } from "@/lib/dates";
@@ -175,9 +174,6 @@ export default async function AttendancePage({ searchParams }: PageProps) {
           the ground above and shows the app wallpaper as a blank band. The page
           now ends where its content does, so the margin is dropped here — for
           this page only, without touching the footer every other page uses. */}
-      <div className="[&>footer]:mt-0">
-        <DashboardFooter />
-      </div>
     </>
   );
 }

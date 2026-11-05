@@ -2,7 +2,6 @@ import Link from "next/link";
 import type { Route } from "next";
 import { ArrowLeft, Timer } from "lucide-react";
 import { DashboardHeader } from "@/components/layout/header";
-import { DashboardFooter } from "@/components/layout/footer";
 import { requireUser } from "@/lib/auth/current";
 import { timeByEmployee } from "@/lib/tasks/time-store";
 import { formatDuration } from "@/lib/tasks/time-math";
@@ -215,9 +214,6 @@ export default async function TaskTimeReportPage({ searchParams }: PageProps) {
           )}
         </div>
       </main>
-      <div className="[&>footer]:mt-6">
-        <DashboardFooter />
-      </div>
     </>
   );
 }

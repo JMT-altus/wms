@@ -1,5 +1,4 @@
 import { DashboardHeader } from "@/components/layout/header";
-import { DashboardFooter } from "@/components/layout/footer";
 import { requireUser } from "@/lib/auth/current";
 import {
   currentWeekStart,
@@ -38,7 +37,6 @@ export default async function SharePage() {
           minMinutes={settings.shareMinMinutes}
         />
       </main>
-      <DashboardFooter />
     </>
   );
 }

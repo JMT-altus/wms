@@ -1,5 +1,4 @@
 import { DashboardHeader } from "@/components/layout/header";
-import { DashboardFooter } from "@/components/layout/footer";
 import { FilterBar } from "@/components/layout/filter-bar";
 import { TaskSearchProvider } from "@/components/tasks/task-search-context";
 import { TaskListPage, isUnreadPending } from "@/components/tasks/task-list-page";
@@ -168,9 +167,6 @@ export default async function TasksPage({ searchParams }: PageProps) {
         subjects={subjects}
         clients={clients}
       />
-      <div className="[&>footer]:mt-6">
-        <DashboardFooter />
-      </div>
       {completeTask && (
         <CompleteTaskModal
           taskId={completeTask.id}

@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { DashboardHeader } from "@/components/layout/header";
-import { DashboardFooter } from "@/components/layout/footer";
 import { EmployeeAvatar } from "@/components/ui/employee-avatar";
 import { requireUser } from "@/lib/auth/current";
 import {
@@ -217,7 +216,6 @@ export default async function DccRankingPage() {
           </>
         )}
       </main>
-      <DashboardFooter />
     </>
   );
 }

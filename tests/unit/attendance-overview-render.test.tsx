@@ -274,13 +274,14 @@ describe("the /attendance page", () => {
 
   it("ends where its content ends: no reserved gap above the shared footer", () => {
     const src = readFileSync(path.resolve(__dirname, "../../app/(app)/attendance/page.tsx"), "utf8");
-    // The footer's own top margin is neutralised for this page only…
-    expect(src).toMatch(/\[&>footer\]:mt-0/);
+    // The page renders no footer of its own (the shared route template adds the copyright line once)…
+    expect(src).not.toMatch(/DashboardFooter/);
     // …and nothing here reserves viewport height or a tall bottom pad.
     expect(src).not.toMatch(/min-h-screen|min-h-\[|h-screen|pb-(16|20|24|32)\b/);
-    // The shared footer itself is untouched.
+    // The shared footer is a slim line with a modest top margin — no tall branded band.
     const footer = readFileSync(path.resolve(__dirname, "../../components/layout/footer.tsx"), "utf8");
-    expect(footer).toMatch(/className="mt-32"/);
+    expect(footer).toMatch(/className="mt-10 /);
+    expect(footer).not.toMatch(/mt-32/);
   });
 
   it("leaves the punch, team and mobile pieces in place for their other callers", () => {

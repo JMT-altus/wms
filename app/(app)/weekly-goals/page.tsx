@@ -1,5 +1,4 @@
 import { DashboardHeader } from "@/components/layout/header";
-import { DashboardFooter } from "@/components/layout/footer";
 import { WeeklyGoalsBoard } from "@/components/weekly-goals/weekly-goals-board";
 import { requireUser } from "@/lib/auth/current";
 import {
@@ -89,9 +88,6 @@ export default async function WeeklyGoalsPage({ searchParams }: PageProps) {
           nextWeek={nextWeekStart(weekStart)}
           thisWeek={thisWeek}
         />
-      </div>
-      <div className="[&>footer]:mt-6">
-        <DashboardFooter />
       </div>
     </div>
   );

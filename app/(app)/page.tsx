@@ -1,5 +1,4 @@
 import { DashboardHeader } from "@/components/layout/header";
-import { DashboardFooter } from "@/components/layout/footer";
 import { FilterBar } from "@/components/layout/filter-bar";
 import { KpiStrip } from "@/components/dashboard/kpi-strip";
 import { StatusTable } from "@/components/dashboard/status-table";
@@ -88,7 +87,6 @@ export default async function DashboardPage({ searchParams }: PageProps) {
         <main>
           <DashboardLoadError />
         </main>
-        <DashboardFooter />
       </>
     );
   }
@@ -205,9 +203,6 @@ export default async function DashboardPage({ searchParams }: PageProps) {
           </>
         )}
       </main>
-      <div className="[&>footer]:mt-6">
-        <DashboardFooter />
-      </div>
     </>
   );
 }

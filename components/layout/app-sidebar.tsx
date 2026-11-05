@@ -1,6 +1,7 @@
 "use client";
 
 import type { CSSProperties } from "react";
+import { PoweredByAltus } from "@/components/layout/powered-by";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import type { Route } from "next";
@@ -79,6 +80,7 @@ export function AppSidebar({
 
   return (
     <aside
+      data-module={mod.id}
       // `rail-navy` is the shared navy surface (globals.css) — the same
       // gradient, blur and accent hairline the header uses, rotated to run
       // down the rail so the two read as one continuous plane.
@@ -257,6 +259,7 @@ export function AppSidebar({
             except a bare circle in the header. Collapsed, the rail is too
             narrow for a name, so it falls back to that link. */}
         <div className="px-2.5 pb-3 pt-2 shrink-0" style={{ borderTop: light ? "1px solid #E2E8F0" : "1px solid rgba(255,255,255,0.10)" }}>
+          <PoweredByAltus light={light} collapsed={collapsed} />
           {/* On the white WMS shell the account menu is in the header, so the foot
               falls back to the plain "Back to Hub" link, as it does when collapsed. */}
           {collapsed || !userMenu || light ? (
@@ -294,6 +297,8 @@ export function AppSidebarOffset({ children }: { children: React.ReactNode }) {
   return (
     <div
       className="app-rail-offset transition-[padding] duration-200"
+      // Which module the page belongs to — a styling hook only (module-scoped CSS in globals.css, e.g. Employees).
+      data-module={moduleForPath(pathname).id}
       style={
         {
           // Consumed by the md-and-up rule in globals.css — below md the rail

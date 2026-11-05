@@ -1,6 +1,7 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
+import { PoweredByAltus } from "@/components/layout/powered-by";
 import Link from "next/link";
 import type { Route } from "next";
 import { signOut } from "firebase/auth";
@@ -269,6 +270,7 @@ export function AdminSidebar({ adminName, adminEmail, avatarUrl }: Props) {
           {/* Lands on the hub, not the WMS dashboard — the hub is the app's
               real entry point, and a module the admin can't open shouldn't be
               where "back" drops them. */}
+          <PoweredByAltus collapsed={collapsed} />
           <Link
             href={"/hub" as Route}
             title={collapsed ? "Back to app" : undefined}

@@ -1,6 +1,5 @@
 import { redirect } from "next/navigation";
 import { DashboardHeader } from "@/components/layout/header";
-import { DashboardFooter } from "@/components/layout/footer";
 import { RecycleBin } from "@/components/tasks/recycle-bin";
 import { listAbandonedTasks } from "@/app/(app)/tasks/lifecycle-actions";
 import { requireUser } from "@/lib/auth/current";
@@ -24,9 +23,6 @@ export default async function RecycleBinPage() {
       <main className="wms-fill w-full">
         <RecycleBin rows={rows} />
       </main>
-      <div className="[&>footer]:mt-6">
-        <DashboardFooter />
-      </div>
     </>
   );
 }

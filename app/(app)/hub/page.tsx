@@ -184,7 +184,7 @@ export default async function HubPage({
 
   return (
     <div
-      className="relative min-h-[100svh] overflow-hidden"
+      className="hub-fill relative flex flex-col overflow-hidden"
       style={{ background: "linear-gradient(180deg, #EEF5FD 0%, #E3EEFA 55%, #DCE9F7 100%)" }}
     >
       {/* Approvers: a reminder of leave requests waiting on them. Streams in on
@@ -206,9 +206,9 @@ export default async function HubPage({
         />
       </div>
 
-      <div className="relative z-10 flex min-h-[100svh] flex-col">
+      <div className="relative z-10 flex flex-1 flex-col">
         {/* Top bar — the mark and the brand label on the left, the avatar menu on the right. */}
-        <header className="mx-auto w-full max-w-[1320px] px-8 max-md:px-4 pt-5 flex items-center justify-between gap-4">
+        <header className="mx-auto w-full max-w-[1320px] px-8 max-md:px-4 pt-3 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/logo-mark.png" alt="" className="block h-auto shrink-0" style={{ width: 40 }} />
@@ -228,12 +228,12 @@ export default async function HubPage({
         </header>
 
         {/* Welcome */}
-        <div className="mx-auto w-full max-w-[1320px] px-8 max-md:px-4 text-center mt-8 mb-8 max-md:mt-6 max-md:mb-6">
-          <h1 style={{ fontFamily: "var(--font-display), var(--font-sans), sans-serif", color: NAVY }}>
+        <div className="hub-welcome mx-auto w-full max-w-[1320px] px-8 max-md:px-4 text-center">
+          <h1 className="hub-greeting" style={{ fontFamily: "var(--font-display), var(--font-sans), sans-serif", color: NAVY }}>
             {hello},{" "}
             <span style={{ color: BLUE }}>{firstName}</span>
           </h1>
-          <p className="mt-3 mx-auto" style={{ fontSize: 15.5, lineHeight: 1.5, color: MUTED, maxWidth: 560 }}>
+          <p className="mt-2 mx-auto" style={{ fontSize: 15.5, lineHeight: 1.5, color: MUTED, maxWidth: 560 }}>
             {line}
           </p>
         </div>
@@ -255,7 +255,7 @@ export default async function HubPage({
         )}
 
         {/* Module tiles — only the ones this person may open. */}
-        <div className={`mx-auto w-full px-8 max-md:px-4 pb-4 grid gap-5 max-md:gap-4 grid-cols-1 ${gridCols}`} style={{ maxWidth: gridMaxWidth }}>
+        <div className={`mx-auto w-full px-8 max-md:px-4 pb-2 grid gap-4 max-md:gap-3 grid-cols-1 ${gridCols}`} style={{ maxWidth: gridMaxWidth }}>
           {tiles.map((m) => {
             const s = STYLES[m.key as ModuleId | "admin"];
             const Icon = s.Icon;
@@ -263,31 +263,33 @@ export default async function HubPage({
               <Link
                 key={m.key}
                 href={m.href as Route}
-                className="group relative flex flex-col rounded-2xl p-5 transition-[transform,box-shadow,border-color] duration-200 ease-out hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1A6BE0]/50"
+                className="group relative flex flex-col rounded-2xl p-4 transition-[transform,box-shadow,border-color] duration-200 ease-out hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1A6BE0]/50"
                 style={{
                   background: s.card,
                   border: `1px solid ${s.border}`,
                   boxShadow: "0 1px 2px rgba(18,40,74,0.04), 0 8px 20px -14px rgba(18,40,74,0.18)",
-                  // Tall enough for the longest title + three-line tagline, so every card in the grid is the same height.
-                  minHeight: 224,
+                  // Cards in a row share the tallest one's height (the grid stretches them); this floor keeps the
+                  // rows even and grows a little on tall windows. Never a fixed height, so nothing is clipped.
+                  minHeight: "clamp(150px, 21vh, 200px)",
                 }}
               >
                 {/* hover: a slightly deeper shadow, no glow */}
                 <span aria-hidden className="pointer-events-none absolute inset-0 rounded-2xl opacity-0 transition-opacity duration-200 group-hover:opacity-100" style={{ boxShadow: "0 14px 30px -16px rgba(18,40,74,0.28), 0 0 0 1px rgba(26,107,224,0.18)" }} />
 
-                {/* icon chip */}
-                <span className="relative grid place-items-center rounded-xl" style={{ width: 42, height: 42, background: s.chip }}>
-                  <Icon size={21} strokeWidth={2.1} style={{ color: s.accent }} />
+                {/* icon chip beside the title */}
+                <span className="relative flex items-center gap-3">
+                  <span className="grid shrink-0 place-items-center rounded-xl" style={{ width: 38, height: 38, background: s.chip }}>
+                    <Icon size={20} strokeWidth={2.1} style={{ color: s.accent }} />
+                  </span>
+                  <h2 style={{ fontFamily: "var(--font-sans), system-ui, sans-serif", fontWeight: 700, fontSize: 16.5, lineHeight: 1.25, letterSpacing: "-0.01em", color: NAVY }}>
+                    {m.label}
+                  </h2>
                 </span>
-
-                <h2 className="relative mt-3.5" style={{ fontFamily: "var(--font-sans), system-ui, sans-serif", fontWeight: 700, fontSize: 16.5, lineHeight: 1.25, letterSpacing: "-0.01em", color: NAVY }}>
-                  {m.label}
-                </h2>
-                <p className="relative mt-1.5" style={{ fontSize: 12.5, lineHeight: 1.5, color: MUTED }}>
+                <p className="relative mt-2" style={{ fontSize: 12.5, lineHeight: 1.5, color: MUTED }}>
                   {m.tagline}
                 </p>
 
-                <div className="relative mt-auto pt-4">
+                <div className="relative mt-auto pt-3">
                   <span
                     className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 transition-[box-shadow,background-color] duration-200 group-hover:shadow-md"
                     style={{ background: "#FFFFFF", color: NAVY, fontSize: 12.5, fontWeight: 600, border: "1px solid rgba(18,40,74,0.10)", boxShadow: "0 1px 2px rgba(18,40,74,0.06)", lineHeight: 1 }}
@@ -320,13 +322,13 @@ export default async function HubPage({
         )}
 
         {/* Subtle platform credit. */}
-        <footer className="mt-auto shrink-0 pb-6 pt-6 max-md:pb-5">
+        <footer className="mt-auto shrink-0 pb-1 pt-3">
           <div className="flex items-center justify-center gap-3 opacity-70">
             <span style={{ fontFamily: "var(--font-mono-display), ui-monospace, monospace", fontSize: 11, fontWeight: 700, letterSpacing: "0.22em", color: MUTED }}>
               POWERED BY
             </span>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/altus-corp-logo.png" alt="Altus Corp" className="w-auto" style={{ height: 36, display: "block" }} />
+            <img src="/altus-corp-logo.png" alt="Altus Corp" className="w-auto" style={{ height: 30, display: "block" }} />
           </div>
         </footer>
       </div>

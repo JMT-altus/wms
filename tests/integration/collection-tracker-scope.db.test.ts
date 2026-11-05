@@ -275,3 +275,86 @@ describe("reassignment moves visibility", () => {
     expect(await scopeMod.collectionScopeFor()).toEqual({ kind: "none", reason: "unconfigured" });
   });
 });
+
+describe("collection.tracker.view_all — View All Collection Person Data", () => {
+  const VIEW_ALL = "collection.tracker.view_all";
+  const revoke = (who: Who) => pg.query(`delete from field_permission_grants where field_key = $1 and subject_type = 'employee' and subject_id = $2`, [VIEW_ALL, ids[who]]);
+  const allNames = async () => {
+    as("super");
+    return (await trackerRows()).names;
+  };
+
+  it("is sensitive and explicit-grant only: an admin who is a linked coordinator does not get it from being an admin", async () => {
+    const own = (await (async () => { as("gauri"); return trackerRows(); })()).names;
+    expect(own.every((n) => n.startsWith("G "))).toBe(true); // gauri is an admin, still only her companies
+  });
+
+  it("granted to one person: they see every company — Tracker, Dashboard and Master — exactly what a super-admin sees, with no scope note", async () => {
+    const everyone = await allNames();
+    await grant(VIEW_ALL, ids.bhavisha);
+    try {
+      as("bhavisha");
+      const t = await trackerRows();
+      expect(t.names).toEqual(everyone);
+      expect(t.names).toEqual(expect.arrayContaining(["G One", "J One", "S One", "Unassigned Co", "Other Label Co"]));
+      expect(t.scopeNote).toBeUndefined();
+      expect(await dashboardNames()).toEqual(everyone);
+      const scope = await scopeMod.collectionScopeFor();
+      expect(scope).toEqual({ kind: "all" });
+      expect((await master.listMasterCompanies({ scope })).total).toBe(everyone.length);
+      // Search runs across the whole authorised set.
+      expect((await master.listMasterCompanies({ scope, query: "G One" })).rows.map((r) => r.companyName)).toEqual(["G One"]);
+      // Starts on her own Collection person (her link), with every coordinator and "All" available in the filter.
+      const props = findProps(await TrackerPage(), "CollectionTracker")!;
+      expect(props.defaultCollectionPerson).toBe("Bhavisha");
+      // Everyone else is unchanged.
+      as("jyotsna");
+      expect((await trackerRows()).names.every((n) => n.startsWith("J "))).toBe(true);
+    } finally {
+      await revoke("bhavisha");
+    }
+  });
+
+  it("widens WHICH companies she can act on with the permissions she already holds — and grants nothing else", async () => {
+    await grant(VIEW_ALL, ids.bhavisha);
+    try {
+      as("bhavisha");
+      // Ordinary actions she already holds (everyone has them here) now reach another coordinator's company.
+      expect(await commitments.getCompanyCommitment(co["S One"]!)).toMatchObject({ ok: true });
+      expect(await outcome(MasterCompanyPage({ params: Promise.resolve({ id: co["S One"]! }) }))).toBe("opens");
+      // …but no sensitive capability comes with it: assigning a Sales Coordinator is still refused.
+      await expect(tracker.assignSalesCoordinator({ companyId: co["S One"]!, coordinatorLabel: "Bhavisha", expected: "Saroj" })).rejects.toThrow("Forbidden");
+    } finally {
+      await revoke("bhavisha");
+    }
+  });
+
+  it("revoked: the next request is back to her own companies, and other companies are refused again by id", async () => {
+    await grant(VIEW_ALL, ids.bhavisha);
+    as("bhavisha");
+    expect((await trackerRows()).names).toContain("S One");
+    await revoke("bhavisha");
+    const t = await trackerRows();
+    expect(t.names.every((n) => n.startsWith("B "))).toBe(true);
+    expect(t.scopeNote).toBe("Showing the companies assigned to you as Sales Coordinator (Bhavisha).");
+    expect(await commitments.getCompanyCommitment(co["S One"]!)).toEqual({ ok: false, error: "That company isn't in the Collection Master." });
+    expect(await outcome(MasterCompanyPage({ params: Promise.resolve({ id: co["S One"]! }) }))).toBe("not found");
+  });
+
+  it("a denied row or an org-wide 'everyone' row behaves as the matrix says; a department row is ignored (sensitive)", async () => {
+    // Department grants never apply to sensitive keys.
+    const dept = (await pg.query<{ id: string }>(`insert into departments (name) values ('Sales Dept') returning id`)).rows[0]!.id;
+    await pg.query(`insert into employee_departments (employee_id, department_id) values ($1, $2)`, [ids.saroj, dept]).catch(() => undefined);
+    await pg.query(`insert into field_permission_grants (field_key, subject_type, subject_id, allowed) values ($1, 'department', $2, true)`, [VIEW_ALL, dept]);
+    try {
+      as("saroj");
+      expect((await trackerRows()).names.every((n) => n.startsWith("S "))).toBe(true);
+    } finally {
+      await pg.query(`delete from field_permission_grants where field_key = $1 and subject_type = 'department'`, [VIEW_ALL]);
+    }
+  });
+
+  it("the super-admin's view is unchanged", async () => {
+    expect((await allNames())).toEqual(expect.arrayContaining(["Unassigned Co", "Other Label Co"]));
+  });
+});
