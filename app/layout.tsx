@@ -1,8 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import { Suspense } from "react";
-import { Roboto, Bricolage_Grotesque, JetBrains_Mono } from "next/font/google";
 import { NuqsAdapter } from "nuqs/adapters/next/app";
 import { SpeedInsights } from "@vercel/speed-insights/next";
+import "./fonts/fonts.css";
 import "./globals.css";
 import { AppToaster } from "@/components/ui/sonner-toaster";
 import { Providers } from "@/components/providers";
@@ -11,35 +11,10 @@ import { RouteProgress } from "@/components/layout/route-progress";
 import { getCurrentEmployee } from "@/lib/auth/current";
 import { accentVars, resolveAccent } from "@/lib/appearance";
 
-const roboto = Roboto({
-  variable: "--font-roboto",
-  subsets: ["latin"],
-  weight: ["300", "400", "500", "700", "900"],
-  display: "swap",
-});
-
-// Display font for the KPI hero numerals and section headlines. Variable
-// weight + optical sizing means it holds up at 160px without looking
-// stretched. Picked over Inter / system-ui so the dashboard has a
-// recognisable typographic voice instead of generic-sans aesthetics.
-const bricolage = Bricolage_Grotesque({
-  variable: "--font-display",
-  subsets: ["latin"],
-  weight: ["300", "400", "500", "600", "700", "800"],
-  display: "swap",
-});
-
-// Monospace voice for eyebrow labels + small caps in the holographic
-// strip. Pairs against Bricolage's geometric curves for tension.
-// Uses --font-mono-display (not --font-mono) so the existing @theme
-// fallback chain stays intact for any code path that wants generic
-// monospace.
-const jetbrainsMono = JetBrains_Mono({
-  variable: "--font-mono-display",
-  subsets: ["latin"],
-  weight: ["400", "500", "700"],
-  display: "swap",
-});
+// Roboto (body), Bricolage Grotesque (display) and JetBrains Mono (eyebrow labels) are self-hosted in
+// app/fonts/fonts.css — the same files Google Fonts serves — so the production build never has to reach
+// fonts.googleapis.com. The stylesheet defines the --font-roboto / --font-display / --font-mono-display
+// variables globals.css consumes.
 
 export const metadata: Metadata = {
   title: "JMT Drive Solutions — Work Management Dashboard",
@@ -76,7 +51,6 @@ export default async function RootLayout({
   return (
     <html
       lang="en"
-      className={`${roboto.variable} ${bricolage.variable} ${jetbrainsMono.variable}`}
       data-density={density}
       style={htmlStyle}
       suppressHydrationWarning
