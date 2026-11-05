@@ -10,10 +10,14 @@ import type { MarkTarget } from "./mark-controls";
  * The strip shown while companies are ticked in the Tracker — the Tasks list's
  * bulk bar, with the Tracker's two marks:
  *
- *   [N] selected · Priority ▾ · Status ▾                      Clear
+ *   [N] selected · Priority ▾ · Collection Done ▾             Clear
  *
  * Priority offers Mark as priority / Remove priority (collection.priority.set);
- * Status offers Collection done / Undo collection done (collection.done.set).
+ * Collection Done offers Mark as Collection Done / Undo Collection Done
+ * (collection.done.set — sensitive, an explicit grant). Without that grant the
+ * Collection Done chip is still drawn beside Priority, disabled, saying which
+ * permission it needs — so a missing grant is visible instead of looking like
+ * a missing feature. The server action refuses without the grant regardless.
  * A chip is drawn only for a capability the viewer holds (decided on the
  * server, checked again by the action). The actions run through the same
  * runner as the row menu, so Collection done asks first here too, and the
@@ -38,6 +42,7 @@ export function TrackerBulkBar({
 }) {
   const count = targets.length;
   const disabled = pending || !storageReady;
+  const noteId = React.useId();
   return (
     <div
       role="region"
@@ -83,25 +88,34 @@ export function TrackerBulkBar({
           </DropdownMenu>
         )}
 
-        {canSetDone && (
+        {canSetDone ? (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button type="button" disabled={disabled} className={chipBtn}>
                 <CheckCircle2 size={14} strokeWidth={2.2} />
-                Status
+                Collection Done
                 <ChevronDown size={12} className="opacity-60" />
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start">
-              <DropdownMenuLabel>Status for the selected…</DropdownMenuLabel>
+              <DropdownMenuLabel>Collection Done for the selected…</DropdownMenuLabel>
               <DropdownMenuItem className="text-[13.5px]" onSelect={() => onRun(targets, "done", true)}>
-                <CheckCircle2 size={15} /> Collection done
+                <CheckCircle2 size={15} /> Mark as Collection Done
               </DropdownMenuItem>
               <DropdownMenuItem className="text-[13.5px]" onSelect={() => onRun(targets, "done", false)}>
-                <Undo2 size={15} /> Undo collection done
+                <Undo2 size={15} /> Undo Collection Done
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+        ) : (
+          <button type="button" disabled aria-disabled="true" className={chipBtn} title={DONE_NEEDS_GRANT} aria-describedby={noteId}>
+            <CheckCircle2 size={14} strokeWidth={2.2} />
+            Collection Done
+            <ChevronDown size={12} className="opacity-60" />
+            <span id={noteId} className="sr-only">
+              {DONE_NEEDS_GRANT}
+            </span>
+          </button>
         )}
       </div>
       {/* Pinned right: Clear must stay reachable whatever the row holds. */}
@@ -114,6 +128,9 @@ export function TrackerBulkBar({
     </div>
   );
 }
+
+/** Why the Collection Done chip is disabled for someone without the grant (no name — the permission's own label). */
+export const DONE_NEEDS_GRANT = "Needs the “Collection Tracker — Collection Done” permission (Field Permissions). Ask a super-admin.";
 
 const chipBtn =
   "inline-flex h-8 shrink-0 items-center gap-1 whitespace-nowrap rounded-lg border border-hairline-strong bg-white px-2 text-[12px] font-semibold text-ink-soft hover:border-altus-red hover:text-altus-red transition-colors disabled:opacity-50";

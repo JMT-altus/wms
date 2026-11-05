@@ -114,11 +114,11 @@ describe("the row menu", () => {
     tracker({ canSetPriority: true });
     openMenu(screen.getByRole("button", { name: "Actions for Alpha" }));
     expect(await menuItem("Mark as priority")).toBeTruthy();
-    expect(screen.queryByRole("menuitem", { name: "Collection done" })).toBeNull();
+    expect(screen.queryByRole("menuitem", { name: "Mark as Collection Done" })).toBeNull();
     cleanup();
     tracker({ canSetDone: true });
     openMenu(screen.getByRole("button", { name: "Actions for Alpha" }));
-    expect(await menuItem("Collection done")).toBeTruthy();
+    expect(await menuItem("Mark as Collection Done")).toBeTruthy();
     expect(screen.queryByRole("menuitem", { name: "Mark as priority" })).toBeNull();
   });
 
@@ -137,10 +137,10 @@ describe("the row menu", () => {
     fireEvent.click(await menuItem("Remove priority"));
     await waitFor(() => expect(h.setMarks).toHaveBeenCalledWith({ companyIds: [ID.Bravo], kind: "priority", active: false }));
     openMenu(screen.getByRole("button", { name: "Actions for Delta" }));
-    expect(await menuItem("Undo collection done")).toBeTruthy();
+    expect(await menuItem("Undo Collection Done")).toBeTruthy();
     expect(screen.queryByRole("menuitem", { name: "Mark as priority" })).toBeNull();
     expect(screen.getByRole("menuitem", { name: "Remove priority" })).toBeTruthy(); // its lingering priority mark can be cleared
-    fireEvent.click(screen.getByRole("menuitem", { name: "Undo collection done" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Undo Collection Done" }));
     await waitFor(() => expect(h.setMarks).toHaveBeenCalledWith({ companyIds: [ID.Delta], kind: "done", active: false }));
     expect(h.toast).toHaveBeenLastCalledWith(expect.objectContaining({ message: "Undid collection done for 1 company." }));
   });
@@ -148,7 +148,7 @@ describe("the row menu", () => {
   it("Collection done asks first: Cancel sends nothing; confirming sends it", async () => {
     tracker(both);
     openMenu(screen.getByRole("button", { name: "Actions for Alpha" }));
-    fireEvent.click(await menuItem("Collection done"));
+    fireEvent.click(await menuItem("Mark as Collection Done"));
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).getByText("Mark collection done?")).toBeTruthy();
     expect(within(dialog).getByText("Alpha")).toBeTruthy();
@@ -158,7 +158,7 @@ describe("the row menu", () => {
     expect(h.setMarks).not.toHaveBeenCalled();
 
     openMenu(screen.getByRole("button", { name: "Actions for Alpha" }));
-    fireEvent.click(await menuItem("Collection done"));
+    fireEvent.click(await menuItem("Mark as Collection Done"));
     fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Yes, collection done" }));
     await waitFor(() => expect(h.setMarks).toHaveBeenCalledWith({ companyIds: [ID.Alpha], kind: "done", active: true }));
     expect(h.toast).toHaveBeenCalledWith(expect.objectContaining({ message: "Marked 1 company as collection done." }));
@@ -194,7 +194,12 @@ describe("selection and the bulk bar", () => {
     const bar = screen.getByRole("region", { name: "Bulk actions" });
     expect(within(bar).getByTestId("selected-count").textContent).toBe("2");
     expect(within(bar).getByRole("button", { name: "Priority" })).toBeTruthy();
-    expect(within(bar).queryByRole("button", { name: "Status" })).toBeNull(); // no collection.done.set
+    // Without collection.done.set the Collection Done chip is beside Priority but disabled, saying which permission it needs.
+    const doneChip = within(bar).getByRole("button", { name: /^Collection Done/ }) as HTMLButtonElement;
+    expect(doneChip.disabled).toBe(true);
+    expect(doneChip.title).toMatch(/Collection Tracker — Collection Done/);
+    openMenu(doneChip);
+    expect(screen.queryByRole("menuitem", { name: "Mark as Collection Done" })).toBeNull();
     expect(rowOf("Alpha").getAttribute("aria-selected")).toBe("true");
     fireEvent.click(within(bar).getByRole("button", { name: "Clear selection" }));
     expect(screen.queryByRole("region", { name: "Bulk actions" })).toBeNull();
@@ -226,12 +231,12 @@ describe("selection and the bulk bar", () => {
     expect(h.refresh).toHaveBeenCalled();
   });
 
-  it("Status → Collection done lists the companies and asks first; Undo collection done runs at once", async () => {
+  it("Collection Done → Mark as Collection Done lists the companies and asks first; Undo collection done runs at once", async () => {
     tracker(both);
     for (const n of ["Alpha", "Echo"]) fireEvent.click(screen.getByRole("checkbox", { name: `Select ${n}` }));
     const bar = screen.getByRole("region", { name: "Bulk actions" });
-    openMenu(within(bar).getByRole("button", { name: "Status" }));
-    fireEvent.click(await menuItem("Collection done"));
+    openMenu(within(bar).getByRole("button", { name: "Collection Done" }));
+    fireEvent.click(await menuItem("Mark as Collection Done"));
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).getByText("2 companies")).toBeTruthy();
     expect(within(dialog).getByRole("list", { name: "Companies to mark" }).textContent).toBe("AlphaEcho");
@@ -243,8 +248,8 @@ describe("selection and the bulk bar", () => {
     h.setMarks.mockClear();
     tracker(both);
     fireEvent.click(screen.getByRole("checkbox", { name: "Select Charlie" }));
-    openMenu(within(screen.getByRole("region", { name: "Bulk actions" })).getByRole("button", { name: "Status" }));
-    fireEvent.click(await menuItem("Undo collection done"));
+    openMenu(within(screen.getByRole("region", { name: "Bulk actions" })).getByRole("button", { name: "Collection Done" }));
+    fireEvent.click(await menuItem("Undo Collection Done"));
     await waitFor(() => expect(h.setMarks).toHaveBeenCalledWith({ companyIds: [ID.Charlie], kind: "done", active: false }));
     expect(screen.queryByRole("dialog")).toBeNull();
   });

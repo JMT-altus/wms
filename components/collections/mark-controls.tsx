@@ -122,7 +122,7 @@ function ConfirmDoneDialog({ targets, busy, onCancel, onConfirm }: { targets: Ma
 /**
  * The row's ⋯ menu. Only the entries the viewer may use are offered (decided on
  * the server): Mark as priority / Remove priority with collection.priority.set,
- * Collection done / Undo collection done with collection.done.set. A done
+ * Mark as Collection Done / Undo Collection Done with collection.done.set. A done
  * company offers its undo (and removing a lingering priority mark) — marking it
  * priority while done would change nothing visible.
  */
@@ -150,8 +150,8 @@ export function MarkMenu({
     else if (state !== "done") items.push({ label: "Mark as priority", icon: <Flag size={15} />, kind: "priority", active: true });
   }
   if (canSetDone) {
-    if (state === "done") items.push({ label: "Undo collection done", icon: <Undo2 size={15} />, kind: "done", active: false });
-    else items.push({ label: "Collection done", icon: <CheckCircle2 size={15} />, kind: "done", active: true });
+    if (state === "done") items.push({ label: "Undo Collection Done", icon: <Undo2 size={15} />, kind: "done", active: false });
+    else items.push({ label: "Mark as Collection Done", icon: <CheckCircle2 size={15} />, kind: "done", active: true });
   }
   if (items.length === 0) return null;
   return (
