@@ -167,7 +167,10 @@ describe("Commitments & escalations page — escalations", () => {
     expect(within(row).getByText("Escalated by: Asha · 19/10/26 · 11:30 AM IST")).toBeTruthy();
     expect(within(row).getByText("Reason for Escalation")).toBeTruthy();
     expect(within(row).getByText("Customer disputes the invoice amount.")).toBeTruthy();
-    expect(within(row).getByText("17/10/26")).toBeTruthy(); // the actual due date
+    // Outstanding and Due date are no longer columns; the due date still drives the row's overdue colour.
+    expect(screen.queryByRole("columnheader", { name: "Outstanding" })).toBeNull();
+    expect(screen.queryByRole("columnheader", { name: "Due date" })).toBeNull();
+    expect(within(row).queryByText("17/10/26")).toBeNull();
     expect(row.getAttribute("data-overdue")).toBe("warning"); // 2 days overdue → yellow, shared rule
     expect(within(row).getByLabelText("Comments for Alpha Traders, newest first").textContent).toBe("User: Asha · Date & Time: 15/10/26, 11:30 AM ISTComment: Cheque promised");
     expect(screen.getByText(/1 company · ₹0 committed · 1 open escalation/)).toBeTruthy();

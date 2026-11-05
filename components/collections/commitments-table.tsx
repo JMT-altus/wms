@@ -3,7 +3,6 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { Search } from "lucide-react";
-import { formatInr } from "@/lib/format";
 import { formatInrExact, toPaise } from "@/lib/collections/money";
 import { fmtDate } from "@/lib/dates";
 import { CommentList, type CommentEntry } from "@/components/collections/comment-list";
@@ -69,11 +68,6 @@ export function filterCommitments<T extends Pick<CommitmentView, "companyName" |
     if (person && r.collectionPerson !== person) return false;
     return true;
   });
-}
-
-/** The due dates the colouring is based on, earliest first (the source's own dates; nothing derived). */
-function dueDates(due: OverdueInput[] | undefined): string[] {
-  return [...new Set((due ?? []).map((d) => d.dueDate).filter((d): d is string => !!d))].sort();
 }
 
 function CloseEscalationButton({ escalationId, companyName }: { escalationId: string; companyName: string }) {
@@ -288,7 +282,7 @@ export function CommitmentsTable({
       </div>
 
       <div className="overflow-x-auto rounded-section bg-white" style={CARD}>
-        <table className="w-full min-w-[1280px] border-collapse text-[13.5px]">
+        <table className="w-full min-w-[1040px] border-collapse text-[13.5px]">
           <thead style={{ background: "#F5F7FB" }}>
             <tr className="text-left text-[11.5px] font-bold uppercase tracking-[0.06em] text-ink-soft">
               <th scope="col" className="px-3 py-2">Company</th>
@@ -300,8 +294,8 @@ export function CommitmentsTable({
               )}
               <th scope="col" className="px-3 py-2">Collection person</th>
               <th scope="col" className="px-3 py-2">Confirmation</th>
-              <th scope="col" className="px-3 py-2 text-right">Outstanding</th>
-              <th scope="col" className="px-3 py-2">Due date</th>
+              {/* Outstanding and Due date are no longer columns here (management's decision). The row's overdue
+                  colouring still reads the same due dates, so nothing about the data or the rule changed. */}
               <th scope="col" className="px-3 py-2">Comments</th>
               {showEscalations && <th scope="col" className="px-3 py-2">Escalation</th>}
             </tr>
@@ -309,7 +303,7 @@ export function CommitmentsTable({
           <tbody>
             {shown.length === 0 ? (
               <tr>
-                <td colSpan={6 + (showCommitments ? 2 : 0) + (showEscalations ? 1 : 0)} className="px-3 py-10 text-center text-ink-muted">
+                <td colSpan={4 + (showCommitments ? 2 : 0) + (showEscalations ? 1 : 0)} className="px-3 py-10 text-center text-ink-muted">
                   {rows.length === 0 ? emptyMessage : "Nothing matches these filters."}
                 </td>
               </tr>
@@ -317,7 +311,6 @@ export function CommitmentsTable({
               shown.map((r) => {
                 // The Tracker's rule, unchanged: worst level across the company's due dates.
                 const od = partyOverdue(r.due, today);
-                const dates = dueDates(r.due);
                 return (
                   <tr key={r.companyId} data-overdue={od.level} className="border-t border-[#EEF1F6] align-top" style={overdueRowStyle(od.level)}>
                     <td className="px-3 py-2 font-semibold text-ink-strong">
@@ -347,10 +340,6 @@ export function CommitmentsTable({
                       {confirmationLabel(r.confirmation)}
                       {r.confirmedAmount && <span className="block text-[12px] tabular-nums text-ink-subtle">Amount: {formatInrExact(r.confirmedAmount)}</span>}
                     </td>
-                    <td className="px-3 py-2 text-right tabular-nums">
-                      {typeof r.outstanding === "number" ? formatInr(r.outstanding) : <span className="text-ink-subtle" title="No outstanding amount from an approved transaction source">—</span>}
-                    </td>
-                    <td className="px-3 py-2 tabular-nums">{dates.length ? dates.map((d) => <span key={d} className="block">{fmtDate(d)}</span>) : DASH}</td>
                     <td className="px-3 py-2 text-ink-soft">
                       <CommentList comments={r.comments} label={`Comments for ${r.companyName}, newest first`} />
                     </td>
