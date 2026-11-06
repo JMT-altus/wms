@@ -117,7 +117,7 @@ export const MODULES: ModuleDef[] = [
     tagline: "Attendance, leave, salary, daily compliance & the team roster.",
     icon: "Users",
     landing: "/attendance",
-    routes: ["/attendance", "/salary", "/my-salary", "/reimbursements", "/leave-approval", "/dcc"],
+    routes: ["/attendance", "/salary", "/my-salary", "/salary-slip", "/reimbursements", "/leave-approval", "/dcc"],
     accent: { from: "#12B3A0", to: "#0C7C6F", ink: "#0C7C6F" },
     items: [
       { href: "/attendance", label: "Attendance", icon: "CalendarCheck", notMatch: ["/attendance/dashboard", "/attendance/leave"] },
@@ -129,7 +129,10 @@ export const MODULES: ModuleDef[] = [
       { href: "/dcc", label: "DCC", icon: "Gauge", notMatch: ["/dcc/dashboard", "/dcc/ranking"] },
       { href: "/dcc/dashboard", label: "DCC Dashboard", icon: "Users" },
       { href: "/my-salary", label: "My Salary", icon: "Wallet" },
-      { href: "/salary", label: "Salary", icon: "IndianRupee", adminOnly: true },
+      // The signed-in employee's own salary slips (statement + PDF per stored run).
+      { href: "/salary-slip", label: "Salary Slip", icon: "ScrollText" },
+      // notMatch: /salary-slip starts with "/salary" but is its own page.
+      { href: "/salary", label: "Salary", icon: "IndianRupee", adminOnly: true, notMatch: ["/salary-slip"] },
       { href: "/reimbursements", label: "Reimbursements", icon: "Receipt" },
     ],
   },

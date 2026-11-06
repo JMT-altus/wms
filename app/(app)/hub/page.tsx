@@ -321,16 +321,14 @@ export default async function HubPage({
           </div>
         )}
 
-        {/* Subtle platform credit. */}
-        <footer className="mt-auto shrink-0 pb-1 pt-3">
-          <div className="flex items-center justify-center gap-3 opacity-70">
-            <span style={{ fontFamily: "var(--font-mono-display), ui-monospace, monospace", fontSize: 11, fontWeight: 700, letterSpacing: "0.22em", color: MUTED }}>
-              POWERED BY
-            </span>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/altus-corp-logo.png" alt="Altus Corp" className="w-auto" style={{ height: 30, display: "block" }} />
-          </div>
-        </footer>
+        {/* Subtle platform credit: a compact centred strip at the bottom of the hub, directly above the copyright bar. */}
+        <div className="hub-credit mt-auto flex shrink-0 items-center justify-center gap-2.5 pb-2.5 pt-5" title="Powered by Altus Corp">
+          <span style={{ fontFamily: "var(--font-mono-display), ui-monospace, monospace", fontSize: 10, fontWeight: 800, letterSpacing: "0.2em", color: MUTED }}>
+            POWERED BY
+          </span>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/altus-corp-logo.png" alt="Altus Corp" className="w-auto" style={{ height: 26, display: "block" }} />
+        </div>
       </div>
     </div>
   );

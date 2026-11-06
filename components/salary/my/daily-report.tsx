@@ -6,7 +6,8 @@ import type { DailyReport, DailyWeek } from "@/lib/salary/daily-report";
 import { STATUS_GROUP_LABEL, formatMinutes, type StatusGroup } from "@/lib/attendance/overview";
 import { days, inrPaise, signedPaise } from "@/lib/salary/money";
 import { fmtDate, fmtDateRange } from "@/lib/dates";
-import { ACCENT, BORDER_SOFT, CARD, NAVY, SLATE, TONE, type Tone } from "@/components/attendance/overview/theme";
+import { TONE, type Tone } from "@/components/attendance/overview/theme";
+import { BLUE, BLUE_LINE, BLUE_SOFT, BORDER_SOFT, CONTROL, FAINT, HEAD_BG, NAVY, SECTION_HEAD, SECTION_TITLE, SLATE, SURFACE, TH } from "@/components/salary/ui";
 
 const GROUP_TONE: Record<StatusGroup, Tone> = {
   present: "teal",
@@ -47,26 +48,20 @@ export function DailySalaryReport({ report, hasRun, today, perDayPaise }: { repo
   const t = report.totals;
 
   return (
-    <section className="rounded-xl p-6 max-md:p-4" style={CARD} aria-labelledby="dr-title">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 id="dr-title" className="flex items-center gap-2 text-[11.5px] font-bold uppercase tracking-[0.12em]" style={{ color: SLATE }}>
-            <ListChecks size={14} aria-hidden style={{ color: ACCENT }} /> Daily salary report
+    <section className="overflow-hidden" style={SURFACE} aria-labelledby="dr-title">
+      <div className={SECTION_HEAD}>
+        <div className="min-w-0">
+          <h2 id="dr-title" className={SECTION_TITLE}>
+            <ListChecks size={15} aria-hidden style={{ color: BLUE }} /> Daily salary report
           </h2>
-          <p className="mt-1 text-[12.5px]" style={{ color: SLATE }}>
+          <p className="mt-0.5 text-[12px]" style={{ color: SLATE }}>
             {perDayPaise !== null ? `${inrPaise(perDayPaise)} per day of pay · ` : ""}
             each day counts present 1, half day ½, absent 0, worked holiday 2
           </p>
         </div>
-        <label className="text-[12.5px] font-semibold" style={{ color: SLATE }}>
-          Show{" "}
-          <select
-            value={filter}
-            onChange={(e) => setFilter(e.target.value as StatusGroup | "all")}
-            className="ml-1 h-8 rounded-md bg-white px-2 text-[13px] font-semibold"
-            style={{ border: `1px solid ${BORDER_SOFT}`, color: NAVY }}
-            aria-label="Filter days by status"
-          >
+        <label className="flex items-center gap-1.5 text-[12.5px] font-semibold" style={{ color: SLATE }}>
+          Show
+          <select value={filter} onChange={(e) => setFilter(e.target.value as StatusGroup | "all")} className={CONTROL} aria-label="Filter days by status">
             <option value="all">All statuses</option>
             {(Object.keys(STATUS_GROUP_LABEL) as StatusGroup[])
               .filter((g) => groupsPresent.has(g))
@@ -79,57 +74,65 @@ export function DailySalaryReport({ report, hasRun, today, perDayPaise }: { repo
         </label>
       </div>
 
-      <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Stat label="Hours worked" value={formatMinutes(t.workedMinutes)} hint="all punches this month" />
-        <Stat label="Payable days so far" value={days(t.dayValues)} hint="sum of day values" />
-        <Stat label="Earned by day" value={money(t.earnedPaise)} hint={hasRun ? "before deductions" : "no salary run for this month"} />
-        <Stat
-          label="Late deduction"
-          value={hasRun ? (t.lateDeductionPaise !== 0 ? signedPaise(t.lateDeductionPaise) : "None") : "—"}
-          hint="every third un-waived late = ½ day"
-          tone={t.lateDeductionPaise !== 0 ? TONE.coral.fg : undefined}
-        />
-      </div>
-      <p className="mt-2 text-[12px]" style={{ color: SLATE }}>
-        No weekly or monthly hours target is set in the attendance policy, so hours are shown for information and pay follows day values.
-      </p>
+      <div className="px-4 pb-4 pt-3">
+        <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
+          <Stat label="Hours worked" value={formatMinutes(t.workedMinutes)} hint="all punches this month" />
+          <Stat label="Payable days so far" value={days(t.dayValues)} hint="sum of day values" />
+          <Stat label="Earned by day" value={money(t.earnedPaise)} hint={hasRun ? "before deductions" : "no salary run for this month"} />
+          <Stat
+            label="Late deduction"
+            value={hasRun ? (t.lateDeductionPaise !== 0 ? signedPaise(t.lateDeductionPaise) : "None") : "—"}
+            hint="every third un-waived late = ½ day"
+            tone={t.lateDeductionPaise !== 0 ? TONE.coral.fg : undefined}
+          />
+        </div>
+        <p className="mt-2 text-[11.5px]" style={{ color: SLATE }}>
+          No weekly or monthly hours target is set in the attendance policy, so hours are shown for information and pay follows day values.
+        </p>
 
-      <div className="mt-4 grid gap-2">
-        {report.weeks.map((w) => (
-          <WeekBlock key={w.index} w={w} open={open.has(w.index)} onToggle={() => toggle(w.index)} filter={filter} hasRun={hasRun} />
-        ))}
-      </div>
+        <div className="mt-3 grid gap-2">
+          {report.weeks.map((w) => (
+            <WeekBlock key={w.index} w={w} open={open.has(w.index)} onToggle={() => toggle(w.index)} filter={filter} hasRun={hasRun} />
+          ))}
+        </div>
 
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-x-6 gap-y-1 rounded-lg px-4 py-3 text-[13px] tabular-nums" style={{ background: "#F3F6FA", color: SLATE }}>
-        <span className="font-bold uppercase tracking-[0.08em]" style={{ color: NAVY }}>
-          Month total
-        </span>
-        <span>
-          Hours <strong style={{ color: NAVY }}>{formatMinutes(t.workedMinutes)}</strong>
-        </span>
-        <span>
-          Days <strong style={{ color: NAVY }}>{days(t.dayValues)}</strong>
-        </span>
-        {hasRun && (
-          <>
-            <span>
-              Earned <strong style={{ color: NAVY }}>{money(t.earnedPaise)}</strong>
-            </span>
-            {t.lateDeductionPaise !== 0 && (
+        <div
+          className="mt-3 flex flex-wrap items-center justify-between gap-x-6 gap-y-1 rounded-lg px-4 py-2.5 text-[13px] tabular-nums"
+          style={{ background: BLUE_SOFT, border: `1px solid ${BLUE_LINE}`, color: SLATE }}
+        >
+          <span className="font-semibold" style={{ color: NAVY }}>
+            Month total
+          </span>
+          <span>
+            Hours <strong className="font-semibold" style={{ color: NAVY }}>{formatMinutes(t.workedMinutes)}</strong>
+          </span>
+          <span>
+            Days <strong className="font-semibold" style={{ color: NAVY }}>{days(t.dayValues)}</strong>
+          </span>
+          {hasRun && (
+            <>
               <span>
-                Late <strong style={{ color: TONE.coral.fg }}>{signedPaise(t.lateDeductionPaise)}</strong>
+                Earned <strong className="font-semibold" style={{ color: NAVY }}>{money(t.earnedPaise)}</strong>
               </span>
-            )}
-            {t.roundingPaise !== 0 && (
+              {t.lateDeductionPaise !== 0 && (
+                <span>
+                  Late <strong className="font-semibold" style={{ color: TONE.coral.fg }}>{signedPaise(t.lateDeductionPaise)}</strong>
+                </span>
+              )}
+              {t.roundingPaise !== 0 && (
+                <span>
+                  Rounding <strong className="font-semibold" style={{ color: NAVY }}>{signedPaise(t.roundingPaise)}</strong>
+                </span>
+              )}
               <span>
-                Rounding <strong style={{ color: NAVY }}>{signedPaise(t.roundingPaise)}</strong>
+                Base salary{" "}
+                <strong className="font-semibold" style={{ color: NAVY }} data-testid="daily-gross">
+                  {money(t.grossPaise)}
+                </strong>
               </span>
-            )}
-            <span>
-              Base salary <strong style={{ color: NAVY }} data-testid="daily-gross">{money(t.grossPaise)}</strong>
-            </span>
-          </>
-        )}
+            </>
+          )}
+        </div>
       </div>
     </section>
   );
@@ -137,14 +140,14 @@ export function DailySalaryReport({ report, hasRun, today, perDayPaise }: { repo
 
 function Stat({ label, value, hint, tone }: { label: string; value: string; hint: string; tone?: string }) {
   return (
-    <div className="rounded-lg px-3 py-2" style={{ background: "#F8FAFD" }}>
-      <p className="text-[11px] font-bold uppercase tracking-[0.08em]" style={{ color: SLATE }}>
+    <div className="rounded-lg px-3 py-2" style={{ background: HEAD_BG, border: `1px solid ${BORDER_SOFT}` }}>
+      <p className="text-[11.5px] font-semibold" style={{ color: SLATE }}>
         {label}
       </p>
-      <p className="mt-0.5 text-[18px] font-extrabold tabular-nums" style={{ color: tone ?? NAVY }}>
+      <p className="mt-0.5 text-[16px] font-bold tabular-nums" style={{ color: tone ?? NAVY }}>
         {value}
       </p>
-      <p className="text-[12px]" style={{ color: SLATE }}>
+      <p className="text-[11.5px]" style={{ color: SLATE }}>
         {hint}
       </p>
     </div>
@@ -159,47 +162,48 @@ function WeekBlock({ w, open, onToggle, filter, hasRun }: { w: DailyWeek; open: 
     .join(" · ");
   const id = `week-${w.index}-rows`;
   return (
-    <div className="rounded-lg" style={{ border: `1px solid ${BORDER_SOFT}` }}>
+    <div className="overflow-hidden rounded-lg" style={{ border: "1px solid #E2E8F0" }}>
       <button
         type="button"
         onClick={onToggle}
         aria-expanded={open}
         aria-controls={id}
-        className="flex w-full flex-wrap items-center justify-between gap-x-4 gap-y-1 rounded-lg px-4 py-3 text-left transition-colors hover:bg-[#F6F8FB] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[#0A6CFF]"
+        className="flex w-full flex-wrap items-center justify-between gap-x-4 gap-y-1 px-3.5 py-2.5 text-left transition-colors hover:bg-[#F6F9FF] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-inset focus-visible:ring-[#0A6CFF]/20"
+        style={open ? { background: HEAD_BG } : undefined}
       >
         <span className="min-w-0">
-          <span className="text-[13px] font-extrabold uppercase tracking-[0.06em]" style={{ color: NAVY }}>
+          <span className="text-[13px] font-semibold" style={{ color: NAVY }}>
             Week {w.index}
           </span>
-          <span className="ml-3 text-[13px] tabular-nums" style={{ color: SLATE }}>
+          <span className="ml-3 text-[12.5px] tabular-nums" style={{ color: SLATE }}>
             {fmtDateRange(w.start, w.end)}
           </span>
-          <span className="block text-[12px]" style={{ color: SLATE }}>
+          <span className="block text-[11.5px]" style={{ color: SLATE }}>
             {summary}
           </span>
         </span>
         <span className="flex items-center gap-4 text-[13px] tabular-nums" style={{ color: SLATE }}>
           <span>
-            <strong style={{ color: NAVY }}>{formatMinutes(w.workedMinutes)}</strong>
+            <strong className="font-semibold" style={{ color: NAVY }}>{formatMinutes(w.workedMinutes)}</strong>
           </span>
           <span>
-            <strong style={{ color: NAVY }}>{days(w.dayValues)}</strong> d
+            <strong className="font-semibold" style={{ color: NAVY }}>{days(w.dayValues)}</strong> d
           </span>
           {hasRun && (
-            <span className="font-bold" style={{ color: NAVY }}>
+            <span className="min-w-[90px] text-right font-semibold" style={{ color: NAVY }}>
               {money(w.earnedPaise)}
             </span>
           )}
-          {open ? <ChevronUp size={16} aria-hidden /> : <ChevronDown size={16} aria-hidden />}
+          {open ? <ChevronUp size={15} aria-hidden style={{ color: FAINT }} /> : <ChevronDown size={15} aria-hidden style={{ color: FAINT }} />}
         </span>
       </button>
       {open && (
-        <div id={id} className="overflow-x-auto px-2 pb-2">
+        <div id={id} className="overflow-x-auto border-t" style={{ borderColor: "#E2E8F0" }}>
           <table className="w-full min-w-[720px] border-collapse text-[13px]">
             <thead>
-              <tr className="text-left text-[11px] font-bold uppercase tracking-[0.08em]" style={{ color: SLATE }}>
+              <tr>
                 {["Date", "Day", "Status", "Check-in", "Check-out", "Work hours", "Day value", "Earned"].map((h, i) => (
-                  <th key={h} className={`px-2 py-1.5 ${i >= 5 ? "text-right" : ""}`}>
+                  <th key={h} className={`${TH} ${i >= 5 ? "!text-right" : ""}`}>
                     {h}
                   </th>
                 ))}
@@ -208,7 +212,7 @@ function WeekBlock({ w, open, onToggle, filter, hasRun }: { w: DailyWeek; open: 
             <tbody>
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-2 py-3 text-center" style={{ color: SLATE }}>
+                  <td colSpan={8} className="px-3 py-3 text-center" style={{ color: SLATE }}>
                     No days with this status in this week.
                   </td>
                 </tr>
@@ -216,27 +220,27 @@ function WeekBlock({ w, open, onToggle, filter, hasRun }: { w: DailyWeek; open: 
               {rows.map((r) => {
                 const tone = r.group ? TONE[GROUP_TONE[r.group]] : null;
                 return (
-                  <tr key={r.date} className="tabular-nums" style={{ borderTop: `1px solid ${BORDER_SOFT}`, background: tone && r.group !== "present" ? tone.bg : undefined, color: NAVY }} aria-current={r.isToday ? "date" : undefined}>
-                    <td className="px-2 py-2 font-semibold">{fmtDate(r.date)}</td>
-                    <td className="px-2 py-2" style={{ color: SLATE }}>
+                  <tr key={r.date} className="tabular-nums" style={{ background: tone && r.group !== "present" ? tone.bg : undefined, color: NAVY }} aria-current={r.isToday ? "date" : undefined}>
+                    <td className="px-3 py-1.5 font-medium">{fmtDate(r.date)}</td>
+                    <td className="px-3 py-1.5" style={{ color: SLATE }}>
                       {WEEKDAY[r.weekday]}
                     </td>
-                    <td className="px-2 py-2">
-                      <span className="inline-flex items-center gap-1.5 font-bold" style={{ color: tone ? tone.fg : SLATE }}>
+                    <td className="px-3 py-1.5">
+                      <span className="inline-flex items-center gap-1.5 font-semibold" style={{ color: tone ? tone.fg : SLATE }}>
                         {tone && <span aria-hidden className="inline-block rounded-full" style={{ width: 7, height: 7, background: tone.solid }} />}
                         {r.label}
                         {r.late && !r.lateWaived && (
-                          <span className="rounded-full px-1.5 text-[10.5px]" style={{ background: TONE.amber.bg, color: TONE.amber.fg }}>
+                          <span className="rounded-full px-1.5 text-[10.5px]" style={{ background: TONE.amber.bg, color: TONE.amber.fg, border: "1px solid #F6DDA6" }}>
                             late
                           </span>
                         )}
                       </span>
                     </td>
-                    <td className="px-2 py-2">{r.inAt ?? "—"}</td>
-                    <td className="px-2 py-2">{r.outAt ?? "—"}</td>
-                    <td className="px-2 py-2 text-right">{r.workedMinutes > 0 ? formatMinutes(r.workedMinutes) : "—"}</td>
-                    <td className="px-2 py-2 text-right">{r.future || !r.code ? "—" : days(r.dayValue)}</td>
-                    <td className="px-2 py-2 text-right font-semibold">{r.future || !r.code || !hasRun ? "—" : money(r.earnedPaise)}</td>
+                    <td className="px-3 py-1.5">{r.inAt ?? "—"}</td>
+                    <td className="px-3 py-1.5">{r.outAt ?? "—"}</td>
+                    <td className="px-3 py-1.5 text-right">{r.workedMinutes > 0 ? formatMinutes(r.workedMinutes) : "—"}</td>
+                    <td className="px-3 py-1.5 text-right">{r.future || !r.code ? "—" : days(r.dayValue)}</td>
+                    <td className="px-3 py-1.5 text-right font-semibold">{r.future || !r.code || !hasRun ? "—" : money(r.earnedPaise)}</td>
                   </tr>
                 );
               })}

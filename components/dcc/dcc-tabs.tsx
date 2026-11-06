@@ -66,6 +66,8 @@ function Tab({ href, active, label, sub, lead }: { href: string; active: boolean
     <Link
       href={href as Route}
       aria-current={active ? "page" : undefined}
+      // The full name and role on hover, for chips where they are truncated.
+      title={sub ? `${label} — ${sub}` : label}
       className={`flex h-full items-center gap-2.5 rounded-t-[10px] border-b-2 px-3 py-2 transition ${
         active ? "border-altus-red bg-surface-card text-ink-strong" : "border-transparent text-ink-muted hover:bg-surface-soft hover:text-ink-strong"
       }`}

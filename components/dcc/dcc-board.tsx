@@ -295,7 +295,7 @@ export function DccBoard(props: DccBoardProps) {
               value={props.ownerId}
               onChange={(e) => router.push(`/dcc?emp=${e.target.value}&date=${props.date}`)}
               aria-label="Whose DCC to show"
-              className="rounded-[9px] border border-hairline bg-surface-input px-2.5 py-1.5 text-[13px] font-semibold text-ink-strong outline-none focus:border-altus-red"
+              className="rounded-[9px] border border-hairline bg-surface-input px-2.5 py-1.5 text-[13px] font-semibold text-ink-strong outline-none focus:border-[#0A6CFF]"
             >
               {props.people.map((p) => (
                 <option key={p.id} value={p.id}>
@@ -335,7 +335,7 @@ export function DccBoard(props: DccBoardProps) {
         {!isToday && (
           <Link
             href={`/dcc?emp=${props.ownerId}`}
-            className="text-[12.5px] font-semibold text-altus-red hover:underline"
+            className="text-[12.5px] font-semibold text-[#0A6CFF] hover:underline"
           >
             Back to Today
           </Link>
@@ -371,8 +371,7 @@ export function DccBoard(props: DccBoardProps) {
           <button
             type="button"
             onClick={() => openAdd(null, null)}
-            className="inline-flex items-center gap-1.5 rounded-[9px] px-3 py-1.5 text-[12.5px] font-bold text-white transition"
-            style={{ background: "var(--color-green-deep)" }}
+            className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#0A6CFF] px-3 text-[13px] font-semibold text-white shadow-[0_1px_2px_rgba(10,108,255,0.25)] transition-colors hover:bg-[#0058D6]"
           >
             <Plus size={14} /> Add KPI
           </button>
@@ -450,13 +449,10 @@ export function DccBoard(props: DccBoardProps) {
               <header className="mb-3 flex items-center gap-2">
                 <span
                   className="size-2 shrink-0 rounded-full"
-                  style={{ background: "var(--color-green-deep)" }}
+                  style={{ background: "#0A6CFF" }}
                   aria-hidden
                 />
-                <h3
-                  className="text-[15px] font-black text-ink-strong"
-                  style={{ fontFamily: "var(--font-serif)" }}
-                >
+                <h3 className="text-[15px] font-semibold text-[#0B1F44]">
                   {group.section}
                 </h3>
                 {group.clientName && (
@@ -672,7 +668,7 @@ function ReviewBar({
         onBlur={onCommitNote}
         placeholder="Note to them…"
         aria-label="Review note"
-        className="min-w-[180px] flex-1 rounded-[8px] border border-hairline bg-surface-card px-2.5 py-1.5 text-[13px] text-ink-strong outline-none focus:border-altus-red"
+        className="min-w-[180px] flex-1 rounded-[8px] border border-hairline bg-surface-card px-2.5 py-1.5 text-[13px] text-ink-strong outline-none focus:border-[#0A6CFF]"
       />
     </div>
   );

@@ -100,7 +100,7 @@ export function MonthCalendar({
   const weeks = error ? [] : buildCalendar(days, year, month, today);
   const title = fmtMonth(`${year}-${String(month).padStart(2, "0")}`, "long");
   const navBtn =
-    "grid place-items-center rounded-lg size-9 transition-colors duration-150 hover:bg-[#F3F6FA] hover:text-[#172B4D] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0D9488] active:bg-[#E9EEF5] motion-reduce:transition-none";
+    "grid place-items-center rounded-lg size-9 transition-colors duration-150 hover:bg-[#F3F6FA] hover:text-[#172B4D] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0A6CFF] active:bg-[#E9EEF5] motion-reduce:transition-none";
   const navOff = "grid place-items-center rounded-lg size-9 opacity-35 cursor-not-allowed";
 
   return (
@@ -150,7 +150,7 @@ export function MonthCalendar({
           <Link
             href={todayHref as Route}
             scroll={false}
-            className="ml-1 rounded-lg px-3 h-9 inline-flex items-center text-[13px] font-semibold transition-colors duration-150 hover:bg-[#F3F6FA] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0D9488] active:bg-[#E9EEF5] motion-reduce:transition-none"
+            className="ml-1 rounded-lg px-3 h-9 inline-flex items-center text-[13px] font-semibold transition-colors duration-150 hover:bg-[#F3F6FA] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0A6CFF] active:bg-[#E9EEF5] motion-reduce:transition-none"
             style={{ color: ACCENT_TEXT, border: `1px solid ${BORDER}` }}
           >
             Today

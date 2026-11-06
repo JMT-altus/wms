@@ -4,7 +4,8 @@ import { localDateString } from "@/lib/format";
 import { loadMySalary } from "@/lib/salary/my-salary";
 import { attendanceCards, buildBreakdown, buildDailyReport, monthTitle, shiftMonthKey } from "@/lib/salary/daily-report";
 import { MonthCalendar } from "@/components/attendance/overview/month-calendar";
-import { CARD, NAVY, PAGE_GROUND, SLATE } from "@/components/attendance/overview/theme";
+import { PAGE_GROUND } from "@/components/attendance/overview/theme";
+import { NAVY, SLATE } from "@/components/salary/ui";
 import { NetPayCard } from "@/components/salary/my/net-pay-card";
 import { BreakdownCard } from "@/components/salary/my/breakdown-card";
 import { AttendanceSummaryCards } from "@/components/salary/my/attendance-cards";
@@ -58,19 +59,14 @@ export default async function MySalaryPage({ searchParams }: PageProps) {
       <DashboardHeader generatedAt={new Date()} title="Employees ▸ My Salary" fullWidth />
       <div style={{ background: PAGE_GROUND }}>
         {/* Full width: the page uses everything after the sidebar, with responsive gutters and no centred cap. */}
-        <main className="w-full px-6 pt-5 pb-10 max-md:px-4 lg:px-8 grid grid-cols-[minmax(0,1fr)] gap-5" data-testid="my-salary-main">
-          {/* The title panel: heading and subtitle on the left, the (admin-only) recalculate action on the right — the same card as /salary. */}
-          <section
-            aria-labelledby="my-salary-title"
-            className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 rounded-2xl px-6 py-5 max-md:px-4"
-            style={CARD}
-            data-testid="my-salary-title-panel"
-          >
-            <div className="flex min-w-0 flex-wrap items-baseline gap-x-4 gap-y-1">
-              <h1 id="my-salary-title" className="text-[clamp(26px,2.6vw,32px)] font-extrabold leading-none tracking-[-0.02em]" style={{ color: NAVY }}>
+        <main className="w-full px-6 pt-4 pb-10 max-md:px-4 lg:px-8 grid grid-cols-[minmax(0,1fr)] gap-4 emp-compact-page" data-testid="my-salary-main">
+          {/* The title: heading and subtitle on the left, the (admin-only) recalculate action on the right — the same header as /salary. */}
+          <section aria-labelledby="my-salary-title" className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3" data-testid="my-salary-title-panel">
+            <div className="min-w-0">
+              <h1 id="my-salary-title" style={{ color: NAVY }}>
                 My Salary
               </h1>
-              <p className="text-[14.5px] font-medium" style={{ color: SLATE }}>
+              <p className="mt-1 text-[12.5px]" style={{ color: SLATE }}>
                 Your monthly pay, deductions and attendance — visible only to you.
               </p>
             </div>
@@ -91,7 +87,7 @@ export default async function MySalaryPage({ searchParams }: PageProps) {
 
           <AttendanceSummaryCards a={cards} error={data.attendance === null} />
 
-          <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1.6fr)_minmax(340px,1fr)]">
+          <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(340px,1fr)]">
             <MonthCalendar
               days={data.attendance?.days ?? []}
               year={data.year}

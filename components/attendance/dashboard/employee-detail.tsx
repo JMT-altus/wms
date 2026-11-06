@@ -145,14 +145,16 @@ export function EmployeeDetailDialog({
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 bg-black/30 z-[90]" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 z-[100] -translate-x-1/2 -translate-y-1/2 w-full max-w-3xl rounded-xl bg-white border border-[#E2E8F0] p-6 shadow-lg max-h-[calc(100dvh-32px)] overflow-y-auto">
-          <div className="flex items-start justify-between gap-4 mb-4">
+        <Dialog.Overlay className="fixed inset-0 bg-[rgba(11,31,68,0.35)] z-[90]" />
+        {/* att-detail-dialog: the WMS table look for this dialog only (globals.css) — it opens outside the page,
+            so the Employees page styles don't reach it, and the shared weekly report keeps its look elsewhere. */}
+        <Dialog.Content className="att-detail-dialog fixed left-1/2 top-1/2 z-[100] -translate-x-1/2 -translate-y-1/2 w-[calc(100vw-32px)] max-w-4xl rounded-xl bg-white border border-[#DCE4F0] p-5 shadow-[0_24px_60px_-24px_rgba(11,31,68,0.45)] max-h-[calc(100dvh-32px)] overflow-y-auto max-sm:p-4">
+          <div className="mb-3 flex items-start justify-between gap-4 border-b border-[#E6ECF5] pb-3">
             <div>
-              <Dialog.Title className="font-serif text-xl text-[#0F172A]">
+              <Dialog.Title className="text-[18px] font-bold leading-tight text-[#0B1F44]">
                 {employeeName}
               </Dialog.Title>
-              <Dialog.Description className="text-[14px] text-[#64748B] mt-0.5">
+              <Dialog.Description className="text-[13px] text-[#5B6B85] mt-0.5">
                 Daily attendance · {monthLabel} · admin can edit / backfill any day
               </Dialog.Description>
             </div>
@@ -160,9 +162,9 @@ export function EmployeeDetailDialog({
               <button
                 type="button"
                 aria-label="Close"
-                className="size-9 inline-flex items-center justify-center rounded-full hover:bg-[#F1F5F9] text-[#64748B] hover:text-[#0F172A] transition-colors"
+                className="size-8 inline-flex items-center justify-center rounded-lg border border-[#E2E8F0] bg-white text-[#64748B] hover:border-[#0A6CFF] hover:text-[#0B4FB8] transition-colors"
               >
-                <X size={18} strokeWidth={2.2} />
+                <X size={16} strokeWidth={2.2} />
               </button>
             </Dialog.Close>
           </div>
@@ -213,7 +215,7 @@ export function EmployeeDetailDialog({
                         <button
                           type="button"
                           onClick={() => setEditingDate(d.logDate)}
-                          className="inline-flex items-center gap-1.5 rounded-md border border-hairline bg-surface-card py-1.5 px-2.5 text-[12px] font-semibold text-ink-soft hover:text-ink-strong hover:border-hairline-strong transition-colors"
+                          className="inline-flex h-7 items-center gap-1.5 rounded-md border border-[#D6DEEB] bg-white px-2.5 text-[12px] font-semibold text-[#0B1F44] hover:border-[#0A6CFF] hover:text-[#0B4FB8] transition-colors"
                         >
                           {d.inAt || d.outAt ? (
                             <>

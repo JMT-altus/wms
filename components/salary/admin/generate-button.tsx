@@ -46,11 +46,11 @@ export function GenerateButton({ month, monthLabel, rows, hero = false }: { mont
       type="button"
       onClick={onGenerate}
       disabled={generating}
-      className={`inline-flex items-center gap-2 rounded-lg font-bold text-white transition-opacity disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0A6CFF] ${hero ? "h-11 px-5 text-[14px]" : "h-10 px-4 text-[13.5px]"}`}
-      style={{ background: "linear-gradient(135deg, #0A6CFF, #0751BE)", boxShadow: "0 6px 14px -8px rgba(10, 108, 255, 0.6)" }}
+      className={`inline-flex items-center gap-1.5 rounded-lg font-semibold text-white transition-[filter,opacity] hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[#0A6CFF]/30 ${hero ? "h-10 px-4 text-[13.5px]" : "h-9 px-3.5 text-[13px]"}`}
+      style={{ background: "linear-gradient(135deg, #0A6CFF, #0751BE)", boxShadow: "0 1px 2px rgba(10, 108, 255, 0.25)" }}
       data-variant={hero ? "hero" : "default"}
     >
-      {generating ? <Loader2 size={15} className="animate-spin" aria-hidden /> : <Sparkles size={15} strokeWidth={2.2} aria-hidden />}
+      {generating ? <Loader2 size={15} className="animate-spin" aria-hidden /> : <Sparkles size={14} strokeWidth={2.2} aria-hidden />}
       {generating ? "Generating…" : `Generate Salary for ${monthLabel}`}
     </button>
   );

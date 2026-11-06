@@ -105,17 +105,18 @@ export default async function DccPage({ searchParams }: PageProps) {
   return (
     <>
       <DashboardHeader generatedAt={new Date()} />
-      <main className="mx-auto w-full max-w-[var(--max-content)] px-6 py-6 max-md:px-4">
-        <h1 className="text-display-md mb-1 text-ink-strong" style={{ fontFamily: "var(--font-serif)" }}>
+      {/* dcc-page: the WMS look for this page only (globals.css) — the shared employee tabs keep their look on DCC Dashboard. */}
+      <main className="dcc-page mx-auto w-full max-w-[1480px] px-10 pb-10 pt-4 max-lg:px-6 max-md:px-4">
+        <h1 className="mb-1 text-[#0B1F44]">
           Daily Compliance Checklist
         </h1>
-        <p className="mb-4 text-[13.5px] text-ink-subtle">
+        <p className="mb-2.5 text-[12.5px] text-[#5B6B85]">
           {view === "grid"
             ? "Each employee's KPI parameters, week by week. Fill a cell and it saves on its own; Weekly Actual and Deficit update as you go."
             : "Mark every KPI due today. Weekly, monthly and ad-hoc items sit in their own trays and never count against your day."}
         </p>
 
-        <div className="mb-4">
+        <div className="mb-2.5">
           <DccTabs
             people={people.map((p) => ({ id: p.id, name: p.name, designation: p.designation, department: p.department }))}
             meId={me.id}

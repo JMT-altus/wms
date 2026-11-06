@@ -28,15 +28,15 @@ export function AttendanceDashboardTable({
 
   return (
     <section
-      className="rounded-section bg-surface-card border border-hairline p-7 max-md:p-5"
-      style={{ boxShadow: "0 14px 32px -20px rgba(10, 108, 255, 0.16), 0 2px 6px -2px rgba(15, 23, 42, 0.06)" }}
+      className="rounded-xl border border-[#DCE4F0] bg-white p-4 max-md:p-3"
+      style={{ boxShadow: "0 1px 2px rgba(11, 31, 68, 0.05)" }}
     >
-      <div className="flex items-center justify-between gap-3 flex-wrap mb-5">
-        <div className="relative w-full max-w-md">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+        <div className="relative w-full max-w-[320px]">
           <Search
-            size={16}
+            size={14}
             strokeWidth={2.2}
-            className="absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-subtle pointer-events-none"
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-[#94A3B8] pointer-events-none"
           />
           <input
             type="search"
@@ -44,10 +44,10 @@ export function AttendanceDashboardTable({
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search by employee…"
             aria-label="Search employees"
-            className="w-full h-11 pl-10 pr-9 rounded-pill border border-hairline bg-surface-card text-[15px] text-ink-strong placeholder:text-ink-subtle outline-none transition-all focus:border-altus-red focus:ring-2 focus:ring-altus-red/25"
+            className="h-9 w-full rounded-lg border border-[#D6DEEB] bg-white pl-8 pr-3 text-[13px] text-[#0B1F44] placeholder:text-[#94A3B8] outline-none transition-[border-color,box-shadow] hover:border-[#B9C6DB] focus:border-[#0A6CFF] focus:ring-[3px] focus:ring-[#0A6CFF]/15"
           />
         </div>
-        <span className="text-[13px] font-semibold text-ink-subtle tabular-nums">
+        <span className="rounded-full bg-[#F1F5FB] px-2.5 py-1 text-[12px] font-semibold text-[#475569] tabular-nums">
           {filtered.length} {filtered.length === 1 ? "person" : "people"}
         </span>
       </div>
@@ -59,13 +59,11 @@ export function AttendanceDashboardTable({
             : "No employees match your search."}
         </p>
       ) : (
-        <div className="overflow-x-auto -mx-1">
-          <table className="w-full border-collapse min-w-[1080px]">
+        // Scrolls sideways inside its own frame on narrow screens; the Employee column stays pinned while it does.
+        <div className="overflow-x-auto rounded-lg border border-[#E2E8F0]">
+          <table className="att-report-table w-full border-collapse min-w-[1080px]">
             <thead>
-              <tr
-                className="border-b"
-                style={{ borderColor: "var(--color-hairline-strong)" }}
-              >
+              <tr style={{ background: "#F5F7FB" }}>
                 <Th>Employee</Th>
                 <Th align="right">Present</Th>
                 <Th align="right">Absent</Th>
@@ -97,16 +95,12 @@ export function AttendanceDashboardTable({
                         setSelected({ id: r.employeeId, name: r.name });
                       }
                     }}
-                    className="border-t cursor-pointer transition-colors hover:bg-surface-soft focus:bg-surface-soft outline-none"
-                    style={{
-                      borderColor: "var(--color-hairline)",
-                      background:
-                        i % 2 === 1 ? "rgba(15, 23, 42, 0.012)" : undefined,
-                    }}
+                    data-row-index={i}
+                    className="group cursor-pointer border-t border-[#EEF2F7] bg-white outline-none transition-colors hover:bg-[#F6F9FF] focus-visible:bg-[#EEF4FF]"
                   >
                     <td
-                      className="px-3 py-3 font-semibold text-ink-strong whitespace-nowrap"
-                      style={{ fontSize: 14 }}
+                      className="sticky left-0 z-[1] whitespace-nowrap bg-white px-3 py-2 font-semibold text-[#0B1F44] transition-colors group-hover:bg-[#F6F9FF] group-focus-visible:bg-[#EEF4FF]"
+                      style={{ fontSize: 13 }}
                     >
                       {r.name}
                     </td>
@@ -156,8 +150,8 @@ export function AttendanceDashboardTable({
                       {s.compOff}
                     </Td>
                     <td
-                      className="px-3 py-3 text-right font-black text-ink-strong tabular-nums whitespace-nowrap"
-                      style={{ fontSize: 14 }}
+                      className="px-3 py-2 text-right font-bold text-[#0B1F44] tabular-nums whitespace-nowrap"
+                      style={{ fontSize: 13, background: "rgba(10,108,255,0.04)" }}
                     >
                       {s.payableDays}
                     </td>
@@ -194,19 +188,16 @@ function Th({
 }) {
   return (
     <th
-      className="px-3 pb-3 uppercase font-bold tracking-[0.06em] text-ink-subtle whitespace-nowrap"
-      style={{ fontSize: 11, textAlign: align }}
+      className="px-3 py-2.5 font-semibold text-[#334155] whitespace-nowrap first:sticky first:left-0 first:z-[2] first:bg-[#F5F7FB]"
+      style={{ fontSize: 12, textAlign: align, borderBottom: "1px solid #E2E8F0" }}
       title={hint}
     >
       <span className="inline-flex items-center gap-1">
         {children}
         {hint && (
           <span
-            className="rounded px-1 py-0.5 text-[9px] font-bold tracking-wide"
-            style={{
-              background: "var(--color-surface-track)",
-              color: "var(--color-ink-subtle)",
-            }}
+            className="rounded px-1 py-px text-[9.5px] font-semibold"
+            style={{ background: "#E8EEF8", color: "#64748B" }}
           >
             {hint}
           </span>
@@ -227,8 +218,8 @@ function Td({
 }) {
   return (
     <td
-      className="px-3 py-3 font-semibold text-ink-soft tabular-nums whitespace-nowrap"
-      style={{ fontSize: 14, textAlign: align, ...style }}
+      className="px-3 py-2 font-medium text-[#334155] tabular-nums whitespace-nowrap"
+      style={{ fontSize: 13, textAlign: align, ...style }}
     >
       {children}
     </td>

@@ -140,7 +140,7 @@ export function DccFillRow({
             }}
             aria-label={`Number for ${item.title}`}
             placeholder={item.unit ?? "0"}
-            className="w-[74px] rounded-[9px] border border-hairline bg-surface-input px-2 py-1.5 text-[13px] tabular-nums text-ink-strong outline-none transition focus:border-altus-red disabled:opacity-50"
+            className="w-[74px] rounded-[9px] border border-hairline bg-surface-input px-2 py-1.5 text-[13px] tabular-nums text-ink-strong outline-none transition focus:border-[#0A6CFF] disabled:opacity-50"
           />
         )}
 
@@ -189,7 +189,7 @@ export function DccFillRow({
             }}
             placeholder="Note…"
             aria-label={`Note for ${item.title}`}
-            className="w-full rounded-[9px] border border-hairline bg-surface-input px-2.5 py-1.5 text-[13px] text-ink-strong outline-none transition focus:border-altus-red disabled:opacity-50"
+            className="w-full rounded-[9px] border border-hairline bg-surface-input px-2.5 py-1.5 text-[13px] text-ink-strong outline-none transition focus:border-[#0A6CFF] disabled:opacity-50"
           />
         </div>
       )}

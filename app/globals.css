@@ -3479,12 +3479,26 @@ select.nt-input {
    every page would shrink the `mx-auto max-w-*` sections that many pages place
    straight inside it. width:100% keeps the opted-in <main> centred at its max
    width as before. */
-.app-page:has(> .wms-fill) {
+/* Every WMS page: the route template's .app-page is a full-height column — the page body
+   (.app-page-body, an ordinary block, so `mx-auto max-w-*` sections lay out exactly as
+   before) takes the spare height and the copyright line comes last, at the bottom of the
+   window. The line itself is sticky (components/layout/footer.tsx), so it stays there
+   while a long page scrolls. */
+.app-page {
   display: flex;
   flex-direction: column;
   min-height: 100dvh;
 }
-.app-page > .wms-fill {
+.app-page > .app-page-body {
+  flex: 1 0 auto;
+  min-width: 0;
+}
+/* A page that opts in with .wms-fill on its <main>: that <main> takes the body's spare height. */
+.app-page-body:has(> .wms-fill) {
+  display: flex;
+  flex-direction: column;
+}
+.app-page-body > .wms-fill {
   flex: 1 0 auto;
   width: 100%;
 }
@@ -3496,31 +3510,35 @@ select.nt-input {
    min-height, never a fixed one: on a window too short for everything the page
    simply scrolls, nothing is clipped. Greeting spacing and size follow the
    window height. Presentation only. */
-.app-page:has(> .hub-fill) {
+.app-page:has(> .app-page-body > .hub-fill) {
   display: flex;
   flex-direction: column;
   min-height: 100svh;
   position: relative;
-  overflow: hidden;
+  /* clip, not hidden: the washes are still cut at the page's edges, but no scroll container is
+     made, so the copyright bar stays sticky at the bottom of the window here too. */
+  overflow: clip;
   background: linear-gradient(180deg, #eef5fd 0%, #e3eefa 55%, #dce9f7 100%);
 }
+.app-page-body:has(> .hub-fill) {
+  display: flex;
+  flex-direction: column;
+}
 /* The hub’s soft washes run on behind the copyright line instead of stopping at its edge. */
-.app-page > .hub-fill {
+.app-page-body > .hub-fill {
   flex: 1 0 auto;
   width: 100%;
   overflow: visible !important;
   background: none !important;
 }
-.app-page > .hub-fill > [aria-hidden] {
+.app-page-body > .hub-fill > [aria-hidden] {
   overflow: visible !important;
 }
-.app-page > .hub-fill + footer {
-  position: relative;
-  z-index: 10;
-  margin-top: 0;
-  border-top: 0;
-  padding-top: 6px;
-  padding-bottom: 10px;
+/* The hub is one screen, so its line simply sits at the bottom of that screen, on the hub's wash. */
+.app-page:has(> .app-page-body > .hub-fill) > footer {
+  /* On the hub the copyright line has no bar of its own: no fill, no rule — it sits on the hub's
+     light-blue wash directly under the Powered-by strip, still pinned to the bottom of the window. */
+  border-top-color: transparent;
   background: transparent;
 }
 /* Welcome + cards sit centred in the spare height on tall windows (the space is
@@ -3746,61 +3764,313 @@ h1.hub-greeting:not(.brand-wordmark):not(.brand-wordmark-deep) {
   border-color: #c9cdee;
 }
 
-/* ── Employees module design layer ───────────────────────────────────────────
-   Scoped to the Employees module's pages through the page wrapper's
-   data-module hook (components/layout/app-sidebar.tsx), so no other module
-   changes. One table look for every Employees report and list (Attendance
-   Report, weekly report, employee detail, DCC, DCC Dashboard, Salary runs,
-   My Salary's daily report): a lavender-tinted header with small uppercase
-   labels, hairline separators between rows and columns, a soft row hover and
-   even padding. Cell BACKGROUNDS are never overridden — the DCC grid and the
-   attendance reports colour cells by status. Separators are inset shadows so
-   they travel with sticky cells. Form fields get one radius, border and focus
-   ring. Presentation only. Dialogs render outside the page wrapper and keep
-   their own look. */
+/* ── Employees module design layer — the approved WMS white-and-blue look ─────
+   The Employees module uses the WMS shell (white rail + white header:
+   lib/chrome-theme.ts) and this layer brings its pages in line with WMS.
+   Scoped to the Employees pages through the page wrapper's data-module hook
+   (components/layout/app-sidebar.tsx), so no other module changes.
+
+   Tables: a pale blue-grey header with sentence-case labels (the WMS
+   dashboard's), hairline separators, compact rows and a soft blue hover. Cell
+   BACKGROUNDS are never overridden — the DCC grid and the attendance reports
+   colour cells by status. Separators are inset shadows so they travel with
+   sticky cells. Form fields: one radius, border and blue focus ring. Page
+   titles: compact. Presentation only. Dialogs render outside the page wrapper
+   and keep their own look. */
 [data-module="employees"] table thead th {
-  background-color: #eef0fb !important;
-  color: #3a3f86 !important;
-  font-size: 11.5px !important;
-  font-weight: 800 !important;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  padding-top: 11px;
-  padding-bottom: 11px;
-  box-shadow: inset -1px 0 0 #dcdff3, inset 0 -1px 0 #c9cdee;
+  background-color: #f5f7fb !important;
+  color: #1e293b !important;
+  font-size: 12.5px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0;
+  text-transform: none;
+  padding-top: 10px;
+  padding-bottom: 10px;
+  box-shadow: inset 0 -1px 0 #e2e8f0;
   border-bottom: 0;
 }
-[data-module="employees"] table thead th:last-child {
-  box-shadow: inset 0 -1px 0 #c9cdee;
-}
 [data-module="employees"] table tbody td {
-  box-shadow: inset -1px 0 0 #eef0f7, inset 0 -1px 0 #e8eaf3;
-}
-[data-module="employees"] table tbody td:last-child {
-  box-shadow: inset 0 -1px 0 #e8eaf3;
+  box-shadow: inset 0 -1px 0 #eef2f7;
 }
 [data-module="employees"] table tbody tr:hover > td:not([style*="background"]) {
-  background-color: #f6f7fe;
+  background-color: #f6f9ff;
 }
 /* The container a table scrolls in: rounded, framed, and scrolling sideways on narrow screens. */
 [data-module="employees"] :is(.overflow-x-auto, .overflow-auto):has(> table) {
   border-radius: 12px;
-  border: 1px solid #dcdff3;
+  border: 1px solid #e2e8f0;
   background: #ffffff;
 }
-/* Form fields: one radius, border and focus ring across the module. */
+/* Form fields: one radius, border and blue focus ring across the module. */
 [data-module="employees"] main :is(select, textarea, input:is([type="text"], [type="search"], [type="date"], [type="month"], [type="number"], [type="email"], [type="tel"], :not([type]))) {
   border-radius: 10px;
-  border-color: #d5dcea;
+  border-color: #d6deeb;
   transition: border-color 150ms ease, box-shadow 150ms ease;
 }
 [data-module="employees"] main :is(select, textarea, input):focus-visible {
   outline: none;
-  border-color: #0d9488;
-  box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.16);
+  border-color: #0a6cff;
+  box-shadow: 0 0 0 3px rgba(10, 108, 255, 0.15);
 }
-/* Rail items: one height and alignment, a clear active state. */
+/* The rail's module chip takes the WMS blue edge (the Employees accent is otherwise teal). */
+.rail-light[data-module="employees"] {
+  --module-accent-from: #0a6cff !important;
+  --module-accent-to: #0047b3 !important;
+}
+/* Rail items: one height and alignment. */
 [data-module="employees"].module-rail nav a {
   min-height: 40px;
   align-items: center;
+}
+/* Page titles: compact (the global h1 rule allows up to 46px), no embossed shadow — the
+   WMS pages carry their title in the header bar. Same layer as that rule, so it wins. */
+@layer base {
+  [data-module="employees"] h1:not(.brand-wordmark):not(.brand-wordmark-deep) {
+    font-size: clamp(24px, 2.2vw, 30px) !important;
+    font-weight: 700 !important;
+    line-height: 1.15 !important;
+    letter-spacing: -0.02em !important;
+    text-shadow: none;
+  }
+}
+
+/* The shared Forms page (components/forms/module-page.tsx) — Leave Approval and Reimbursements in
+   Employees — uses the module's width here; its other users keep their 900px column. */
+[data-module="employees"] .module-page-main {
+  max-width: 1480px;
+  padding-left: 40px;
+  padding-right: 40px;
+  padding-top: 24px;
+}
+@media (max-width: 1023px) {
+  [data-module="employees"] .module-page-main { padding-left: 24px; padding-right: 24px; }
+}
+@media (max-width: 767px) {
+  [data-module="employees"] .module-page-main { padding-left: 16px; padding-right: 16px; }
+}
+
+/* ── Attendance Report: the employee daily-log dialog (att-detail-dialog) ─────
+   The dialog opens outside the page wrapper, so the Employees layer doesn't
+   reach it; this gives its tables the same WMS look. Scoped to this dialog's
+   class only — the same weekly report on the Attendance page is untouched.
+   Status cell backgrounds and colours are never overridden. */
+.att-detail-dialog table thead tr {
+  background: #f5f7fb;
+}
+.att-detail-dialog table thead th {
+  color: #334155 !important;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  padding-top: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #e2e8f0;
+}
+.att-detail-dialog table tbody td {
+  font-size: 13px;
+}
+.att-detail-dialog table tbody tr:hover > td:not([style*="background"]) {
+  background-color: #f6f9ff;
+}
+.att-detail-dialog :is(input, select, textarea):focus-visible {
+  outline: none;
+  border-color: #0a6cff;
+  box-shadow: 0 0 0 3px rgba(10, 108, 255, 0.15);
+}
+
+/* ── Daily Compliance Checklist (/dcc) — the WMS look, this page only ─────────
+   .dcc-page is set by app/(app)/dcc/page.tsx. The employee tab strip is shared
+   with DCC Dashboard, so its look for this page lives here, not in the component.
+
+   Employee selector: ONE compact row of small chips (22px avatar, 12.5px name,
+   10.5px role) that scrolls sideways with a thin scrollbar when the team doesn't
+   fit — every employee from the data stays in it and selectable; the current
+   one in WMS blue.
+
+   Table header: the Employees table styles pad every header cell 10px top and
+   bottom; with three header rows (week / day / date) and the Sr No, Parameters
+   and Frequency cells spanning all three and bottom-aligned, that left a tall
+   empty block above those labels. Here the header rows are compact and those
+   three cells are vertically centred, so the header reads as one block; the
+   week grouping (row/col spans) is unchanged. */
+/* Same layer as the Employees title rule (a layered !important outranks an unlayered one); more specific. */
+@layer base {
+  [data-module="employees"] .dcc-page h1:not(.brand-wordmark):not(.brand-wordmark-deep) {
+    font-size: 26px !important;
+  }
+}
+.dcc-page nav[aria-label="Checklists"] {
+  margin: 0;
+  padding: 0 0 6px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #c9d6ea transparent;
+}
+.dcc-page nav[aria-label="Checklists"]::-webkit-scrollbar {
+  height: 6px;
+}
+.dcc-page nav[aria-label="Checklists"]::-webkit-scrollbar-thumb {
+  background: #c9d6ea;
+  border-radius: 999px;
+}
+.dcc-page nav[aria-label="Checklists"] > ul {
+  min-width: max-content;
+  flex-wrap: nowrap;
+  gap: 6px;
+  border-bottom: 0;
+}
+/* Every chip the same: 40px tall, avatar left, name over role right, both centred vertically. */
+.dcc-page nav[aria-label="Checklists"] a {
+  height: 40px;
+  border: 1px solid #dce4f0;
+  border-radius: 10px;
+  background: #ffffff;
+  padding: 0 12px 0 6px;
+  gap: 8px;
+  align-items: center;
+  color: #334155;
+  transition: border-color 150ms ease, background-color 150ms ease, color 150ms ease;
+}
+.dcc-page nav[aria-label="Checklists"] a:hover {
+  border-color: #b9c6db;
+  background: #f8fafd;
+  color: #0b1f44;
+}
+.dcc-page nav[aria-label="Checklists"] a[aria-current="page"] {
+  border-color: #0a6cff;
+  background: #eef4ff;
+  color: #0b4fb8;
+}
+/* The avatar slot: a fixed 28px that never shrinks. The avatar itself is drawn at 28px (its size is
+   inline, hence !important) — a real size, not a visual scale, so it stays centred in the slot. The
+   Dashboard / Ranking icons sit centred in the same slot. Initials and colours are unchanged. */
+.dcc-page nav[aria-label="Checklists"] a > span:first-child {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  display: grid;
+  place-items: center;
+}
+.dcc-page nav[aria-label="Checklists"] a > span:first-child > span[aria-hidden] {
+  width: 28px !important;
+  height: 28px !important;
+  font-size: 11px !important;
+  line-height: 1;
+}
+/* Name over role: one line each, the same line height in every chip; long ones end in "…" (full text on hover). */
+.dcc-page nav[aria-label="Checklists"] a > span:last-child {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1px;
+}
+.dcc-page nav[aria-label="Checklists"] a > span:last-child > span {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dcc-page nav[aria-label="Checklists"] a > span:last-child > span:first-child {
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 16px;
+}
+.dcc-page nav[aria-label="Checklists"] a > span:last-child > span + span {
+  font-size: 11px;
+  line-height: 14px;
+  color: #64748b;
+}
+.dcc-page nav[aria-label="Checklists"] a[aria-current="page"] > span:last-child > span + span {
+  color: #3b6fc4;
+}
+/* Compact three-row header; the spanning first three cells centred. */
+[data-module="employees"] .dcc-page table thead th {
+  padding: 5px 8px;
+  vertical-align: middle;
+  line-height: 1.2;
+}
+[data-module="employees"] .dcc-page table thead th[rowspan="3"] {
+  vertical-align: middle;
+  font-size: 12.5px !important;
+}
+/* Week bands and summary columns (beat the module's plain header colour). */
+[data-module="employees"] .dcc-page table thead th.dcc-week-head {
+  background-color: #eef4ff !important;
+  color: #0b4fb8 !important;
+  font-size: 12.5px !important;
+}
+[data-module="employees"] .dcc-page table thead th.dcc-sum-head {
+  background-color: #eaf1fe !important;
+  color: #0b4fb8 !important;
+}
+[data-module="employees"] .dcc-page table thead th.dcc-today {
+  background-color: var(--color-amber-bg) !important;
+  color: var(--color-amber-deep) !important;
+}
+.dcc-page table tbody td.dcc-sum {
+  background-color: #f5f8ff;
+}
+/* DCC Dashboard and DCC Ranking: single-row headers, so a little more room than the grid's three rows. */
+[data-module="employees"] .dcc-summary-page table thead th {
+  padding: 8px 12px;
+  white-space: nowrap;
+}
+
+/* ── My Salary, Salary (and its Employee report) and Leave Approvals ──────────
+   .emp-compact-page is set on those pages' <main>. The same 26px title as DCC,
+   and table headers at the module's colours with compact padding. */
+@layer base {
+  [data-module="employees"] .emp-compact-page h1:not(.brand-wordmark):not(.brand-wordmark-deep) {
+    font-size: 26px !important;
+  }
+}
+[data-module="employees"] .emp-compact-page table thead th {
+  padding: 8px 12px;
+}
+/* Salary runs: twelve columns, so the cells are a little tighter to fit a 1366px screen. */
+[data-module="employees"] .emp-compact-page table.salary-runs-table thead th {
+  padding: 8px;
+}
+/* Reimbursements' request dialog and admin response (.wms-form — set only there; the dialog renders
+   in a portal, outside the module wrapper): compact labels and 36px fields with the WMS blue focus. */
+.wms-form label {
+  margin-bottom: 5px;
+  font-size: 13px;
+  color: #0b1f44;
+}
+.wms-form :is(input:not([type="checkbox"]):not([type="radio"]), textarea) {
+  border-radius: 8px;
+  border-color: #d6deeb;
+  padding: 7px 11px;
+  font-size: 13.5px;
+  color: #0b1f44;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+.wms-form :is(input, textarea):focus {
+  outline: none;
+  border-color: #0a6cff;
+  box-shadow: 0 0 0 3px rgba(10, 108, 255, 0.15);
+}
+/* The shared dropdown (components/ui/select.tsx) at the same height and type as the fields beside it. */
+.wms-form button[aria-haspopup="listbox"] {
+  height: 36px;
+  padding: 0 11px;
+  border-radius: 8px;
+  border-color: #d6deeb;
+  background: #ffffff;
+  font-size: 13.5px;
+  color: #0b1f44;
+}
+.wms-form button[aria-haspopup="listbox"]:focus,
+.wms-form button[aria-haspopup="listbox"][data-state="open"] {
+  border-color: #0a6cff;
+  box-shadow: 0 0 0 3px rgba(10, 108, 255, 0.15);
+}
+/* The month picker's input sits inside its own bordered group: no second border or radius. */
+[data-module="employees"] main .emp-compact-page input[type="month"],
+[data-module="employees"] main.emp-compact-page input[type="month"] {
+  border: 0;
+  border-radius: 6px;
 }

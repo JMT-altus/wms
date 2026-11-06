@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import * as Dialog from "@radix-ui/react-dialog";
 import { Upload, CheckCircle2, Undo2, FileSpreadsheet } from "lucide-react";
 import { fireToast } from "@/lib/toast";
-import { BORDER, NAVY } from "@/components/attendance/overview/theme";
+import { BORDER, BTN, NAVY } from "@/components/salary/ui";
 import {
   previewSalaryImport,
   confirmSalaryImport,
@@ -96,21 +96,21 @@ export function SalaryImportDialog() {
       <Dialog.Trigger asChild>
         <button
           type="button"
-          className="inline-flex h-10 items-center gap-2 rounded-lg bg-white px-4 text-[13.5px] font-bold transition-colors hover:bg-[#F3F6FA] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0A6CFF]"
+          className={BTN}
           style={{ border: `1px solid ${BORDER}`, color: NAVY }}
         >
-          <Upload size={15} strokeWidth={2.2} />
+          <Upload size={14} strokeWidth={2.2} />
           Import Salary Log
         </button>
       </Dialog.Trigger>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 bg-black/30 z-[90]" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 z-[100] -translate-x-1/2 -translate-y-1/2 w-full max-w-2xl rounded-xl bg-white border border-[#E2E8F0] p-6 shadow-lg max-h-[calc(100dvh-32px)] overflow-y-auto">
-          <Dialog.Title className="font-serif text-xl text-[#0F172A] mb-1">
+        <Dialog.Content className="fixed left-1/2 top-1/2 z-[100] -translate-x-1/2 -translate-y-1/2 w-[calc(100vw-32px)] max-w-2xl rounded-xl bg-white border border-[#DCE4F0] p-5 shadow-[0_18px_40px_-16px_rgba(11,31,68,0.3)] max-h-[calc(100dvh-32px)] overflow-y-auto">
+          <Dialog.Title className="mb-1 text-[17px] font-semibold text-[#0B1F44]">
             Import Salary Log (historical backtest)
           </Dialog.Title>
           <Dialog.Description
-            className="text-[15px] text-[#64748B] mb-4"
+            className="text-[13.5px] text-[#5B6B85] mb-4"
             style={{ lineHeight: 1.5 }}
           >
             Upload the Salary Log workbook. Its <strong>Summary</strong> sheet seeds
@@ -199,8 +199,8 @@ export function SalaryImportDialog() {
                 <div className="mt-4 overflow-x-auto">
                   <table className="w-full text-[13px]">
                     <thead>
-                      <tr className="text-left text-[#64748B] border-b border-[#E2E8F0]">
-                        <th className="py-1.5 pr-3 font-semibold">Employee</th>
+                      <tr className="text-left text-[12px] text-[#334155] bg-[#F5F7FB] border-b border-[#E2E8F0]">
+                        <th className="py-1.5 pl-2 pr-3 font-semibold">Employee</th>
                         <th className="py-1.5 pr-3 font-semibold">Month</th>
                         <th className="py-1.5 pr-3 font-semibold text-right">Payable d.</th>
                         <th className="py-1.5 pr-3 font-semibold text-right">Days</th>
@@ -210,7 +210,7 @@ export function SalaryImportDialog() {
                     <tbody>
                       {preview.sample.map((s, i) => (
                         <tr key={i} className="border-b border-[#F1F5F9]">
-                          <td className="py-1.5 pr-3 text-[#0F172A]">{s.employeeName}</td>
+                          <td className="py-1.5 pl-2 pr-3 text-[#0B1F44]">{s.employeeName}</td>
                           <td className="py-1.5 pr-3 text-[#475569]">{s.month}</td>
                           <td className="py-1.5 pr-3 text-right text-[#475569]">{num(s.payableDays)}</td>
                           <td className="py-1.5 pr-3 text-right text-[#475569]">{s.daysInMonth}</td>
@@ -237,7 +237,7 @@ export function SalaryImportDialog() {
                   type="button"
                   onClick={() => setPreview(null)}
                   disabled={pending}
-                  className="px-4 py-2.5 text-[14px] font-medium text-[#64748B]"
+                  className="h-9 rounded-lg px-3.5 text-[13px] font-semibold text-[#5B6B85] hover:bg-[#F5F8FC]"
                 >
                   Discard
                 </button>
@@ -245,7 +245,7 @@ export function SalaryImportDialog() {
                   type="button"
                   onClick={onConfirm}
                   disabled={pending || preview.withProfile === 0}
-                  className="inline-flex items-center gap-1.5 rounded-md py-2.5 px-5 text-[14px] font-medium text-white disabled:opacity-50"
+                  className="inline-flex h-9 items-center gap-1.5 rounded-lg px-4 text-[13px] font-semibold text-white disabled:opacity-50"
                   style={{ background: "linear-gradient(135deg, #0A6CFF, #0751BE)" }}
                 >
                   <CheckCircle2 size={15} strokeWidth={2.2} />
@@ -261,7 +261,7 @@ export function SalaryImportDialog() {
               onClick={onUndo}
               disabled={pending || !lastBatchId}
               title={lastBatchId ? undefined : "No import done yet in this session"}
-              className="inline-flex items-center gap-1.5 rounded-md border border-hairline bg-surface-card py-2 px-4 text-[13px] font-medium text-ink-strong hover:border-hairline-strong transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[#DCE4F0] bg-white px-3.5 text-[13px] font-semibold text-[#0B1F44] hover:bg-[#F5F8FC] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Undo2 size={14} strokeWidth={2.2} />
               Undo Last Import
@@ -269,7 +269,7 @@ export function SalaryImportDialog() {
             <Dialog.Close asChild>
               <button
                 type="button"
-                className="px-4 py-2 text-[14px] font-medium text-[#64748B]"
+                className="h-9 rounded-lg px-3.5 text-[13px] font-semibold text-[#5B6B85] hover:bg-[#F5F8FC]"
                 disabled={pending}
               >
                 Close

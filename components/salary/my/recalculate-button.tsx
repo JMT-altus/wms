@@ -6,7 +6,7 @@ import { Loader2, RefreshCw } from "lucide-react";
 import { fireToast } from "@/lib/toast";
 import { recalculateEmployeeRun } from "@/app/(app)/salary/actions";
 import { inr2 } from "@/lib/salary/money";
-import { BORDER, NAVY } from "@/components/attendance/overview/theme";
+import { BORDER, BTN, NAVY } from "@/components/salary/ui";
 
 /**
  * "Recalculate my salary": recompute this employee's run for the month from
@@ -28,15 +28,8 @@ export function RecalculateButton({ month, employeeId, monthLabel, disabledReaso
       router.refresh();
     });
   return (
-    <button
-      type="button"
-      onClick={run}
-      disabled={pending || Boolean(disabledReason)}
-      title={disabledReason}
-      className="inline-flex h-10 items-center gap-2 rounded-lg bg-white px-4 text-[13.5px] font-bold transition-colors hover:bg-[#F3F6FA] disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0A6CFF]"
-      style={{ border: `1px solid ${BORDER}`, color: NAVY }}
-    >
-      {pending ? <Loader2 size={15} className="animate-spin" aria-hidden /> : <RefreshCw size={15} aria-hidden />}
+    <button type="button" onClick={run} disabled={pending || Boolean(disabledReason)} title={disabledReason} className={BTN} style={{ border: `1px solid ${BORDER}`, color: NAVY }}>
+      {pending ? <Loader2 size={14} className="animate-spin" aria-hidden /> : <RefreshCw size={14} aria-hidden />}
       {pending ? "Recalculating…" : label}
     </button>
   );

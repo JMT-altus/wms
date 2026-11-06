@@ -52,9 +52,9 @@ const DATE_BADGE_FMT = new Intl.DateTimeFormat("en-IN", {
   timeZone: "UTC",
 });
 
-/** "2026-06-10" → "Wed, 10 Jun 2026" without timezone drift. */
+/** "2026-06-10" → "Wed 10 Jun 2026" (no commas) without timezone drift. */
 function labelForDate(date: string): string {
-  return DATE_BADGE_FMT.format(new Date(`${date}T12:00:00Z`));
+  return DATE_BADGE_FMT.format(new Date(`${date}T12:00:00Z`)).replace(/,/g, "");
 }
 
 /** "01/10/26 – 09/10/26": the dates the KPI figures cover. */
@@ -113,7 +113,7 @@ export default async function AttendancePage({ searchParams }: PageProps) {
     <>
       <DashboardHeader generatedAt={new Date()} />
       <div style={{ background: PAGE_GROUND }}>
-        <main className="mx-auto max-w-[1200px] px-8 max-md:px-4 pt-7 pb-10 max-md:pb-8 grid grid-cols-[minmax(0,1fr)] gap-6">
+        <main className="mx-auto w-full max-w-[1480px] px-10 max-lg:px-6 max-md:px-4 pt-6 pb-10 max-md:pb-8 grid grid-cols-[minmax(0,1fr)] gap-6">
           {/* A. Welcome — light, no surface of its own */}
           <div className="att-rise" style={{ ["--att-delay" as string]: "0ms" }}>
             <WelcomeHero

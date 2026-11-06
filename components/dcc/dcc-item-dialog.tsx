@@ -9,7 +9,7 @@ import { parseFrequency, maskLabel, DCC_INPUT_TYPES, DCC_INPUT_TYPE_LABELS, DCC_
 import { suggestCode, type BoardItem, type BoardClient } from "@/lib/dcc/board-model";
 
 const FIELD =
-  "w-full rounded-[10px] border border-hairline bg-surface-input px-3 py-2 text-[14px] text-ink-strong outline-none transition focus:border-altus-red";
+  "w-full rounded-[10px] border border-hairline bg-surface-input px-3 py-2 text-[14px] text-ink-strong outline-none transition focus:border-[#0A6CFF]";
 const LABEL =
   "mb-1.5 block text-[11px] font-bold uppercase tracking-[0.08em] text-ink-subtle";
 
@@ -175,10 +175,7 @@ export function DccItemDialog({
         className="my-auto w-full max-w-[560px] rounded-[22px] border border-hairline bg-surface-card shadow-2xl"
       >
         <header className="flex items-center justify-between border-b border-hairline px-6 py-4">
-          <h2
-            className="text-[18px] font-black text-ink-strong"
-            style={{ fontFamily: "var(--font-serif)" }}
-          >
+          <h2 className="text-[18px] font-bold text-[#0B1F44]">
             {item ? "Edit KPI" : "Add KPI"}
           </h2>
           <button
@@ -368,7 +365,7 @@ export function DccItemDialog({
           <label className="flex cursor-pointer items-start gap-2.5 rounded-[12px] border border-hairline bg-surface-soft p-3">
             <input
               type="checkbox"
-              className="mt-0.5 size-4 accent-[var(--color-green-deep)]"
+              className="mt-0.5 size-4 accent-[#0A6CFF]"
               checked={isParticipantList}
               onChange={(e) => setIsParticipantList(e.target.checked)}
             />
@@ -407,8 +404,7 @@ export function DccItemDialog({
               type="button"
               onClick={save}
               disabled={saving}
-              className="inline-flex items-center gap-1.5 rounded-[10px] px-4 py-2 text-[13px] font-bold text-white transition disabled:opacity-50"
-              style={{ background: "var(--color-green-deep)" }}
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#0A6CFF] px-4 text-[13px] font-semibold text-white shadow-[0_1px_2px_rgba(10,108,255,0.25)] transition-colors hover:bg-[#0058D6] disabled:cursor-not-allowed disabled:bg-[#5B9BFF]"
             >
               {saving && <Loader2 size={14} className="animate-spin" />}
               {item ? "Save changes" : "Add KPI"}

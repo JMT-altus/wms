@@ -111,16 +111,16 @@ describe("My Salary page", () => {
     expect(screen.getByText(/Executive · Legacy Creators/)).toBeTruthy();
   });
 
-  it("the Net Pay card follows the reference: wallet label with the month, picker top-right, red statement link, amount, designation, neutral status pill — all from the run", async () => {
+  it("the Net Pay card: wallet label with the month, picker top-right, the statement link in WMS blue, amount, designation, neutral status pill — all from the run", async () => {
     await page();
     const card = screen.getByTestId("net-pay-card");
     expect(card.className).toMatch(/\bw-full\b/);
-    expect(card.className).toMatch(/rounded-\[20px\]/);
+    expect(card.getAttribute("style")).toMatch(/border-radius: 12px/); // the WMS card
     expect(within(card).getByText(/Net pay · October 2026/i)).toBeTruthy();
     expect(within(card).getByLabelText("Salary month")).toBeTruthy();
     const link = within(card).getByRole("link", { name: /Salary Statement/ });
     expect(link.getAttribute("href")).toBe(`/my-salary/statement/${run().id}`);
-    expect(link.getAttribute("style")).toMatch(/color: rgb\(194, 64, 58\)/); // the module's red, not the blue nav colour
+    expect(link.getAttribute("style")).toMatch(/color: rgb\(11, 79, 184\)/); // the WMS blue
     expect(within(card).getByText("Executive · Legacy Creators")).toBeTruthy();
     const pill = within(card).getByText("Payment pending").closest("span")!;
     expect(pill.getAttribute("data-variant")).toBe("neutral");
@@ -196,7 +196,7 @@ describe("My Salary page", () => {
     expect(screen.getAllByText(/Couldn.t load this month/).length).toBeGreaterThan(0);
   });
 
-  it("uses the full content width: no centred max-width container on the main column; the title sits in a white card with the subtitle", async () => {
+  it("uses the full content width: no centred max-width container on the main column; a compact title with the subtitle, not a card", async () => {
     await page();
     const main = screen.getByTestId("my-salary-main");
     expect(main.className).toMatch(/\bw-full\b/);
@@ -205,7 +205,7 @@ describe("My Salary page", () => {
     const panel = screen.getByTestId("my-salary-title-panel");
     expect(within(panel).getByRole("heading", { level: 1 }).textContent).toBe("My Salary");
     expect(panel.textContent).toMatch(/visible only to you/);
-    expect(panel.className).toMatch(/rounded-2xl/);
+    expect(panel.getAttribute("style")).toBeNull(); // the WMS page title sits on the page, not in a card
     expect(within(panel).queryByRole("button", { name: /Recalculate/ })).toBeNull(); // not an admin
   });
 

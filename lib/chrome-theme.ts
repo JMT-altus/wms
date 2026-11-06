@@ -16,8 +16,17 @@ const DARK_CHROME_PREFIXES = [
 /**
  * Pages outside WMS that use the white shell too: the Salary module (admin
  * runs and the employee's My Salary), styled after the Altus payroll screens.
+ * (The whole Employees module now uses it — see LIGHT_CHROME_MODULES — so these
+ * stay listed only as the original, explicit entries.)
  */
 const LIGHT_CHROME_PREFIXES = ["/salary", "/my-salary"];
+
+/**
+ * Whole modules that use the approved WMS white-and-blue shell besides WMS
+ * itself: Employees (Attendance, Leave, Att Report, DCC, Salary, My Salary,
+ * Reimbursements…). Every other module keeps its navy rail.
+ */
+const LIGHT_CHROME_MODULES = new Set(["wms", "employees"]);
 
 const under = (pathname: string, prefixes: readonly string[]) => prefixes.some((p) => pathname === p || pathname.startsWith(p + "/"));
 
@@ -29,5 +38,5 @@ export function isLightChrome(pathname: string | null | undefined): boolean {
   if (!pathname) return false;
   if (under(pathname, DARK_CHROME_PREFIXES)) return false;
   if (under(pathname, LIGHT_CHROME_PREFIXES)) return true;
-  return moduleForPath(pathname).id === "wms";
+  return LIGHT_CHROME_MODULES.has(moduleForPath(pathname).id);
 }

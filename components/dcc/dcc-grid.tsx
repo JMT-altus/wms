@@ -196,22 +196,22 @@ export function DccGrid(props: DccGridProps) {
   return (
     <div className="space-y-3">
       {/* ── Toolbar ─────────────────────────────────────────────────── */}
-      <div className="flex flex-wrap items-center gap-2.5 rounded-kpi border border-hairline bg-surface-card px-4 py-3">
+      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-[#DCE4F0] bg-white px-3 py-2 shadow-[0_1px_2px_rgba(11,31,68,0.05)]">
         <div className="flex items-center gap-2">
           <EmployeeAvatar name={props.ownerName} size="sm" />
           <div className="leading-tight">
-            <div className="text-[14px] font-bold text-ink-strong">
+            <div className="text-[14px] font-semibold text-[#0B1F44]">
               {props.ownerName}
             </div>
             {props.ownerSub && (
-              <div className="text-[11.5px] text-ink-subtle">
+              <div className="text-[11.5px] text-[#64748B]">
                 {props.ownerSub}
               </div>
             )}
           </div>
         </div>
 
-        <div className="ml-auto flex items-center gap-1 rounded-[9px] border border-hairline p-0.5 max-md:ml-0">
+        <div className="ml-auto flex h-8 items-center gap-0.5 rounded-lg border border-[#D6DEEB] bg-white px-0.5 max-md:ml-0">
           <button
             type="button"
             aria-label="Earlier weeks"
@@ -220,7 +220,7 @@ export function DccGrid(props: DccGridProps) {
           >
             <ChevronLeft size={16} />
           </button>
-          <span className="min-w-[150px] px-2 text-center text-[13px] font-bold text-ink-strong">
+          <span className="min-w-[150px] px-2 text-center text-[13px] font-semibold text-[#0B1F44]">
             {props.weeks[0]?.label} –{" "}
             {props.weeks[props.weeks.length - 1]?.label}
           </span>
@@ -238,14 +238,14 @@ export function DccGrid(props: DccGridProps) {
           <button
             type="button"
             onClick={() => go(thisWeek)}
-            className="text-[12.5px] font-semibold text-altus-red hover:underline"
+            className="text-[12.5px] font-semibold text-[#0A6CFF] hover:underline"
           >
             This week
           </button>
         )}
         <Link
           href={`/dcc?emp=${props.ownerId}&view=day`}
-          className="rounded-[9px] border border-hairline px-3 py-1.5 text-[12.5px] font-semibold text-ink-soft transition hover:bg-surface-track"
+          className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[#D6DEEB] bg-white px-3 text-[12.5px] font-semibold text-[#0B1F44] transition-colors hover:border-[#0A6CFF] hover:text-[#0B4FB8]"
         >
           Day view
         </Link>
@@ -253,8 +253,7 @@ export function DccGrid(props: DccGridProps) {
           <button
             type="button"
             onClick={() => setDialog({ open: true, item: null })}
-            className="inline-flex items-center gap-1.5 rounded-[9px] px-3 py-1.5 text-[12.5px] font-bold text-white"
-            style={{ background: "var(--color-green-deep)" }}
+            className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[#0A6CFF] px-3 text-[12.5px] font-semibold text-white shadow-[0_1px_2px_rgba(10,108,255,0.25)] transition-colors hover:bg-[#0058D6]"
           >
             <Plus size={14} /> Add KPI
           </button>
@@ -263,7 +262,7 @@ export function DccGrid(props: DccGridProps) {
           <button
             type="button"
             onClick={() => setBulkOpen(true)}
-            className="inline-flex items-center gap-1.5 rounded-[9px] border border-hairline px-3 py-1.5 text-[12.5px] font-semibold text-ink-soft transition hover:bg-surface-track"
+            className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[#D6DEEB] bg-white px-3 text-[12.5px] font-semibold text-[#0B1F44] transition-colors hover:border-[#0A6CFF] hover:text-[#0B4FB8]"
           >
             <Upload size={14} /> Bulk setup
           </button>
@@ -271,7 +270,7 @@ export function DccGrid(props: DccGridProps) {
       </div>
 
       {/* ── The sheet ───────────────────────────────────────────────── */}
-      <div className="overflow-x-auto rounded-[16px] border border-hairline bg-surface-card">
+      <div className="overflow-x-auto rounded-xl border border-[#DCE4F0] bg-white shadow-[0_1px_2px_rgba(11,31,68,0.05)]">
         <table
           className="min-w-max border-collapse text-[12.5px]"
           data-testid="dcc-grid"
@@ -291,7 +290,7 @@ export function DccGrid(props: DccGridProps) {
                 <th
                   key={w.monday}
                   colSpan={8}
-                  className={`${TH} border-l-2 border-l-hairline-strong text-[12px] font-black text-ink-strong`}
+                  className={`${TH} dcc-week-head ${WEEK_SEP} text-[12px]`}
                 >
                   {w.label}
                 </th>
@@ -303,17 +302,17 @@ export function DccGrid(props: DccGridProps) {
                   {w.days.map((d) => (
                     <th
                       key={d}
-                      className={`${TH} ${d === props.today ? TODAY : ""} ${d === w.days[0] ? "border-l-2 border-l-hairline-strong" : ""}`}
+                      className={`${TH} ${d === props.today ? TODAY : ""} ${d === w.days[0] ? "border-l-2 border-l-[#C9DAFB]" : ""}`}
                     >
                       {dayName(d)}
                     </th>
                   ))}
-                  <th className={`${TH} w-[92px] bg-surface-soft`} rowSpan={2}>
+                  <th className={`${TH} dcc-sum-head w-[92px]`} rowSpan={2}>
                     Weekly
                     <br />
                     Actual
                   </th>
-                  <th className={`${TH} w-[84px] bg-surface-soft`} rowSpan={2}>
+                  <th className={`${TH} dcc-sum-head w-[84px]`} rowSpan={2}>
                     Weekly
                     <br />
                     Deficit
@@ -326,7 +325,7 @@ export function DccGrid(props: DccGridProps) {
                 w.days.map((d) => (
                   <th
                     key={d}
-                    className={`${TH} font-semibold tabular-nums ${d === props.today ? TODAY : ""} ${d === w.days[0] ? "border-l-2 border-l-hairline-strong" : ""}`}
+                    className={`${TH} font-semibold tabular-nums ${d === props.today ? TODAY : ""} ${d === w.days[0] ? "border-l-2 border-l-[#C9DAFB]" : ""}`}
                   >
                     {dayLabel(d)}
                   </th>
@@ -352,7 +351,7 @@ export function DccGrid(props: DccGridProps) {
               return (
                 <tr
                   key={item.id}
-                  className="group border-t border-hairline hover:bg-surface-soft/40"
+                  className="group border-t border-[#EEF2F7] hover:bg-[#F6F9FF]"
                 >
                   <td
                     className={`${TD} ${STICKY_1} text-center tabular-nums text-ink-subtle`}
@@ -407,7 +406,7 @@ export function DccGrid(props: DccGridProps) {
                             return (
                               <td
                                 key={d}
-                                className={`${TD} p-0 ${d === props.today ? TODAY : ""} ${d === w.days[0] ? "border-l-2 border-l-hairline-strong" : ""} ${due ? "" : "bg-[repeating-linear-gradient(135deg,transparent,transparent_6px,var(--color-surface-track)_6px,var(--color-surface-track)_7px)]"}`}
+                                className={`${TD} p-0 ${d === props.today ? TODAY : ""} ${d === w.days[0] ? "border-l-2 border-l-[#C9DAFB]" : ""} ${due ? "" : "bg-[repeating-linear-gradient(135deg,transparent,transparent_6px,var(--color-surface-track)_6px,var(--color-surface-track)_7px)]"}`}
                               >
                                 {due && (
                                   <div className="w-[96px]">
@@ -446,7 +445,7 @@ export function DccGrid(props: DccGridProps) {
                           />
                         )}
                         <td
-                          className={`${TD} bg-surface-soft text-right font-bold tabular-nums text-ink-strong`}
+                          className={`${TD} dcc-sum text-right font-semibold tabular-nums text-[#0B1F44]`}
                         >
                           {kind === "monthly" ? (
                             <span className="text-ink-subtle">—</span>
@@ -463,7 +462,7 @@ export function DccGrid(props: DccGridProps) {
                           )}
                         </td>
                         <td
-                          className={`${TD} bg-surface-soft text-right font-bold tabular-nums`}
+                          className={`${TD} dcc-sum text-right font-semibold tabular-nums`}
                           style={{ color: deficitColor(totals.deficit) }}
                         >
                           {totalText(totals.deficit)}
@@ -478,7 +477,7 @@ export function DccGrid(props: DccGridProps) {
         </table>
       </div>
 
-      <p className="text-[12px] text-ink-subtle">
+      <p className="rounded-lg border border-[#E2E8F0] bg-white px-3 py-2 text-[12px] leading-relaxed text-[#5B6B85]">
         Weekly Actual adds up the week&apos;s numbers (for Yes / No parameters,
         how many days were Yes; for text, how many days have an answer). Weekly
         Deficit is the week&apos;s target minus the actual, shown only where a
@@ -491,7 +490,7 @@ export function DccGrid(props: DccGridProps) {
             {otherCount === 1 ? "parameter is" : "parameters are"} on the{" "}
             <Link
               href={`/dcc?emp=${props.ownerId}&view=day`}
-              className="font-semibold text-altus-red hover:underline"
+              className="font-semibold text-[#0A6CFF] hover:underline"
             >
               Day view
             </Link>
@@ -558,7 +557,7 @@ function PeriodCell({
   const key = slotKey(item.id, null, date);
   const first = kind === "weekly" ? week.monday : monthStart(week.monday);
   return (
-    <td colSpan={6} className={`${TD} border-l-2 border-l-hairline-strong p-0`}>
+    <td colSpan={6} className={`${TD} border-l-2 border-l-[#C9DAFB] p-0`}>
       <div className="flex items-center gap-2 px-2">
         <span className="shrink-0 text-[10.5px] font-bold uppercase tracking-wide text-ink-subtle">
           {kind === "weekly" ? "Week" : `Month ${week.month}`}
@@ -602,7 +601,7 @@ function Cell({
   const shown = draft ?? text;
   const base = `h-9 w-full min-w-[74px] bg-transparent px-2 text-[12.5px] text-ink-strong outline-none ${
     item.inputType === "number" ? "text-right tabular-nums" : ""
-  } ${state?.kind === "error" ? "ring-2 ring-inset ring-[var(--color-red)]" : "focus:ring-2 focus:ring-inset focus:ring-altus-red"}`;
+  } ${state?.kind === "error" ? "ring-2 ring-inset ring-[var(--color-red)]" : "focus:ring-2 focus:ring-inset focus:ring-[#0A6CFF]"}`;
 
   let field: React.ReactNode;
   if (!editable) {
@@ -682,14 +681,18 @@ function deficitColor(deficit: number | null): string | undefined {
   return deficit > 0 ? "var(--color-red-deep)" : "var(--color-green-deep)";
 }
 
+// The WMS table look (white rows, pale blue-grey header, blue week bands); page-level rules in globals.css (.dcc-page).
 const TH =
-  "border-b border-hairline px-2 py-1.5 text-center text-[11px] font-bold uppercase tracking-[0.06em] align-bottom";
-const TD = "border-b border-hairline px-2 py-1 align-middle";
-const TODAY = "bg-[var(--color-amber-bg)]";
-const STICKY_1 = "sticky left-0 z-[2] w-[52px] bg-surface-card";
+  "border-b border-[#E2E8F0] px-2 py-1.5 text-center text-[11.5px] font-semibold align-bottom";
+const TD = "border-b border-[#EEF2F7] px-2 py-1 align-middle";
+/** Today's column keeps its amber highlight (dcc-today restores it over the module's header colour). */
+const TODAY = "dcc-today bg-[var(--color-amber-bg)]";
+/** Where each week starts: a blue rule. */
+const WEEK_SEP = "border-l-2 border-l-[#C9DAFB]";
+const STICKY_1 = "sticky left-0 z-[2] w-[52px] bg-white";
 const STICKY_2 =
-  "sticky left-[52px] z-[2] min-w-[240px] max-w-[320px] bg-surface-card";
+  "sticky left-[52px] z-[2] min-w-[240px] max-w-[320px] bg-white";
 const STICKY_3 =
-  "sticky left-[292px] z-[2] bg-surface-card shadow-[4px_0_6px_-4px_rgba(0,0,0,0.15)]";
+  "sticky left-[292px] z-[2] bg-white shadow-[4px_0_6px_-4px_rgba(11,31,68,0.18)]";
 const STEP =
-  "grid size-7 place-items-center rounded-[7px] text-ink-soft transition hover:bg-surface-track disabled:opacity-30";
+  "grid size-7 place-items-center rounded-md text-[#475569] transition hover:bg-[#EEF4FF] hover:text-[#0B4FB8] disabled:opacity-30";

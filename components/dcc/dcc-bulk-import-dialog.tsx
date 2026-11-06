@@ -3,13 +3,14 @@
 import * as React from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
-import { X, Loader2, Upload, Eye } from "lucide-react";
+import { X, Loader2, Upload, Eye, Download, ChevronRight } from "lucide-react";
+import { DCC_BULK_FORMAT_GUIDE, DCC_BULK_SAMPLE, DCC_BULK_SAMPLE_FILENAME } from "@/lib/dcc/bulk-sample";
 import { previewDccBulkImport, applyDccBulkImport, type BulkPreview, type BulkApplySummary } from "@/app/(app)/dcc/actions";
 import { DCC_INPUT_TYPE_LABELS } from "@/lib/dcc/util";
 import { parseBulkImport, countLines } from "@/lib/dcc/bulk-import";
 import type { DccTabPerson } from "@/components/dcc/dcc-tabs";
 
-const FIELD = "w-full rounded-[10px] border border-hairline bg-surface-input px-3 py-2 text-[13px] text-ink-strong outline-none transition focus:border-altus-red";
+const FIELD = "w-full rounded-[10px] border border-hairline bg-surface-input px-3 py-2 text-[13px] text-ink-strong outline-none transition focus:border-[#0A6CFF]";
 const LABEL = "mb-1.5 block text-[11px] font-bold uppercase tracking-[0.08em] text-ink-subtle";
 
 const PLACEHOLDER = `# Sheet tab label, e.g. "BH – Bhavisha"
@@ -84,6 +85,18 @@ export function DccBulkImportDialog({ open, onClose, people }: DccBulkImportDial
 
   const canApply = Boolean(preview) && preview!.applicable > 0 && preview!.blocking.length === 0 && busy === null;
 
+  /** Save the paste-ready sample as a .txt — built in the browser, no request. */
+  function downloadSample() {
+    const url = URL.createObjectURL(new Blob([DCC_BULK_SAMPLE], { type: "text/plain;charset=utf-8" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = DCC_BULK_SAMPLE_FILENAME;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+  }
+
   return createPortal(
     <div
       className="fixed inset-0 z-[200] flex items-start justify-center overflow-y-auto bg-ink-strong/40 p-4 backdrop-blur-[2px] sm:p-8"
@@ -94,7 +107,7 @@ export function DccBulkImportDialog({ open, onClose, people }: DccBulkImportDial
       <div role="dialog" aria-modal="true" aria-label="Bulk KPI setup" className="my-auto w-full max-w-[1040px] rounded-[22px] border border-hairline bg-surface-card shadow-2xl">
         <header className="flex items-center justify-between border-b border-hairline px-6 py-4">
           <div>
-            <h2 className="text-[18px] font-black text-ink-strong" style={{ fontFamily: "var(--font-serif)" }}>
+            <h2 className="text-[18px] font-bold text-[#0B1F44]">
               Bulk KPI setup
             </h2>
             <p className="text-[12.5px] text-ink-subtle">Paste one group per sheet tab, one KPI per line: Sr No | Title | Frequency | Input type. Preview, map each tab to a person, then apply once.</p>
@@ -108,9 +121,19 @@ export function DccBulkImportDialog({ open, onClose, people }: DccBulkImportDial
           {!summary && (
             <>
               <div>
-                <label className={LABEL} htmlFor="dcc-bulk-text">
-                  Checklist text
-                </label>
+                <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
+                  <label className={`${LABEL} !mb-0`} htmlFor="dcc-bulk-text">
+                    Checklist text
+                  </label>
+                  <button
+                    type="button"
+                    onClick={downloadSample}
+                    className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[#C9DAFB] bg-white px-3 text-[12.5px] font-semibold text-[#0B4FB8] transition-colors hover:bg-[#EEF4FF] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[#0A6CFF]/20"
+                    title="A paste-ready sample in the format below"
+                  >
+                    <Download size={14} aria-hidden /> Download sample
+                  </button>
+                </div>
                 <textarea
                   id="dcc-bulk-text"
                   className={`${FIELD} min-h-[180px] font-mono text-[12.5px] leading-snug`}
@@ -128,6 +151,19 @@ export function DccBulkImportDialog({ open, onClose, people }: DccBulkImportDial
                     {local.invalid > 0 && <span className="text-red-deep"> · {local.invalid} with problems</span>}
                   </p>
                 )}
+                <details className="group mt-2 rounded-lg border border-[#E2E8F0] bg-[#F8FAFD] text-[12px]">
+                  <summary className="flex cursor-pointer list-none items-center gap-1.5 px-3 py-1.5 font-semibold text-[#334155] [&::-webkit-details-marker]:hidden">
+                    <ChevronRight size={13} aria-hidden className="transition-transform group-open:rotate-90" /> Format guide
+                  </summary>
+                  <dl className="grid gap-x-4 gap-y-1 border-t border-[#E2E8F0] px-3 py-2 sm:grid-cols-[130px_minmax(0,1fr)]">
+                    {DCC_BULK_FORMAT_GUIDE.map((g) => (
+                      <React.Fragment key={g.rule}>
+                        <dt className="font-semibold text-[#0B1F44]">{g.rule}</dt>
+                        <dd className="text-[#475569]">{g.detail}</dd>
+                      </React.Fragment>
+                    ))}
+                  </dl>
+                </details>
               </div>
 
               <div className="flex flex-wrap items-center gap-3">
@@ -140,7 +176,7 @@ export function DccBulkImportDialog({ open, onClose, people }: DccBulkImportDial
                   {busy === "preview" ? <Loader2 size={14} className="animate-spin" /> : <Eye size={14} />} Preview
                 </button>
                 <label className="flex cursor-pointer items-center gap-2 text-[12.5px] text-ink-soft">
-                  <input type="checkbox" className="size-4 accent-[var(--color-green-deep)]" checked={updateDiffering} onChange={(e) => setUpdateDiffering(e.target.checked)} />
+                  <input type="checkbox" className="size-4 accent-[#0A6CFF]" checked={updateDiffering} onChange={(e) => setUpdateDiffering(e.target.checked)} />
                   Update existing KPIs whose frequency, type or code differs (titles are never changed; nothing is removed)
                 </label>
               </div>
@@ -163,7 +199,7 @@ export function DccBulkImportDialog({ open, onClose, people }: DccBulkImportDial
                           Goes to
                           <select
                             aria-label={`Employee for ${g.label}`}
-                            className="rounded-[8px] border border-hairline bg-surface-input px-2 py-1 text-[12.5px] font-semibold text-ink-strong outline-none focus:border-altus-red"
+                            className="rounded-[8px] border border-hairline bg-surface-input px-2 py-1 text-[12.5px] font-semibold text-ink-strong outline-none focus:border-[#0A6CFF]"
                             value={mapping[g.label] ?? ""}
                             onChange={(e) => {
                               const m = { ...mapping, [g.label]: e.target.value || null };
@@ -256,8 +292,7 @@ export function DccBulkImportDialog({ open, onClose, people }: DccBulkImportDial
               type="button"
               onClick={runApply}
               disabled={!canApply}
-              className="inline-flex items-center gap-1.5 rounded-[10px] px-4 py-2 text-[13px] font-bold text-white transition disabled:opacity-50"
-              style={{ background: "var(--color-green-deep)" }}
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#0A6CFF] px-4 text-[13px] font-semibold text-white shadow-[0_1px_2px_rgba(10,108,255,0.25)] transition-colors hover:bg-[#0058D6] disabled:cursor-not-allowed disabled:bg-[#5B9BFF]"
             >
               {busy === "apply" ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />} Apply
             </button>

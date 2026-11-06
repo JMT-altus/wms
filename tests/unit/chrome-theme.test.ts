@@ -13,14 +13,14 @@ describe("isLightChrome", () => {
     }
     expect(isLightChrome(null)).toBe(false);
   });
-  it("is off for the other modules", () => {
-    expect(isLightChrome("/attendance/dashboard")).toBe(false);
-    expect(isLightChrome("/reimbursements")).toBe(false);
-  });
-  it("is on for the Salary module — admin runs, My Salary and a statement — and nowhere else in Employees", () => {
-    for (const p of ["/salary", "/salary?month=2026-10", "/my-salary", "/my-salary/statement/abc"]) {
-      expect(isLightChrome(p.split("?")[0]!), p).toBe(true);
+  it("is on for the whole Employees module — the approved WMS white-and-blue shell", () => {
+    for (const p of ["/attendance", "/attendance/leave", "/attendance/leave/approvals", "/attendance/dashboard", "/dcc", "/dcc/dashboard", "/dcc/ranking", "/salary", "/salary/employee", "/my-salary", "/my-salary/statement/abc", "/reimbursements", "/leave-approval"]) {
+      expect(isLightChrome(p), p).toBe(true);
     }
-    expect(isLightChrome("/salary-x")).toBe(false);
+  });
+  it("is off for every other module (they keep their navy rail)", () => {
+    for (const p of ["/incentive", "/outstanding", "/training", "/hr/policies", "/participant-breakthrough", "/record-reference"]) {
+      expect(isLightChrome(p), p).toBe(false);
+    }
   });
 });

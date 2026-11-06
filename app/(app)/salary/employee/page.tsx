@@ -6,7 +6,8 @@ import { requireAdmin } from "@/lib/auth/current";
 import { localDateString } from "@/lib/format";
 import { listReportEmployees } from "@/lib/salary/employee-report";
 import { EmployeeReportPicker } from "@/components/salary/admin/employee-report-picker";
-import { CARD, NAVY, PAGE_GROUND, SLATE } from "@/components/attendance/overview/theme";
+import { PAGE_GROUND } from "@/components/attendance/overview/theme";
+import { NAVY, SLATE, SURFACE } from "@/components/salary/ui";
 
 export const dynamic = "force-dynamic";
 
@@ -22,16 +23,16 @@ export default async function EmployeeSalaryReportIndex() {
     <>
       <DashboardHeader generatedAt={new Date()} title="Employees ▸ Salary ▸ Employee report" fullWidth />
       <div style={{ background: PAGE_GROUND }}>
-        <main className="w-full px-6 pt-5 pb-10 max-md:px-4 lg:px-8 grid grid-cols-[minmax(0,1fr)] gap-5">
-          <section className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3 rounded-2xl px-6 py-5 max-md:px-4" style={CARD} aria-labelledby="emp-report-title">
+        <main className="w-full px-6 pt-4 pb-10 max-md:px-4 lg:px-8 grid grid-cols-[minmax(0,1fr)] gap-4 emp-compact-page">
+          <section className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3 px-4 py-3.5" style={SURFACE} aria-labelledby="emp-report-title">
             <div className="min-w-0">
-              <Link href={"/salary" as Route} className="inline-flex items-center gap-1 text-[12.5px] font-semibold" style={{ color: SLATE }}>
+              <Link href={"/salary" as Route} className="inline-flex items-center gap-1 text-[12.5px] font-semibold hover:text-[#0B4FB8]" style={{ color: SLATE }}>
                 <ArrowLeft size={13} aria-hidden /> Salary
               </Link>
-              <h1 id="emp-report-title" className="mt-1 text-[clamp(26px,2.6vw,32px)] font-extrabold leading-none tracking-[-0.02em]" style={{ color: NAVY }}>
+              <h1 id="emp-report-title" className="mt-0.5" style={{ color: NAVY }}>
                 Employee Salary Report
               </h1>
-              <p className="mt-1 text-[14.5px] font-medium" style={{ color: SLATE }}>
+              <p className="mt-1 text-[12.5px]" style={{ color: SLATE }}>
                 Choose an employee to see their pay, deductions and day-by-day attendance for a month.
               </p>
             </div>

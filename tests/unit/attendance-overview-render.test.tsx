@@ -278,9 +278,10 @@ describe("the /attendance page", () => {
     expect(src).not.toMatch(/DashboardFooter/);
     // …and nothing here reserves viewport height or a tall bottom pad.
     expect(src).not.toMatch(/min-h-screen|min-h-\[|h-screen|pb-(16|20|24|32)\b/);
-    // The shared footer is a slim line with a modest top margin — no tall branded band.
+    // The shared footer is a slim bar kept at the bottom of the window (sticky, in the page's flow) — no tall branded band.
     const footer = readFileSync(path.resolve(__dirname, "../../components/layout/footer.tsx"), "utf8");
-    expect(footer).toMatch(/className="mt-10 /);
+    expect(footer).toMatch(/sticky bottom-0/);
+    expect(footer).toMatch(/\bh-9\b/);
     expect(footer).not.toMatch(/mt-32/);
   });
 

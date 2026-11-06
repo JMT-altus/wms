@@ -10,7 +10,8 @@ import { SalaryRunsReport } from "@/components/salary/admin/salary-runs-report";
 import { PayrollHistoryCard } from "@/components/salary/admin/payroll-history-card";
 import { AttendanceSummaryCards } from "@/components/salary/my/attendance-cards";
 import { SalaryMonthPicker } from "@/components/salary/my/month-picker";
-import { CARD, NAVY, PAGE_GROUND, SLATE } from "@/components/attendance/overview/theme";
+import { PAGE_GROUND } from "@/components/attendance/overview/theme";
+import { BORDER, BTN, NAVY, SLATE } from "@/components/salary/ui";
 import { requireAdmin } from "@/lib/auth/current";
 import { localDateString } from "@/lib/format";
 import { listRunsForMonth, listSalaryMonths, listSalaryProfiles } from "@/lib/queries/salary";
@@ -58,29 +59,20 @@ export default async function SalaryPage({ searchParams }: PageProps) {
       <DashboardHeader generatedAt={new Date()} title="Employees ▸ Salary" fullWidth />
       <div style={{ background: PAGE_GROUND }}>
         {/* Full width after the sidebar: the same gutters as the header row above, no centred cap. */}
-        <main className="w-full px-6 pt-5 pb-10 max-md:px-4 lg:px-8 grid grid-cols-[minmax(0,1fr)] gap-5" data-testid="salary-admin-main">
-          {/* The title panel: heading and subtitle on the left, the actions on the right — the same card as /my-salary. */}
-          <section
-            aria-labelledby="salary-title"
-            className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 rounded-2xl px-6 py-5 max-md:px-4"
-            style={CARD}
-            data-testid="salary-title-panel"
-          >
-            <div className="flex min-w-[280px] flex-1 flex-wrap items-baseline gap-x-4 gap-y-1">
-              <h1 id="salary-title" className="text-[clamp(26px,2.6vw,32px)] font-extrabold leading-none tracking-[-0.02em]" style={{ color: NAVY }}>
+        <main className="w-full px-6 pt-4 pb-10 max-md:px-4 lg:px-8 grid grid-cols-[minmax(0,1fr)] gap-4 emp-compact-page" data-testid="salary-admin-main">
+          {/* The title: heading and subtitle on the left, the actions on the right — the same header as /my-salary. */}
+          <section aria-labelledby="salary-title" className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3" data-testid="salary-title-panel">
+            <div className="min-w-[280px] flex-1">
+              <h1 id="salary-title" style={{ color: NAVY }}>
                 Salary
               </h1>
-              <p className="text-[14.5px] font-medium" style={{ color: SLATE }}>
+              <p className="mt-1 text-[12.5px]" style={{ color: SLATE }}>
                 Every employee&apos;s pay, deductions and attendance for the month — generated from attendance and each CTC profile.
               </p>
             </div>
-            <div className="flex flex-wrap items-center justify-end gap-2.5 max-md:w-full" role="group" aria-label="Salary actions">
-              <Link
-                href={"/salary/employee" as Route}
-                className="inline-flex h-10 items-center gap-1.5 rounded-lg border border-hairline-strong bg-white px-3.5 text-[13.5px] font-semibold transition-colors hover:bg-surface-track"
-                style={{ color: NAVY }}
-              >
-                <UserSearch size={15} aria-hidden /> Employee report
+            <div className="flex flex-wrap items-center justify-end gap-2 max-md:w-full" role="group" aria-label="Salary actions">
+              <Link href={"/salary/employee" as Route} className={BTN} style={{ border: `1px solid ${BORDER}`, color: NAVY }}>
+                <UserSearch size={14} aria-hidden /> Employee report
               </Link>
               <SalaryImportDialog />
               {rows.length > 0 && generate}

@@ -131,6 +131,24 @@ describe("pending approvals list", () => {
     await waitFor(() => expect(decideLeave).toHaveBeenCalledWith({ id: "r1", verdict: "rejected", note: "Peak week" }));
   });
 
+  it("the Leave Approvals table layout keeps the same decisions, the reject-needs-a-reason rule and the row anchor", async () => {
+    const { container } = render(<LeaveList rows={[row()]} mode="pending" layout="table" />);
+    expect(screen.getByRole("table", { name: "Leave requests awaiting approval" })).toBeTruthy();
+    expect(container.querySelector("tr#leave-r1")).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Reject" }));
+    expect(decideLeave).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText("Remarks"), { target: { value: "Peak week" } });
+    fireEvent.click(screen.getByRole("button", { name: "Reject" }));
+    await waitFor(() => expect(decideLeave).toHaveBeenCalledWith({ id: "r1", verdict: "rejected", note: "Peak week" }));
+  });
+
+  it("the table layout draws no Approve / Reject for a view-only reviewer", () => {
+    render(<LeaveList rows={[row()]} mode="pending" layout="table" canDecide={false} />);
+    expect(screen.queryByRole("button", { name: "Approve" })).toBeNull();
+    expect(screen.queryByLabelText("Remarks")).toBeNull();
+    expect(screen.getByText("Asha Rao")).toBeTruthy();
+  });
+
   it("a decided request offers no approve/reject, and shows the employee its status and remarks", () => {
     render(
       <LeaveList

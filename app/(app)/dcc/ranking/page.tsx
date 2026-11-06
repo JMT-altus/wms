@@ -94,124 +94,125 @@ export default async function DccRankingPage() {
 
   const podium = ranked.slice(0, 3);
   const rest = ranked.slice(3);
-  // Visual order puts 1st in the middle, raised above 2nd and 3rd.
-  const podiumOrder = [podium[1], podium[0], podium[2]].filter(Boolean) as Ranked[];
 
   return (
     <>
       <DashboardHeader generatedAt={new Date()} />
-      <main className="mx-auto w-full max-w-[var(--max-content)] space-y-5 px-6 py-6 max-md:px-4">
-        <div>
-          <h1
-            className="text-display-md text-ink-strong"
-            style={{ fontFamily: "var(--font-serif)" }}
-          >
-            DCC Ranking
-          </h1>
-          <p className="mt-1 text-[13.5px] text-ink-subtle">
-            Last {WINDOW_DAYS} days. Score = 80% compliance + 20% consistency (streak,
-            capped at 30 days).
+      <main className="dcc-page dcc-summary-page mx-auto w-full max-w-[1480px] space-y-3 px-10 pb-10 pt-4 max-lg:px-6 max-md:px-4">
+        <header>
+          <div className="flex flex-wrap items-center gap-2.5">
+            <h1 className="text-[#0B1F44]">DCC Ranking</h1>
+            <span className="rounded-full border border-[#C9DAFB] bg-[#EEF4FF] px-2 py-0.5 text-[11.5px] font-semibold text-[#0B4FB8]">
+              Last {WINDOW_DAYS} days
+            </span>
+          </div>
+          <p className="mt-1 text-[12.5px] text-[#5B6B85]">
+            Score = 80% compliance + 20% consistency (streak, capped at 30 days). Click a name to open their checklist.
           </p>
-        </div>
+        </header>
 
         {ranked.length === 0 ? (
-          <div className="rounded-[22px] border border-hairline bg-surface-card px-6 py-14 text-center">
-            <Trophy size={40} className="mx-auto mb-3 text-ink-subtle" />
-            <p className="text-[15px] font-bold text-ink-strong">Nothing to rank yet.</p>
-            <p className="mt-1 text-[13px] text-ink-subtle">
-              Once checklists have due days in the window, the ranking fills in.
-            </p>
+          <div className="rounded-xl border border-[#DCE4F0] bg-white px-6 py-10 text-center shadow-[0_1px_2px_rgba(11,31,68,0.05)]">
+            <Trophy size={26} className="mx-auto mb-2 text-[#94A3B8]" />
+            <p className="text-[14px] font-semibold text-[#0B1F44]">Nothing to rank yet.</p>
+            <p className="mt-1 text-[12.5px] text-[#64748B]">Once checklists have due days in the window, the ranking fills in.</p>
           </div>
         ) : (
           <>
-            <section className="rounded-[22px] border border-hairline bg-surface-card p-6">
-              <div className="flex items-end justify-center gap-4 max-sm:gap-2">
-                {podiumOrder.map((r) => {
-                  const rank = ranked.indexOf(r) + 1;
-                  const isFirst = rank === 1;
-                  return (
-                    <Link
-                      key={r.id}
-                      href={`/dcc?emp=${r.id}`}
-                      className="flex flex-1 flex-col items-center gap-2 transition hover:opacity-90"
-                      style={{ maxWidth: 200 }}
+            {/* The top three, in rank order — a quiet tint per position. */}
+            <section aria-label="Top three" className="grid grid-cols-3 gap-3 max-md:grid-cols-1">
+              {podium.map((r, i) => {
+                const tone = pctTone(r.pct);
+                const tint = TOP_TINT[i]!;
+                return (
+                  <Link
+                    key={r.id}
+                    href={`/dcc?emp=${r.id}`}
+                    className="flex min-w-0 items-center gap-3 rounded-xl border bg-white px-4 py-3 transition-colors hover:bg-[#F8FAFF]"
+                    style={{ borderColor: tint.border, boxShadow: `inset 0 3px 0 ${tint.edge}, 0 1px 2px rgba(11,31,68,0.05)` }}
+                  >
+                    <span
+                      className="grid size-7 shrink-0 place-items-center rounded-full text-[12.5px] font-bold tabular-nums"
+                      style={{ background: tint.bg, color: tint.fg, border: `1px solid ${tint.border}` }}
+                      aria-label={`Rank ${i + 1}`}
                     >
-                      <EmployeeAvatar
-                        name={r.name}
-                        size={isFirst ? "lg" : "md"}
-                        background={MEDAL_BG[rank - 1]}
-                      />
-                      <div className="text-center">
-                        <div
-                          className="truncate text-[13.5px] font-bold text-ink-strong"
-                          style={{ maxWidth: 160 }}
-                        >
-                          {r.name}
-                        </div>
-                        <div
-                          className="text-[26px] font-black leading-tight tabular-nums"
-                          style={{
-                            color: pctTone(r.pct).fg,
-                            fontFamily: "var(--font-serif)",
-                          }}
-                        >
-                          {r.score}
-                        </div>
-                      </div>
-                      <div
-                        className="flex w-full items-start justify-center rounded-t-[12px] pt-2 text-[12px] font-black text-white tabular-nums"
-                        style={{
-                          height: isFirst ? 84 : 56,
-                          background: MEDAL_BG[rank - 1],
-                        }}
-                      >
-                        {rank}
-                      </div>
-                    </Link>
-                  );
-                })}
-              </div>
+                      {i + 1}
+                    </span>
+                    <EmployeeAvatar name={r.name} size="md" />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[14px] font-semibold text-[#0B1F44]" title={r.name}>
+                        {r.name}
+                      </span>
+                      <span className="mt-0.5 flex items-center gap-2.5 text-[12px] tabular-nums text-[#64748B]">
+                        <span>
+                          Compliance{" "}
+                          <span className="font-semibold" style={{ color: tone.fg }}>
+                            {r.pct}%
+                          </span>
+                        </span>
+                        {r.streak > 0 && (
+                          <span className="inline-flex items-center gap-0.5 font-medium text-[#475569]">
+                            <Flame size={12} style={{ color: "var(--color-orange)" }} />
+                            {r.streak}
+                          </span>
+                        )}
+                      </span>
+                    </span>
+                    <span className="shrink-0 text-right">
+                      <span className="block text-[22px] font-bold leading-none tabular-nums text-[#0B1F44]">{r.score}</span>
+                      <span className="text-[11px] font-semibold text-[#94A3B8]">Score</span>
+                    </span>
+                  </Link>
+                );
+              })}
             </section>
 
             {rest.length > 0 && (
-              <section className="rounded-[22px] border border-hairline bg-surface-card p-4">
-                <ol className="space-y-1">
-                  {rest.map((r, idx) => {
-                    const tone = pctTone(r.pct);
-                    return (
-                      <li key={r.id}>
-                        <Link
-                          href={`/dcc?emp=${r.id}`}
-                          className="flex items-center gap-3 rounded-[12px] px-3 py-2.5 transition hover:bg-surface-soft"
-                        >
-                          <span className="w-6 shrink-0 text-center text-[13px] font-black text-ink-subtle tabular-nums">
-                            {idx + 4}
-                          </span>
-                          <EmployeeAvatar name={r.name} size="sm" />
-                          <span className="min-w-0 flex-1 truncate text-[14px] font-semibold text-ink-strong">
-                            {r.name}
-                          </span>
-                          {r.streak > 0 && (
-                            <span className="flex items-center gap-1 text-[12px] font-bold text-ink-muted tabular-nums">
-                              <Flame size={13} style={{ color: "var(--color-orange)" }} />
-                              {r.streak}
-                            </span>
-                          )}
-                          <span
-                            className="w-[52px] text-right text-[13px] font-bold tabular-nums"
-                            style={{ color: tone.fg }}
-                          >
+              <div className="overflow-x-auto shadow-[0_1px_2px_rgba(11,31,68,0.05)]">
+                <table className="w-full min-w-[560px] border-collapse bg-white text-[13px]" aria-label="Ranking">
+                  <thead>
+                    <tr>
+                      <th scope="col" className="w-16 text-left">Rank</th>
+                      <th scope="col" className="text-left">Employee</th>
+                      <th scope="col" className="w-28 text-right">Streak</th>
+                      <th scope="col" className="w-32 text-right">Compliance</th>
+                      <th scope="col" className="w-28 text-right">Score</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rest.map((r, idx) => {
+                      const tone = pctTone(r.pct);
+                      return (
+                        <tr key={r.id}>
+                          <td className="px-3 py-2 font-semibold tabular-nums text-[#64748B]">{idx + 4}</td>
+                          <td className="max-w-[420px] px-3 py-2">
+                            <Link href={`/dcc?emp=${r.id}`} className="group flex min-w-0 items-center gap-2.5">
+                              <EmployeeAvatar name={r.name} size="sm" />
+                              <span className="truncate font-semibold text-[#0B1F44] group-hover:text-[#0B4FB8] group-hover:underline" title={r.name}>
+                                {r.name}
+                              </span>
+                            </Link>
+                          </td>
+                          <td className="px-3 py-2 text-right tabular-nums">
+                            {r.streak > 0 ? (
+                              <span className="inline-flex items-center gap-1 font-medium text-[#475569]">
+                                <Flame size={12} style={{ color: "var(--color-orange)" }} />
+                                {r.streak}
+                              </span>
+                            ) : (
+                              <span className="text-[#94A3B8]">—</span>
+                            )}
+                          </td>
+                          <td className="px-3 py-2 text-right font-semibold tabular-nums" style={{ color: tone.fg }}>
                             {r.pct}%
-                          </span>
-                          <span className="w-[42px] text-right text-[14px] font-black text-ink-strong tabular-nums">
-                            {r.score}
-                          </span>
-                        </Link>
-                      </li>
-                    );
-                  })}
-                </ol>
-              </section>
+                          </td>
+                          <td className="px-3 py-2 text-right font-bold tabular-nums text-[#0B1F44]">{r.score}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             )}
           </>
         )}
@@ -220,8 +221,9 @@ export default async function DccRankingPage() {
   );
 }
 
-const MEDAL_BG = [
-  "linear-gradient(145deg,#E6C244,#B8912A)",
-  "linear-gradient(145deg,#C9CDD3,#9099A3)",
-  "linear-gradient(145deg,#CD8B54,#9C6234)",
+/** First, second and third: a quiet gold, silver and bronze tint — readable, not decorative. */
+const TOP_TINT = [
+  { bg: "#FFF8E7", fg: "#8A6410", border: "#EBD9A6", edge: "#E0B84A" },
+  { bg: "#F3F5F8", fg: "#475569", border: "#D5DCE6", edge: "#A7B1C0" },
+  { bg: "#FBF2EA", fg: "#8A5531", border: "#E8D0BC", edge: "#C98C5E" },
 ];

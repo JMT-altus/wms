@@ -17,8 +17,10 @@ export default function AppTemplate({ children }: { children: React.ReactNode })
       animate={{ opacity: 1 }}
       transition={{ duration: 0.22, ease: [0.2, 0.7, 0.3, 1] }}
     >
-      {children}
-      {/* The copyright line, once for every WMS page — the last child of .app-page, where the pages used to put it. */}
+      {/* .app-page is a full-height column: the page takes the spare height, the copyright line sits after it at the
+          bottom of the window and stays there (sticky) while a long page scrolls. */}
+      <div className="app-page-body">{children}</div>
+      {/* The copyright line, once for every WMS page. */}
       <DashboardFooter />
     </motion.div>
   );

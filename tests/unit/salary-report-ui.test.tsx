@@ -264,9 +264,9 @@ describe("the page (source checks)", () => {
     const at = order.map((m) => page.indexOf(m));
     expect(at.every((i) => i >= 0), order.join(", ")).toBe(true);
     expect([...at].sort((x, y) => x - y)).toEqual(at);
-    // The title panel is the My Salary card: white, bordered, the heading with its subtitle, Import then Generate on the right.
+    // The title is My Salary's: a compact heading with its subtitle on the page (no card), Import then Generate on the right.
     const panel = page.slice(page.indexOf('aria-labelledby="salary-title"'), page.indexOf("</section>"));
-    expect(panel).toMatch(/style=\{CARD\}/);
+    expect(panel.slice(0, panel.indexOf(">"))).not.toMatch(/style=/);
     expect(panel).not.toMatch(/max-w-|#[0-9A-Fa-f]{6}/);
     expect(panel).toMatch(/<h1[^>]*>\s*Salary\s*<\/h1>/);
     expect(panel.indexOf("<SalaryImportDialog")).toBeLessThan(panel.indexOf("&& generate}"));

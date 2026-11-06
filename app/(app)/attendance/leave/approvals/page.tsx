@@ -33,27 +33,29 @@ export default async function LeaveApprovalsPage() {
   return (
     <>
       <DashboardHeader generatedAt={new Date()} />
-      <main className="mx-auto max-w-[860px] px-8 max-md:px-4 pt-8 pb-16">
-        <header className="mb-6">
-          <h1 className="text-display-lg text-ink-strong">Leave Approvals</h1>
-          <p className="text-body-lg text-ink-subtle mt-1">
-            Leave requests waiting for your decision.
-            {!failed && rows.length > 0 && (
-              <span className="ml-2 tabular-nums">{rows.length} pending</span>
-            )}
-          </p>
+      <main className="emp-compact-page mx-auto w-full max-w-[1480px] px-10 max-lg:px-6 max-md:px-4 pt-4 pb-12">
+        <header className="mb-3 flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
+          <div className="min-w-0">
+            <h1 className="text-[#0B1F44]">Leave Approvals</h1>
+            <p className="mt-1 text-[12.5px] text-[#5B6B85]">Leave requests waiting for your decision.</p>
+          </div>
+          {!failed && rows.length > 0 && (
+            <span className="rounded-full border border-[#F6DDA6] bg-[#FFF7E6] px-2.5 py-0.5 text-[12px] font-semibold tabular-nums text-[#B45309]">
+              {rows.length} pending
+            </span>
+          )}
         </header>
         {!failed && caps.decide === null && (
-          <p className="mb-4 rounded-md bg-[#F8FAFC] border border-hairline px-4 py-3 text-[14px] text-ink-soft">
+          <p className="mb-3 rounded-lg border border-[#DCE4F0] bg-[#F5F8FC] px-3 py-2 text-[12.5px] text-[#475569]">
             You can view these requests but not approve or reject them.
           </p>
         )}
         {failed ? (
-          <p role="alert" className="rounded-md bg-[#FFFBEB] border border-[#FCD9A0] px-4 py-3 text-[14.5px] text-[#92400E]">
+          <p role="alert" className="rounded-lg border border-[#FCD9A0] bg-[#FFFBEB] px-3 py-2 text-[13px] text-[#92400E]">
             The leave requests could not be loaded. Nothing has been changed — please refresh in a moment.
           </p>
         ) : (
-          <LeaveList rows={rows} mode="pending" canDecide={caps.decide !== null} />
+          <LeaveList rows={rows} mode="pending" canDecide={caps.decide !== null} layout="table" />
         )}
       </main>
     </>

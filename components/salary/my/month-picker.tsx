@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { shiftMonthKey } from "@/lib/salary/daily-report";
-import { BORDER, NAVY, SLATE } from "@/components/attendance/overview/theme";
+import { BORDER, NAVY, SLATE } from "@/components/salary/ui";
 
 /**
  * The one control that drives the My Salary page: the month, kept in the URL
@@ -36,11 +36,12 @@ export function SalaryMonthPicker({
   };
   const prev = shiftMonthKey(month, -1);
   const next = shiftMonthKey(month, 1);
-  const btn = "grid place-items-center size-9 rounded-lg transition-colors hover:bg-[#F3F6FA] disabled:opacity-35 disabled:cursor-not-allowed focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0A6CFF]";
+  const btn =
+    "grid size-8 place-items-center rounded-md transition-colors hover:bg-[#F3F6FA] hover:text-[#0B4FB8] disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:bg-transparent focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[#0A6CFF]/20";
   return (
-    <div className="inline-flex items-center gap-1 rounded-lg bg-white p-0.5" style={{ border: `1px solid ${BORDER}`, color: SLATE }} aria-busy={pending}>
+    <div className="inline-flex h-9 items-center gap-0.5 rounded-lg bg-white px-0.5" style={{ border: `1px solid ${BORDER}`, color: SLATE }} aria-busy={pending}>
       <button type="button" aria-label="Previous month" className={btn} disabled={prev < min || pending} onClick={() => go(prev)}>
-        <ChevronLeft size={16} strokeWidth={2.2} />
+        <ChevronLeft size={15} strokeWidth={2.2} />
       </button>
       <label className="sr-only" htmlFor={inputId}>
         {label}
@@ -52,11 +53,11 @@ export function SalaryMonthPicker({
         min={min}
         max={max}
         onChange={(e) => go(e.target.value)}
-        className="h-9 rounded-md bg-transparent px-2 text-[14px] font-semibold tabular-nums focus-visible:outline-2 focus-visible:outline-[#0A6CFF]"
+        className="salary-month-input h-8 rounded-md border-0 bg-transparent px-1.5 text-[13px] font-semibold tabular-nums shadow-none focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[#0A6CFF]/20"
         style={{ color: NAVY }}
       />
       <button type="button" aria-label="Next month" className={btn} disabled={next > max || pending} onClick={() => go(next)}>
-        <ChevronRight size={16} strokeWidth={2.2} />
+        <ChevronRight size={15} strokeWidth={2.2} />
       </button>
     </div>
   );

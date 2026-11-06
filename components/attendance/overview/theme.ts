@@ -20,13 +20,14 @@ export const NAVY = "#172B4D";
 export const SLATE = "#64748B";
 
 /**
- * The one accent: a restrained teal. `ACCENT` is for icons, rules and focus
- * rings; `ACCENT_TEXT` is the same hue darkened so SMALL text in it still
- * reads comfortably on white (AA), and `ACCENT_SOFT` is its pale tint.
+ * The one accent: the approved WMS blue, so the Employees module matches WMS.
+ * `ACCENT` is for icons, rules and focus rings; `ACCENT_TEXT` is the same hue
+ * darkened so SMALL text in it still reads comfortably on white (AA), and
+ * `ACCENT_SOFT` is its pale tint. (Good-news status green stays TONE.teal.)
  */
-export const ACCENT = "#0D9488";
-export const ACCENT_TEXT = "#0F766E";
-export const ACCENT_SOFT = "#E7F5F3";
+export const ACCENT = "#0A6CFF";
+export const ACCENT_TEXT = "#0B4FB8";
+export const ACCENT_SOFT = "#EEF4FF";
 
 /** Separators: a quiet cool gray. `BORDER_SOFT` for lines inside a surface. */
 export const BORDER = "#DCE5EF";

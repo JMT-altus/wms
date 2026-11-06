@@ -98,7 +98,7 @@ const SELECT =
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label
-      className="relative inline-flex items-center h-9 rounded-lg pl-3 pr-1 bg-white transition-colors duration-150 hover:border-[#C5D0DE] focus-within:border-[#0D9488] focus-within:shadow-[0_0_0_3px_rgba(13,148,136,0.18)] motion-reduce:transition-none"
+      className="relative inline-flex items-center h-9 rounded-lg pl-3 pr-1 bg-white transition-colors duration-150 hover:border-[#C5D0DE] focus-within:border-[#0A6CFF] focus-within:shadow-[0_0_0_3px_rgba(13,148,136,0.18)] motion-reduce:transition-none"
       style={{ border: `1px solid ${BORDER}` }}
       title={label}
     >

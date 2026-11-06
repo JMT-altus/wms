@@ -45,16 +45,16 @@ export function AttendanceMonthSelector({
         type="button"
         aria-label="Previous month"
         onClick={() => go(year, month - 1)}
-        className="inline-flex items-center justify-center size-9 rounded-md border border-hairline bg-surface-card text-ink-soft hover:text-ink-strong hover:border-hairline-strong transition-colors"
+        className="inline-flex size-9 items-center justify-center rounded-lg border border-[#D6DEEB] bg-white text-[#475569] transition-colors hover:border-[#0A6CFF] hover:text-[#0B4FB8] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[#0A6CFF]/20"
       >
-        <ChevronLeft size={16} strokeWidth={2.4} />
+        <ChevronLeft size={15} strokeWidth={2.4} />
       </button>
 
       <select
         value={month}
         aria-label="Month"
         onChange={(e) => go(year, Number(e.target.value))}
-        className="rounded-md border border-hairline bg-surface-card px-3 py-2 text-[14px] font-semibold text-ink-strong"
+        className="h-9 rounded-lg border border-[#D6DEEB] bg-white px-2.5 text-[13px] font-semibold text-[#0B1F44] transition-colors hover:border-[#B9C6DB] focus:border-[#0A6CFF] focus:outline-none focus:ring-[3px] focus:ring-[#0A6CFF]/15"
       >
         {MONTH_LABELS.map((label, i) => (
           <option key={label} value={i + 1}>
@@ -67,7 +67,7 @@ export function AttendanceMonthSelector({
         value={year}
         aria-label="Year"
         onChange={(e) => go(Number(e.target.value), month)}
-        className="rounded-md border border-hairline bg-surface-card px-3 py-2 text-[14px] font-semibold text-ink-strong tabular-nums"
+        className="h-9 rounded-lg border border-[#D6DEEB] bg-white px-2.5 text-[13px] font-semibold text-[#0B1F44] transition-colors hover:border-[#B9C6DB] focus:border-[#0A6CFF] focus:outline-none focus:ring-[3px] focus:ring-[#0A6CFF]/15 tabular-nums"
       >
         {years.map((y) => (
           <option key={y} value={y}>
@@ -80,9 +80,9 @@ export function AttendanceMonthSelector({
         type="button"
         aria-label="Next month"
         onClick={() => go(year, month + 1)}
-        className="inline-flex items-center justify-center size-9 rounded-md border border-hairline bg-surface-card text-ink-soft hover:text-ink-strong hover:border-hairline-strong transition-colors"
+        className="inline-flex size-9 items-center justify-center rounded-lg border border-[#D6DEEB] bg-white text-[#475569] transition-colors hover:border-[#0A6CFF] hover:text-[#0B4FB8] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[#0A6CFF]/20"
       >
-        <ChevronRight size={16} strokeWidth={2.4} />
+        <ChevronRight size={15} strokeWidth={2.4} />
       </button>
     </div>
   );

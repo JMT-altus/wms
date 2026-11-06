@@ -220,7 +220,7 @@ export function DccParticipantCard({
                 }}
                 placeholder="Add participant…"
                 aria-label={`Add a participant to ${item.title}`}
-                className="flex-1 rounded-[9px] border border-hairline bg-surface-input px-2.5 py-1.5 text-[13px] text-ink-strong outline-none transition focus:border-altus-red"
+                className="flex-1 rounded-[9px] border border-hairline bg-surface-input px-2.5 py-1.5 text-[13px] text-ink-strong outline-none transition focus:border-[#0A6CFF]"
               />
               <button
                 type="button"

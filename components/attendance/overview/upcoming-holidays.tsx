@@ -28,7 +28,7 @@ export function UpcomingHolidays({
 }) {
   return (
     <details open className="group rounded-xl" style={CARD}>
-      <summary className="flex items-center justify-between gap-3 cursor-pointer list-none p-6 max-md:p-4 rounded-xl transition-colors duration-150 hover:bg-[#F8FAFC] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0D9488] motion-reduce:transition-none [&::-webkit-details-marker]:hidden">
+      <summary className="flex items-center justify-between gap-3 cursor-pointer list-none p-6 max-md:p-4 rounded-xl transition-colors duration-150 hover:bg-[#F8FAFC] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0A6CFF] motion-reduce:transition-none [&::-webkit-details-marker]:hidden">
         <span className="inline-flex items-center gap-3 min-w-0">
           <CalendarHeart size={20} strokeWidth={2} aria-hidden style={{ color: ACCENT }} className="shrink-0" />
           <span className="min-w-0">

@@ -18,11 +18,18 @@ export function FormEditorDialog({
   formKey,
   formName,
   fields,
+  look,
+  triggerLabel = "Edit form",
 }: {
   formKey: string;
   formName: string;
   fields: FormFieldDef[];
+  /** "wms": the approved WMS look (Reimbursements). Omitted: the original look the other forms keep. */
+  look?: "wms";
+  /** The trigger's text — Reimbursements names which form each button edits. */
+  triggerLabel?: string;
 }) {
+  const wms = look === "wms";
   const [open, setOpen] = useState(false);
   const [list, setList] = useState<FormFieldDef[]>(fields);
   const [error, setError] = useState<string | null>(null);
@@ -74,27 +81,41 @@ export function FormEditorDialog({
     });
   }
 
-  const lbl = "block text-[11px] font-bold uppercase tracking-wide text-ink-muted mb-1";
-  const inp = "w-full rounded-md border border-hairline px-2.5 py-1.5 text-[13px] outline-none focus:border-altus-red/60 bg-white";
+  const lbl = wms ? "block text-[11.5px] font-semibold text-[#5B6B85] mb-1" : "block text-[11px] font-bold uppercase tracking-wide text-ink-muted mb-1";
+  const inp = wms
+    ? "w-full rounded-lg border border-[#D6DEEB] bg-white px-2.5 py-1.5 text-[13px] text-[#0B1F44] outline-none focus:border-[#0A6CFF] focus:ring-[3px] focus:ring-[#0A6CFF]/15"
+    : "w-full rounded-md border border-hairline px-2.5 py-1.5 text-[13px] outline-none focus:border-altus-red/60 bg-white";
 
   return (
     <Dialog.Root open={open} onOpenChange={(o) => { setOpen(o); if (o) reseed(); }}>
       <Dialog.Trigger asChild>
-        <button className="inline-flex items-center gap-1.5 rounded-full border border-hairline px-3.5 py-2 text-[13.5px] font-bold text-ink-soft hover:text-ink-strong transition-colors">
-          <Pencil size={14} /> Edit form
-        </button>
+        {wms ? (
+          <button className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[#DCE4F0] bg-white px-3.5 text-[13px] font-semibold text-[#0B1F44] transition-colors hover:bg-[#F5F8FC] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[#0A6CFF]/20">
+            <Pencil size={13} /> {triggerLabel}
+          </button>
+        ) : (
+          <button className="inline-flex items-center gap-1.5 rounded-full border border-hairline px-3.5 py-2 text-[13.5px] font-bold text-ink-soft hover:text-ink-strong transition-colors">
+            <Pencil size={14} /> {triggerLabel}
+          </button>
+        )}
       </Dialog.Trigger>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 bg-black/30 z-[90]" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 z-[100] -translate-x-1/2 -translate-y-1/2 w-full max-w-2xl rounded-xl bg-white border border-[#E2E8F0] p-6 shadow-lg max-h-[calc(100dvh-32px)] overflow-y-auto">
-          <Dialog.Title className="font-serif text-xl text-[#0F172A] mb-1">Edit form — {formName}</Dialog.Title>
-          <Dialog.Description className="text-[14px] text-[#64748B] mb-4">
+        <Dialog.Content
+          className={
+            wms
+              ? "fixed left-1/2 top-1/2 z-[100] w-[calc(100vw-32px)] max-w-2xl -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-xl border border-[#DCE4F0] bg-white p-5 shadow-[0_18px_40px_-16px_rgba(11,31,68,0.3)] max-h-[calc(100dvh-32px)]"
+              : "fixed left-1/2 top-1/2 z-[100] -translate-x-1/2 -translate-y-1/2 w-full max-w-2xl rounded-xl bg-white border border-[#E2E8F0] p-6 shadow-lg max-h-[calc(100dvh-32px)] overflow-y-auto"
+          }
+        >
+          <Dialog.Title className={wms ? "mb-0.5 text-[17px] font-semibold text-[#0B1F44]" : "font-serif text-xl text-[#0F172A] mb-1"}>Edit form — {formName}</Dialog.Title>
+          <Dialog.Description className={wms ? "mb-4 text-[13px] text-[#5B6B85]" : "text-[14px] text-[#64748B] mb-4"}>
             Add, reorder, rename or remove fields. For dropdowns, put one option per line.
           </Dialog.Description>
 
           <div className="space-y-3">
             {list.map((f, i) => (
-              <div key={i} className="rounded-xl border border-hairline p-3 bg-black/[0.015]">
+              <div key={i} className={wms ? "rounded-lg border border-[#E2E8F0] bg-[#F8FAFD] p-3" : "rounded-xl border border-hairline p-3 bg-black/[0.015]"}>
                 <div className="grid grid-cols-12 gap-2 items-end">
                   <div className="col-span-4">
                     <span className={lbl}>Label</span>
@@ -143,20 +164,36 @@ export function FormEditorDialog({
 
           {error && <div role="alert" className="mt-3 rounded-md border border-[#BFDBFE] bg-[#EFF6FF] px-3 py-2 text-[14px] text-[#0751BE]">{error}</div>}
 
-          <div className="mt-5 flex items-center gap-2">
-            <button type="button" onClick={save} disabled={pending}
-              className="rounded-md py-2.5 px-5 text-[14px] font-bold text-white disabled:opacity-50"
-              style={{ background: "linear-gradient(135deg, #0A6CFF, #0751BE)" }}>
-              {pending ? "Saving…" : "Save form"}
-            </button>
-            <button type="button" onClick={reset} disabled={pending}
-              className="inline-flex items-center gap-1.5 rounded-md border border-hairline py-2.5 px-4 text-[14px] font-bold text-ink-soft">
-              <RotateCcw size={14} /> Reset to default
-            </button>
-            <Dialog.Close asChild>
-              <button type="button" className="ml-auto px-4 py-2.5 text-[14px] font-medium text-[#64748B]" disabled={pending}>Cancel</button>
-            </Dialog.Close>
-          </div>
+          {wms ? (
+            <div className="-mx-5 mt-4 flex items-center gap-2 border-t border-[#E6ECF5] px-5 pt-3.5">
+              <button type="button" onClick={save} disabled={pending}
+                className="h-9 rounded-lg bg-[#0A6CFF] px-4 text-[13px] font-semibold text-white shadow-[0_1px_2px_rgba(10,108,255,0.25)] hover:bg-[#0058D6] disabled:opacity-50">
+                {pending ? "Saving…" : "Save form"}
+              </button>
+              <button type="button" onClick={reset} disabled={pending}
+                className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[#DCE4F0] bg-white px-3.5 text-[13px] font-semibold text-[#334155] hover:bg-[#F5F8FC]">
+                <RotateCcw size={13} /> Reset to default
+              </button>
+              <Dialog.Close asChild>
+                <button type="button" className="ml-auto h-9 rounded-lg px-3.5 text-[13px] font-semibold text-[#5B6B85] hover:bg-[#F5F8FC]" disabled={pending}>Cancel</button>
+              </Dialog.Close>
+            </div>
+          ) : (
+            <div className="mt-5 flex items-center gap-2">
+              <button type="button" onClick={save} disabled={pending}
+                className="rounded-md py-2.5 px-5 text-[14px] font-bold text-white disabled:opacity-50"
+                style={{ background: "linear-gradient(135deg, #0A6CFF, #0751BE)" }}>
+                {pending ? "Saving…" : "Save form"}
+              </button>
+              <button type="button" onClick={reset} disabled={pending}
+                className="inline-flex items-center gap-1.5 rounded-md border border-hairline py-2.5 px-4 text-[14px] font-bold text-ink-soft">
+                <RotateCcw size={14} /> Reset to default
+              </button>
+              <Dialog.Close asChild>
+                <button type="button" className="ml-auto px-4 py-2.5 text-[14px] font-medium text-[#64748B]" disabled={pending}>Cancel</button>
+              </Dialog.Close>
+            </div>
+          )}
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>

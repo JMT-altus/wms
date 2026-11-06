@@ -47,7 +47,7 @@ export function ComplianceRing({
       <div>
         <div
           className="text-[30px] font-black leading-none tabular-nums"
-          style={{ color: tone.fg, fontFamily: "var(--font-serif)" }}
+          style={{ color: tone.fg }}
         >
           {pct}%
         </div>
@@ -94,7 +94,7 @@ export function DccStatCards({
         <div className="flex items-baseline gap-1.5">
           <span
             className="text-[30px] font-black leading-none tabular-nums"
-            style={{ color: filledTone.fg, fontFamily: "var(--font-serif)" }}
+            style={{ color: filledTone.fg }}
           >
             {stats.filled}
           </span>
@@ -124,7 +124,6 @@ export function DccStatCards({
           />
           <span
             className="text-[30px] font-black leading-none tabular-nums text-ink-strong"
-            style={{ fontFamily: "var(--font-serif)" }}
           >
             {streak}
           </span>
@@ -143,7 +142,6 @@ export function DccStatCards({
           <ListChecks size={24} className="text-ink-muted" aria-hidden />
           <span
             className="text-[30px] font-black leading-none tabular-nums text-ink-strong"
-            style={{ fontFamily: "var(--font-serif)" }}
           >
             {stats.due}
           </span>
