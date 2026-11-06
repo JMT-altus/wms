@@ -4,8 +4,14 @@ import { commentAuthor, commentDate, commentTime } from "@/lib/collections/comme
 /** A comment as the screens need it — the follow-up's note, when, and by whom (id and name). */
 export type CommentEntry = Pick<FollowUpEntry, "id" | "note" | "createdAt" | "createdById" | "createdByName" | "authorIsReviewer" | "editedAt" | "editedByName" | "reviewerEscalationId">;
 
-/** Comments by the escalation reviewer (authorIsReviewer, resolved on the server) have a yellow background for every viewer. */
-export const REVIEWER_COMMENT_CLASS = "bg-[#FFF3B0]";
+/**
+ * Comments by the escalation reviewer (authorIsReviewer, resolved on the server from the Review escalations
+ * permission — nobody is named in code) are lavender for every viewer: a pale violet ground and a thin violet
+ * border. Yellow is kept for MARK AS PRIORITY rows only, so the two never look alike.
+ */
+export const REVIEWER_COMMENT_CLASS = "border border-[#C4B5FD] bg-[#F3EEFF]";
+/** The reviewer comment's own text: a dark purple that stays readable on the lavender ground. */
+export const REVIEWER_COMMENT_TEXT = "text-[#4C1D95]";
 
 /** A reviewer's answer to an escalation (Escalations → Add Comment): a violet block, labelled, with dark text. */
 export const ESCALATION_REPLY_CLASS = "rounded-md border-l-4 border-[#7C3AED] bg-[#F5F3FF] px-2";
@@ -47,12 +53,13 @@ export function CommentAudit({
   entry: Pick<CommentEntry, "note" | "createdAt" | "createdById" | "createdByName" | "authorIsReviewer" | "editedAt" | "editedByName" | "reviewerEscalationId">;
   variant?: "compact" | "full";
 }) {
-  // A reply to an escalation is its own kind (violet, labelled); otherwise a reviewer's ordinary comment keeps its yellow.
+  // A reply to an escalation is its own kind (violet bar, labelled); a reviewer's ordinary comment is lavender.
   const reply = typeof entry.reviewerEscalationId === "string";
   const reviewer = !reply && entry.authorIsReviewer === true;
   const author = commentAuthor(entry);
   const dateTime = `${commentDate(entry.createdAt)}, ${commentTime(entry.createdAt)}`;
-  const tone = reply ? ` ${ESCALATION_REPLY_CLASS}` : reviewer ? ` rounded px-1 ${REVIEWER_COMMENT_CLASS}` : "";
+  const tone = reply ? ` ${ESCALATION_REPLY_CLASS}` : reviewer ? ` rounded-md px-1.5 ${REVIEWER_COMMENT_CLASS}` : "";
+  const noteText = reviewer ? REVIEWER_COMMENT_TEXT : "text-ink-strong";
   if (variant === "full") {
     return (
       <dl
@@ -73,7 +80,7 @@ export function CommentAudit({
         {entry.note && (
           <>
             <dt className="text-ink-subtle">Comment:</dt>
-            <dd className="whitespace-pre-wrap text-ink-strong">{entry.note}</dd>
+            <dd className={`whitespace-pre-wrap ${noteText}`}>{entry.note}</dd>
           </>
         )}
         {entry.editedAt && (
@@ -99,7 +106,7 @@ export function CommentAudit({
         {" · "}
         <span className="tabular-nums">Date &amp; Time: {dateTime}</span>
       </span>
-      {entry.note && <span className="block whitespace-pre-wrap text-ink-strong">Comment: {entry.note}</span>}
+      {entry.note && <span className={`block whitespace-pre-wrap ${noteText}`}>Comment: {entry.note}</span>}
       <EditedNote entry={entry} />
     </span>
   );

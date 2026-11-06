@@ -90,8 +90,9 @@ describe("the escalation reviewer's comments are yellow for every viewer; others
     expect(screen.getByRole("button", { name: /Edit your comment/ })).toBeTruthy();
   });
 
-  it("the yellow is a background colour (yellow) and the same in the full History view", () => {
-    expect(REVIEWER_COMMENT_CLASS).toMatch(/^bg-\[#FF[EF][0-9A-F]{3}\]$/i);
+  it("the reviewer colour is lavender — never Priority's yellow — and the same in the full History view", () => {
+    expect(REVIEWER_COMMENT_CLASS).toContain("bg-[#F3EEFF]");
+    expect(REVIEWER_COMMENT_CLASS).not.toMatch(/#FEF9C3|#FFF3B0|#FDE68A/i); // the Priority yellows
     const { container } = render(<CommentAudit entry={REVIEWER} variant="full" />);
     const dl = container.querySelector("[data-comment-audit='full']")!;
     expect(dl.className).toContain(REVIEWER_COMMENT_CLASS);
