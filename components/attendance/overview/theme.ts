@@ -60,7 +60,7 @@ export const CARD: CSSProperties = {
 
 /* ── Status tones ────────────────────────────────────────────────────────── */
 
-export type Tone = "teal" | "coral" | "amber" | "blue" | "violet" | "slate" | "orange" | "rose";
+export type Tone = "teal" | "coral" | "amber" | "blue" | "violet" | "slate" | "orange" | "rose" | "indigo";
 
 export interface ToneColors {
   /** Text and icon colour — passes AA on white. */
@@ -82,4 +82,6 @@ export const TONE: Record<Tone, ToneColors> = {
   slate: { fg: "#586679", bg: "#F3F5F8", solid: "#93A0B2" },
   orange: { fg: "#A9531A", bg: "#FEF4EC", solid: "#E58A47" },
   rose: { fg: "#A33A66", bg: "#FCF1F6", solid: "#D2679A" },
+  // An HR-waived day (WV): distinct from every status colour above.
+  indigo: { fg: "#3F3CB0", bg: "#EFEFFD", solid: "#5B57D9" },
 };

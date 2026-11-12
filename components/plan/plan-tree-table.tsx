@@ -74,6 +74,8 @@ import type { PlanChip } from "./plan-toolbar";
 import { PlanRowDialogs, type PlanDialog } from "./plan-row-dialogs";
 import { PlanBulkBar } from "./plan-bulk-bar";
 import { PlanDeleteDialog } from "./plan-delete-dialog";
+import { PlanCreateDialog } from "./plan-create";
+import type { PlanBranch } from "@/lib/plan/context";
 import {
   getColumnPrefs,
   getColumnPrefsServer,
@@ -114,6 +116,9 @@ const COLUMNS: ColumnDef[] = [
   { key: "ref", header: "Ref", width: 124, fixed: true },
   { key: "controls", header: "", width: 156, fixed: true },
   { key: "name", header: "Result / Action", width: "flex", fixed: true },
+  // Each row's OWN description (project_nodes.description, the field the creation and edit
+  // popups collect) — never a parent's. Shown by default, beside the name it describes.
+  { key: "description", header: "Description", width: 280 },
   // OWNER IS THE INITIATOR — the person the create and edit dialogs ask for
   // under "Initiator", `project_nodes.initiator_id`. Whoever raised the row
   // owns it in the only sense this table reports, and a column that showed a
@@ -147,7 +152,6 @@ const COLUMNS: ColumnDef[] = [
   { key: "from", header: "From", width: 144, defaultHidden: true },
   { key: "to", header: "To", width: 144, defaultHidden: true },
   { key: "wms", header: "WMS", width: 148, defaultHidden: true },
-  { key: "description", header: "Description", width: 280, defaultHidden: true },
 ];
 
 /**
@@ -216,12 +220,29 @@ interface Props {
   fullScreen: boolean;
   onFullScreenChange: (v: boolean) => void;
   onView: (v: PlanView) => void;
+  /** For the creation popup the row "+" and New project open (the toolbar's own form). */
+  clients?: string[];
+  subjects?: string[];
+  departments?: { id: string; name: string }[];
+}
+
+/** The path from the top of the tree down to `id` (inclusive) — seeds the creation popup's parent pickers. */
+function pathTo(nodes: readonly PlanNode[], id: string): PlanBranch {
+  for (const n of nodes) {
+    if (n.id === id) return [{ id: n.id, kind: n.kind, name: n.name }];
+    const below = pathTo(n.children, id);
+    if (below.length) return [{ id: n.id, kind: n.kind, name: n.name }, ...below];
+  }
+  return [];
 }
 
 export function PlanTreeTable({
   tree,
   viewer,
   employees,
+  clients = [],
+  subjects = [],
+  departments,
   query,
   projectId,
   onProjectChange,
@@ -291,6 +312,9 @@ export function PlanTreeTable({
     parentId: string;
     kind: PlanKind;
   } | null>(null);
+  // The creation popup opened by New project, or by the "+" on a Project / Milestone row
+  // (New Milestone / New Result, with the clicked row's path pre-selected as the parent).
+  const [creating, setCreating] = React.useState<{ kind: PlanKind; branch: PlanBranch } | null>(null);
 
   // Counted over the WHOLE TREE, never the rendered rows: results start
   // collapsed, so counting what is on screen reports "0 Actions".
@@ -400,6 +424,13 @@ export function PlanTreeTable({
    */
   function addChild(parentId: string, kind: PlanKind) {
     if (pending) return;
+    // A Milestone or Result is made through the SAME popup the toolbar's
+    // + Milestone / + Result open — name, description and the rest — with this
+    // row already chosen as its parent. Nothing is written until it is submitted.
+    if (kind === "milestone" || kind === "result") {
+      setCreating({ kind, branch: pathTo(tree, parentId) });
+      return;
+    }
     // An Action or Sub-Action cannot be made undated, and a bare "+" has no
     // date to give — so ask for it first rather than inventing one.
     if (requiresTargetDate(kind) || requiresDescription(kind)) {
@@ -552,7 +583,7 @@ export function PlanTreeTable({
           ) : null
         }
         onExport={exportCsv}
-        onNew={() => run(() => createPlanNode({ kind: "project", parentId: null }))}
+        onNew={() => setCreating({ kind: "project", branch: [] })}
         newLabel="New project"
       />
 
@@ -838,7 +869,7 @@ export function PlanTreeTable({
         </p>
         <button
           type="button"
-          onClick={() => run(() => createPlanNode({ kind: "project", parentId: null }))}
+          onClick={() => setCreating({ kind: "project", branch: [] })}
           disabled={pending}
           className="inline-flex items-center gap-1.5 rounded-pill px-4 h-9 text-[14.5px] font-bold disabled:opacity-50"
           style={{
@@ -861,6 +892,27 @@ export function PlanTreeTable({
             const { parentId, kind } = datePrompt;
             setDatePrompt(null);
             createChild(parentId, kind, ymd, description);
+          }}
+        />
+      )}
+
+      {creating && (
+        <PlanCreateDialog
+          key={`${creating.kind}:${creating.branch.map((b) => b.id).join("/")}`}
+          kind={creating.kind}
+          tree={tree}
+          branch={creating.branch}
+          employees={employees}
+          clients={clients}
+          subjects={subjects}
+          departments={departments}
+          defaultInitiatorId={viewer.id}
+          isAdmin={viewer.isAdmin}
+          onClose={() => setCreating(null)}
+          // Open the parent and point at the new row once it exists (the popup refreshes the page itself).
+          onCreated={({ id, parentId }) => {
+            if (parentId) setExpanded((prev) => new Set(prev).add(parentId));
+            setFreshId(id);
           }}
         />
       )}
@@ -1228,8 +1280,17 @@ function Cell({
         </span>
       );
 
-    case "description":
-      return <Muted>{node.description ?? "—"}</Muted>;
+    case "description": {
+      // The row's own description; two lines at most, the whole text on hover.
+      const text = node.description?.trim();
+      return text ? (
+        <span className="line-clamp-2 whitespace-normal break-words text-[12.5px] leading-[1.35]" style={{ color: "var(--color-ink-muted)" }} title={text}>
+          {text}
+        </span>
+      ) : (
+        <Muted>—</Muted>
+      );
+    }
 
     default:
       return null;

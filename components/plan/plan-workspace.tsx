@@ -213,6 +213,9 @@ export function PlanWorkspace({
           tree={tree}
           viewer={viewer}
           employees={employees}
+          clients={clients}
+          subjects={subjects}
+          departments={departments}
           query={query}
           projectId={projectId}
           onProjectChange={pickProject}

@@ -348,16 +348,19 @@ export type AttendanceKind = (typeof ATTENDANCE_KINDS)[number];
 
 // Attendance codes. Phase A: P / H/D / A / W/O / incomplete. Phase B (0059)
 // adds holiday (H / HP / H-H/D), leave (PL paid, LWP unpaid) and comp-off (CO).
-export const ATTENDANCE_CODES = ["P","H/D","A","W/O","incomplete","H","HP","H-H/D","PL","LWP","CO"] as const;
+// "WV" (0126): an HR waiver — one payable day, no late/early mark; punches untouched.
+export const ATTENDANCE_CODES = ["P","H/D","A","W/O","incomplete","H","HP","H-H/D","PL","LWP","CO","WV"] as const;
 export type AttendanceCode = (typeof ATTENDANCE_CODES)[number];
 export const ATTENDANCE_CODE_VALUES: Record<AttendanceCode, number> = {
   "P":1, "H/D":0.5, "A":0, "W/O":1, "incomplete":0,
   "H":1, "HP":2, "H-H/D":1.5, "PL":1, "LWP":0, "CO":1,
+  "WV":1, // waived: one payable day, like paid leave (approved treatment)
 };
 export const ATTENDANCE_CODE_LABELS: Record<AttendanceCode, string> = {
   "P":"Present", "H/D":"Half Day", "A":"Absent", "W/O":"Weekly Off", "incomplete":"No Check-out",
   "H":"Holiday", "HP":"Holiday Present", "H-H/D":"Holiday Half-Day",
   "PL":"Paid Leave", "LWP":"Unpaid Leave", "CO":"Comp Off",
+  "WV":"Waived",
 };
 
 // Phase B (0059) — leave_requests / comp_off_credits enums. The DB columns are
@@ -1109,6 +1112,34 @@ export const PERMISSION_FIELDS = [
     hint: "With 'Approve or reject' (and 'View queue'): see and decide pending requests assigned to other approvers, or to nobody. Never your own.",
     defaultAllowed: false,
     group: "Leave approvals",
+    sensitive: true,
+    adminBypass: false,
+    superAdminBypass: false,
+  },
+  // ── Attendance settings (Admin Panel → Attendance Settings): shift timings and
+  // check-in / check-out grace decide who is late or left early, so it is an
+  // explicit grant made by a super-admin, never implied by admin status.
+  // Super-admins themselves may always manage it (lib/auth/attendance-settings.ts).
+  {
+    key: "attendance.settings.manage",
+    label: "Attendance settings — Manage shifts and grace periods",
+    hint: "Create and change work shifts, assign them to employees or departments, and set the check-in and check-out grace periods (Admin Panel → Attendance Settings). Super-admins always have this.",
+    defaultAllowed: false,
+    group: "Attendance settings",
+    sensitive: true,
+    adminBypass: false,
+    superAdminBypass: false,
+  },
+  // ── Attendance waivers (HR → Attendance Correction): waiving a day pays it and
+  // removes its late/early mark, so it is an explicit grant made by a
+  // super-admin, never implied by admin status. Super-admins themselves may
+  // always waive (lib/auth/attendance-waivers.ts). HR module access is needed too.
+  {
+    key: "attendance.waivers.manage",
+    label: "Attendance waivers — Waive and reverse",
+    hint: "Waive an employee's attendance for a date (counted as a paid day with no late/early mark) and reverse a waiver, with a reason, in HR → Attendance Correction. Super-admins always have this.",
+    defaultAllowed: false,
+    group: "Attendance waivers",
     sensitive: true,
     adminBypass: false,
     superAdminBypass: false,

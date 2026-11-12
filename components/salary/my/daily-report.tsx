@@ -19,6 +19,7 @@ const GROUP_TONE: Record<StatusGroup, Tone> = {
   leave: "orange",
   compoff: "rose",
   open: "amber",
+  waived: "indigo",
 };
 const WEEKDAY = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const money = (p: number | null) => (p === null ? "—" : inrPaise(p));

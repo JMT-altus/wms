@@ -65,7 +65,7 @@ vi.mock("@/lib/db", () => {
 });
 
 import { applyTaskStatusChange } from "@/lib/tasks/set-status";
-import { archiveTask, bulkArchive, bulkDelete, bulkReassignDoer, bulkSetStatus, deleteTask, reassignTask } from "@/app/(app)/tasks/actions";
+import { archiveTask, bulkArchive, bulkDelete, bulkReassignDoer, bulkSetStatus, completePooledTask, deleteTask, reassignDoer, reassignTask } from "@/app/(app)/tasks/actions";
 import { abandonTask } from "@/app/(app)/tasks/lifecycle-actions";
 
 const WEEKLY = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -151,6 +151,20 @@ describe("the task-level actions", () => {
     expect(h.updates).toBe(0);
     h.current = task(ORDINARY);
     expect(await reassignTask(ORDINARY, { newDoerId: OTHER_DOER }, UPDATED)).toEqual({ ok: true });
+  });
+
+  it("the inline Doer cell (reassignDoer) refuses the weekly task and writes nothing; an ordinary task still reassigns", async () => {
+    expect(await reassignDoer(WEEKLY, OTHER_DOER)).toEqual({ ok: false, error: expect.stringMatching(/compulsory weekly/) });
+    expect(h.updates + h.inserts).toBe(0);
+    h.current = task(ORDINARY);
+    expect(await reassignDoer(ORDINARY, OTHER_DOER)).toEqual({ ok: true });
+    expect(h.updates).toBe(1);
+  });
+
+  it("completing a pool task can't be used to reassign the weekly task", async () => {
+    const input = { title: "x", client: null, subject: null, description: null, priority: "imp_urgent", dueAt: null, doerId: OTHER_DOER };
+    expect(await completePooledTask(WEEKLY, input)).toEqual({ ok: false, error: expect.stringMatching(/compulsory weekly/) });
+    expect(h.updates + h.inserts).toBe(0);
   });
 });
 

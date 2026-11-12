@@ -2,12 +2,8 @@ import "server-only";
 import { eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { attendanceLogs } from "@/db/schema";
-import {
-  companyDefaults,
-  getEmployeeMonthStatus,
-  type DayRow,
-} from "@/lib/queries/attendance-status";
-import { getOrgSettings } from "@/lib/queries/org-settings";
+import { getEmployeeMonthStatus, type DayRow } from "@/lib/queries/attendance-status";
+import { scheduleForEmployeeIdOn } from "@/lib/queries/attendance-schedule";
 import { listHolidays, type HolidayRow } from "@/lib/queries/holidays";
 import {
   computeOverview,
@@ -45,12 +41,13 @@ export async function loadAttendanceOverview(input: {
 }): Promise<AttendanceOverviewData> {
   const { employeeId, today, year, month } = input;
 
-  const [org, status] = await Promise.all([
-    getOrgSettings(),
+  const [sched, status] = await Promise.all([
+    // The employee's full day as of today: their shift's working hours, else the company setting.
+    scheduleForEmployeeIdOn(employeeId, today),
     getEmployeeMonthStatus(employeeId, year, month, today),
   ]);
 
-  const fullDayMinutes = companyDefaults(org).fullDayMinutes;
+  const fullDayMinutes = sched.fullDayMinutes;
   return {
     kpis: computeOverview(status.days, monthRange(year, month, today), fullDayMinutes),
     days: status.days,

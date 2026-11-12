@@ -376,6 +376,9 @@ export async function reassignDoer(
   const me = await requireUser();
   const limited = rateLimitOrError(me.id, "write");
   if (limited) return limited;
+  // The weekly Bulk Upload task follows the employee configured in Admin &
+  // Master Setup, as in reassignTask and bulkReassignDoer.
+  if (await isProtectedWeeklyTask(taskId)) return { ok: false, error: PROTECTED_TASK_MESSAGE };
   try {
     const outcome = await db.transaction(async (tx) => {
       // FOR UPDATE so two concurrent reassigns serialise — see
@@ -1085,6 +1088,9 @@ export async function completePooledTask(
 
   const current = await db.query.tasks.findFirst({ where: eq(tasks.id, taskId) });
   if (!current) return { ok: false, error: "Task not found." };
+  // Never a pool task, but this action can write any task's doer: keep the
+  // weekly Bulk Upload task on its configured assignee.
+  if (await isProtectedWeeklyTask(taskId)) return { ok: false, error: PROTECTED_TASK_MESSAGE };
 
   const now = new Date();
   try {

@@ -24,7 +24,7 @@ export default async function AttendancePolicyPage() {
 
   const [changes, history, holidays] = await Promise.all([
     listPolicyChanges(),
-    listPolicyHistory(50),
+    listPolicyHistory(50, "policy"), // shift and grace changes are listed in Attendance Settings
     loadMonthHolidays(year, month),
   ]);
   const policy = resolvePolicy(changes, today);

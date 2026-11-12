@@ -195,6 +195,23 @@ export function PlanCreate(props: PlanCreateProps) {
  *   project / milestone   a `createOverride` writes a project_nodes row and NO
  *                         task, with the Schedule block hidden.
  */
+export type PlanCreateDialogProps = Omit<PlanCreateProps, "roster"> & {
+  kind: PlanKind;
+  onClose: () => void;
+  /** Called once the new plan row exists (before any task is written for it). */
+  onCreated?: (row: { id: string; kind: PlanKind; parentId: string | null }) => void;
+};
+
+/**
+ * The same creation popup the toolbar's + Project / + Milestone / + Result open,
+ * for other entry points — the hierarchy table's row "+" and its New project
+ * buttons. `branch` seeds the parent pickers (pass the clicked row's path so the
+ * parent arrives already chosen). Nothing is written until the form is submitted.
+ */
+export function PlanCreateDialog(props: PlanCreateDialogProps) {
+  return <CreateDialog {...props} roster={[]} />;
+}
+
 function CreateDialog({
   kind: initialKind,
   tree,
@@ -207,7 +224,8 @@ function CreateDialog({
   isAdmin,
   onClose,
   onDone,
-}: PlanCreateProps & { kind: PlanKind; onClose: () => void }) {
+  onCreated,
+}: PlanCreateProps & { kind: PlanKind; onClose: () => void; onCreated?: PlanCreateDialogProps["onCreated"] }) {
   const router = useRouter();
   // The level is state, not just the button that opened the dialog: picking
   // the wrong one should cost a dropdown, not a close and a re-open.
@@ -448,6 +466,7 @@ function CreateDialog({
                         return { ok: false as const, error: res.error };
                       }
                       rememberCreated(res.id, values.title.trim() || values.subject?.trim() || "");
+                      onCreated?.({ id: res.id, kind, parentId });
                       // The project's client, so the task lands in the list
                       // under the engagement it belongs to rather than under
                       // its own action name.
@@ -492,6 +511,7 @@ function CreateDialog({
                         return { ok: false as const, error: res.error };
                       }
                       rememberCreated(res.id, payload.title.trim() || payload.subject?.trim() || "");
+                      onCreated?.({ id: res.id, kind, parentId });
                       return { ok: true as const, id: res.id };
                     },
                   })}

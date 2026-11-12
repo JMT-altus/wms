@@ -8,6 +8,9 @@ export const ATTENDANCE_CORRECTION_EVENT = "attendance_correction";
 export const ADMIN_PUNCH_UPSERT_EVENT = "attendance_punch_upsert";
 export const ADMIN_PUNCH_EDIT_EVENT = "attendance_punch_edit";
 export const ADMIN_PUNCH_DELETE_EVENT = "attendance_punch_delete";
+/** HR waived / un-waived a day (0126). The waiver row itself also keeps who, when and why. */
+export const ATTENDANCE_WAIVER_EVENT = "attendance_waiver";
+export const ATTENDANCE_WAIVER_REVERSED_EVENT = "attendance_waiver_reversed";
 
 /**
  * History that must survive the deletion of the person who wrote it: every
@@ -20,4 +23,6 @@ export const PROTECTED_ATTENDANCE_EVENTS = [
   ADMIN_PUNCH_DELETE_EVENT,
   IMPORT_EVENT,
   IMPORT_UNDO_EVENT,
+  ATTENDANCE_WAIVER_EVENT,
+  ATTENDANCE_WAIVER_REVERSED_EVENT,
 ] as const;

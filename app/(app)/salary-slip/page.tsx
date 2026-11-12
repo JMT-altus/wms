@@ -98,7 +98,7 @@ export default async function SalarySlipPage({ searchParams }: PageProps) {
                     </div>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
-                    <Link href={`/my-salary/statement/${selected.id}` as Route} className={BTN} style={{ border: `1px solid ${BLUE_LINE}`, color: BLUE_TEXT }}>
+                    <Link href={`/my-salary/statement/${selected.id}?from=salary-slip` as Route} className={BTN} style={{ border: `1px solid ${BLUE_LINE}`, color: BLUE_TEXT }}>
                       <Eye size={14} aria-hidden /> View slip
                     </Link>
                     <a
@@ -200,7 +200,7 @@ export default async function SalarySlipPage({ searchParams }: PageProps) {
                             {fmtDate(r.createdAt)}
                           </td>
                           <td className="whitespace-nowrap px-3 py-2 text-right">
-                            <Link href={`/my-salary/statement/${r.id}` as Route} className={`${BTN_SM} mr-1`} style={{ border: `1px solid ${BORDER}`, color: BLUE_TEXT }} aria-label={`View ${monthTitle(r.month)} salary slip`}>
+                            <Link href={`/my-salary/statement/${r.id}?from=salary-slip` as Route} className={`${BTN_SM} mr-1`} style={{ border: `1px solid ${BORDER}`, color: BLUE_TEXT }} aria-label={`View ${monthTitle(r.month)} salary slip`}>
                               <Eye size={12} aria-hidden /> View
                             </Link>
                             <a href={`/salary/payslip/${r.id}`} className={BTN_SM} style={{ border: `1px solid ${BORDER}`, color: BLUE_TEXT }} aria-label={`Download ${monthTitle(r.month)} salary slip as PDF`}>

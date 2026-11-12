@@ -197,6 +197,59 @@ describe("timestamp precision (the defect)", () => {
   });
 });
 
+describe("month view: load, correct a day, reload (real grading)", () => {
+  it("shows the month graded, saves a missing OUT through the audited flow, and the reloaded month is recalculated — nothing else changes", async () => {
+    const date = "2026-08-12"; // a Wednesday
+    const EMP = await addEmployee("Gamma Month"); // its own employee, so other tests' counts are unaffected
+    await pg.query(`insert into attendance_logs (employee_id, log_date, kind, logged_at) values ($1, $2, 'in', '2026-08-12 09:40:00+05:30')`, [EMP, date]);
+    await pg.query(`insert into attendance_logs (employee_id, log_date, kind, logged_at) values ($1, '2026-08-13', 'in', '2026-08-13 09:30:00+05:30'), ($1, '2026-08-13', 'out', '2026-08-13 18:30:00+05:30')`, [EMP]);
+    await pg.query(`insert into attendance_logs (employee_id, log_date, kind, logged_at) values ($1, $2, 'in', '2026-08-12 09:00:00+05:30')`, [OTHER, date]);
+    const otherBefore = await punches(OTHER, date);
+    const MONTH_HR = await addEmployee("Month Hr"); // its own HR actor: the deletion test counts HR's corrections
+    as(MONTH_HR, false);
+
+    const before = await hr.loadMonth({ employeeId: EMP, month: "2026-08" });
+    expect(before.ok).toBe(true);
+    if (!before.ok) return;
+    expect(before.view.employee.id).toBe(EMP);
+    const d12 = before.view.days.find((x) => x.logDate === date)!;
+    const d13 = before.view.days.find((x) => x.logDate === "2026-08-13")!;
+    expect(d12).toMatchObject({ inAt: "09:40", outAt: null });
+    expect(d13).toMatchObject({ inAt: "09:30", outAt: "18:30" });
+
+    const look = await hr.lookupDay({ employeeId: EMP, date });
+    if (!look.ok) throw new Error(look.error);
+    const saved = await hr.saveCorrection({
+      employeeId: EMP, date, inTime: "", outTime: "18:40", reason: "biometric_unavailable", explanation: WHY,
+      snapshot: { in: look.day.punches.in!.loggedAt, out: null }, confirmed: true,
+    });
+    expect(saved).toMatchObject({ ok: true });
+
+    const after = await hr.loadMonth({ employeeId: EMP, month: "2026-08" });
+    if (!after.ok) throw new Error(after.error);
+    const a12 = after.view.days.find((x) => x.logDate === date)!;
+    expect(a12).toMatchObject({ inAt: "09:40", outAt: "18:40" });
+    expect(a12.workedMinutes).toBe(540); // recalculated by the existing grader from the corrected punches
+    expect(d12.code).toBe("incomplete"); // shown as "No check-out" before
+    expect(a12.code).toBe("P"); // present after the correction
+    // Only that day changed: every other day of the month grades exactly as before.
+    const rest = (v: typeof after.view.days) => JSON.stringify(v.filter((x) => x.logDate !== date));
+    expect(rest(after.view.days)).toBe(rest(before.view.days));
+    // The other employee's attendance is untouched; the audit row records the change.
+    expect(await punches(OTHER, date)).toEqual(otherBefore);
+    const ev = (await events(EMP)).filter((e) => e.to_value?.date === date);
+    expect(ev).toHaveLength(1);
+    expect(ev[0]).toMatchObject({ event_type: "attendance_correction", actor_id: MONTH_HR });
+    expect(ev[0]!.from_value.out).toBeNull();
+  });
+
+  it("refuses the HR user's own month", async () => {
+    as(HR, false);
+    const res = await hr.loadMonth({ employeeId: HR, month: "2026-08" });
+    expect(res.ok).toBe(false);
+  });
+});
+
 describe("concurrent corrections to the same day", () => {
   it("the second save, based on what it saw before the first landed, is refused and changes nothing", async () => {
     const date = "2026-09-12";

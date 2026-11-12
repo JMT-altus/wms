@@ -46,6 +46,7 @@ const GROUP_TONE: Record<StatusGroup, Tone> = {
   leave: "orange",
   compoff: "rose",
   open: "amber",
+  waived: "indigo",
 };
 
 /** Only the days that are an exception to "present" carry a background tint. */

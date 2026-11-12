@@ -19,6 +19,9 @@ import {
 } from "@/lib/queries/comp-off";
 import type { AttendanceCode } from "@/db/enums";
 import { effectiveJoinDay } from "@/lib/attendance/join-day";
+import { loadScheduleContext, scheduleFor } from "@/lib/queries/attendance-schedule";
+import { activeWaiverDates } from "@/lib/queries/attendance-waivers";
+import { applyWaiver } from "@/lib/attendance/waiver";
 
 /**
  * Month-status query layer (Attendance Phase A, Task A3).
@@ -77,6 +80,7 @@ export interface MonthSummary {
   paidLeave: number; // code "PL"
   unpaidLeave: number; // code "LWP"
   compOff: number; // code "CO" (redeemed comp-off)
+  waived: number; // code "WV" (HR waiver, 0126)
 }
 
 export interface EmployeeMonthStatus {
@@ -138,15 +142,9 @@ function monthBounds(year: number, month: number): { first: string; last: string
 
 // ── schedule helpers ────────────────────────────────────────────────────────
 
-/** Company-wide schedule defaults derived from org_settings. */
-export function companyDefaults(org: OrgSettings): AttendanceSchedule {
-  return {
-    lateAfter: org.attLateAfter ?? "10:50",
-    earlyBefore: org.attEarlyBefore ?? "19:20",
-    fullDayMinutes: Number(org.attFullDayHours ?? 9) * 60,
-    halfDayMinutes: Number(org.attHalfDayHours ?? 5) * 60,
-  };
-}
+// Company-wide schedule from org settings — moved to lib/queries/attendance-schedule.ts, where every
+// attendance path reads its (date- and shift-aware) schedule. Re-exported for existing importers.
+export { companyDefaults } from "@/lib/queries/attendance-schedule";
 
 /** Resolve an employee's effective schedule. Phase A only exposes the two
  *  time overrides on `employees` (lateAfter / earlyBefore); hour overrides are
@@ -208,6 +206,7 @@ function emptySummary(): MonthSummary {
     paidLeave: 0,
     unpaidLeave: 0,
     compOff: 0,
+    waived: 0,
   };
 }
 
@@ -247,6 +246,9 @@ function tally(summary: MonthSummary, r: DayCodeResult): void {
     case "CO":
       summary.compOff += 1;
       break;
+    case "WV":
+      summary.waived += 1;
+      break;
   }
   if (r.late) {
     summary.lateRaw += 1;
@@ -276,7 +278,12 @@ interface DayContextInputs {
    * policy's `approved_leave_payment`, as of the month being graded.
    */
   nullLeaveKindAs: LeavePay;
+  /** Dates with an ACTIVE HR waiver for this employee (0126). */
+  waived?: Set<string>;
 }
+
+// The waiver grading rule (pure): lib/attendance/waiver.ts. Re-exported for the waiver actions.
+export { applyWaiver, isWaivableCode } from "@/lib/attendance/waiver";
 
 /**
  * The policy decides how a no-kind approved leave is paid. Resolved once per
@@ -331,7 +338,8 @@ const firstLogDateUntil = (until: string) =>
  */
 function gradeMonth(
   emp: EmpSlice,
-  sched: AttendanceSchedule,
+  /** The schedule for each date — shift and grace settings are effective-dated, so it can change mid-month. */
+  schedFor: (ymd: string) => AttendanceSchedule,
   byDay: Map<string, FoldedDay>,
   year: number,
   month: number,
@@ -397,18 +405,20 @@ function gradeMonth(
       // (and any later CO redemption) lives in comp_off_credits.
       graded = computeDayCode(
         { inAt: null, outAt: null },
-        sched,
+        schedFor(ymd),
         { isWeeklyOff, isHoliday, leave, compOffRedeemed: isRedeemed },
         refNow,
       );
     } else {
       graded = computeDayCode(
         { inAt: folded.inAt, outAt: folded.outAt },
-        sched,
+        schedFor(ymd),
         { isWeeklyOff, isHoliday, leave, compOffRedeemed: isRedeemed },
         refNow,
       );
     }
+    // An active HR waiver on a working day (0126): WV, one payable day, no late/early mark; punches untouched.
+    if (dayCtx.waived?.has(ymd)) graded = applyWaiver(graded);
     tally(summary, graded);
     days.push({
       logDate: ymd,
@@ -481,22 +491,24 @@ export async function getEmployeeMonthStatus(
 
   // Phase-B calendar/leave/comp-off context. `listHolidayDateSet` is per
   // calendar year; a month is always within one year so `year` is correct.
-  const [holidaySet, leaves, compOff, nullLeaveKindAs] = await Promise.all([
+  const [holidaySet, leaves, compOff, nullLeaveKindAs, waivers] = await Promise.all([
     listHolidayDateSet(year),
     listEmployeeLeaveForRange([employeeId], first, last),
     getCompOffMapForRange([employeeId], first, last),
     nullLeaveKindForMonth(year, month),
+    activeWaiverDates([employeeId], first, last),
   ]);
 
-  const defaults = companyDefaults(org);
-  const sched = employeeSchedule(emp, defaults);
+  // Shift / grace settings (effective-dated) and the employee's departments.
+  const schedCtx = await loadScheduleContext({ org, employeeIds: [employeeId] });
   const byDay = foldPunches(rows, tz);
-  return gradeMonth(emp, sched, byDay, year, month, refTodayISO, {
+  return gradeMonth(emp, scheduleFor(schedCtx, emp), byDay, year, month, refTodayISO, {
     holidaySet,
     leaves,
     converted: compOff.convertedByEmp.get(employeeId) ?? new Set<string>(),
     redeemed: compOff.redeemedByEmp.get(employeeId) ?? new Set<string>(),
     nullLeaveKindAs,
+    waived: waivers.get(employeeId),
   });
 }
 
@@ -566,10 +578,12 @@ export async function getMonthDashboard(
   // query each across ALL employees (still no N+1) — the result maps are then
   // sliced per employee in the grade loop below.
   const allEmpIds = people.map((p) => p.id);
-  const [allLeaves, compOff, nullLeaveKindAs]: [LeaveRow[], CompOffRangeMaps, LeavePay] = await Promise.all([
+  const [allLeaves, compOff, nullLeaveKindAs, waivers]: [LeaveRow[], CompOffRangeMaps, LeavePay, Map<string, Set<string>>] = await Promise.all([
     listEmployeeLeaveForRange(allEmpIds, first, last),
     getCompOffMapForRange(allEmpIds, first, last),
     nullLeaveKindForMonth(year, month, filters?.strictPolicy === true),
+    // HR waivers (0126): one query for the roster. Salary generation reads strictly.
+    activeWaiverDates(allEmpIds, first, last, { strict: filters?.strictPolicy === true }),
   ]);
 
   // Group approved leaves by employee once.
@@ -583,7 +597,8 @@ export async function getMonthDashboard(
     arr.push(lv);
   }
 
-  const defaults = companyDefaults(org);
+  // Shift / grace settings and departments: one read for the whole roster. Salary generation reads strictly.
+  const schedCtx = await loadScheduleContext({ org, strict: filters?.strictPolicy === true });
 
   // Group raw punches by employee once.
   const rowsByEmp = new Map<string, { kind: "in" | "out"; loggedAt: Date }[]>();
@@ -602,14 +617,14 @@ export async function getMonthDashboard(
       continue;
     }
     const tz = p.timezone || "Asia/Kolkata";
-    const sched = employeeSchedule(p, defaults);
     const byDay = foldPunches(rowsByEmp.get(p.id) ?? [], tz);
-    const { summary } = gradeMonth(p, sched, byDay, year, month, refTodayISO, {
+    const { summary } = gradeMonth(p, scheduleFor(schedCtx, p), byDay, year, month, refTodayISO, {
       holidaySet,
       leaves: leavesByEmp.get(p.id) ?? [],
       converted: compOff.convertedByEmp.get(p.id) ?? new Set<string>(),
       redeemed: compOff.redeemedByEmp.get(p.id) ?? new Set<string>(),
       nullLeaveKindAs,
+      waived: waivers.get(p.id),
     });
     out.push({
       employeeId: p.id,

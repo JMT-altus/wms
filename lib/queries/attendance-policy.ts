@@ -1,8 +1,9 @@
 import "server-only";
-import { and, asc, desc, eq, gte, lte } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, lte, notInArray } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { attendancePolicyChanges, employees, holidays } from "@/db/schema";
 import type { MonthHoliday } from "@/lib/attendance/payroll-rules";
+import { SHIFT_KEYS } from "@/lib/attendance/shift-settings";
 import { resolvePolicyStrict } from "@/lib/attendance/policy-read";
 import {
   resolvePolicy,
@@ -49,8 +50,12 @@ export interface PolicyHistoryRow {
   createdAt: Date;
 }
 
-/** The audit trail, newest first. */
-export async function listPolicyHistory(limit = 100): Promise<PolicyHistoryRow[]> {
+/**
+ * The audit trail, newest first. Scope: "policy" = the payroll-policy settings
+ * (Attendance Policy page), "shifts" = shift and grace settings (Attendance
+ * Settings page), "all" = everything in the table.
+ */
+export async function listPolicyHistory(limit = 100, scope: "all" | "policy" | "shifts" = "all"): Promise<PolicyHistoryRow[]> {
   const rows = await db
     .select({
       id: attendancePolicyChanges.id,
@@ -64,6 +69,13 @@ export async function listPolicyHistory(limit = 100): Promise<PolicyHistoryRow[]
     })
     .from(attendancePolicyChanges)
     .leftJoin(employees, eq(attendancePolicyChanges.changedById, employees.id))
+    .where(
+      scope === "policy"
+        ? notInArray(attendancePolicyChanges.policyKey, [...SHIFT_KEYS])
+        : scope === "shifts"
+          ? inArray(attendancePolicyChanges.policyKey, [...SHIFT_KEYS])
+          : undefined,
+    )
     .orderBy(desc(attendancePolicyChanges.createdAt))
     .limit(limit);
   return rows.map((r) => ({

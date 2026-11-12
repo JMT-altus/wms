@@ -45,14 +45,32 @@ export function getColumnPrefsServer(): ColumnPrefs {
   return EMPTY;
 }
 
+/**
+ * Columns that became visible by default AFTER people had saved their own
+ * choices. A saved choice that hid one of these only because it used to be
+ * hidden by default would keep it out of sight for good, so each is shown ONCE
+ * to such a person (and placed after `after`); the next time they save their
+ * columns the key is recorded in `revealed`, and from then on their own choice
+ * — including hiding it again — stands.
+ */
+export const REVEAL_ONCE: readonly { key: string; after: string }[] = [{ key: "description", after: "name" }];
+
 function parse(raw: string | null): ColumnPrefs {
   if (!raw) return EMPTY;
   try {
-    const value = JSON.parse(raw) as ColumnPrefs;
-    return {
-      order: Array.isArray(value.order) ? value.order.filter((k) => typeof k === "string") : null,
-      hidden: Array.isArray(value.hidden) ? value.hidden.filter((k) => typeof k === "string") : null,
-    };
+    const value = JSON.parse(raw) as ColumnPrefs & { revealed?: unknown };
+    let order = Array.isArray(value.order) ? value.order.filter((k) => typeof k === "string") : null;
+    let hidden = Array.isArray(value.hidden) ? value.hidden.filter((k) => typeof k === "string") : null;
+    const revealed = Array.isArray(value.revealed) ? value.revealed.filter((k): k is string => typeof k === "string") : [];
+    for (const { key, after } of REVEAL_ONCE) {
+      if (revealed.includes(key)) continue;
+      if (hidden) hidden = hidden.filter((k) => k !== key);
+      if (order && order.includes(key) && order.includes(after)) {
+        order = order.filter((k) => k !== key);
+        order.splice(order.indexOf(after) + 1, 0, key);
+      }
+    }
+    return { order, hidden };
   } catch {
     // A hand-edited value costs the defaults, not the screen.
     return EMPTY;
@@ -61,7 +79,8 @@ function parse(raw: string | null): ColumnPrefs {
 
 export function saveColumnPrefs(prefs: { order: string[]; hidden: string[] }): void {
   try {
-    window.localStorage.setItem(KEY, JSON.stringify(prefs));
+    // Saving IS the person's choice, so every reveal-once column is settled from here on.
+    window.localStorage.setItem(KEY, JSON.stringify({ ...prefs, revealed: REVEAL_ONCE.map((r) => r.key) }));
   } catch {
     // Full quota or blocked storage — the preference is lost, the table is not.
     return;

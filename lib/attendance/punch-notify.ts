@@ -2,12 +2,8 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { attendanceLogs, employees, type NotificationKind } from "@/db/schema";
 import { notify } from "@/lib/notifications/dispatch";
-import { getOrgSettings } from "@/lib/queries/org-settings";
-import {
-  companyDefaults,
-  employeeSchedule,
-  getEmployeeMonthStatus,
-} from "@/lib/queries/attendance-status";
+import { getEmployeeMonthStatus } from "@/lib/queries/attendance-status";
+import { scheduleForEmployeeOn } from "@/lib/queries/attendance-schedule";
 import { notifyAttendance, decideCheckoutNotification } from "@/lib/attendance/notify";
 import { toMin, lateDeductionCrossed } from "@/lib/attendance/status";
 import type { AttendanceSchedule } from "@/lib/attendance/schedule";
@@ -35,11 +31,11 @@ export function clockInTz(at: Date, tz: string): string {
   }).format(at);
 }
 
-/** Resolve an employee's effective attendance schedule (org defaults + their
- *  per-employee lateAfter/earlyBefore overrides). */
-async function resolveScheduleFor(emp: ScheduleEmp): Promise<AttendanceSchedule> {
-  const org = await getOrgSettings();
-  return employeeSchedule(emp, companyDefaults(org));
+/** The employee's attendance schedule ON `logDate`: their shift and the grace in
+ *  force that day (Admin Panel → Attendance Settings), else the company times,
+ *  plus their personal lateAfter/earlyBefore overrides — the same rule grading uses. */
+async function resolveScheduleFor(emp: NotifyEmp, logDate: string): Promise<AttendanceSchedule> {
+  return scheduleForEmployeeOn(emp, logDate);
 }
 
 /** Read an employee's folded in/out "HH:mm" (in `tz`) for one log day. */
@@ -75,7 +71,7 @@ export async function notifyOnInPunch(
   inAt: string,
 ): Promise<void> {
   try {
-    const sched = await resolveScheduleFor(emp);
+    const sched = await resolveScheduleFor(emp, logDate);
     if (toMin(inAt) <= toMin(sched.lateAfter)) return; // on-time — nothing to do.
     await notifyAttendance("attendance_late", emp, { logDate, inAt });
     await maybeFireDeductionAlert(emp, logDate, inAt);
@@ -119,7 +115,7 @@ export async function notifyOnDayFinalized(emp: DayEmp, logDate: string): Promis
     const tz = emp.timezone || "Asia/Kolkata";
     const { inAt, outAt } = await readDayTimes(emp.id, logDate, tz);
     if (!inAt || !outAt) return;
-    const sched = await resolveScheduleFor(emp);
+    const sched = await resolveScheduleFor(emp, logDate);
     const kind = decideCheckoutNotification({ inAt, outAt, sched });
     if (!kind) return;
     const worked = Math.max(0, toMin(outAt) - toMin(inAt));
@@ -139,7 +135,7 @@ export async function notifyAdminLateDeduction(emp: DayEmp, logDate: string): Pr
     const tz = emp.timezone || "Asia/Kolkata";
     const { inAt } = await readDayTimes(emp.id, logDate, tz);
     if (!inAt) return;
-    const sched = await resolveScheduleFor(emp);
+    const sched = await resolveScheduleFor(emp, logDate);
     if (toMin(inAt) <= toMin(sched.lateAfter)) return; // not a late day.
     await maybeFireDeductionAlert(emp, logDate, inAt);
   } catch (err) {

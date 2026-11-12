@@ -233,7 +233,8 @@ export type StatusGroup =
   | "offwork"
   | "leave"
   | "compoff"
-  | "open";
+  | "open"
+  | "waived";
 
 export const STATUS_GROUP_LABEL: Record<StatusGroup, string> = {
   present: "Present",
@@ -245,6 +246,7 @@ export const STATUS_GROUP_LABEL: Record<StatusGroup, string> = {
   leave: "Leave",
   compoff: "Comp Off",
   open: "No check-out",
+  waived: "Waived",
 };
 
 /** Which legend group a day code belongs to. */
@@ -260,6 +262,7 @@ export const CODE_GROUP: Record<AttendanceCode, StatusGroup> = {
   LWP: "leave",
   CO: "compoff",
   incomplete: "open",
+  WV: "waived",
 };
 
 /** On a day that hasn't happened, only these are facts rather than "Absent". */

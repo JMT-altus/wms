@@ -14,7 +14,7 @@ import { PrintButton } from "./print-button";
  * (the toolbar hides in print; the sheet keeps its rules). The PDF slip is the
  * existing /salary/payslip route — same run, same figures.
  */
-export function SalaryStatement({ run, backHref }: { run: SalaryRunRow; backHref: string }) {
+export function SalaryStatement({ run, backHref, backLabel = "Back to My Salary" }: { run: SalaryRunRow; backHref: string; backLabel?: string }) {
   const b = buildBreakdown(run);
   const status = paymentStatusOf(run);
   const line = "flex items-center justify-between gap-4 py-2 text-[14px]";
@@ -22,7 +22,7 @@ export function SalaryStatement({ run, backHref }: { run: SalaryRunRow; backHref
     <article className="mx-auto w-full max-w-[920px] print:max-w-none" aria-labelledby="st-title">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3 print:hidden">
         <Link href={backHref as Route} className="inline-flex items-center gap-1.5 text-[13.5px] font-semibold hover:underline" style={{ color: NAVY }}>
-          <ArrowLeft size={15} aria-hidden /> Back to My Salary
+          <ArrowLeft size={15} aria-hidden /> {backLabel}
         </Link>
         <div className="flex items-center gap-2">
           <a

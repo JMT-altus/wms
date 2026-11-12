@@ -28,6 +28,8 @@ import {
   ArrowLeft,
   LogOut,
   type LucideIcon,
+
+  Clock3,
 } from "lucide-react";
 import { getFirebaseAuth } from "@/lib/firebase/client";
 
@@ -58,6 +60,7 @@ const NAV: ReadonlyArray<NavItem> = [
   { href: "/admin/outstanding-responsibles" as Route, label: "Outstanding Responsibles", icon: UserCog },
   { href: "/admin/holidays" as Route, label: "Holidays", icon: CalendarDays },
   { href: "/admin/attendance-policy" as Route, label: "Attendance Policy", icon: CalendarDays },
+  { href: "/admin/attendance-settings" as Route, label: "Attendance Settings", icon: Clock3 },
   { href: "/admin/leave-approvers" as Route, label: "Leave Approvers", icon: CalendarDays },
   { href: "/admin/sales-coordinators" as Route, label: "Sales Coordinators", icon: UserCog },
   { href: "/admin/salary-profiles" as Route, label: "Salary Profiles", icon: BadgeIndianRupee },

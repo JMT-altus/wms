@@ -54,7 +54,7 @@ describe("Salary Slip page", () => {
     expect(card.textContent).toMatch(/Salary slip · October 2026/);
     expect(screen.getByTestId("slip-net").textContent).toBe("₹27,300.00");
     expect(card.textContent).toMatch(/− ₹700\.00/); // PT 200 + TDS 500, as stored
-    expect(within(card).getByRole("link", { name: /View slip/ }).getAttribute("href")).toBe("/my-salary/statement/11111111-1111-4111-8111-111111111111");
+    expect(within(card).getByRole("link", { name: /View slip/ }).getAttribute("href")).toBe("/my-salary/statement/11111111-1111-4111-8111-111111111111?from=salary-slip");
     expect(within(card).getByRole("link", { name: /Download PDF/ }).getAttribute("href")).toBe("/salary/payslip/11111111-1111-4111-8111-111111111111");
     const table = screen.getByRole("table", { name: "Salary slips" });
     expect(within(table).getAllByRole("row")).toHaveLength(3); // header + two slips

@@ -1476,6 +1476,40 @@ export const attendanceLogs = pgTable(
 );
 
 /**
+ * 0126 — attendance waivers (HR → Attendance Correction). One row per waiver
+ * episode; reversing sets the reversed_* columns and never deletes. At most one
+ * ACTIVE waiver per employee and date (partial unique index). An active waiver
+ * grades the working day "WV" (1 payable day, no late/early mark); punches are
+ * never touched. See db/migrations/0126_attendance_waivers.sql.
+ */
+export const attendanceWaivers = pgTable(
+  "attendance_waivers",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    employeeId: uuid("employee_id")
+      .notNull()
+      .references(() => employees.id, { onDelete: "cascade" }),
+    logDate: date("log_date").notNull(),
+    reason: text("reason").notNull(),
+    waivedById: uuid("waived_by_id").references(() => employees.id, { onDelete: "set null" }),
+    waivedAt: timestamp("waived_at", { withTimezone: true }).notNull().defaultNow(),
+    reversedById: uuid("reversed_by_id").references(() => employees.id, { onDelete: "set null" }),
+    reversedAt: timestamp("reversed_at", { withTimezone: true }),
+    reverseReason: text("reverse_reason"),
+  },
+  (t) => [
+    uniqueIndex("attendance_waivers_one_active_uq").on(t.employeeId, t.logDate).where(sql`${t.reversedAt} IS NULL`),
+    index("attendance_waivers_employee_date_idx").on(t.employeeId, t.logDate),
+    check("attendance_waivers_reason_check", sql`length(btrim(${t.reason})) >= 3`),
+    check(
+      "attendance_waivers_reversal_check",
+      sql`(${t.reversedAt} IS NULL AND ${t.reverseReason} IS NULL AND ${t.reversedById} IS NULL) OR (${t.reversedAt} IS NOT NULL AND ${t.reversedAt} >= ${t.waivedAt} AND length(btrim(coalesce(${t.reverseReason}, ''))) >= 3)`,
+    ),
+  ],
+);
+export type AttendanceWaiver = typeof attendanceWaivers.$inferSelect;
+
+/**
  * Mobile attendance devices (0063) — device-binding anti-proxy for the native
  * app. Each physical phone generates an opaque `deviceId` (kept in the OS
  * keystore) and enrolls it to ONE employee; `deviceId` is globally unique so a

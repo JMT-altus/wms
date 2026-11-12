@@ -72,7 +72,7 @@ const day = (logDate: string, over: Partial<DayRow> = {}): DayRow => ({
 });
 const summary: MonthSummary = {
   payableDays: 28.5, present: 17, absent: 3, halfDay: 1, weeklyOff: 4, incomplete: 0, late: 3, lateRaw: 3, leftEarly: 0, lateWaived: 0,
-  holiday: 1, holidayPresent: 0, holidayHalfDay: 0, paidLeave: 0, unpaidLeave: 0, compOff: 0,
+  holiday: 1, holidayPresent: 0, holidayHalfDay: 0, paidLeave: 0, unpaidLeave: 0, compOff: 0, waived: 0,
 };
 const data = (over: Partial<MySalaryData> = {}): MySalaryData => ({
   month: "2026-10",
@@ -221,7 +221,7 @@ describe("My Salary page", () => {
 describe("Salary statement page", () => {
   const statement = async (runId: string) => {
     const { default: Page } = await import("@/app/(app)/my-salary/statement/[runId]/page");
-    return Page({ params: Promise.resolve({ runId }) });
+    return Page({ params: Promise.resolve({ runId }), searchParams: Promise.resolve({}) });
   };
   it("an employee opens their OWN run; another employee's run — or a made-up id — is a 404", async () => {
     h.runs.set(run().id, run());
@@ -239,5 +239,15 @@ describe("Salary statement page", () => {
     h.runs.set(other.id, other);
     render(await statement(other.id));
     expect(screen.getByText("Beta Two")).toBeTruthy();
+    expect(screen.getByRole("link", { name: /Back to Salary$/ }).getAttribute("href")).toBe(`/salary?month=${other.month}`);
+  });
+  it("the back link returns to where the statement was opened from (My Salary by default, Salary Slip when asked)", async () => {
+    h.runs.set(run().id, run());
+    const { default: Page } = await import("@/app/(app)/my-salary/statement/[runId]/page");
+    const { unmount } = render(await Page({ params: Promise.resolve({ runId: run().id }), searchParams: Promise.resolve({}) }));
+    expect(screen.getByRole("link", { name: /Back to My Salary/ }).getAttribute("href")).toBe(`/my-salary?month=${run().month}`);
+    unmount();
+    render(await Page({ params: Promise.resolve({ runId: run().id }), searchParams: Promise.resolve({ from: "salary-slip" }) }));
+    expect(screen.getByRole("link", { name: /Back to Salary Slip/ }).getAttribute("href")).toBe(`/salary-slip?month=${run().month}`);
   });
 });

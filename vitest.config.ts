@@ -4,6 +4,9 @@ import path from "node:path";
 export default defineConfig({
   test: {
     environment: "node",
+    // In-memory Postgres (PGlite) and large jsdom renders pass in 1–8 s alone but
+    // can exceed the 5 s default when the full suite saturates the machine.
+    testTimeout: 20_000,
     include: [
       "tests/unit/**/*.test.ts",
       "tests/unit/**/*.test.tsx",

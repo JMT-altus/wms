@@ -29,6 +29,7 @@ const GROUP_TONE: Record<StatusGroup, Tone> = {
   leave: "amber",
   compoff: "rose",
   open: "amber",
+  waived: "indigo",
 };
 const WEEKDAY = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 export const REPORT_COLUMNS = ["Date", "Day", "Status", "Check-in", "Check-out", "Work hours"] as const;

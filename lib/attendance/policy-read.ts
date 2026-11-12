@@ -1,5 +1,6 @@
 import { resolvePolicy, validatePolicyValue, type PolicyChange, type PolicyValues } from "@/lib/attendance/policy";
 import type { LeavePay } from "@/lib/leave/workflow";
+import { isShiftKey } from "@/lib/attendance/shift-settings";
 
 /**
  * Reading the attendance policy for a month, in two modes.
@@ -27,6 +28,9 @@ export class PolicyReadError extends Error {
 export function resolvePolicyStrict(changes: PolicyChange[], asOf: string): PolicyValues {
   for (const c of changes) {
     if (c.effectiveFrom > asOf) continue;
+    // Shift / grace settings share this table but are not payroll-policy keys: the
+    // schedule loader validates them (strictly, for salary) with their own rules.
+    if (isShiftKey(c.key)) continue;
     const checked = validatePolicyValue(c.key, c.value);
     if (!checked.ok) {
       throw new PolicyReadError(

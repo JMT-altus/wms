@@ -103,7 +103,7 @@ describe("buildBreakdown", () => {
 describe("attendanceCards", () => {
   const s: MonthSummary = {
     payableDays: 18.5, present: 17, absent: 3, halfDay: 1, weeklyOff: 4, incomplete: 1, late: 2, lateRaw: 3, leftEarly: 0, lateWaived: 1,
-    holiday: 1, holidayPresent: 1, holidayHalfDay: 0, paidLeave: 1, unpaidLeave: 0, compOff: 0,
+    holiday: 1, holidayPresent: 1, holidayHalfDay: 0, paidLeave: 1, unpaidLeave: 0, compOff: 0, waived: 0,
   };
   it("counts straight from the grader's summary: worked / working days, half days, absent, leave, off days, worked off days", () => {
     expect(attendanceCards(s)).toEqual({

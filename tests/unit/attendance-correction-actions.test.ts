@@ -34,6 +34,11 @@ vi.mock("@/lib/queries/attendance-status", () => ({
   },
 }));
 
+// Month-view extras (hours highlight limits, waiver history, waive permission) — their own tests cover them.
+vi.mock("@/lib/queries/attendance-schedule", () => ({ loadScheduleContext: async () => ({}), settingsOn: () => ({ hoursHighlight: null }) }));
+vi.mock("@/lib/queries/attendance-waivers", () => ({ listWaivers: async () => [] }));
+vi.mock("@/lib/auth/attendance-waivers", () => ({ canManageWaivers: async () => false }));
+
 function selectChain(): unknown {
   const chain: Record<string, unknown> = {};
   for (const k of ["from", "where", "orderBy", "limit", "for"]) chain[k] = () => chain;
@@ -85,7 +90,7 @@ vi.mock("@/lib/db", () => ({
   },
 }));
 
-import { lookupDay, previewCorrection, saveCorrection } from "@/app/(app)/hr/attendance-correction/actions";
+import { loadMonth, lookupDay, previewCorrection, saveCorrection } from "@/app/(app)/hr/attendance-correction/actions";
 
 const ME = "99999999-9999-4999-8999-999999999999";
 const EMP = "11111111-1111-4111-8111-111111111111";
@@ -141,8 +146,47 @@ describe("access", () => {
     await expect(lookupDay({ employeeId: EMP, date: "2026-04-01" })).rejects.toThrow("Forbidden");
     await expect(previewCorrection(body())).rejects.toThrow("Forbidden");
     await expect(save()).rejects.toThrow("Forbidden");
+    await expect(loadMonth({ employeeId: EMP, month: "2026-04" })).rejects.toThrow("Forbidden");
     expect(h.transactions).toBe(0);
     expect(h.selects).toEqual([]);
+  });
+});
+
+describe("loadMonth (read-only month view)", () => {
+  it("returns the employee and the graded days from the attendance query, writing nothing", async () => {
+    h.selects = [[employee()], []];
+    const res = await loadMonth({ employeeId: EMP, month: "2026-04" });
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.view.employee).toMatchObject({ id: EMP, name: "Alpha One", joinDay: "2026-01-05" });
+    expect(res.view.month).toBe("2026-04");
+    expect(res.view.today).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(res.view.days).toEqual([expect.objectContaining({ logDate: "2026-04-01", code: "P", workedMinutes: 540 })]);
+    expect(h.transactions).toBe(0);
+  });
+
+  it("refuses the signed-in person's own attendance, before reading anything", async () => {
+    const res = await loadMonth({ employeeId: ME, month: "2026-04" });
+    expect(res.ok).toBe(false);
+    expect(h.selects).toEqual([]);
+  });
+
+  it("refuses a month that hasn't started, an inactive or unknown employee, and bad input", async () => {
+    h.selects = [[employee()], []];
+    expect(await loadMonth({ employeeId: EMP, month: "2099-01" })).toEqual({ ok: false, error: "That month hasn't started yet." });
+    h.selects = [[employee({ isActive: false })], []];
+    const inactive = await loadMonth({ employeeId: EMP, month: "2026-04" });
+    expect(!inactive.ok && inactive.error).toMatch(/inactive/);
+    h.selects = [[]];
+    expect(await loadMonth({ employeeId: EMP, month: "2026-04" })).toEqual({ ok: false, error: "That employee was not found." });
+    expect((await loadMonth({ employeeId: EMP, month: "2026-13" })).ok).toBe(false);
+    expect((await loadMonth({ employeeId: "nope", month: "2026-04" })).ok).toBe(false);
+  });
+
+  it("returns a friendly message, not a raw error, when grading fails", async () => {
+    h.gradeFails = true;
+    h.selects = [[employee()], []];
+    expect(await loadMonth({ employeeId: EMP, month: "2026-04" })).toEqual({ ok: false, error: "Could not load that month. Please try again." });
   });
 });
 

@@ -69,7 +69,7 @@ const day = (logDate: string, over: Partial<DayRow> = {}): DayRow => ({
 });
 const summary: MonthSummary = {
   payableDays: 28.5, present: 17, absent: 3, halfDay: 1, weeklyOff: 4, incomplete: 1, late: 3, lateRaw: 3, leftEarly: 0, lateWaived: 0,
-  holiday: 1, holidayPresent: 0, holidayHalfDay: 0, paidLeave: 0, unpaidLeave: 0, compOff: 0,
+  holiday: 1, holidayPresent: 0, holidayHalfDay: 0, paidLeave: 0, unpaidLeave: 0, compOff: 0, waived: 0,
 };
 // Days as getEmployeeMonthStatus grades imported punches: a full day, and a day with the check-out missing
 // (the grader measures that one to 23:59).

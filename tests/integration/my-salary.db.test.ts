@@ -196,7 +196,7 @@ describe("re-runs never silently rewrite a paid month", () => {
 describe("the statement page", () => {
   const open = async (runId: string) => {
     const { default: Page } = await import("@/app/(app)/my-salary/statement/[runId]/page");
-    return Page({ params: Promise.resolve({ runId }) });
+    return Page({ params: Promise.resolve({ runId }), searchParams: Promise.resolve({}) });
   };
   it("opens for the run's own employee and for an admin; is a 404 for anyone else", async () => {
     const run = (await q.listRunsForEmployee(ids.a))[0]!;

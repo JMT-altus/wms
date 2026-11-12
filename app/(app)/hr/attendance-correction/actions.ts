@@ -8,7 +8,7 @@ import { requireUser } from "@/lib/auth/current";
 import { getModuleAccessFor } from "@/lib/auth/module-access";
 import { rateLimitOrError } from "@/lib/rate-limit";
 import { localDateString } from "@/lib/format";
-import { getEmployeeMonthStatus } from "@/lib/queries/attendance-status";
+import { getEmployeeMonthStatus, type DayRow } from "@/lib/queries/attendance-status";
 import { CORRECTION_REASON_CODES, EXPLANATION_MAX, isRealDate, reasonLabel } from "@/lib/attendance/correction/plan";
 import {
   applySet,
@@ -21,6 +21,11 @@ import {
   type SalaryRunNotice,
 } from "@/lib/attendance/correction/apply";
 import { ATTENDANCE_CORRECTION_EVENT } from "@/lib/attendance/correction/events";
+import { loadScheduleContext, settingsOn } from "@/lib/queries/attendance-schedule";
+import { listWaivers, type WaiverRecord } from "@/lib/queries/attendance-waivers";
+import { canManageWaivers } from "@/lib/auth/attendance-waivers";
+import { hoursBand, type HoursBand } from "@/lib/attendance/hours-band";
+import { DEFAULT_HOURS_HIGHLIGHT, type HoursHighlight } from "@/lib/attendance/shift-settings";
 
 /**
  * HR → Attendance Correction (power failure / biometric outage).
@@ -142,6 +147,82 @@ export async function lookupDay(raw: unknown): Promise<Result<{ day: DayView }>>
     };
   } catch (err) {
     return { ok: false, error: correctionFailureMessage(err, "lookup", "Could not load that day. Please try again.") };
+  }
+}
+
+const MonthSchema = z.object({
+  employeeId: z.string().uuid("Choose an employee."),
+  month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, "Choose a month."),
+});
+
+export interface MonthView {
+  employee: { id: string; name: string; email: string; timezone: string; joinDay: string };
+  /** YYYY-MM */
+  month: string;
+  /** Today in the employee's time zone (YYYY-MM-DD) — days after it are "upcoming". */
+  today: string;
+  /** The graded days, exactly as the attendance report and dashboard read them. */
+  days: DayRow[];
+  /**
+   * Daily hours highlight (display only): "short" (yellow) / "long" (green) per date, from the day's
+   * check-in and check-out and the limits in force on that date (Attendance Settings). Days with a
+   * missing punch are never listed.
+   */
+  bands: Record<string, HoursBand>;
+  /** The highlight limits in force on the month's last day shown (for the legend). */
+  highlight: HoursHighlight;
+  /** Every waiver episode in the month (active and reversed), oldest first. */
+  waivers: WaiverRecord[];
+  /** Whether the signed-in user may waive and reverse (HR + super-admin or the waiver grant). */
+  canWaive: boolean;
+}
+
+/**
+ * Read-only: one employee's graded month (the same `getEmployeeMonthStatus` the
+ * attendance report and dashboard use — nothing is graded here). Same HR check
+ * and self-correction refusal as the day actions. A month after the current one
+ * is refused.
+ */
+export async function loadMonth(raw: unknown): Promise<Result<{ view: MonthView }>> {
+  const me = await requireHr();
+  const p = MonthSchema.safeParse(raw);
+  if (!p.success) return { ok: false, error: firstError(p.error) };
+  try {
+    assertNotSelf(me.id, p.data.employeeId);
+    // Validates the employee (exists, active) and gives the time zone and effective join day.
+    const ctx = await loadCorrectionDay(db, p.data.employeeId, `${p.data.month}-01`, false);
+    const today = localDateString(ctx.emp.timezone);
+    if (p.data.month > today.slice(0, 7)) return { ok: false, error: "That month hasn't started yet." };
+    const [y, m] = p.data.month.split("-").map(Number) as [number, number];
+    const first = `${p.data.month}-01`;
+    const last = new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10);
+    const [status, schedCtx, waivers, canWaive] = await Promise.all([
+      getEmployeeMonthStatus(ctx.emp.id, y, m, today),
+      loadScheduleContext({ employeeIds: [ctx.emp.id] }),
+      listWaivers(ctx.emp.id, first, last),
+      canManageWaivers(me),
+    ]);
+    const limitsOn = (d: string) => settingsOn(schedCtx, d).hoursHighlight ?? DEFAULT_HOURS_HIGHLIGHT;
+    const bands: Record<string, HoursBand> = {};
+    for (const d of status.days) {
+      const b = hoursBand(d.inAt, d.outAt, limitsOn(d.logDate));
+      if (b) bands[d.logDate] = b;
+    }
+    return {
+      ok: true,
+      view: {
+        employee: { id: ctx.emp.id, name: ctx.emp.name, email: ctx.emp.email, timezone: ctx.emp.timezone, joinDay: ctx.emp.joinDay },
+        month: p.data.month,
+        today,
+        days: status.days,
+        bands,
+        highlight: limitsOn(today < last ? today : last),
+        waivers,
+        canWaive,
+      },
+    };
+  } catch (err) {
+    return { ok: false, error: correctionFailureMessage(err, "month", "Could not load that month. Please try again.") };
   }
 }
 
