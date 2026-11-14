@@ -63,11 +63,16 @@ beforeAll(async () => {
     fieldPermissionGrants: schema.fieldPermissionGrants,
     collectionMasterImports: schema.collectionMasterImports,
     collectionMasterCompanies: schema.collectionMasterCompanies,
+    // Sales orders are matched against the Product Master (tests/integration/tally-sales-orders.db.test.ts).
+    products: schema.products,
+    lookupItems: schema.lookupItems,
+    productSkus: schema.productSkus,
   });
   pg = made.pg;
   h.db = made.db;
   await pg.exec("create sequence if not exists customer_masters_code_seq start 1");
   await pg.exec(readFileSync(resolve(__dirname, "../../db/migrations/0122_tally_import.sql"), "utf8"));
+  await pg.exec(readFileSync(resolve(__dirname, "../../db/migrations/0127_sales_order_details.sql"), "utf8"));
   const emp = async (name: string) => (await pg.query<{ id: string }>(`insert into employees (name, email, role, is_admin) values ($1, $2, 'both', true) returning id`, [name, `${name}@example.test`])).rows[0]!.id;
   grantee = await emp("granted");
   other = await emp("other");
@@ -108,7 +113,7 @@ describe("permissions", () => {
   });
 
   it("a non-admin holding a stray grant is refused, and one person can't write into another's batch", async () => {
-    const started = await actions.startTallyImport({ category: "sales-orders", fileName: "a.csv", fileHash: hash(), sheetName: null, headers: VOUCHER, sample: [], mapping: M, totalRows: 1, asOfDate: null, direction: null, includeAttention: false, confirm: true });
+    const started = await actions.startTallyImport({ category: "sales-invoices", fileName: "a.csv", fileHash: hash(), sheetName: null, headers: VOUCHER, sample: [], mapping: M, totalRows: 1, asOfDate: null, direction: null, includeAttention: false, confirm: true });
     expect(started.ok).toBe(true);
     await pg.query(`insert into field_permission_grants (field_key, subject_type, subject_id, allowed) values ('tally.import', 'employee', $1, true)`, [other]);
     h.me = { id: other, email: "other@example.test", name: "other", isActive: true, isAdmin: true, departmentId: null };
@@ -120,7 +125,7 @@ describe("permissions", () => {
   });
 
   it("needs an explicit confirmation", async () => {
-    const res = await actions.startTallyImport({ category: "sales-orders", fileName: "a.csv", fileHash: hash(), sheetName: null, headers: VOUCHER, sample: [], mapping: M, totalRows: 1, asOfDate: null, direction: null, includeAttention: false });
+    const res = await actions.startTallyImport({ category: "sales-invoices", fileName: "a.csv", fileHash: hash(), sheetName: null, headers: VOUCHER, sample: [], mapping: M, totalRows: 1, asOfDate: null, direction: null, includeAttention: false });
     expect(res.ok).toBe(false);
   });
 });
@@ -149,7 +154,8 @@ describe("masters", () => {
 });
 
 describe("vouchers", () => {
-  it.each(["sales-orders", "sales-invoices", "purchase-invoices", "credit-notes", "debit-notes", "customer-receipts", "vendor-payments"] as TallyCategoryKey[])("%s: imports, traceable to its file and row, and a repeat import creates nothing", async (c) => {
+  // Sales orders have their own layout and their own file: tests/integration/tally-sales-orders.db.test.ts.
+  it.each(["sales-invoices", "purchase-invoices", "credit-notes", "debit-notes", "customer-receipts", "vendor-payments"] as TallyCategoryKey[])("%s: imports, traceable to its file and row, and a repeat import creates nothing", async (c) => {
     const data = rows([`${c}-1`, "15-Apr-25", "Alpha Traders", "1,000.50"]);
     const { batch } = await run(c, data, M);
     expect(batch).toMatchObject({ status: "completed", importedRows: 1, financialYears: ["2025-26"], isHistorical: true });

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { Route } from "next";
 import type { ListParams } from "@/lib/tally/list-params";
 import type { BatchOption, DocumentPage, DocumentSort } from "@/lib/queries/tally-ledger";
 import { DOCUMENT_SECTIONS, FORMS_ROUTES, documentHref, vendorHref } from "@/lib/tally/sections";
@@ -13,7 +14,7 @@ import { Card, Dash, EmptyState, FilterBar, Money, Pagination, ResultCount, Sort
  * where the type carries them. Amounts are the stored paise — nothing is
  * computed except the filtered total, which the database sums.
  */
-export function DocumentList({ type, page, params, financialYears, batches }: { type: TallyDocumentType; page: DocumentPage; params: ListParams<DocumentSort>; financialYears: string[]; batches: BatchOption[] }) {
+export function DocumentList({ type, page, params, financialYears, batches, importHref = null }: { type: TallyDocumentType; page: DocumentPage; params: ListParams<DocumentSort>; financialYears: string[]; batches: BatchOption[]; /** Sales Orders: its own import screen, for someone who can open it. */ importHref?: Route | null }) {
   const def = DOCUMENT_SECTIONS[type];
   const base = def.href;
   const filtered = Boolean(params.q || params.fy || params.from || params.to || params.batch);
@@ -36,8 +37,14 @@ export function DocumentList({ type, page, params, financialYears, batches }: { 
       {page.total === 0 ? (
         <EmptyState
           title={filtered ? `No ${def.label.toLowerCase()} match these filters.` : `No ${def.label.toLowerCase()} yet.`}
-          body={filtered ? "Clear the filters to see every record in this ledger." : `${def.label} arrive through Tally Data Import → ${def.label}. Each imported voucher then appears here, linked to its party and its batch.`}
-          cta={{ href: FORMS_ROUTES.tallyImport, label: "Open Tally Data Import" }}
+          body={
+            filtered
+              ? "Clear the filters to see every record in this ledger."
+              : type === "sales-orders"
+                ? "Sales orders arrive from Tally's Sales Order Excel format, through Import Sales Orders. Each order then appears here with its product lines, linked to its customer and its import."
+                : `${def.label} arrive through Tally Data Import → ${def.label}. Each imported voucher then appears here, linked to its party and its batch.`
+          }
+          cta={type === "sales-orders" ? (importHref ? { href: importHref, label: "Import Sales Orders" } : undefined) : { href: FORMS_ROUTES.tallyImport, label: "Open Tally Data Import" }}
         />
       ) : (
         <div className="overflow-x-auto">

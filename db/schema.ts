@@ -20,6 +20,7 @@ import {
   smallint,
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
+import type { SalesOrderDetails, SoAllocation, SoGst, SoHsn } from "@/lib/tally/sales-order-catalogue";
 import { sql } from "drizzle-orm";
 import {
   TASK_STATUSES,
@@ -2281,6 +2282,52 @@ export const tallyImportRows = pgTable(
 );
 
 /** The last confirmed mapping per category, as { fieldKey: Tally heading }. */
+/**
+ * 0128 — Sales Order field settings (Admin & Master Setup → Sales Order Fields). One row per field with a setting
+ * or per custom field; a field with no row keeps the Tally matrix's rule (lib/tally/sales-order-catalogue). Never
+ * deleted (trigger): retired instead. The effective configuration is lib/tally/sales-order-config.
+ *
+ * tally_import_batches.field_config_version (also 0128) is deliberately NOT declared on tallyImportBatches: it is
+ * read and written only through guarded SQL (lib/queries/sales-order-fields), so every Tally import keeps working on
+ * a database where 0128 isn't applied yet.
+ */
+export const salesOrderFieldSettings = pgTable("sales_order_field_settings", {
+  fieldKey: text("field_key").primaryKey(),
+  isCustom: boolean("is_custom").notNull().default(false),
+  scope: text("scope").notNull(),
+  label: text("label"),
+  section: text("section"),
+  displayOrder: integer("display_order"),
+  requirement: text("requirement"),
+  condition: jsonb("condition"),
+  fieldType: text("field_type"),
+  options: text("options").array(),
+  inForm: boolean("in_form").notNull().default(true),
+  inImport: boolean("in_import").notNull().default(true),
+  onOrderPage: boolean("on_order_page").notNull().default(true),
+  status: text("status").notNull().default("active"),
+  rowVersion: integer("row_version").notNull().default(1),
+  createdById: uuid("created_by_id").references(() => employees.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedById: uuid("updated_by_id").references(() => employees.id, { onDelete: "set null" }),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** 0128 — every change to a Sales Order field setting (append-only). `version` is the configuration version. */
+export const salesOrderFieldHistory = pgTable(
+  "sales_order_field_history",
+  {
+    version: bigint("version", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
+    fieldKey: text("field_key").notNull().references(() => salesOrderFieldSettings.fieldKey, { onDelete: "restrict" }),
+    action: text("action").notNull(),
+    before: jsonb("before"),
+    after: jsonb("after").notNull(),
+    changedById: uuid("changed_by_id").references(() => employees.id, { onDelete: "set null" }),
+    changedAt: timestamp("changed_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("sales_order_field_history_field_idx").on(t.fieldKey, t.version)],
+);
+
 export const tallyColumnMappings = pgTable("tally_column_mappings", {
   category: text("category").primaryKey(),
   mapping: jsonb("mapping").notNull().$type<Record<string, string>>().default({}),
@@ -2339,7 +2386,13 @@ export const tallyDocuments = pgTable(
     adjustmentType: text("adjustment_type"),
     dueDate: date("due_date"),
     narration: text("narration"),
-    lines: jsonb("lines").notNull().$type<{ item: string | null; quantity: number | null; ratePaise: number | null; amountPaise: number | null }[]>().default([]),
+    /** Item lines. The optional fields are written by the Sales Orders import (product match, unit, description, due date, source row). */
+    lines: jsonb("lines")
+      .notNull()
+      .$type<{ item: string | null; quantity: number | null; ratePaise: number | null; amountPaise: number | null; uom?: string | null; description?: string | null; dueDate?: string | null; rowNo?: number; productId?: string | null; skuId?: string | null; productLabel?: string | null; discPct?: number | null; discountPaise?: number | null; mrpPaise?: number | null; allocations?: SoAllocation[]; gst?: SoGst; hsn?: SoHsn }[]>()
+      .default([]),
+    /** 0127 — Sales Orders: the order-level fields of Tally's Sales Order matrix (lib/tally/sales-order-catalogue). '{}' for other document types. */
+    details: jsonb("details").notNull().$type<SalesOrderDetails | Record<string, never>>().default({}),
     importBatchId: uuid("import_batch_id").notNull().references(() => tallyImportBatches.id, { onDelete: "restrict" }),
     sourceRow: integer("source_row").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -2353,6 +2406,33 @@ export const tallyDocuments = pgTable(
     index("tally_documents_batch_idx").on(t.importBatchId),
     check("tally_documents_total_check", sql`${t.totalPaise} > 0`),
   ],
+);
+
+/**
+ * 0129 — Sales Order pre-closures: the matrix's "Update" fields (Item Allocations - Pre-Close Quantity, Reason for
+ * Pre-Close, Pre-Close Date), one row per pre-closure of one delivery of a stored order. Append-only and checked
+ * against the stored order by triggers (see the migration); the order itself is never changed.
+ */
+export const salesOrderPreclosures = pgTable(
+  "sales_order_preclosures",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    documentId: uuid("document_id").notNull().references(() => tallyDocuments.id, { onDelete: "restrict" }),
+    /** Counted from 1, as the order page shows them. */
+    lineNo: integer("line_no").notNull(),
+    allocationNo: integer("allocation_no").notNull(),
+    item: text("item").notNull(),
+    dueDate: date("due_date"),
+    orderedQuantity: numeric("ordered_quantity", { precision: 20, scale: 6 }).notNull(),
+    quantity: numeric("quantity", { precision: 20, scale: 6 }).notNull(),
+    reason: text("reason"),
+    precloseDate: date("preclose_date").notNull(),
+    requestId: uuid("request_id").notNull(),
+    recordedById: uuid("recorded_by_id").references(() => employees.id, { onDelete: "set null" }),
+    recordedByName: text("recorded_by_name").notNull(),
+    recordedAt: timestamp("recorded_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("sales_order_preclosures_request_uq").on(t.requestId), index("sales_order_preclosures_delivery_idx").on(t.documentId, t.lineNo, t.allocationNo, t.recordedAt)],
 );
 
 /** Balances at a date. Never a transaction, and never added to tally_documents totals. */

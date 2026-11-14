@@ -1,5 +1,8 @@
 import { TALLY_CATEGORIES, TALLY_LIMITS, type TallyCategoryKey, type TallyDocumentType } from "./categories";
 import type { TallyMapping } from "./mapping";
+import { planSalesOrders } from "./sales-orders";
+import type { SalesOrderDetails, SoAllocation, SoGst, SoHsn } from "./sales-order-catalogue";
+import type { SoCatalogue } from "./sales-order-config";
 import { documentKey, financialYear, parseTallyAmount, parseTallyDateValue, parseTallyNumber, partyKey } from "./values";
 
 /**
@@ -24,6 +27,12 @@ export type TallyRowState = "valid" | "attention" | "duplicate" | "invalid";
 export interface RawRow {
   rowNo: number;
   cells: string[];
+  /**
+   * Sales Orders: other vouchers' rows sat between this row and the one sent
+   * before it. Set by `chunkRows` when it brings the blocks of one voucher
+   * number together, so a repeat of a voucher is never read as more lines of it.
+   */
+  breakBefore?: boolean;
 }
 
 export interface PlannedRow {
@@ -32,6 +41,12 @@ export interface PlannedRow {
   messages: string[];
   /** The record this row belongs to; rows sharing a key are lines of one document. */
   recordKey: string | null;
+  /** Sales Orders: the row carries a product line (set whatever its state). */
+  hasLine?: boolean;
+  /** Sales Orders: the first row of the voucher block this row belongs to. */
+  block?: number;
+  /** Rows that must reach the server together (every block of one voucher number). Defaults to `recordKey`. */
+  groupKey?: string;
 }
 
 export interface TallyLine {
@@ -39,6 +54,37 @@ export interface TallyLine {
   quantity: number | null;
   ratePaise: number | null;
   amountPaise: number | null;
+  /** Sales Orders only (lib/tally/sales-orders.ts); absent on the other categories. */
+  uom?: string | null;
+  description?: string | null;
+  dueDate?: string | null;
+  /** The file row this line came from. */
+  rowNo?: number;
+  /** Filled by the server's product matching before the record is written. */
+  productId?: string | null;
+  skuId?: string | null;
+  productLabel?: string | null;
+  /** Sales Orders: the rest of the line, per the field catalogue (lib/tally/sales-order-catalogue). */
+  discPct?: number | null;
+  discountPaise?: number | null;
+  mrpPaise?: number | null;
+  allocations?: SoAllocation[];
+  gst?: SoGst;
+  hsn?: SoHsn;
+  /** Custom product-line fields (Admin & Master Setup → Sales Order Fields), by key. */
+  custom?: Record<string, string>;
+}
+
+/** A sales-order ledger line that is not the customer's: a sales, tax or round-off ledger with no item on its row. */
+export interface LedgerLine {
+  name: string;
+  key: string;
+  /** What the line adds to the order total: positive for a credit (sales, tax), negative for a debit (a discount). */
+  signedPaise: number;
+  side: "dr" | "cr" | null;
+  /** The item lines listed under this ledger on the rows below it. When they add up to the ledger, it is their sales ledger and is not counted twice. */
+  itemsPaise: number;
+  rowNo: number;
 }
 
 export interface PartyRecord {
@@ -79,6 +125,11 @@ export interface DocumentRecord {
   dueDate: string | null;
   narration: string | null;
   lines: TallyLine[];
+  /** Sales Orders: the voucher type as written, and the non-customer ledger lines (for the total check and the server's customer check). */
+  voucherType?: string | null;
+  ledgers?: LedgerLine[];
+  /** Sales Orders: every catalogue field that isn't one of the document's own columns (stored in tally_documents.details). */
+  details?: SalesOrderDetails;
 }
 
 export interface OutstandingRecord {
@@ -106,6 +157,8 @@ export interface PlanOptions {
   direction?: TallyDirection | null;
   /** yyyy-mm-dd "today" in the business calendar, for future-date warnings. */
   today: string;
+  /** Sales Orders: the effective field configuration (lib/tally/sales-order-config); the Tally matrix when absent. */
+  soCatalogue?: SoCatalogue;
 }
 
 export interface TallyPlan {
@@ -113,11 +166,11 @@ export interface TallyPlan {
   records: TallyRecord[];
 }
 
-const EARLIEST = "2000-01-01";
+export const EARLIEST = "2000-01-01";
 /** Taxable + tax may differ from the total by Tally's own rounding. */
-const ROUND_OFF_PAISE = 100;
+export const ROUND_OFF_PAISE = 100;
 
-const looksLikeTotalRow = (s: string) => /^(grand\s*total|total|sub\s*total|closing balance|opening balance|carried over|brought forward)$/i.test(s.trim());
+export const looksLikeTotalRow = (s: string) => /^(grand\s*total|total|sub\s*total|closing balance|opening balance|carried over|brought forward)$/i.test(s.trim());
 
 export function planRows(category: TallyCategoryKey, rows: readonly RawRow[], mapping: TallyMapping, opts: PlanOptions): TallyPlan {
   const def = TALLY_CATEGORIES[category];
@@ -127,12 +180,14 @@ export function planRows(category: TallyCategoryKey, rows: readonly RawRow[], ma
   };
   if (def.kind === "party") return planParties(category, rows, cell);
   if (def.kind === "outstanding") return planOutstanding(rows, cell, opts);
+  // Sales orders follow Tally's own voucher layout (continuation rows, Dr/Cr ledger lines, product lines).
+  if (category === "sales-orders") return planSalesOrders(rows, cell, opts);
   return planDocuments(category as TallyDocumentType, rows, cell, opts);
 }
 
-type Cell = (r: RawRow, key: string) => string;
+export type Cell = (r: RawRow, key: string) => string;
 
-const blank = (r: RawRow) => r.cells.every((c) => !c.trim());
+export const blank = (r: RawRow) => r.cells.every((c) => !c.trim());
 
 /* ── masters ─────────────────────────────────────────────────────────────── */
 
@@ -196,7 +251,7 @@ export function documentIdentity(type: TallyDocumentType, fy: string, documentNo
   return type === "purchase-invoices" || type === "debit-notes" || type === "vendor-payments" ? `${base}|${party}` : base;
 }
 
-function amountOf(r: RawRow, cell: Cell, key: string, label: string, errors: string[]): number | null {
+export function amountOf(r: RawRow, cell: Cell, key: string, label: string, errors: string[]): number | null {
   const raw = cell(r, key);
   if (!raw) return null;
   const a = parseTallyAmount(raw);
@@ -397,13 +452,20 @@ export function summarize(rows: readonly { state: TallyRowState }[], includeAtte
  * is planned on its own there, so a split document would look like two.
  */
 export function chunkRows(rows: readonly RawRow[], planned: readonly PlannedRow[], maxRows: number = TALLY_LIMITS.chunkRows, maxBytes: number = TALLY_LIMITS.chunkBytes): RawRow[][] {
-  const keyOf = new Map(planned.map((p) => [p.rowNo, p.recordKey]));
+  const keyOf = new Map(planned.map((p) => [p.rowNo, p.groupKey ?? p.recordKey]));
+  // Where each row sits among the planned rows, to see when a group's rows were not next to each other in the file.
+  const position = new Map(planned.map((p, i) => [p.rowNo, i]));
+  const marksBlocks = new Set(planned.filter((p) => p.groupKey).map((p) => p.rowNo));
   const groups = new Map<string, RawRow[]>();
   for (const r of rows) {
     const k = keyOf.get(r.rowNo) ?? `row:${r.rowNo}`;
     const g = groups.get(k);
-    if (g) g.push(r);
-    else groups.set(k, [r]);
+    if (!g) {
+      groups.set(k, [r]);
+      continue;
+    }
+    const apart = marksBlocks.has(r.rowNo) && position.get(r.rowNo) !== (position.get(g[g.length - 1]!.rowNo) ?? -2) + 1;
+    g.push(apart ? { ...r, breakBefore: true } : r);
   }
   const chunks: RawRow[][] = [];
   let cur: RawRow[] = [];

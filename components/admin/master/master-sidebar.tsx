@@ -5,7 +5,7 @@ import { PoweredByAltus } from "@/components/layout/powered-by";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import type { Route } from "next";
-import {
+import { ListChecks,
   Boxes,
   CalendarCheck2,
   Library,
@@ -78,6 +78,12 @@ const NAV: ReadonlyArray<NavItem> = [
     label: "Data Ingestion",
     hint: "Sheets / Tally mapping",
     icon: DatabaseZap,
+  },
+  {
+    href: "/master-setup/sales-order-fields" as Route,
+    label: "Sales Order Fields",
+    hint: "Mandatory, optional & custom fields",
+    icon: ListChecks,
   },
   {
     href: "/master-setup/collection-weekly-upload" as Route,

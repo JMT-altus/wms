@@ -348,6 +348,10 @@ describe("closures are written in exactly one place: the confirmed Bulk Upload",
         "lib/collections/load.ts",
         "tests/integration/collection-closures-migration.db.test.ts",
         "tests/integration/collection-logs-movement.db.test.ts",
+        // Dashboard counts = Tracker counts: installs the closures table and moves companies through the real upload.
+        "tests/integration/collection-dashboard-tracker-counts.db.test.ts",
+        // Dashboard follows the Tracker's uploads and assignments: same storage, same real upload.
+        "tests/integration/collection-dashboard-sync.db.test.ts",
         // Tests that mock the loader's or the import's closure modules.
         "tests/unit/collection-balances-actions.test.ts",
         "tests/unit/collection-source.test.ts",

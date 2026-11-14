@@ -27,13 +27,17 @@ export function columnFit(field: TallyField, samples: readonly string[]): number
 
 const MIN_FIT = 0.8;
 
-export function suggestMapping(category: TallyCategoryKey, headers: readonly string[], sampleRows: readonly string[][], saved?: Record<string, string> | null): TallyMapping {
+/**
+ * `fields` replaces the category's own list: the Sales Order import passes the effective configuration's fields
+ * (lib/tally/categories → salesOrderMappingFields), so a configured or custom field is mapped like any other.
+ */
+export function suggestMapping(category: TallyCategoryKey, headers: readonly string[], sampleRows: readonly string[][], saved?: Record<string, string> | null, fieldList?: readonly TallyField[]): TallyMapping {
   const used = new Set<number>();
   const out: TallyMapping = {};
   const heads = headers.map(norm);
   const samplesOf = (i: number) => sampleRows.map((r) => r[i] ?? "");
   const fits = (field: TallyField, i: number) => columnFit(field, samplesOf(i)) >= MIN_FIT;
-  const fields = TALLY_CATEGORIES[category].fields;
+  const fields = fieldList ?? TALLY_CATEGORIES[category].fields;
   // A saved mapping (by heading text) wins, as long as the column is here and still fits.
   for (const field of fields) {
     const want = saved?.[field.key];
@@ -71,31 +75,37 @@ export interface MappingProblems {
   duplicated: string[];
   /** Fields whose mapped column mostly can't be read as that type. */
   incompatible: { field: TallyField; column: string; fit: number }[];
+  /** Headings of mapped columns that the file has more than once: which column is meant can't be known. */
+  duplicateHeadings: string[];
 }
 
-export function checkMapping(category: TallyCategoryKey, mapping: TallyMapping, headers: readonly string[], sampleRows: readonly string[][]): MappingProblems {
-  const missingRequired = requiredFields(category).filter((x) => mapping[x.key] === undefined);
+export function checkMapping(category: TallyCategoryKey, mapping: TallyMapping, headers: readonly string[], sampleRows: readonly string[][], fieldList?: readonly TallyField[]): MappingProblems {
+  const fields = fieldList ?? TALLY_CATEGORIES[category].fields;
+  const missingRequired = (fieldList ? fields.filter((x) => x.required) : requiredFields(category)).filter((x) => mapping[x.key] === undefined);
   const counts = new Map<number, number>();
   for (const i of Object.values(mapping)) counts.set(i, (counts.get(i) ?? 0) + 1);
   const duplicated = [...counts].filter(([, n]) => n > 1).map(([i]) => headers[i] ?? `Column ${i + 1}`);
-  const incompatible = TALLY_CATEGORIES[category].fields.flatMap((field) => {
+  const incompatible = fields.flatMap((field) => {
     const i = mapping[field.key];
     if (i === undefined) return [];
     const fit = columnFit(field, sampleRows.map((r) => r[i] ?? ""));
     return fit < MIN_FIT ? [{ field, column: headers[i] ?? `Column ${i + 1}`, fit }] : [];
   });
-  return { missingRequired, duplicated, incompatible };
+  const seen = new Map<string, number>();
+  for (const h of headers) seen.set(norm(h), (seen.get(norm(h)) ?? 0) + 1);
+  const duplicateHeadings = [...new Set(Object.values(mapping).map((i) => headers[i]).filter((h): h is string => !!h && (seen.get(norm(h)) ?? 0) > 1).map((h) => h.trim()))];
+  return { missingRequired, duplicated, incompatible, duplicateHeadings };
 }
 
-export const mappingIsUsable = (p: MappingProblems) => p.missingRequired.length === 0 && p.duplicated.length === 0 && p.incompatible.length === 0;
+export const mappingIsUsable = (p: MappingProblems) => p.missingRequired.length === 0 && p.duplicated.length === 0 && p.incompatible.length === 0 && p.duplicateHeadings.length === 0;
 
 /**
  * The header row of a sheet. Tally prints the company, report title and period
  * above the table, so the header is the first row (of the first 30) with the
  * most recognisable headings, not simply row one.
  */
-export function findHeaderRow(category: TallyCategoryKey, grid: readonly string[][]): number {
-  const known = new Set(TALLY_CATEGORIES[category].fields.flatMap((x) => x.synonyms));
+export function findHeaderRow(category: TallyCategoryKey, grid: readonly string[][], fieldList?: readonly TallyField[]): number {
+  const known = new Set((fieldList ?? TALLY_CATEGORIES[category].fields).flatMap((x) => x.synonyms));
   let best = 0;
   let bestScore = 0;
   for (let i = 0; i < Math.min(30, grid.length); i++) {

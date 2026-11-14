@@ -3,8 +3,12 @@ import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
   collectionMasterCompanies,
+  customerAddresses,
   customerMasters,
   employees,
+  lookupItems,
+  productSkus,
+  products,
   tallyColumnMappings,
   tallyDocuments,
   tallyImportBatches,
@@ -15,9 +19,11 @@ import {
 import { isMissingTable } from "@/lib/queries/collection-master";
 import { TALLY_CATEGORIES, type TallyCategoryKey } from "@/lib/tally/categories";
 import { resolveRows, type RecordResolution, type TallyImportRowStatus, importDecisions } from "@/lib/tally/resolve";
-import { planRows, type DocumentRecord, type OutstandingRecord, type PartyRecord, type PlanOptions, type RawRow, type TallyRecord } from "@/lib/tally/plan";
+import { planRows, type DocumentRecord, type OutstandingRecord, type PartyRecord, type PlanOptions, type PlannedRow, type RawRow, type TallyRecord } from "@/lib/tally/plan";
 import type { TallyMapping } from "@/lib/tally/mapping";
 import { documentKey, financialYear, partyKey } from "@/lib/tally/values";
+import { MatchCollector, NO_LINKS, buildSalesOrderMasters, customerLabel, resolveSalesOrder, type ExistingSalesOrder, type SalesOrderLinks, type SalesOrderMatches } from "@/lib/tally/sales-order-match";
+import { loadSalesOrderCatalogue } from "@/lib/queries/sales-order-fields";
 
 /**
  * The database side of Tally Data Import (migration 0122). Nothing here authorizes:
@@ -55,10 +61,11 @@ function findParty(ix: PartyIndex, gstin: string | null, key: string): { id: str
 }
 
 /** What the database says about each record: existing, linked, or needing a look. */
-export async function resolveRecords(q: Q, category: TallyCategoryKey, records: readonly TallyRecord[], direction: "receivable" | "payable" | null): Promise<Map<string, RecordResolution>> {
+export async function resolveRecords(q: Q, category: TallyCategoryKey, records: readonly TallyRecord[], direction: "receivable" | "payable" | null, links: SalesOrderLinks = NO_LINKS, collect: MatchCollector = new MatchCollector()): Promise<Map<string, RecordResolution>> {
   const def = TALLY_CATEGORIES[category];
   const out = new Map<string, RecordResolution>();
   if (records.length === 0) return out;
+  if (category === "sales-orders") return resolveSalesOrders(q, records as DocumentRecord[], links, collect);
   const side = def.party === "either" ? (direction === "payable" ? "vendor" : "customer") : def.party;
   const ix = await partyIndex(q, side);
   const label = side === "customer" ? "Customer Master" : "Vendor Master";
@@ -137,14 +144,127 @@ export async function resolveRecords(q: Q, category: TallyCategoryKey, records: 
   return out;
 }
 
+/* ── sales orders: the customer and product masters ──────────────────────── */
+
+/** The Admin & Master Setup → Libraries list a Sales Order's ledgers are checked against (the WMS has no ledger master). */
+export const TALLY_LEDGER_LIST = "tally_ledger";
+
+/** The masters a sales order is matched against. Read-only: an import never adds to or changes them. */
+async function salesOrderMasters(q: Q) {
+  const [customers, productRows, skus, ledgers] = await Promise.all([
+    q.select({ id: customerMasters.id, name: customerMasters.name, code: customerMasters.code, gstin: customerMasters.gstin }).from(customerMasters),
+    q.select({ id: products.id, name: products.name, code: products.code, tallyName: products.tallyName, isActive: products.isActive }).from(products),
+    q.select({ id: productSkus.id, productId: productSkus.productId, skuCode: productSkus.skuCode, variantLabel: productSkus.variantLabel, uom: productSkus.uom, tallyItemName: productSkus.tallyItemName, isActive: productSkus.isActive }).from(productSkus),
+    // lookup_items exists since 0081. (Not caught: inside the import's transaction a failed read aborts it anyway.)
+    q.select({ label: lookupItems.label }).from(lookupItems).where(and(eq(lookupItems.listKey, TALLY_LEDGER_LIST), eq(lookupItems.isActive, true))),
+  ]);
+  return buildSalesOrderMasters(customers, productRows, skus, ledgers.map((l) => l.label));
+}
+
+/**
+ * Every sales order against the Customer Master, the Product Master and the
+ * orders already stored. An order whose customer or any item can't be matched
+ * is held back; so is one whose voucher number is already here with different
+ * details. `links` are a person's own matches: each id is looked up in the
+ * masters here, and one that isn't found is simply not a match.
+ */
+async function resolveSalesOrders(q: Q, docs: readonly DocumentRecord[], links: SalesOrderLinks, collect: MatchCollector): Promise<Map<string, RecordResolution>> {
+  const out = new Map<string, RecordResolution>();
+  const masters = await salesOrderMasters(q);
+  const stored = await q
+    .select({ identity: tallyDocuments.identity, id: tallyDocuments.id, batch: tallyDocuments.importBatchId, totalPaise: tallyDocuments.totalPaise, documentDate: tallyDocuments.documentDate, partyKey: tallyDocuments.partyKey, lines: tallyDocuments.lines, details: tallyDocuments.details })
+    .from(tallyDocuments)
+    .where(inArray(tallyDocuments.identity, docs.map((d) => d.key)));
+  const existing = new Map<string, ExistingSalesOrder>(stored.map((e) => [e.identity, e]));
+  for (const rec of docs) out.set(rec.key, resolveSalesOrder(rec, masters, links, existing.get(rec.key), collect));
+  return out;
+}
+
+export interface LinkOption {
+  value: string;
+  label: string;
+  /** The manual-entry form: the name an import reads for this record, and its unit. */
+  name?: string;
+  unit?: string | null;
+}
+
+/** What a person can match an unrecognised name to: every customer, every active item (variants and products), and every listed ledger. */
+export async function salesOrderLinkOptions(): Promise<{ customers: LinkOption[]; products: LinkOption[]; ledgers: LinkOption[] }> {
+  try {
+    const m = await salesOrderMasters(db);
+    const byLabel = (a: LinkOption, b: LinkOption) => a.label.localeCompare(b.label);
+    return {
+      customers: [...m.customerById.values()].map((c) => ({ value: c.id, label: customerLabel(c), name: c.name })).sort(byLabel),
+      products: [...m.productByRef.values()].map((t) => ({ value: t.ref, label: t.ref.startsWith("sku:") ? t.label : `${t.label} — whole product`, name: t.importName, unit: t.uom })).sort(byLabel),
+      ledgers: [...m.ledgerByKey.values()].map((l) => ({ value: l, label: l })).sort(byLabel),
+    };
+  } catch (err) {
+    if (isMissingTable(err)) return { customers: [], products: [], ledgers: [] };
+    throw err;
+  }
+}
+
+/** The buyer details the manual-entry form starts from for a chosen customer: the Customer Master's own, to check and edit. Read-only. */
+export async function salesOrderCustomerDetails(id: string) {
+  const [c] = await db
+    .select({ name: customerMasters.name, gstin: customerMasters.gstin, state: customerMasters.state, country: customerMasters.country, registrationType: customerMasters.gstRegistrationType, billingAddress: customerMasters.billingAddress })
+    .from(customerMasters)
+    .where(eq(customerMasters.id, id))
+    .limit(1);
+  if (!c) return null;
+  // The KYC address book (0088) when there is one; the master's own fields otherwise. Read-only, outside any
+  // transaction, so a missing table can simply mean "no address book".
+  const [address] = await db
+    .select()
+    .from(customerAddresses)
+    .where(and(eq(customerAddresses.customerMasterId, id), eq(customerAddresses.addressType, "billing")))
+    .orderBy(customerAddresses.sortOrder)
+    .limit(1)
+    .catch((err: unknown) => {
+      if (isMissingTable(err)) return [];
+      throw err;
+    });
+  const lines = address ? [address.line1, address.line2, address.line3, address.line4, address.city].filter((l): l is string => !!l?.trim()).join(", ") : null;
+  return {
+    name: c.name,
+    gstin: c.gstin,
+    state: address?.state ?? c.state,
+    country: address?.country ?? c.country,
+    registrationType: c.registrationType,
+    address: lines || c.billingAddress,
+    pincode: address?.pinCode ?? null,
+  };
+}
+
 /** Validation: the file's rows after the database has had its say. Read-only. */
-export async function checkRows(category: TallyCategoryKey, rows: readonly RawRow[], mapping: TallyMapping, opts: PlanOptions) {
-  const plan = planRows(category, rows, mapping, opts);
-  const resolutions = await resolveRecords(db, category, plan.records, opts.direction ?? null);
-  return resolveRows(plan, resolutions);
+/**
+ * Validation: the file's rows after the database has had its say. Read-only. Sales Orders are planned with the
+ * stored field configuration, whose version is returned so the import can refuse if it changes in between.
+ */
+export async function checkRows(category: TallyCategoryKey, rows: readonly RawRow[], mapping: TallyMapping, opts: PlanOptions, links: SalesOrderLinks = NO_LINKS): Promise<{ rows: PlannedRow[]; matches: SalesOrderMatches | null; fieldConfigVersion: number | null }> {
+  const config = category === "sales-orders" ? await loadSalesOrderCatalogue(db) : null;
+  const plan = planRows(category, rows, mapping, config ? { ...opts, soCatalogue: config.catalogue } : opts);
+  const collect = new MatchCollector();
+  const resolutions = await resolveRecords(db, category, plan.records, opts.direction ?? null, links, collect);
+  return { rows: resolveRows(plan, resolutions), matches: category === "sales-orders" ? collect.result() : null, fieldConfigVersion: config?.catalogue.version ?? null };
 }
 
 /* ── the import ──────────────────────────────────────────────────────────── */
+
+/**
+ * Whether tally_documents has the `details` column (migration 0127). Without it a Sales Order's order-level
+ * fields have nowhere to go, so the Sales Order import refuses to start rather than drop them. Read-only.
+ */
+export async function salesOrderDetailsReady(q: Q = db): Promise<boolean> {
+  try {
+    await q.select({ details: tallyDocuments.details }).from(tallyDocuments).limit(0);
+    return true;
+  } catch (err) {
+    const e = err as { code?: string; cause?: { code?: string } } | null;
+    if ((e?.code ?? e?.cause?.code) === "42703" || isMissingTable(err)) return false;
+    throw err;
+  }
+}
 
 export type BatchRow = typeof tallyImportBatches.$inferSelect;
 
@@ -267,7 +387,9 @@ async function insertRecord(q: Q, rec: TallyRecord, res: RecordResolution, categ
       adjustmentType: rec.adjustmentType,
       dueDate: rec.dueDate,
       narration: rec.narration,
-      lines: rec.lines,
+      // Sales orders store each line with the product it was matched to, and every order-level field (0127).
+      lines: res.lines ?? rec.lines,
+      ...(rec.documentType === "sales-orders" ? { details: res.details ?? rec.details ?? {} } : {}),
       importBatchId: batch.id,
       sourceRow: rec.rowNos[0]!,
     })
@@ -288,15 +410,27 @@ export interface ChunkCounts {
  * The server plans from the rows and the batch's own stored mapping, not from
  * anything the browser concluded. Safe to repeat.
  */
-export async function importChunk(batch: BatchRow, rows: readonly RawRow[], actorId: string, today: string): Promise<ChunkCounts> {
+/** The Sales Order field configuration changed after the import was validated: nothing of this part is written. */
+export class FieldConfigChanged extends Error {}
+
+export async function importChunk(batch: BatchRow, rows: readonly RawRow[], actorId: string, today: string, links: SalesOrderLinks = NO_LINKS, fieldConfigVersion: number | null = null): Promise<ChunkCounts> {
   const category = batch.category as TallyCategoryKey;
   const counts: ChunkCounts = { imported: 0, skipped: 0, rejected: 0 };
   await db.transaction(async (tx) => {
     const q = tx as unknown as Q;
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext('tally_import'))`);
-    const plan = planRows(category, rows, batch.mapping, { asOfDate: batch.asOfDate, direction: batch.direction, today });
-    const resolutions = await resolveRecords(q, category, plan.records, batch.direction);
+    // Sales Orders: planned with the configuration the import was validated against — and only that one.
+    const config = category === "sales-orders" ? await loadSalesOrderCatalogue(q) : null;
+    if (config && fieldConfigVersion !== null && config.catalogue.version !== fieldConfigVersion) throw new FieldConfigChanged();
+    const plan = planRows(category, rows, batch.mapping, { asOfDate: batch.asOfDate, direction: batch.direction, today, ...(config ? { soCatalogue: config.catalogue } : {}) });
+    const resolutions = await resolveRecords(q, category, plan.records, batch.direction, links);
     const decisions = importDecisions(plan, resolutions, batch.includeAttention, batch.id);
+    // A match a person made by hand is written beside the first row of the order it was used for.
+    const manualNote = new Map<number, string>();
+    for (const rec of plan.records) {
+      const notes = resolutions.get(rec.key)?.manual;
+      if (notes?.length) manualNote.set(rec.rowNos[0]!, notes.join(" "));
+    }
     const target = new Map<string, { table: string; id: string } | null>();
     for (const rec of plan.records) {
       const d = decisions.records.get(rec.key);
@@ -311,6 +445,7 @@ export async function importChunk(batch: BatchRow, rows: readonly RawRow[], acto
         status = "skipped";
         reason = "Another import added this record first.";
       }
+      if (status === "imported" && inserted && manualNote.has(row.rowNo)) reason = manualNote.get(row.rowNo)!;
       const existingId = row.recordKey ? (resolutions.get(row.recordKey)?.existingId ?? null) : null;
       const res = await tx
         .insert(tallyImportRows)
@@ -367,17 +502,26 @@ export async function finishBatch(batchId: string, today: string): Promise<Batch
 
 export interface HistoryRow extends BatchRow {
   uploadedBy: string | null;
+  /** The documents this batch created (one per voucher, however many rows it had). */
+  documentCount?: number;
 }
 
-export async function listHistory(limit = 50): Promise<{ storageReady: boolean; rows: HistoryRow[] }> {
+/** How many documents a batch created. Counted from the ledger itself, so it can't disagree with it. */
+export async function countBatchDocuments(batchId: string): Promise<number> {
+  const [row] = await db.select({ n: sql<number>`count(*)::int` }).from(tallyDocuments).where(eq(tallyDocuments.importBatchId, batchId));
+  return row?.n ?? 0;
+}
+
+export async function listHistory(limit = 50, category?: TallyCategoryKey): Promise<{ storageReady: boolean; rows: HistoryRow[] }> {
   try {
     const rows = await db
-      .select({ batch: tallyImportBatches, uploadedBy: employees.name })
+      .select({ batch: tallyImportBatches, uploadedBy: employees.name, documentCount: sql<number>`(select count(*)::int from tally_documents d where d.import_batch_id = ${tallyImportBatches.id})` })
       .from(tallyImportBatches)
       .leftJoin(employees, eq(employees.id, tallyImportBatches.createdById))
+      .where(category ? eq(tallyImportBatches.category, category) : undefined)
       .orderBy(desc(tallyImportBatches.createdAt))
       .limit(limit);
-    return { storageReady: true, rows: rows.map((r) => ({ ...r.batch, uploadedBy: r.uploadedBy })) };
+    return { storageReady: true, rows: rows.map((r) => ({ ...r.batch, uploadedBy: r.uploadedBy, documentCount: Number(r.documentCount) })) };
   } catch (err) {
     if (isMissingTable(err)) return { storageReady: false, rows: [] };
     throw err;

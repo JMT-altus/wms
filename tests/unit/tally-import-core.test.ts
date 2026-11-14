@@ -6,6 +6,7 @@ import { checkMapping, findHeaderRow, mappingIsUsable, mappingToHeadings, sugges
 import { chunkRows, documentIdentity, planRows, summarize, type DocumentRecord, type RawRow } from "@/lib/tally/plan";
 import { importDecisions, resolveRows, type RecordResolution } from "@/lib/tally/resolve";
 import { checkTallyFile, decodeCsv, readTallyBytes } from "@/lib/tally/workbook";
+import { SO_MAPPING, soOrder } from "../fixtures/sales-order-rows";
 
 // The pure rules of Tally import. All data is invented.
 const today = "2026-10-31";
@@ -81,12 +82,18 @@ describe("column mapping", () => {
 describe("planning — every voucher category", () => {
   const docCategories = TALLY_CATEGORY_KEYS.filter((c) => TALLY_CATEGORIES[c].kind === "document");
   it.each(docCategories)("%s: a clean row is valid, with its financial year and original number kept", (c) => {
-    const plan = planRows(c, rows(["V-1", "15-Apr-25", "Alpha", "1,000.00"]), SALES, { today });
+    // With an item line: a sales order is nothing without one, and carries every field Tally's matrix marks Y
+    // (tests/unit/tally-sales-orders.test.ts covers its rules).
+    const plan =
+      c === "sales-orders"
+        ? planRows(c, rows(soOrder("V-1", "15-Apr-25", "Alpha", "1,000.00", { orderDate: "15-Apr-25" }, "Motor")), SO_MAPPING, { today })
+        : planRows(c, rows(["V-1", "15-Apr-25", "Alpha", "1,000.00", "Motor", "2", "1,000.00"]), LINES, { today });
     expect(plan.rows[0]).toMatchObject({ state: "valid", messages: [] });
     expect(plan.records[0]).toMatchObject({ kind: "document", documentType: c, documentNo: "V-1", documentDate: "2025-04-15", financialYear: "2025-26", totalPaise: 100000 });
   });
 
-  it.each(docCategories)("%s: required fields, dates and amounts each refuse with the reason", (c) => {
+  // Sales orders word these in Tally's terms (voucher, ledger); their own file covers them.
+  it.each(docCategories.filter((c) => c !== "sales-orders"))("%s: required fields, dates and amounts each refuse with the reason", (c) => {
     const plan = planRows(c, rows(["", "bad", "", "x"], ["V-2", "1-Apr-25", "A", "0"], ["V-3", "1-Apr-1990", "A", "5"]), SALES, { today });
     expect(plan.rows.map((r) => r.state)).toEqual(["invalid", "invalid", "invalid"]);
     expect(plan.rows[0]!.messages.join(" ")).toMatch(/document number is missing.*party is missing.*Date "bad".*Total "x"/);

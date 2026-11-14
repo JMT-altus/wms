@@ -34,6 +34,7 @@ import type { TallyCategoryKey } from "@/lib/tally/categories";
 import { chunkRows, planRows, type RawRow } from "@/lib/tally/plan";
 import { TALLY_DOCUMENT_TYPES } from "@/lib/tally/sections";
 import { readListParams, type SearchParams } from "@/lib/tally/list-params";
+import { SO_HEADERS, SO_MAPPING, soOrder } from "../fixtures/sales-order-rows";
 
 type Pg = Awaited<ReturnType<typeof createTestDb>>["pg"];
 let pg: Pg;
@@ -82,15 +83,19 @@ const rows = (...r: string[][]): RawRow[] => r.map((cells, i) => ({ rowNo: i + 2
 const VOUCHER = ["Voucher No.", "Date", "Party", "Amount", "Against"];
 const M = { documentNo: 0, documentDate: 1, partyName: 2, amount: 3 };
 const MR = { ...M, refDocumentNo: 4 };
+// Sales orders carry every field of Tally's Sales Order matrix (lib/tally/sales-order-catalogue.ts): here one order per
+// row, in the import template's layout, with every Y field filled (tests/fixtures/sales-order-rows.ts).
+const MS = SO_MAPPING;
+const so = (no: string, date: string, party: string, amount: string) => soOrder(no, date, party, amount, { orderDate: date });
 let seq = 0;
 const hash = () => String(++seq).padStart(64, "0");
 
 async function run(category: TallyCategoryKey, data: RawRow[], mapping: Record<string, number>, over: Record<string, unknown> = {}, headers = VOUCHER) {
-  const started = await actions.startTallyImport({ category, fileName: `${category}-${seq + 1}.csv`, fileHash: hash(), sheetName: "S", headers, sample: data.slice(0, 20), mapping, totalRows: data.length, asOfDate: null, direction: null, includeAttention: true, confirm: true, ...over });
+  const started = await actions.startTallyImport({ ...(category === "sales-orders" ? { fieldConfigVersion: 0 } : {}), category, fileName: `${category}-${seq + 1}.csv`, fileHash: hash(), sheetName: "S", headers, sample: data.slice(0, 20), mapping, totalRows: data.length, asOfDate: null, direction: null, includeAttention: true, confirm: true, ...over });
   if (!started.ok) throw new Error(`start refused: ${started.error}`);
   const plan = planRows(category, data, mapping, { today: "2026-10-31", asOfDate: (over.asOfDate as string) ?? null, direction: (over.direction as "receivable") ?? null });
   for (const c of chunkRows(data.filter((r) => !started.doneRowNos.includes(r.rowNo)), plan.rows)) {
-    const res = await actions.importTallyChunk({ batchId: started.batchId, rows: c });
+    const res = await actions.importTallyChunk({ ...(category === "sales-orders" ? { fieldConfigVersion: 0 } : {}), batchId: started.batchId, rows: c });
     if (!res.ok) throw new Error(`chunk refused: ${res.error}`);
   }
   const done = await actions.finishTallyImport(started.batchId);
@@ -109,17 +114,22 @@ beforeAll(async () => {
     fieldPermissionGrants: schema.fieldPermissionGrants,
     collectionMasterImports: schema.collectionMasterImports,
     collectionMasterCompanies: schema.collectionMasterCompanies,
+    products: schema.products,
+    lookupItems: schema.lookupItems,
+    productSkus: schema.productSkus,
   });
   pg = made.pg;
   h.db = made.db;
   await pg.exec("create sequence if not exists customer_masters_code_seq start 1");
   await pg.exec(readFileSync(resolve(__dirname, "../../db/migrations/0122_tally_import.sql"), "utf8"));
+  await pg.exec(readFileSync(resolve(__dirname, "../../db/migrations/0127_sales_order_details.sql"), "utf8"));
   const emp = async (name: string, isAdmin: boolean) => (await pg.query<{ id: string }>(`insert into employees (name, email, role, is_admin) values ($1, $2, 'both', $3) returning id`, [name, `${name}@example.test`, isAdmin])).rows[0]!.id;
   admin = await emp("admin", true);
   staff = await emp("staff", false);
   await pg.query(`insert into field_permission_grants (field_key, subject_type, subject_id, allowed) values ('tally.import', 'employee', $1, true)`, [admin]);
   await pg.query(`insert into customer_masters (name, gstin) values ('Alpha Traders', '27ABCDE1234F1Z5'), ('Beta Co', null)`);
   await pg.query(`insert into collection_master_companies (company_name, name_key) values ('Alpha Traders', 'alphatraders')`);
+  await pg.query(`insert into products (name, code) values ('Gear Motor', 'GM')`);
   actions = await import("@/app/(forms-module)/forms/tally-import/actions");
   ledger = await import("@/lib/queries/tally-ledger");
   access = await import("@/lib/auth/forms-access");
@@ -149,7 +159,9 @@ describe("before anything is imported", () => {
     for (const type of TALLY_DOCUMENT_TYPES) {
       const out = await html(pages.documents({ params: Promise.resolve({ type }), searchParams: sp() }));
       expect(out).toMatch(/No .* yet\./);
-      expect(out).toContain("Open Tally Data Import");
+      // Sales Orders have their own import inside their section; the other ledgers point at Tally Data Import.
+      if (type === "sales-orders") expect(out).toContain('href="/forms/documents/sales-orders/import"');
+      else expect(out).toContain("Open Tally Data Import");
       expect(out).toContain("No documents");
     }
     expect(await html(pages.vendors({ searchParams: sp() }))).toContain("No vendors yet.");
@@ -174,7 +186,7 @@ describe("before anything is imported", () => {
 describe("importing through the real actions fills the sections", () => {
   it("imports every category once", async () => {
     batches.vendors = (await run("vendor-master", rows(["Vendor One", "27AAAAA0000A1Z5", "Maharashtra"], ["Vendor Two", "", "Gujarat"]), { name: 0, gstin: 1, state: 2 }, {}, ["Name", "GSTIN", "State"])).id;
-    batches.so = (await run("sales-orders", rows(["SO/1", "1-Apr-25", "Alpha Traders", "1000"], ["SO/2", "15-May-25", "Beta Co", "2500"], ["SO/3", "10-Apr-24", "Alpha Traders", "500"]), M)).id;
+    batches.so = (await run("sales-orders", rows(so("SO/1", "1-Apr-25", "Alpha Traders", "1000"), so("SO/2", "15-May-25", "Beta Co", "2500"), so("SO/3", "10-Apr-24", "Alpha Traders", "500")), MS, {}, SO_HEADERS)).id;
     batches.inv = (await run("sales-invoices", rows(["INV/1", "5-Apr-25", "Alpha Traders", "1000", "SO/1"], ["INV/2", "20-May-25", "Beta Co", "2500", "SO/2"]), MR)).id;
     batches.pi = (await run("purchase-invoices", rows(["PI/1", "2-Apr-25", "Vendor One", "700"]), M)).id;
     batches.cn = (await run("credit-notes", rows(["CN/1", "10-Jun-25", "Alpha Traders", "100", "INV/1"]), MR)).id;
@@ -339,9 +351,9 @@ describe("importing through the real actions fills the sections", () => {
     expect(out).toContain("Sales Orders");
     for (const r of all.rows) expect(out).toContain(`/forms/documents/sales-orders/${r.targetId}`);
     expect(out).toContain("Open Sales Orders");
-    expect(out).toContain("Voucher No."); // the file's own headings
+    expect(out).toContain("Voucher Number"); // the file's own headings (Tally's exact field names)
     // A rejected row keeps its reason and has no destination.
-    const bad = await run("sales-orders", rows(["", "1-Apr-25", "Alpha Traders", "10"]), M);
+    const bad = await run("sales-orders", rows(so("", "1-Apr-25", "Alpha Traders", "10")), MS, {}, SO_HEADERS);
     expect(bad.rejectedRows).toBe(1);
     const badRows = await ledger.listBatchRows(v, bad.id, readListParams({}, ledger.BATCH_ROW_SORTS, { sort: "rowNo", dir: "asc" }));
     expect(badRows.rows[0]).toMatchObject({ status: "rejected", targetId: null });
@@ -433,7 +445,7 @@ describe("access, through the real resolver and real grant rows", () => {
     await expect(actions.importTallyChunk({})).rejects.toThrow("Forbidden");
     expect(await actions.getTallyBatchProblems(batches.so)).toEqual([]); // the history stays readable
     await pg.query(`insert into field_permission_grants (field_key, subject_type, subject_id, allowed) values ('tally.import', 'employee', $1, true)`, [admin]);
-    const started = await actions.startTallyImport({ category: "sales-orders", fileName: "x.csv", fileHash: hash(), sheetName: null, headers: VOUCHER, sample: [], mapping: M, totalRows: 1, asOfDate: null, direction: null, includeAttention: false, confirm: true });
+    const started = await actions.startTallyImport({ fieldConfigVersion: 0, category: "sales-orders", fileName: "x.csv", fileHash: hash(), sheetName: null, headers: SO_HEADERS, sample: [], mapping: MS, totalRows: 1, asOfDate: null, direction: null, includeAttention: false, confirm: true });
     expect(started.ok).toBe(true);
     expect(uuidsIn(JSON.stringify(started))).toHaveLength(1);
   });

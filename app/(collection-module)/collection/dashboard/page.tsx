@@ -1,5 +1,6 @@
 import { CollectionDashboard } from "@/components/collections/collection-dashboard";
-import { buildRows } from "@/lib/collections/derive";
+import { RefreshOnReturn } from "@/components/collections/refresh-on-return";
+import { buildRows, trackerParties } from "@/lib/collections/derive";
 import { loadCollectionParties } from "@/lib/collections/load";
 import { collectionScopeFor } from "@/lib/collections/scope-server";
 import { listFollowUps } from "@/lib/queries/collection-followups";
@@ -9,15 +10,28 @@ export const dynamic = "force-dynamic";
 
 /**
  * Collection Dashboard. Reads parties through the same loader as the Tracker and
- * their follow-ups from the same table, so the two screens always agree. With no
- * accounting source connected it renders its empty states — no invented figures.
+ * their follow-ups from the same table, and keeps the same parties the Tracker
+ * lists (`trackerParties`: companies in Collection Logs — ₹0 Debit and ₹0 Credit
+ * in the latest confirmed upload that included them — are left out), so the party
+ * counts on the two screens always agree. With no accounting source connected it
+ * renders its empty states — no invented figures.
+ *
+ * Always the latest database state: rendered on every request (`force-dynamic`,
+ * no cached read anywhere in the loader), and every Tracker action that can
+ * change who is listed or under whom — a confirmed balance upload, companies
+ * added from an upload, a Collection Master import, a Sales Coordinator
+ * assignment — revalidates this path. `RefreshOnReturn` covers the one case
+ * left: a Dashboard that was already open while that happened elsewhere.
  */
 export default async function CollectionDashboardPage() {
   // collection.view, checked before anything is loaded.
   await requireCollectionCapability("collection.view");
   // The same scope as the Tracker: a super-admin's dashboard covers every company, a Sales Coordinator's only their own.
   const [source, followUps] = await Promise.all([loadCollectionParties(await collectionScopeFor()), listFollowUps()]);
-  const rows = buildRows(source.parties, followUps.entries);
+  // The Tracker's own list rule, not a copy of it: a party the Tracker leaves out is not counted here either.
+  const rows = buildRows(trackerParties(source.parties), followUps.entries);
+  // This render's identity, for RefreshOnReturn (it never compares it with the browser's clock).
+  const loadedAt = new Date().getTime();
 
   return (
     <div>
@@ -34,6 +48,7 @@ export default async function CollectionDashboardPage() {
           Outstanding and follow-up overview by party and collection person.
         </p>
       </header>
+      <RefreshOnReturn loadedAt={loadedAt} />
       <CollectionDashboard rows={rows} connected={source.connected} />
     </div>
   );

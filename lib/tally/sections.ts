@@ -76,6 +76,8 @@ export const vendorHref = (id: string): Route => `/forms/vendor-master/${id}` as
 export const documentHref = (type: TallyDocumentType, id: string): Route => `/forms/documents/${type}/${id}` as Route;
 export const outstandingLineHref = (view: OutstandingView, id: string): Route => `/forms/outstanding/${view}/${id}` as Route;
 export const batchHref = (id: string): Route => `/forms/tally-import/batches/${id}` as Route;
+/** The Sales Order Excel import: a screen of Forms → Sales Orders, not a module of its own. */
+export const salesOrderImportHref = "/forms/documents/sales-orders/import" as Route;
 
 /** Where an import category's records are viewed. The outstanding section depends on the batch's direction. */
 export function sectionForCategory(category: TallyCategoryKey, direction: OutstandingDirection | null): { label: string; href: Route } {

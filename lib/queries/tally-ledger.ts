@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, desc, eq, gte, ilike, inArray, lte, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, getTableColumns, gte, ilike, inArray, lte, or, sql, type SQL } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { customerMasters, employees, tallyDocuments, tallyImportBatches, tallyImportRows, tallyOutstandingLines, vendorMasters } from "@/db/schema";
 import type { FormsViewer } from "@/lib/auth/forms-access";
@@ -324,11 +324,27 @@ export interface DocumentDetail {
   referencedBy: DocumentRef[];
 }
 
+/** Every column but `details` (0127), which is read on its own so a database without it still opens documents. */
+const { details: _details, ...documentOwnColumns } = getTableColumns(tallyDocuments);
+
+/** A Sales Order's order-level fields; {} for other types, and while migration 0127 isn't applied. */
+async function documentDetails(id: string): Promise<(typeof tallyDocuments.$inferSelect)["details"]> {
+  try {
+    const [row] = await db.select({ details: tallyDocuments.details }).from(tallyDocuments).where(eq(tallyDocuments.id, id)).limit(1);
+    return row?.details ?? {};
+  } catch (err) {
+    const e = err as { code?: string; cause?: { code?: string } } | null;
+    if ((e?.code ?? e?.cause?.code) === "42703") return {};
+    throw err;
+  }
+}
+
 /** One document, of the type the page is for — a sales invoice's id opened under /credit-notes is "not found". */
 export async function getDocument(_v: FormsViewer, type: TallyDocumentType, id: string): Promise<DocumentDetail | null> {
   try {
-    const [document] = await db.select().from(tallyDocuments).where(and(eq(tallyDocuments.id, id), eq(tallyDocuments.documentType, type))).limit(1);
-    if (!document) return null;
+    const [own] = await db.select(documentOwnColumns).from(tallyDocuments).where(and(eq(tallyDocuments.id, id), eq(tallyDocuments.documentType, type))).limit(1);
+    if (!own) return null;
+    const document = { ...own, details: type === "sales-orders" ? await documentDetails(id) : {} };
     const [party, batch, refersTo, referencedBy] = await Promise.all([
       partyLink(document.customerMasterId, document.vendorMasterId),
       batchSummary(document.importBatchId),

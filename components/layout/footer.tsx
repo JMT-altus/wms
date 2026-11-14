@@ -12,6 +12,9 @@
  * page's flow — the end of every page scrolls clear of it, nothing is hidden
  * behind it — and it is exactly as wide as the content column, never over the
  * sidebar. Dialogs, menus and toasts render in portals above it (z-50 and up).
+ * Its height (h-9, 2.25rem) is --site-footer-h in app/globals.css — change both
+ * together: a page's own sticky action bar uses .sticky-above-footer to sit just
+ * above the footer instead of behind it.
  */
 export function DashboardFooter() {
   return (

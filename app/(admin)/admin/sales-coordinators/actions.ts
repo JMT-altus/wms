@@ -108,6 +108,8 @@ export async function setCoordinatorLink(raw: unknown): Promise<Result> {
     if (changed) {
       revalidatePath("/admin/sales-coordinators");
       revalidatePath("/collection/tracker");
+      // The link decides whose companies the Dashboard counts as well as which the Tracker lists.
+      revalidatePath("/collection/dashboard");
     }
     return { ok: true, changed };
   } catch (err) {

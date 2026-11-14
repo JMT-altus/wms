@@ -115,6 +115,9 @@ describe("setting a link — super-admins only", () => {
   it("a super-admin links a login to a Collection Master label; audited with who, from and to", async () => {
     as("SuperA");
     expect(await set("SalesG", L("Gauri"))).toEqual({ ok: true, changed: true });
+    // The link decides whose companies the Tracker lists and the Dashboard counts: both are revalidated.
+    const { revalidatePath } = await import("next/cache");
+    expect(vi.mocked(revalidatePath).mock.calls.map((c) => c[0])).toEqual(expect.arrayContaining(["/collection/tracker", "/collection/dashboard"]));
     expect(await identity.salespersonIdentityFor(P.SalesG!)).toEqual({ status: "linked", label: "Gauri" });
     expect(await events()).toEqual([{ employee_id: P.SalesG!.id, actor_id: P.SuperA!.id, from_value: { kind: "unconfigured" }, to_value: { kind: "label", label: "Gauri" } }]);
   });

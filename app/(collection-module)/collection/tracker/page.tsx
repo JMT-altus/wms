@@ -1,5 +1,5 @@
 import { CollectionTracker } from "@/components/collections/collection-tracker";
-import { buildRows, personOf } from "@/lib/collections/derive";
+import { buildRows, personOf, trackerParties } from "@/lib/collections/derive";
 import { loadCollectionParties } from "@/lib/collections/load";
 import { scopeNote } from "@/lib/collections/scope";
 import { collectionScopeFor } from "@/lib/collections/scope-server";
@@ -49,7 +49,7 @@ export default async function CollectionTrackerPage() {
   const scope = await collectionScopeFor();
   const [loaded, followUps] = await Promise.all([loadCollectionParties(scope), listFollowUps()]);
   const loggedCount = loaded.parties.filter((p) => p.inLogs).length;
-  const active = loaded.parties.filter((p) => !p.inLogs);
+  const active = trackerParties(loaded.parties);
   const source = { ...loaded, parties: active, connected: loaded.connected && (active.length > 0 || loggedCount > 0) };
   const companyIds = source.parties.map((p) => p.masterId).filter((id): id is string => !!id);
   // Confirmation (visible to every Tracker user) and open-escalation status, from

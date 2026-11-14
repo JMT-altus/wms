@@ -1,3 +1,6 @@
+import type { SoFieldType, SoRequirement } from "./sales-order-catalogue";
+import { BASE_CATALOGUE, importFields, type SoCatalogue } from "./sales-order-config";
+
 /**
  * The ten Tally import categories and the WMS fields each one understands.
  * Pure data: shared by the browser preview and the server's re-check.
@@ -31,6 +34,9 @@ export interface TallyField {
   required?: boolean;
   /** Lower-case headings this field is commonly exported under. */
   synonyms: readonly string[];
+  /** Sales Orders: the matrix section and marking, for the grouped mapping screen. */
+  section?: string;
+  requirement?: SoRequirement;
 }
 
 export interface TallyCategoryDef {
@@ -80,10 +86,39 @@ const PARTY_MASTER: readonly TallyField[] = [
 
 const voucherFields = (extra: readonly TallyField[]): readonly TallyField[] => [DOC_NO, DOC_DATE, PARTY(), TOTAL, GSTIN, TAXABLE, TAX, ...extra, NARRATION];
 
+/**
+ * Sales Orders follow TallyPrime's own "Import data format" (the Accounting
+ * Voucher sheet): one row per ledger line, product line or allocation, with the
+ * voucher-level cells on the voucher's rows. Every field comes from the Sales
+ * Order field catalogue (./sales-order-catalogue), which keeps the matrix's
+ * exact Tally names, so the template maps itself. A field is "required" here
+ * (its column must be in the file) when the matrix marks it Y with no
+ * condition and no default; the planner (./sales-orders) checks the rest.
+ */
+const soType = (t: SoFieldType): TallyFieldType => (t === "date" ? "date" : t === "amount" ? "amount" : t === "number" || t === "percent" ? "number" : "text");
+/**
+ * The import's fields under a Sales Order field configuration: every active field available to imports, headed by its
+ * Tally name (a custom field by its label). "Required" — its column must be in the file — when the configuration makes
+ * it mandatory with no condition and the matrix gives it no default.
+ */
+export function salesOrderMappingFields(c: SoCatalogue): TallyField[] {
+  return importFields(c).map((x) => ({
+    key: x.key,
+    label: x.tallyName,
+    type: soType(x.type),
+    required: x.requirementRule.kind === "always" && !x.defaultsFrom,
+    synonyms: [x.tallyName.toLowerCase().replace(/\s+/g, " "), ...(x.synonyms ?? [])],
+    section: x.section,
+    // As configured: a field an administrator made conditional shows as "?", one made optional as plainly optional.
+    requirement: x.requirementRule.kind === "when" ? "conditional" : x.requirementRule.kind === "always" ? "mandatory" : x.setting?.requirement == null && !x.isCustom ? x.requirement : "provision",
+  }));
+}
+const SALES_ORDER_FIELDS: readonly TallyField[] = salesOrderMappingFields(BASE_CATALOGUE);
+
 export const TALLY_CATEGORIES: Readonly<Record<TallyCategoryKey, TallyCategoryDef>> = {
   "customer-master": { key: "customer-master", label: "Customer Master", kind: "party", party: "customer", destination: "Customer Master (new customers only; existing ones are never changed)", fields: PARTY_MASTER },
   "vendor-master": { key: "vendor-master", label: "Vendor Master", kind: "party", party: "vendor", destination: "Vendor Master", fields: PARTY_MASTER },
-  "sales-orders": { key: "sales-orders", label: "Sales Orders", kind: "document", party: "customer", destination: "Tally ledger (Sales Orders)", fields: voucherFields([ITEM, QTY, RATE, LINE_AMOUNT, DUE]) },
+  "sales-orders": { key: "sales-orders", label: "Sales Orders", kind: "document", party: "customer", destination: "Forms → Sales Orders", fields: SALES_ORDER_FIELDS },
   "sales-invoices": { key: "sales-invoices", label: "Sales Invoices / Tax Invoices", kind: "document", party: "customer", refersTo: "sales-orders", destination: "Tally ledger (Sales Invoices)", fields: voucherFields([ITEM, QTY, RATE, LINE_AMOUNT, DUE, REF_DOC("Sales order reference")]) },
   "purchase-invoices": { key: "purchase-invoices", label: "Purchase Invoices", kind: "document", party: "vendor", destination: "Tally ledger (Purchase Invoices)", fields: voucherFields([ITEM, QTY, RATE, LINE_AMOUNT, DUE]) },
   "credit-notes": { key: "credit-notes", label: "Credit Notes", kind: "document", party: "customer", refersTo: "sales-invoices", destination: "Tally ledger (Credit Notes)", fields: voucherFields([ITEM, QTY, RATE, LINE_AMOUNT, REF_DOC("Original invoice number"), f("adjustmentType", "Adjustment type", "text", ["voucher type", "vch type", "adjustment type", "reason", "type"])]) },
@@ -115,7 +150,8 @@ export const requiredFields = (c: TallyCategoryKey): TallyField[] => TALLY_CATEG
 export const TALLY_LIMITS = {
   fileBytes: 15 * 1024 * 1024,
   rows: 100_000,
-  columns: 80,
+  /** A full TallyPrime voucher export has about 390 columns; wider sheets are refused, never cut short. */
+  columns: 400,
   cellChars: 500,
   /** Rows per server call: a Server Action body is limited to 1 MB. */
   chunkRows: 300,

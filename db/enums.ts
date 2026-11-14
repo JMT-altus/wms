@@ -765,6 +765,13 @@ export const LOOKUP_LISTS = [
     label: "Client KYC — States",
     hint: "The State dropdown on client addresses. Falls back to the official GST state list while empty.",
   },
+  // Sales Order import: the WMS has no ledger master, so the Tally ledgers an order may use (sales, tax,
+  // freight, round-off, additional cost) are listed here. Seeded empty — nothing is invented.
+  {
+    key: "tally_ledger",
+    label: "Sales Orders — Tally Ledgers",
+    hint: "The Tally ledgers a Sales Order may use besides the customer: sales, tax, freight, round-off, additional cost. While empty, ledger names in an import aren't checked; once any are listed, an order using a ledger not listed here is held back until it is matched or added.",
+  },
 ] as const;
 export type LookupListKey = (typeof LOOKUP_LISTS)[number]["key"];
 
@@ -1152,6 +1159,32 @@ export const PERMISSION_FIELDS = [
     hint: "Validate Tally exports and import them into the WMS. Viewing the import history needs only the Forms module (admins).",
     defaultAllowed: false,
     group: "Tally Data Import",
+    sensitive: true,
+    adminBypass: false,
+    superAdminBypass: false,
+  },
+  // ── Sales Order fields (Admin & Master Setup → Sales Order Fields): which fields every Sales Order must carry, on the
+  // form and in every import, so it is an explicit grant made by a super-admin, never implied by admin status.
+  // Super-admins themselves may always manage it (lib/auth/sales-order-fields.ts).
+  {
+    key: "sales-orders.fields.manage",
+    label: "Sales Order fields — Configure",
+    hint: "Change Sales Order fields' labels, sections, order, mandatory/optional/conditional rules, form/import/order-page availability and allowed values; add and retire custom fields (Admin & Master Setup → Sales Order Fields). Super-admins always have this.",
+    defaultAllowed: false,
+    group: "Sales Order fields",
+    sensitive: true,
+    adminBypass: false,
+    superAdminBypass: false,
+  },
+  // ── Sales Order pre-closing (the matrix's "Update" fields): closing what's left of a delivery of an order changes
+  // what the business still owes the customer, so it is an explicit grant made by a super-admin, never implied by
+  // admin status. Super-admins themselves may always pre-close (lib/auth/sales-order-preclose.ts).
+  {
+    key: "sales-orders.preclose",
+    label: "Sales Orders — Pre-close deliveries",
+    hint: "Record a Pre-Close Quantity, Reason and Date against a delivery of a stored Sales Order (Forms → Sales Orders → the order). Every pre-closure is kept with who recorded it; none can be changed or removed.",
+    defaultAllowed: false,
+    group: "Sales Order fields",
     sensitive: true,
     adminBypass: false,
     superAdminBypass: false,

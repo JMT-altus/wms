@@ -4074,3 +4074,20 @@ h1.hub-greeting:not(.brand-wordmark):not(.brand-wordmark-deep) {
   border: 0;
   border-radius: 6px;
 }
+
+/* The site footer (components/layout/footer.tsx) is a sticky bar at the bottom of every page, this tall (its h-9:
+   change both together). A page's own sticky action bar (the Client KYC form's actions) sits just above it with
+   .sticky-above-footer, never behind it: both stay in the page's flow, so the end of the page still scrolls clear of
+   both and nothing is hidden under either. */
+:root {
+  --site-footer-h: 2.25rem;
+}
+.sticky-above-footer {
+  position: sticky;
+  bottom: var(--site-footer-h);
+}
+@media print {
+  .sticky-above-footer {
+    position: static;
+  }
+}

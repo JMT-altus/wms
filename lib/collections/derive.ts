@@ -96,6 +96,19 @@ export function commentHistory<T extends Pick<FollowUpEntry, "id" | "note" | "cr
   return unique.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 }
 
+/**
+ * The parties the Tracker lists: every party the loader returned for the caller's
+ * scope EXCEPT those in Collection Logs (`inLogs`: a confirmed upload gave the
+ * company ₹0 Debit and ₹0 Credit, and none since has given it a balance). The
+ * flag is read as the loader set it; nothing is re-derived from the Debit /
+ * Credit figures here, so a company that was never moved to Collection Logs
+ * stays listed even when its Debit and Credit are blank.
+ *
+ * The Tracker page and the Dashboard page both build their rows from this one
+ * function, so the Dashboard's party counts are the Tracker's by construction.
+ */
+export const trackerParties = <T extends Pick<CollectionParty, "inLogs">>(parties: readonly T[]): T[] => parties.filter((p) => !p.inLogs);
+
 /** Join the source's parties with their saved follow-ups. */
 export function buildRows(parties: CollectionParty[], followUps: FollowUpEntry[]): PartyRow[] {
   const byParty = followUpsByParty(followUps);

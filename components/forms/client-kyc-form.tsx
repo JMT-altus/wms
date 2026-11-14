@@ -1787,7 +1787,7 @@ export function ClientKycForm({
 
       {/* ── Action bar ──────────────────────────────────────────────────── */}
       <div
-        className="kyc-actions sticky bottom-0 z-20 flex items-center justify-end gap-3 flex-wrap px-4 py-3 rounded-lg"
+        className="kyc-actions sticky-above-footer z-20 flex items-center justify-end gap-3 flex-wrap px-4 py-3 rounded-lg"
         style={{
           background: "var(--color-surface-card)",
           borderTop: "1px solid var(--color-hairline)",

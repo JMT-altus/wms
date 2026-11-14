@@ -1,4 +1,5 @@
-import type { PlannedRow, TallyPlan } from "./plan";
+import type { PlannedRow, TallyLine, TallyPlan } from "./plan";
+import type { SalesOrderDetails } from "./sales-order-catalogue";
 
 /**
  * Combines a file's plan with what the database knows. Pure, so the rules that
@@ -17,6 +18,19 @@ export interface RecordResolution {
   attention: string[];
   invalid: string | null;
   note: string | null;
+  /**
+   * Sales Orders. Problems the masters found, on the rows that caused them: the
+   * order is held back whole, and `invalid` is always set alongside.
+   */
+  rowInvalid?: Record<number, string[]>;
+  /** Sales Orders: warnings that belong to one row (a unit that differs from the master's). */
+  rowAttention?: Record<number, string[]>;
+  /** Sales Orders: the product lines with their master links, as they will be stored. */
+  lines?: TallyLine[];
+  /** Sales Orders: the order's other details, with each ledger's listed name, as they will be stored. */
+  details?: SalesOrderDetails;
+  /** Sales Orders: matches a person made by hand, recorded with the import. */
+  manual?: string[];
 }
 
 export type TallyImportRowStatus = "imported" | "skipped" | "rejected" | "failed";
@@ -27,14 +41,23 @@ export function resolveRows(plan: TallyPlan, resolutions: ReadonlyMap<string, Re
   return plan.rows.map((row) => {
     const res = row.recordKey ? resolutions.get(row.recordKey) : undefined;
     if (!res || row.state === "invalid") return row;
+    if (res.invalid && res.rowInvalid) {
+      // The row that caused it says why; the rest of the order says which row that was.
+      const own = res.rowInvalid[row.rowNo];
+      if (own) return { ...row, state: "invalid", messages: own };
+      const first = Math.min(...Object.keys(res.rowInvalid).map(Number));
+      return { ...row, state: "invalid", messages: [`Not imported: row ${first} of this order has an error.`] };
+    }
     if (res.invalid) return { ...row, state: "invalid", messages: [res.invalid] };
     if (res.existing === "same") return { ...row, state: "duplicate", messages: [res.note ?? "Already imported."] };
     if (row.state === "duplicate") return row;
     // A document's reference warnings belong on its first row, not on every line.
+    const own = res.rowAttention?.[row.rowNo] ?? [];
     if (res.attention.length && !flagged.has(row.recordKey!)) {
       flagged.add(row.recordKey!);
-      return { ...row, state: "attention", messages: [...row.messages, ...res.attention] };
+      return { ...row, state: "attention", messages: [...row.messages, ...res.attention, ...own] };
     }
+    if (own.length) return { ...row, state: "attention", messages: [...row.messages, ...own] };
     return row;
   });
 }
