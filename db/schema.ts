@@ -2311,6 +2311,9 @@ export const salesOrderFieldSettings = pgTable("sales_order_field_settings", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedById: uuid("updated_by_id").references(() => employees.id, { onDelete: "set null" }),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  // 0130 adds "help_text" (text, nullable). It is deliberately NOT declared here: Drizzle names every declared column
+  // in an INSERT, which would break saving any setting on a database that doesn't have 0130 yet. It is read and
+  // written with plain SQL in lib/queries/sales-order-fields.ts, only when the column exists.
 });
 
 /** 0128 — every change to a Sales Order field setting (append-only). `version` is the configuration version. */
@@ -3328,6 +3331,411 @@ export const incentiveAudit = pgTable(
 
 export type IncentiveAudit = typeof incentiveAudit.$inferSelect;
 export type NewIncentiveAudit = typeof incentiveAudit.$inferInsert;
+
+/* ── 0131 — Incentive Rules configuration (Admin & Master Setup → Incentive Rules) ───────────────────────────────
+ * Separate from the live tracker's incentive_schemes / rule_versions on purpose (see the migration): nothing that
+ * exists reads these tables. The database enforces the workflow's invariants (status transitions, immutability of
+ * published versions, maker-checker, no overlapping published dates, append-only history) with triggers. */
+
+export const incentivePrograms = pgTable(
+  "incentive_programs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    code: text("code").notNull(),
+    name: text("name").notNull(),
+    description: text("description"),
+    isActive: boolean("is_active").notNull().default(true),
+    rowVersion: integer("row_version").notNull().default(1),
+    createdById: uuid("created_by_id").references(() => employees.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedById: uuid("updated_by_id").references(() => employees.id, { onDelete: "set null" }),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("incentive_programs_code_uq").on(t.code)],
+);
+
+export const incentiveConfigVersions = pgTable(
+  "incentive_config_versions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    programId: uuid("program_id").notNull().references(() => incentivePrograms.id, { onDelete: "restrict" }),
+    categoryCode: text("category_code").notNull(),
+    versionNo: integer("version_no").notNull(),
+    status: text("status").notNull().default("draft").$type<"draft" | "submitted" | "approved" | "rejected" | "published" | "discarded">(),
+    effectiveFrom: date("effective_from"),
+    effectiveTo: date("effective_to"),
+    changeNote: text("change_note"),
+    rejectionReason: text("rejection_reason"),
+    rowVersion: integer("row_version").notNull().default(1),
+    createdById: uuid("created_by_id").references(() => employees.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedById: uuid("updated_by_id").references(() => employees.id, { onDelete: "set null" }),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    submittedById: uuid("submitted_by_id").references(() => employees.id, { onDelete: "set null" }),
+    submittedAt: timestamp("submitted_at", { withTimezone: true }),
+    approvedById: uuid("approved_by_id").references(() => employees.id, { onDelete: "set null" }),
+    approvedAt: timestamp("approved_at", { withTimezone: true }),
+    rejectedById: uuid("rejected_by_id").references(() => employees.id, { onDelete: "set null" }),
+    rejectedAt: timestamp("rejected_at", { withTimezone: true }),
+    publishedById: uuid("published_by_id").references(() => employees.id, { onDelete: "set null" }),
+    publishedAt: timestamp("published_at", { withTimezone: true }),
+  },
+  (t) => [
+    uniqueIndex("incentive_config_versions_no_uq").on(t.programId, t.categoryCode, t.versionNo),
+    index("incentive_config_versions_effective_idx").on(t.programId, t.categoryCode, t.status, t.effectiveFrom),
+  ],
+);
+
+export const incentiveConfigSettings = pgTable(
+  "incentive_config_settings",
+  {
+    versionId: uuid("version_id").notNull().references(() => incentiveConfigVersions.id, { onDelete: "restrict" }),
+    settingKey: text("setting_key").notNull(),
+    value: jsonb("value").notNull().$type<string | number | string[]>(),
+  },
+  (t) => [primaryKey({ columns: [t.versionId, t.settingKey] })],
+);
+
+export const incentiveConfigSlabs = pgTable(
+  "incentive_config_slabs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    versionId: uuid("version_id").notNull().references(() => incentiveConfigVersions.id, { onDelete: "restrict" }),
+    position: integer("position").notNull(),
+    lineCode: text("line_code").notNull(),
+    label: text("label").notNull(),
+    fromPaise: bigint("from_paise", { mode: "number" }).notNull(),
+    toPaise: bigint("to_paise", { mode: "number" }).notNull(),
+    valueType: text("value_type").notNull().$type<"percent" | "fixed">(),
+    ratePpm: integer("rate_ppm"),
+    fixedPaise: bigint("fixed_paise", { mode: "number" }),
+    capPaise: bigint("cap_paise", { mode: "number" }),
+  },
+  (t) => [uniqueIndex("incentive_config_slabs_position_uq").on(t.versionId, t.position)],
+);
+
+export const incentiveConfigDelaySteps = pgTable(
+  "incentive_config_delay_steps",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    versionId: uuid("version_id").notNull().references(() => incentiveConfigVersions.id, { onDelete: "restrict" }),
+    position: integer("position").notNull(),
+    fromDays: integer("from_days").notNull(),
+    toDays: integer("to_days"),
+    multiplierPpm: integer("multiplier_ppm").notNull(),
+  },
+  (t) => [uniqueIndex("incentive_config_delay_steps_position_uq").on(t.versionId, t.position)],
+);
+
+export const incentiveConfigEligibility = pgTable(
+  "incentive_config_eligibility",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    versionId: uuid("version_id").notNull().references(() => incentiveConfigVersions.id, { onDelete: "restrict" }),
+    position: integer("position").notNull(),
+    subjectType: text("subject_type").notNull().$type<"employee" | "department" | "role">(),
+    /** No foreign key on purpose: a published version never changes (see migration 0131). */
+    subjectId: uuid("subject_id"),
+    role: text("role"),
+    subjectLabel: text("subject_label").notNull(),
+    mode: text("mode").notNull().$type<"include" | "exclude">(),
+    effectiveFrom: date("effective_from").notNull(),
+    effectiveTo: date("effective_to"),
+  },
+  (t) => [uniqueIndex("incentive_config_eligibility_position_uq").on(t.versionId, t.position)],
+);
+
+export const incentiveConfigHistory = pgTable(
+  "incentive_config_history",
+  {
+    eventNo: bigint("event_no", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
+    programId: uuid("program_id").notNull().references(() => incentivePrograms.id, { onDelete: "restrict" }),
+    versionId: uuid("version_id").references(() => incentiveConfigVersions.id, { onDelete: "restrict" }),
+    action: text("action").notNull(),
+    before: jsonb("before"),
+    after: jsonb("after"),
+    note: text("note"),
+    actorId: uuid("actor_id").references(() => employees.id, { onDelete: "set null" }),
+    actorName: text("actor_name"),
+    at: timestamp("at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("incentive_config_history_version_idx").on(t.versionId, t.eventNo),
+    index("incentive_config_history_program_idx").on(t.programId, t.eventNo),
+  ],
+);
+
+/* ── 0132 — Incentive calculation, Category A (Stage 4) ───────────────────────────────────────────────────────────
+ * Calculated from Forms (tally_documents) and the published 0131 configuration; separate from the live tracker's
+ * incentive_periods / incentive_ledger / payout_runs, which nothing here reads or writes. Runs, results, credits and
+ * adjustments are append-only; a period's status and adopted run are guarded by a trigger (see the migration). */
+
+export const incentiveCalcRuns = pgTable(
+  "incentive_calc_runs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    programId: uuid("program_id").notNull().references(() => incentivePrograms.id, { onDelete: "restrict" }),
+    categoryCode: text("category_code").notNull(),
+    month: date("month").notNull(),
+    asOf: date("as_of").notNull(),
+    configVersionId: uuid("config_version_id").references(() => incentiveConfigVersions.id, { onDelete: "restrict" }),
+    configVersionNo: integer("config_version_no"),
+    engineVersion: text("engine_version").notNull(),
+    status: text("status").notNull().$type<"computed" | "blocked">(),
+    adopted: boolean("adopted").notNull(),
+    outcome: text("outcome").notNull(),
+    inputsHash: text("inputs_hash").notNull(),
+    resultHash: text("result_hash").notNull(),
+    inputs: jsonb("inputs").notNull(),
+    result: jsonb("result").notNull(),
+    computedById: uuid("computed_by_id").references(() => employees.id, { onDelete: "set null" }),
+    computedByName: text("computed_by_name").notNull(),
+    computedAt: timestamp("computed_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("incentive_calc_runs_period_idx").on(t.programId, t.categoryCode, t.month, t.computedAt)],
+);
+
+export const incentiveCalcPeriods = pgTable(
+  "incentive_calc_periods",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    programId: uuid("program_id").notNull().references(() => incentivePrograms.id, { onDelete: "restrict" }),
+    categoryCode: text("category_code").notNull(),
+    month: date("month").notNull(),
+    status: text("status").notNull().default("open").$type<"open" | "locked" | "submitted" | "approved" | "paid">(),
+    currentRunId: uuid("current_run_id").references(() => incentiveCalcRuns.id, { onDelete: "restrict" }),
+    /** 0133 — submission for approval, release and payout reference. */
+    submissionNo: integer("submission_no").notNull().default(0),
+    submittedAt: timestamp("submitted_at", { withTimezone: true }),
+    submittedById: uuid("submitted_by_id").references(() => employees.id, { onDelete: "set null" }),
+    approvalsRequired: integer("approvals_required"),
+    releaseOn: date("release_on"),
+    payoutReference: text("payout_reference"),
+    rowVersion: integer("row_version").notNull().default(1),
+    lockedAt: timestamp("locked_at", { withTimezone: true }),
+    lockedById: uuid("locked_by_id").references(() => employees.id, { onDelete: "set null" }),
+    approvedAt: timestamp("approved_at", { withTimezone: true }),
+    approvedById: uuid("approved_by_id").references(() => employees.id, { onDelete: "set null" }),
+    paidAt: timestamp("paid_at", { withTimezone: true }),
+    paidById: uuid("paid_by_id").references(() => employees.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("incentive_calc_periods_month_uq").on(t.programId, t.categoryCode, t.month)],
+);
+
+export const incentiveCalcResults = pgTable(
+  "incentive_calc_results",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    runId: uuid("run_id").notNull().references(() => incentiveCalcRuns.id, { onDelete: "restrict" }),
+    employeeId: uuid("employee_id").references(() => employees.id, { onDelete: "set null" }),
+    employeeName: text("employee_name").notNull(),
+    salesPaise: bigint("sales_paise", { mode: "number" }).notNull(),
+    qualified: boolean("qualified").notNull(),
+    poolExact: text("pool_exact").notNull(),
+    earnedExact: text("earned_exact").notNull(),
+    payableExact: text("payable_exact").notNull(),
+    earnedPaise: bigint("earned_paise", { mode: "number" }).notNull(),
+    payablePaise: bigint("payable_paise", { mode: "number" }).notNull(),
+    pendingPaise: bigint("pending_paise", { mode: "number" }).notNull(),
+    projectedPaise: bigint("projected_paise", { mode: "number" }).notNull(),
+    explanation: jsonb("explanation").notNull().$type<string[]>(),
+  },
+  (t) => [uniqueIndex("incentive_calc_results_employee_uq").on(t.runId, t.employeeId)],
+);
+
+export const incentiveCalcOrderCredits = pgTable(
+  "incentive_calc_order_credits",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    runId: uuid("run_id").notNull().references(() => incentiveCalcRuns.id, { onDelete: "restrict" }),
+    employeeId: uuid("employee_id").references(() => employees.id, { onDelete: "set null" }),
+    documentId: uuid("document_id").references(() => tallyDocuments.id, { onDelete: "set null" }),
+    documentType: text("document_type").notNull(),
+    documentNo: text("document_no").notNull(),
+    sharePpm: integer("share_ppm").notNull(),
+    valuePaise: bigint("value_paise", { mode: "number" }).notNull(),
+    collectiblePaise: bigint("collectible_paise", { mode: "number" }).notNull(),
+    collectedPaise: bigint("collected_paise", { mode: "number" }).notNull(),
+    fullyCollected: boolean("fully_collected").notNull(),
+    takesShare: boolean("takes_share").notNull(),
+    allocatedExact: text("allocated_exact").notNull(),
+    earnedExact: text("earned_exact").notNull(),
+    payableExact: text("payable_exact").notNull(),
+    explanation: jsonb("explanation").notNull().$type<string[]>(),
+  },
+  (t) => [uniqueIndex("incentive_calc_order_credits_uq").on(t.runId, t.employeeId, t.documentId)],
+);
+
+export const incentiveCalcReceiptCredits = pgTable(
+  "incentive_calc_receipt_credits",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    runId: uuid("run_id").notNull().references(() => incentiveCalcRuns.id, { onDelete: "restrict" }),
+    employeeId: uuid("employee_id").references(() => employees.id, { onDelete: "set null" }),
+    receiptDocumentId: uuid("receipt_document_id").references(() => tallyDocuments.id, { onDelete: "set null" }),
+    invoiceDocumentId: uuid("invoice_document_id").references(() => tallyDocuments.id, { onDelete: "set null" }),
+    unitDocumentId: uuid("unit_document_id").references(() => tallyDocuments.id, { onDelete: "set null" }),
+    receiptNo: text("receipt_no").notNull(),
+    receiptDate: date("receipt_date").notNull(),
+    amountPaise: bigint("amount_paise", { mode: "number" }).notNull(),
+    referenceDate: date("reference_date"),
+    delayDays: integer("delay_days"),
+    multiplierPpm: integer("multiplier_ppm"),
+    earnedExact: text("earned_exact").notNull(),
+    status: text("status").notNull(),
+    note: text("note").notNull(),
+  },
+  // The migration's unique index (one credited part per receipt, invoice and salesperson per run) is partial and
+  // NULLS NOT DISTINCT; only the plain index is declared here.
+  (t) => [index("incentive_calc_receipt_credits_run_idx").on(t.runId, t.employeeId)],
+);
+
+export const incentiveCalcAdjustments = pgTable(
+  "incentive_calc_adjustments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    programId: uuid("program_id").notNull().references(() => incentivePrograms.id, { onDelete: "restrict" }),
+    categoryCode: text("category_code").notNull(),
+    fromMonth: date("from_month").notNull(),
+    toMonth: date("to_month"),
+    employeeId: uuid("employee_id").references(() => employees.id, { onDelete: "set null" }),
+    employeeName: text("employee_name").notNull(),
+    kind: text("kind").notNull().$type<"recalc-difference" | "negative-carry" | "write-off" | "salary-recovery">(),
+    amountPaise: bigint("amount_paise", { mode: "number" }).notNull(),
+    monthsLeft: integer("months_left"),
+    sourceRunId: uuid("source_run_id").notNull().references(() => incentiveCalcRuns.id, { onDelete: "restrict" }),
+    note: text("note").notNull(),
+    createdById: uuid("created_by_id").references(() => employees.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("incentive_calc_adjustments_to_idx").on(t.programId, t.categoryCode, t.toMonth)],
+);
+
+export const incentiveCalcAttributions = pgTable(
+  "incentive_calc_attributions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    documentId: uuid("document_id").notNull().references(() => tallyDocuments.id, { onDelete: "restrict" }),
+    employeeId: uuid("employee_id").notNull().references(() => employees.id, { onDelete: "restrict" }),
+    sharePpm: integer("share_ppm").notNull(),
+    createdById: uuid("created_by_id").references(() => employees.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    /** 0133 — a row is never edited: a correction retires it (who, when, why) and records a new one. */
+    note: text("note"),
+    retiredAt: timestamp("retired_at", { withTimezone: true }),
+    retiredById: uuid("retired_by_id").references(() => employees.id, { onDelete: "set null" }),
+    retiredReason: text("retired_reason"),
+  },
+  // 0133: one ACTIVE row per order and salesperson (a partial unique index in the migration).
+  (t) => [index("incentive_calc_attributions_document_idx").on(t.documentId)],
+);
+
+export const incentiveCalcRepHistory = pgTable(
+  "incentive_calc_rep_history",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    customerMasterId: uuid("customer_master_id").notNull().references(() => customerMasters.id, { onDelete: "restrict" }),
+    employeeId: uuid("employee_id").notNull().references(() => employees.id, { onDelete: "restrict" }),
+    effectiveFrom: date("effective_from").notNull(),
+    effectiveTo: date("effective_to"),
+    createdById: uuid("created_by_id").references(() => employees.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    note: text("note"),
+    retiredAt: timestamp("retired_at", { withTimezone: true }),
+    retiredById: uuid("retired_by_id").references(() => employees.id, { onDelete: "set null" }),
+    retiredReason: text("retired_reason"),
+  },
+  (t) => [index("incentive_calc_rep_history_customer_idx").on(t.customerMasterId, t.effectiveFrom)],
+);
+
+export const incentiveCalcReceiptEvents = pgTable(
+  "incentive_calc_receipt_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    documentId: uuid("document_id").notNull().references(() => tallyDocuments.id, { onDelete: "restrict" }),
+    kind: text("kind").notNull().$type<"refund" | "bounced" | "reversed" | "allocation" | "salesReturn" | "hold">(),
+    invoiceDocumentId: uuid("invoice_document_id").references(() => tallyDocuments.id, { onDelete: "restrict" }),
+    amountPaise: bigint("amount_paise", { mode: "number" }),
+    eventDate: date("event_date").notNull(),
+    note: text("note"),
+    createdById: uuid("created_by_id").references(() => employees.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    retiredAt: timestamp("retired_at", { withTimezone: true }),
+    retiredById: uuid("retired_by_id").references(() => employees.id, { onDelete: "set null" }),
+    retiredReason: text("retired_reason"),
+  },
+  (t) => [index("incentive_calc_receipt_events_document_idx").on(t.documentId)],
+);
+
+/* ── 0133 — input history, approvals and payout records (Category A) ── */
+
+export const incentiveCalcInputHistory = pgTable(
+  "incentive_calc_input_history",
+  {
+    eventNo: bigint("event_no", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
+    entity: text("entity").notNull().$type<"attribution" | "rep-history" | "receipt-event">(),
+    entityId: uuid("entity_id").notNull(),
+    action: text("action").notNull().$type<"record" | "retire">(),
+    before: jsonb("before"),
+    after: jsonb("after"),
+    note: text("note"),
+    actorId: uuid("actor_id").references(() => employees.id, { onDelete: "set null" }),
+    actorName: text("actor_name").notNull(),
+    at: timestamp("at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("incentive_calc_input_history_entity_idx").on(t.entity, t.entityId, t.eventNo)],
+);
+
+export const incentiveCalcApprovals = pgTable(
+  "incentive_calc_approvals",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    periodId: uuid("period_id").notNull().references(() => incentiveCalcPeriods.id, { onDelete: "restrict" }),
+    runId: uuid("run_id").notNull().references(() => incentiveCalcRuns.id, { onDelete: "restrict" }),
+    submissionNo: integer("submission_no").notNull(),
+    stepNo: integer("step_no").notNull(),
+    decision: text("decision").notNull().$type<"approve" | "reject">(),
+    reason: text("reason"),
+    actorId: uuid("actor_id").references(() => employees.id, { onDelete: "set null" }),
+    actorName: text("actor_name").notNull(),
+    at: timestamp("at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("incentive_calc_approvals_step_uq").on(t.periodId, t.submissionNo, t.stepNo)],
+);
+
+export const incentiveCalcPayouts = pgTable(
+  "incentive_calc_payouts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    periodId: uuid("period_id").notNull().references(() => incentiveCalcPeriods.id, { onDelete: "restrict" }),
+    runId: uuid("run_id").notNull().references(() => incentiveCalcRuns.id, { onDelete: "restrict" }),
+    reference: text("reference").notNull(),
+    releaseOn: date("release_on").notNull(),
+    paidOn: date("paid_on").notNull(),
+    totalPaise: bigint("total_paise", { mode: "number" }).notNull(),
+    note: text("note"),
+    recordedById: uuid("recorded_by_id").references(() => employees.id, { onDelete: "set null" }),
+    recordedByName: text("recorded_by_name").notNull(),
+    recordedAt: timestamp("recorded_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("incentive_calc_payouts_period_uq").on(t.periodId)],
+);
+
+export const incentiveCalcPayoutLines = pgTable(
+  "incentive_calc_payout_lines",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    payoutId: uuid("payout_id").notNull().references(() => incentiveCalcPayouts.id, { onDelete: "restrict" }),
+    employeeId: uuid("employee_id").references(() => employees.id, { onDelete: "set null" }),
+    employeeName: text("employee_name").notNull(),
+    payablePaise: bigint("payable_paise", { mode: "number" }).notNull(),
+    adjustmentsPaise: bigint("adjustments_paise", { mode: "number" }).notNull(),
+    amountPaise: bigint("amount_paise", { mode: "number" }).notNull(),
+  },
+  (t) => [uniqueIndex("incentive_calc_payout_lines_uq").on(t.payoutId, t.employeeId)],
+);
 
 // ════════════════════════════════════════════════════════════════════════════
 // TRAINING CENTRE (migration 0079)

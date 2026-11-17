@@ -30,13 +30,12 @@ import { TALLY_CATEGORIES, TALLY_LIMITS, salesOrderMappingFields, type TallyCate
 import { checkMapping, findHeaderRow, mappingIsUsable, suggestMapping, type TallyMapping } from "@/lib/tally/mapping";
 import { chunkRows, planRows, summarize, type PlannedRow, type RawRow, type TallyDirection } from "@/lib/tally/plan";
 import { salesOrderViews, summarizeSalesOrders } from "@/lib/tally/sales-orders";
-import { buildCatalogue, importFields, type FieldSetting } from "@/lib/tally/sales-order-config";
+import { buildCatalogue, ignoredHeading, importFields, sectionLabel, type FieldSetting, type SoCatalogue } from "@/lib/tally/sales-order-config";
 import { NO_LINKS, mergeMatches, type SalesOrderLinks, type SalesOrderMatches } from "@/lib/tally/sales-order-match";
 import { hasReportableProblems, salesOrderErrorReport } from "@/lib/tally/error-report";
 import { DOCUMENT_SECTIONS, salesOrderImportHref } from "@/lib/tally/sections";
 import { SalesOrderPreview, type LinkOption } from "@/components/forms/tally/sales-order-preview";
 import { SalesOrderEntryForm } from "@/components/forms/tally/sales-order-entry-form";
-import { ignoredHeadingReason } from "@/lib/tally/sales-order-catalogue";
 import { salesOrderFormLinks, salesOrderFormRows, type SoFormOrder, type SoFormRowSource } from "@/lib/tally/sales-order-form";
 import { partyKey } from "@/lib/tally/values";
 import type { TallyField } from "@/lib/tally/categories";
@@ -713,7 +712,7 @@ export function TallyImportShell({
                 </div>
               )}
               {so ? (
-                <SalesOrderMapping fields={soFields} sections={catalogue.sections} headers={file.headers} mapping={mapping} onChange={setField} />
+                <SalesOrderMapping fields={soFields} catalogue={catalogue} headers={file.headers} mapping={mapping} onChange={setField} />
               ) : (
               <div className="mt-3 grid grid-cols-2 max-md:grid-cols-1 gap-x-6 gap-y-2">
                 {def.fields.map((field) => (
@@ -1005,13 +1004,15 @@ function formMismatchOf(file: Loaded, matches: SalesOrderMatches | null): boolea
 
 /**
  * The Sales Order column mapping, grouped by the matrix's own sections. A section with a required field that has no
- * column opens by itself; the rest stay folded. Columns the matrix marks x (or "Update") are listed as ignored, and
- * any other column no field reads is listed too, so nothing in the file goes unaccounted for.
+ * column opens by itself; the rest stay folded. Columns of fields that aren't on under the configuration — a field
+ * the matrix marks x that nobody enabled, an "Update" field, a field or section an administrator switched off — are
+ * listed as ignored, and any other column no field reads is listed too, so nothing in the file goes unaccounted for.
  */
-function SalesOrderMapping({ fields, sections, headers, mapping, onChange }: { fields: readonly TallyField[]; sections: readonly string[]; headers: string[]; mapping: TallyMapping; onChange: (key: string, value: string) => void }) {
+function SalesOrderMapping({ fields, catalogue, headers, mapping, onChange }: { fields: readonly TallyField[]; catalogue: SoCatalogue; headers: string[]; mapping: TallyMapping; onChange: (key: string, value: string) => void }) {
+  const sections = catalogue.sections;
   const used = new Set(Object.values(mapping));
-  const ignored = headers.filter((h, i) => !used.has(i) && ignoredHeadingReason(h));
-  const unread = headers.filter((h, i) => !used.has(i) && !ignoredHeadingReason(h));
+  const ignored = headers.filter((h, i) => !used.has(i) && ignoredHeading(catalogue, h));
+  const unread = headers.filter((h, i) => !used.has(i) && !ignoredHeading(catalogue, h));
   const mapped = fields.filter((f) => mapping[f.key] !== undefined).length;
   return (
     <div className="mt-3">
@@ -1027,7 +1028,7 @@ function SalesOrderMapping({ fields, sections, headers, mapping, onChange }: { f
           return (
             <details key={section} open={missing > 0} className="rounded-lg" style={{ border: "1px solid var(--color-hairline)" }}>
               <summary className="cursor-pointer select-none px-3 py-2 text-[13px] font-bold text-ink-strong">
-                {section}{" "}
+                {sectionLabel(catalogue, section)}{" "}
                 <span className="font-semibold text-ink-subtle">
                   · {have}/{list.length}
                   {missing > 0 && <span className="text-[#B91C1C]"> · {missing} required without a column</span>}
@@ -1062,7 +1063,7 @@ function SalesOrderMapping({ fields, sections, headers, mapping, onChange }: { f
           {ignored.length > 0 && (
             <p>
               <span className="font-bold text-ink-strong">Ignored ({ignored.length}):</span> {ignored.slice(0, 12).join(", ")}
-              {ignored.length > 12 ? ` and ${ignored.length - 12} more` : ""} — not Sales Order fields in Tally&apos;s matrix.
+              {ignored.length > 12 ? ` and ${ignored.length - 12} more` : ""} — not Sales Order fields in Tally&apos;s matrix, or switched off. An administrator can enable a field in Admin &amp; Master Setup → Sales Order Fields.
             </p>
           )}
           {unread.length > 0 && (

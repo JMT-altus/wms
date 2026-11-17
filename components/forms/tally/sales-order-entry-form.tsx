@@ -9,7 +9,8 @@ import { GST_STATES } from "@/lib/masters/gstin";
 import { CHANGE_MODES, REGISTERED_TYPES, isIndia, soField, type SoField } from "@/lib/tally/sales-order-catalogue";
 import { allocationAmountPaise, emptyItem, emptyLedger, emptySalesOrder, itemAmountPaise, orderTotals, singleDeliveryDiscountNote, type SoFormCostCentre, type SoFormItem, type SoFormLedger, type SoFormOrder } from "@/lib/tally/sales-order-form";
 import type { LinkOption } from "@/components/forms/tally/sales-order-preview";
-import { BASE_CATALOGUE, formFields, isRequired, type ConfiguredField, type FieldScope, type SoCatalogue } from "@/lib/tally/sales-order-config";
+import { BASE_CATALOGUE, activeGroups, formFields, groupFields, groupLabel, isRequired, type ConfiguredField, type FieldScope, type SoCatalogue } from "@/lib/tally/sales-order-config";
+import { SO_GROUP, type SoGroupKey } from "@/lib/tally/sales-order-catalogue";
 
 /**
  * Forms → Sales Orders → Import Sales Orders → "Enter an order". One Sales
@@ -71,6 +72,8 @@ function Label({ field, required, children, wide }: { field: SoField | string; r
         {!changed && f.requirement === "provision" && <span className="ml-1 rounded px-1 text-[10.5px] font-bold text-[#047857]" style={{ background: "#ECFDF5" }}>Optional</span>}
       </span>
       {children}
+      {/* The administrator's help text for the field (Admin & Master Setup → Sales Order Fields), when there is one. */}
+      {cf?.helpText && <span className="text-[11.5px] font-normal text-ink-subtle">{cf.helpText}</span>}
     </label>
   );
 }
@@ -198,20 +201,88 @@ function CustomFields({ scope, values, onChange, owner, tried, disabled }: { sco
 }
 
 /**
- * The fields the matrix marks x that the WMS offers (keyed matrix fields), of one scope and Tally section, in a
- * collapsed panel titled with their configured labels. Only those the configuration has on the form, and only while
- * their condition holds (Voucher Applicable Upto for an optional voucher; cess under "Specify Details Here").
- * Optional by default; a field an administrator made mandatory is starred, checked and opens the panel.
+ * The sections whose keyed Tally fields have a panel of their own on the form (a TallyExtras beside the fields they
+ * go with), by scope. An enabled keyed field in any other section — a provision of one of the matrix's other
+ * sections, or a field an administrator moved to a section of their own — is shown by OtherSections.
+ */
+const PLACED: Record<FieldScope, readonly string[]> = {
+  voucher: ["General Details", "Party Details (Buyer/Supplier)", "Dispatch/Receipt/Party's Document Details", "Export/Import Details", "Original Invoice Details"],
+  ledger: [],
+  item: ["Item Details", "GST Rate & Related Details"],
+  allocation: ["Item Allocations Details"],
+  additionalCost: [],
+};
+/** The keyed Tally fields of one scope that the configuration has on the form (the x fields the WMS offers, and enabled provisions). A repeating group's fields are its rows' columns instead (GroupRows). */
+const keyedFormFields = (c: SoCatalogue, scope: FieldScope) => formFields(c, scope).filter((f) => f.keyed && !f.isCustom && !f.group);
+
+/**
+ * One of Tally's repeating groups under a ledger entry or the order — bill, bank, tax type, TDS or TCS bill
+ * allocations, advance lines: a table of rows with the columns the configuration has on the form (labelled as it says,
+ * in its display order), rows added and removed by hand. A field the configuration requires is starred and checked on
+ * every row (its condition read from the row, then its ledger entry, then the order). Each row becomes one template
+ * row under its parent, checked by the import like a file's.
+ */
+function GroupRows({ group, rows, onChange, parentValue, owner, tried, disabled }: { group: SoGroupKey; rows: Record<string, string>[] | undefined; onChange: (rows: Record<string, string>[]) => void; parentValue: (key: string) => string | null | undefined; owner: string; tried: boolean; disabled: boolean }) {
+  const c = React.useContext(FormConfig);
+  const fields = groupFields(c, group, "form");
+  if (!fields.length) return null;
+  const g = SO_GROUP[group];
+  const list = rows ?? [];
+  const title = groupLabel(c, group);
+  const set = (i: number, key: string, value: string) => onChange(list.map((r, j) => (j === i ? { ...r, [key]: value } : r)));
+  return (
+    <More label={`${title} of ${owner}${list.length ? ` · ${list.length}` : " (optional)"}`} defaultOpen={list.length > 0}>
+      {list.map((row, i) => {
+        const read = (k: string) => row[k] ?? parentValue(k) ?? null;
+        return (
+          <div key={i} role="group" aria-label={`${title} ${i + 1} of ${owner}`} className="mt-2 rounded-lg bg-white p-2.5" style={{ border: "1px solid var(--color-hairline)" }}>
+            <div className="mb-1.5 flex items-center justify-between text-[12px] font-bold text-ink-muted">
+              <span>
+                {g.rowLabel.replace(/^./, (x) => x.toUpperCase())} {i + 1}
+              </span>
+              <button type="button" aria-label={`Remove ${g.rowLabel} ${i + 1} of ${owner}`} disabled={disabled} onClick={() => onChange(list.filter((_, j) => j !== i))} className="grid h-7 w-7 place-items-center rounded-md text-ink-subtle hover:bg-[#F6F8FB] hover:text-[#B91C1C]">
+                <Trash2 size={14} aria-hidden />
+              </button>
+            </div>
+            <Grid cols={4}>
+              {fields.map((f) => {
+                const required = isRequired(f, read);
+                return (
+                  <Label key={f.key} field={f} required={required}>
+                    <TypedInput f={f} aria={`${f.label} of ${owner} ${g.rowLabel} ${i + 1}`} value={row[f.key] ?? ""} onChange={(x) => set(i, f.key, x)} invalid={tried && required && blank(row[f.key])} disabled={disabled} />
+                  </Label>
+                );
+              })}
+            </Grid>
+          </div>
+        );
+      })}
+      <button type="button" disabled={disabled} onClick={() => onChange([...list, {}])} className="mt-2 inline-flex items-center gap-1 text-[12.5px] font-bold" style={{ color: BLUE }}>
+        <Plus size={14} aria-hidden /> Add {g.rowLabel}
+      </button>
+    </More>
+  );
+}
+/** The sections OtherSections shows for a scope, in the configuration's order. */
+const otherSections = (c: SoCatalogue, scope: FieldScope) => c.sectionList.filter((s) => !PLACED[scope].includes(s.name) && keyedFormFields(c, scope).some((f) => f.section === s.name));
+
+/**
+ * The fields the matrix marks x that the configuration has on the form (keyed matrix fields), of one scope and
+ * section, in a collapsed panel titled with their configured labels. Only while their condition holds (Voucher
+ * Applicable Upto for an optional voucher; cess under "Specify Details Here"). Optional by default; a field an
+ * administrator made mandatory is starred, checked and opens the panel.
  */
 function TallyExtras({ scope, section, title, values, valueOf, onChange, owner, tried, disabled }: { scope: FieldScope; section: string; title: string; values: Record<string, string> | undefined; valueOf: (key: string) => string | null | undefined; onChange: (key: string, value: string) => void; owner: string; tried: boolean; disabled: boolean }) {
   const c = React.useContext(FormConfig);
   const read = (k: string) => values?.[k] ?? valueOf(k) ?? null;
-  const fields = formFields(c, scope).filter((f) => f.keyed && !f.isCustom && soField(f.key).section === section && (!f.shownWhen || f.shownWhen.values.some((x) => x.toLowerCase() === (read(f.shownWhen!.field) ?? "").trim().toLowerCase())));
+  const fields = keyedFormFields(c, scope).filter((f) => f.section === section && (!f.shownWhen || f.shownWhen.values.some((x) => x.toLowerCase() === (read(f.shownWhen!.field) ?? "").trim().toLowerCase())));
   if (!fields.length) return null;
   const required = (f: ConfiguredField) => isRequired(f, read);
   const anyRequired = fields.some(required);
+  // A long section (e-Way Bill has 47 fields) is titled with their number, not all their names.
+  const names = fields.length > 6 ? `${fields.length} fields` : fields.map((f) => f.label).join(", ");
   return (
-    <More label={`${title} — ${fields.map((f) => f.label).join(", ")}${anyRequired ? "" : " (optional)"}`} defaultOpen={anyRequired}>
+    <More label={`${title} — ${names}${anyRequired ? "" : " (optional)"}`} defaultOpen={anyRequired}>
       <Grid cols={4}>
         {fields.map((f) => (
           <Label key={f.key} field={f} required={required(f)}>
@@ -220,6 +291,18 @@ function TallyExtras({ scope, section, title, values, valueOf, onChange, owner, 
         ))}
       </Grid>
     </More>
+  );
+}
+
+/** One panel per section that has no place of its own on the form (see PLACED), titled with the section's configured label. */
+function OtherSections(props: { scope: FieldScope; values: Record<string, string> | undefined; valueOf: (key: string) => string | null | undefined; onChange: (key: string, value: string) => void; owner: string; tried: boolean; disabled: boolean }) {
+  const c = React.useContext(FormConfig);
+  return (
+    <>
+      {otherSections(c, props.scope).map((s) => (
+        <TallyExtras key={s.name} {...props} section={s.name} title={s.label} />
+      ))}
+    </>
   );
 }
 
@@ -344,7 +427,7 @@ function EntryForm({ options, disabled, busy, problems, onCheck, loadCustomer, c
   );
 
   /** The rate, narration and description every ledger entry carries (Y). */
-  const entryFields = (l: { rate: string; narration: string; description: string; custom?: Record<string, string> }, set: (patch: Partial<SoFormLedger>) => void, owner: string) => (
+  const entryFields = (l: { rate: string; narration: string; description: string; custom?: Record<string, string>; groups?: SoFormLedger["groups"] }, set: (patch: Partial<SoFormLedger>) => void, owner: string) => (
     <>
       <Label field="ledgerRate">
         <TextBox ariaLabel={`${tallyName("ledgerRate")} of ${owner}`} inputMode="decimal" value={l.rate} onChange={(x) => set({ rate: x })} invalid={need("", l.rate)} placeholder="0 where it has none" disabled={disabled} />
@@ -356,10 +439,21 @@ function EntryForm({ options, disabled, busy, problems, onCheck, loadCustomer, c
         <TextBox ariaLabel={`${tallyName("ledgerDescription")} of ${owner}`} value={l.description} onChange={(x) => set({ description: x })} invalid={need("", l.description)} disabled={disabled} />
       </Label>
       <CustomFields scope="ledger" values={l.custom} onChange={(k, x) => set({ custom: { ...l.custom, [k]: x } })} owner={owner} tried={tried} disabled={disabled} />
+      {otherSections(catalogue, "ledger").length > 0 && (
+        <div className="col-span-full">
+          <OtherSections scope="ledger" values={l.custom} valueOf={(k) => v[k]} onChange={(k, x) => set({ custom: { ...l.custom, [k]: x } })} owner={owner} tried={tried} disabled={disabled} />
+        </div>
+      )}
+      {activeGroups(catalogue, "ledger", "form").map((g) => (
+        <div key={g.key} className="col-span-full">
+          <GroupRows group={g.key} rows={l.groups?.[g.key]} onChange={(rows) => set({ groups: { ...l.groups, [g.key]: rows } })} parentValue={(k) => l.custom?.[k] ?? v[k]} owner={owner} tried={tried} disabled={disabled} />
+        </div>
+      ))}
     </>
   );
 
   const consigneeKeys = ["consignee", "consigneeMailingName", "consigneeAddressType", "consigneeAddress", "consigneeCountry", "consigneeState", "consigneeGstin", "consigneePincode"];
+  const otherVoucherSections = otherSections(catalogue, "voucher").length > 0 || activeGroups(catalogue, "voucher", "form").length > 0;
 
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-3" aria-label="Enter a Sales Order">
@@ -590,6 +684,7 @@ function EntryForm({ options, disabled, busy, problems, onCheck, loadCustomer, c
                   </Grid>
                 </More>
                 <TallyExtras scope="item" section="Item Details" title="More item details" values={iv} valueOf={lineValue} onChange={(k, x) => setItemValue(i, k, x)} owner={`item ${i + 1}`} tried={tried} disabled={disabled} />
+                <OtherSections scope="item" values={iv} valueOf={lineValue} onChange={(k, x) => setItemValue(i, k, x)} owner={`item ${i + 1}`} tried={tried} disabled={disabled} />
               </div>
 
               {formFields(catalogue, "item").some((f) => f.isCustom) && (
@@ -659,6 +754,7 @@ function EntryForm({ options, disabled, busy, problems, onCheck, loadCustomer, c
                         </Grid>
                       </More>
                       <TallyExtras scope="allocation" section="Item Allocations Details" title={`More for allocation ${j + 1}`} values={a} valueOf={(k) => a[k] ?? lineValue(k)} onChange={(k, x) => setAlloc(i, j, k, x)} owner={`item ${i + 1} allocation ${j + 1}`} tried={tried} disabled={disabled} />
+                      <OtherSections scope="allocation" values={a} valueOf={(k) => a[k] ?? lineValue(k)} onChange={(k, x) => setAlloc(i, j, k, x)} owner={`item ${i + 1} allocation ${j + 1}`} tried={tried} disabled={disabled} />
                       {single && singleDeliveryDiscountNote(item) && (
                         <p role="note" className="mt-1.5 rounded-md px-2.5 py-1.5 text-[12px] text-ink-muted" style={{ background: "var(--color-amber-bg)" }}>
                           {singleDeliveryDiscountNote(item)}
@@ -769,6 +865,7 @@ function EntryForm({ options, disabled, busy, problems, onCheck, loadCustomer, c
           <Label field="destination">{voucherBox("destination")}</Label>
           <Label field="carrier">{voucherBox("carrier")}</Label>
         </Grid>
+        <TallyExtras scope="voucher" section="Dispatch/Receipt/Party's Document Details" title="Dispatch documents" values={v} valueOf={(k) => v[k]} onChange={setVoucher} owner="the order" tried={tried} disabled={disabled} />
         <TallyExtras scope="voucher" section="Export/Import Details" title="Export details" values={v} valueOf={(k) => v[k]} onChange={setVoucher} owner="the order" tried={tried} disabled={disabled} />
       </Section>
 
@@ -778,6 +875,7 @@ function EntryForm({ options, disabled, busy, problems, onCheck, loadCustomer, c
             <Choice field={soField("originalSalesNature")} value={v.originalSalesNature ?? ""} onChange={(x) => setVoucher("originalSalesNature", x)} disabled={disabled} />
           </Label>
         </Grid>
+        <TallyExtras scope="voucher" section="Original Invoice Details" title="Original invoice" values={v} valueOf={(k) => v[k]} onChange={setVoucher} owner="the order" tried={tried} disabled={disabled} />
         <h4 className="mt-3 text-[12.5px] font-bold text-ink-strong">Additional cost (?)</h4>
         {order.additionalCosts.map((a, i) => (
           <div key={i} className="mt-2 grid grid-cols-[1fr_140px_160px_auto] max-sm:grid-cols-1 items-end gap-2">
@@ -827,8 +925,17 @@ function EntryForm({ options, disabled, busy, problems, onCheck, loadCustomer, c
         </Grid>
       </Section>
 
+      {otherVoucherSections && (
+        <Section letter="K" title="Other Tally sections" hint="Sections and fields enabled in Admin & Master Setup → Sales Order Fields" optional>
+          <OtherSections scope="voucher" values={v} valueOf={(k) => v[k]} onChange={setVoucher} owner="the order" tried={tried} disabled={disabled} />
+          {activeGroups(catalogue, "voucher", "form").map((g) => (
+            <GroupRows key={g.key} group={g.key} rows={order.groups?.[g.key]} onChange={(rows) => setOrder((o) => ({ ...o, groups: { ...o.groups, [g.key]: rows } }))} parentValue={(k) => v[k]} owner="the order" tried={tried} disabled={disabled} />
+          ))}
+        </Section>
+      )}
+
       {formFields(catalogue, "voucher").some((f) => f.isCustom) && (
-        <Section letter="K" title="Custom fields" hint="Fields added in Admin & Master Setup → Sales Order Fields">
+        <Section letter={otherVoucherSections ? "L" : "K"} title="Custom fields" hint="Fields added in Admin & Master Setup → Sales Order Fields">
           <Grid>
             <CustomFields scope="voucher" values={v} onChange={setVoucher} owner="the order" tried={tried} disabled={disabled} />
           </Grid>

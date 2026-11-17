@@ -3,14 +3,31 @@ import { desc, eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { employees, salesOrderFieldHistory, salesOrderFieldSettings } from "@/db/schema";
 import { isMissingTable } from "@/lib/queries/collection-master";
-import { BASE_CATALOGUE, buildCatalogue, customKey, settingFromRow, validateSetting, type FieldSetting, type SettingInput, type SoCatalogue } from "@/lib/tally/sales-order-config";
+import {
+  BASE_CATALOGUE,
+  buildCatalogue,
+  customKey,
+  sectionKey,
+  settingFromRow,
+  validateSection,
+  validateSetting,
+  type FieldSetting,
+  type SectionInput,
+  type SettingInput,
+  type SoCatalogue,
+} from "@/lib/tally/sales-order-config";
 
 /**
- * The stored Sales Order field settings (migration 0128) and the effective configuration built from them. Nothing
- * here authorizes: callers hold the permission (lib/auth/sales-order-fields.ts) or only read.
+ * The stored Sales Order field and section settings (migration 0128) and the effective configuration built from them.
+ * Nothing here authorizes: callers hold the permission (lib/auth/sales-order-fields.ts) or only read.
  *
  * Without migration 0128 the settings simply don't exist: every reader gets the Tally matrix as it is (version 0),
  * so the Sales Order screens and imports keep working, and saving a setting says the update is needed.
+ *
+ * HELP TEXT lives in one column added by migration 0130 (`help_text`). It is deliberately NOT declared on the Drizzle
+ * table: Drizzle names every declared column in an INSERT, which would break saving any setting on a database that
+ * doesn't have 0130 yet. It is read and written here with plain SQL, only when the column exists; without it every
+ * other setting works and saving a help text says the update is needed.
  */
 
 type Q = typeof db;
@@ -18,6 +35,8 @@ type Q = typeof db;
 export interface CatalogueLoad {
   /** False while migration 0128 isn't applied. */
   ready: boolean;
+  /** False while migration 0130 (the help-text column) isn't applied. */
+  helpTextReady: boolean;
   catalogue: SoCatalogue;
   settings: FieldSetting[];
 }
@@ -39,12 +58,19 @@ const SETTING_COLUMNS = {
   status: salesOrderFieldSettings.status,
   rowVersion: salesOrderFieldSettings.rowVersion,
 };
+/** The settings columns to read: 0130's help text when the database has it, an empty one when it doesn't. */
+const settingColumns = (helpText: boolean) => ({ ...SETTING_COLUMNS, helpText: helpText ? sql<string | null>`"sales_order_field_settings"."help_text"` : sql<string | null>`null` });
 
-/** Whether migration 0128's tables exist — asked in a way that can't fail, so it is safe inside a transaction. */
-async function settingsTableExists(q: Q): Promise<boolean> {
-  const r = await q.execute(sql`select to_regclass('public.sales_order_field_settings') is not null and to_regclass('public.sales_order_field_history') is not null as ok`);
-  const rows = (Array.isArray(r) ? r : ((r as unknown as { rows?: unknown[] }).rows ?? [])) as { ok: boolean }[];
-  return rows[0]?.ok === true;
+const NOT_READY_0130 = "Help text needs database update 0130 first, so nothing was saved.";
+const STALE = "This setting was changed by someone else meanwhile. Nothing was saved; reload to see the current setting.";
+
+/** Which of the settings' migrations the database has — asked in a way that can't fail, so it is safe inside a transaction. */
+async function settingsCapabilities(q: Q): Promise<{ ready: boolean; helpText: boolean }> {
+  const r = await q.execute(sql`select
+    to_regclass('public.sales_order_field_settings') is not null and to_regclass('public.sales_order_field_history') is not null as ok,
+    exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'sales_order_field_settings' and column_name = 'help_text') as help`);
+  const rows = (Array.isArray(r) ? r : ((r as unknown as { rows?: unknown[] }).rows ?? [])) as { ok: boolean; help: boolean }[];
+  return { ready: rows[0]?.ok === true, helpText: rows[0]?.help === true };
 }
 
 /**
@@ -53,46 +79,79 @@ async function settingsTableExists(q: Q): Promise<boolean> {
  * database without 0128 must never be asked for them.
  */
 export async function loadSalesOrderCatalogue(q: Q = db): Promise<CatalogueLoad> {
-  if (!(await settingsTableExists(q))) return { ready: false, catalogue: BASE_CATALOGUE, settings: [] };
+  const caps = await settingsCapabilities(q);
+  if (!caps.ready) return { ready: false, helpTextReady: false, catalogue: BASE_CATALOGUE, settings: [] };
   try {
     const [rows, [v]] = await Promise.all([
-      q.select(SETTING_COLUMNS).from(salesOrderFieldSettings),
+      q.select(settingColumns(caps.helpText)).from(salesOrderFieldSettings),
       q.select({ v: sql<number>`coalesce(max(${salesOrderFieldHistory.version}), 0)::bigint` }).from(salesOrderFieldHistory),
     ]);
     const settings = rows.map(settingFromRow);
-    return { ready: true, catalogue: buildCatalogue(settings, Number(v?.v ?? 0)), settings };
+    return { ready: true, helpTextReady: caps.helpText, catalogue: buildCatalogue(settings, Number(v?.v ?? 0)), settings };
   } catch (err) {
-    if (isMissingTable(err)) return { ready: false, catalogue: BASE_CATALOGUE, settings: [] };
+    if (isMissingTable(err)) return { ready: false, helpTextReady: false, catalogue: BASE_CATALOGUE, settings: [] };
     throw err;
   }
 }
 
 export type SaveResult = { ok: true; fieldKey: string; version: number } | { ok: false; error: string };
 
+type RowValues = Pick<typeof salesOrderFieldSettings.$inferInsert, "isCustom" | "scope" | "label" | "section" | "displayOrder" | "requirement" | "condition" | "fieldType" | "options" | "inForm" | "inImport" | "onOrderPage" | "status">;
+
 /**
- * Saves one field's setting: a change to a matrix field or an existing custom field, a new custom field, a
- * retirement or a restore. One transaction, serialised with every other settings change:
- *   - the input is validated against the configuration as it is NOW (not as the screen saw it);
- *   - `expectedRowVersion` must be the row's version the screen read (0 = it had no row): a change made meanwhile
- *     is never overwritten;
- *   - the row is written and the change appended to the history, which numbers the new configuration version.
- * Rows are never deleted (the database refuses it).
+ * Writes one settings row (a field's or a section's) and appends the change to the history, which numbers the new
+ * configuration version. `expectedRowVersion` must be the row's version the screen read (0 = it had no row): a change
+ * made meanwhile is never overwritten. `helpText`: undefined keeps what is stored. Rows are never deleted (the
+ * database refuses it).
+ */
+async function writeSetting(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  actorId: string,
+  key: string,
+  values: RowValues,
+  helpText: string | null | undefined,
+  helpTextReady: boolean,
+  expectedRowVersion: number,
+  mustExist: boolean,
+): Promise<SaveResult> {
+  const q = tx as unknown as Q;
+  const text = helpText === undefined ? undefined : helpText?.trim() || null;
+  // Asked for before anything is written: a database without 0130 has nowhere to keep it.
+  if (text && !helpTextReady) return { ok: false, error: NOT_READY_0130 };
+  const [row] = await q.select(settingColumns(helpTextReady)).from(salesOrderFieldSettings).where(eq(salesOrderFieldSettings.fieldKey, key)).limit(1);
+  if ((row?.rowVersion ?? 0) !== expectedRowVersion) return { ok: false, error: STALE };
+  if (!row && mustExist) return { ok: false, error: "That custom field doesn't exist." };
+  const action = !row ? "create" : row.status !== values.status ? (values.status === "retired" ? "retire" : "restore") : "update";
+  if (row) {
+    await tx
+      .update(salesOrderFieldSettings)
+      .set({ ...values, rowVersion: row.rowVersion + 1, updatedById: actorId, updatedAt: new Date() })
+      .where(eq(salesOrderFieldSettings.fieldKey, key));
+  } else {
+    await tx.insert(salesOrderFieldSettings).values({ fieldKey: key, ...values, createdById: actorId, updatedById: actorId });
+  }
+  if (helpTextReady && text !== undefined) await tx.execute(sql`update sales_order_field_settings set help_text = ${text} where field_key = ${key}`);
+  const before = row ? settingFromRow(row) : null;
+  const after = { ...values, fieldKey: key, ...(helpTextReady ? { helpText: text === undefined ? (row?.helpText ?? null) : text } : {}) };
+  const [h] = await tx.insert(salesOrderFieldHistory).values({ fieldKey: key, action, before, after, changedById: actorId }).returning({ version: salesOrderFieldHistory.version });
+  return { ok: true, fieldKey: key, version: Number(h!.version) };
+}
+
+/**
+ * Saves one field's setting: a change to a matrix field or an existing custom field, a new custom field, enabling
+ * or disabling one. One transaction, serialised with every other settings change; the input is validated against the
+ * configuration as it is NOW (not as the screen saw it).
  */
 export async function saveFieldSetting(actorId: string, input: SettingInput, expectedRowVersion: number): Promise<SaveResult> {
   return db.transaction(async (tx) => {
     const q = tx as unknown as Q;
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext('sales_order_field_settings'))`);
-    const { catalogue } = await loadSalesOrderCatalogue(q);
+    const { catalogue, helpTextReady } = await loadSalesOrderCatalogue(q);
     const key = input.fieldKey ?? (input.isCustom && input.label ? customKey(input.label, catalogue) : null);
     if (!key) return { ok: false as const, error: "Name the field." };
     const errors = validateSetting({ ...input, fieldKey: key }, catalogue);
     if (errors.length) return { ok: false as const, error: errors.join(" ") };
-    const [row] = await q.select(SETTING_COLUMNS).from(salesOrderFieldSettings).where(eq(salesOrderFieldSettings.fieldKey, key)).limit(1);
-    if ((row?.rowVersion ?? 0) !== expectedRowVersion) {
-      return { ok: false as const, error: "This field was changed by someone else meanwhile. Nothing was saved; reload to see the current setting." };
-    }
-    if (!row && input.fieldKey && input.isCustom) return { ok: false as const, error: "That custom field doesn't exist." };
-    const values = {
+    const values: RowValues = {
       isCustom: input.isCustom,
       scope: input.scope,
       label: input.label?.trim() || null,
@@ -107,21 +166,42 @@ export async function saveFieldSetting(actorId: string, input: SettingInput, exp
       onOrderPage: input.onOrderPage,
       status: input.status,
     };
-    const action = !row ? "create" : row.status !== input.status ? (input.status === "retired" ? "retire" : "restore") : "update";
-    if (row) {
-      await tx
-        .update(salesOrderFieldSettings)
-        .set({ ...values, rowVersion: row.rowVersion + 1, updatedById: actorId, updatedAt: new Date() })
-        .where(eq(salesOrderFieldSettings.fieldKey, key));
-    } else {
-      await tx.insert(salesOrderFieldSettings).values({ fieldKey: key, ...values, createdById: actorId, updatedById: actorId });
-    }
-    const before = row ? settingFromRow(row) : null;
-    const [h] = await tx
-      .insert(salesOrderFieldHistory)
-      .values({ fieldKey: key, action, before, after: { ...values, fieldKey: key }, changedById: actorId })
-      .returning({ version: salesOrderFieldHistory.version });
-    return { ok: true as const, fieldKey: key, version: Number(h!.version) };
+    return writeSetting(tx, actorId, key, values, input.helpText, helpTextReady, expectedRowVersion, !!input.fieldKey && input.isCustom);
+  });
+}
+
+/**
+ * Saves one section's settings — its display label, order, enabled / disabled, help text — or adds a custom section.
+ * The same transaction, lock, version check and history as a field's: a section's row is keyed "section_…" and holds
+ * the section's name in `section`. Disabling a section writes nothing to its fields or to any order.
+ */
+export async function saveSectionSetting(actorId: string, input: SectionInput, expectedRowVersion: number): Promise<SaveResult> {
+  return db.transaction(async (tx) => {
+    const q = tx as unknown as Q;
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext('sales_order_field_settings'))`);
+    const { catalogue, helpTextReady } = await loadSalesOrderCatalogue(q);
+    const errors = validateSection(input, catalogue);
+    if (errors.length) return { ok: false as const, error: errors.join(" ") };
+    const name = input.name.trim();
+    const key = catalogue.sectionByName.get(name)?.key ?? sectionKey(name, new Set(catalogue.sectionList.map((s) => s.key)));
+    const label = input.label?.trim() || null;
+    const values: RowValues = {
+      isCustom: false,
+      // A section belongs to no scope; the column needs one of its values.
+      scope: "voucher",
+      label: label === name ? null : label,
+      section: name,
+      displayOrder: input.displayOrder,
+      requirement: null,
+      condition: null,
+      fieldType: null,
+      options: null,
+      inForm: true,
+      inImport: true,
+      onOrderPage: true,
+      status: input.status,
+    };
+    return writeSetting(tx, actorId, key, values, input.helpText, helpTextReady, expectedRowVersion, false);
   });
 }
 

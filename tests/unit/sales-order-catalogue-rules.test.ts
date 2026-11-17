@@ -19,16 +19,18 @@ const states = (p: ReturnType<typeof plan>) => p.rows.map((r) => r.state);
 const doc = (p: ReturnType<typeof plan>) => p.records[0] as DocumentRecord;
 
 describe("the catalogue is the business's matrix", () => {
-  it("every one of the Read Me's 353 Sales Order fields: 91 applied (65 Y, 18 ?, 8 Provision), 3 Update, 259 x — 21 offered as optional fields, 238 listed apart with why", () => {
+  it("every one of the Read Me's 353 Sales Order fields: 91 applied (65 Y, 18 ?, 8 Provision), 3 Update, 259 x — 21 offered as optional fields, 238 provisions (off by default) with why", () => {
     const readMe = SO_FIELDS.filter((f) => !f.outsideMatrix && !f.workflow);
     const n = (r: string) => readMe.filter((f) => f.requirement === r).length;
     expect([readMe.length, n("mandatory"), n("conditional"), n("provision")]).toEqual([91, 65, 18, 8]);
     // The x fields the WMS offers: optional, never required by the matrix; all but HSN Description stored by key.
-    const offered = SO_FIELDS.filter((f) => f.outsideMatrix);
+    const offered = SO_FIELDS.filter((f) => f.outsideMatrix && !f.defaultOff);
     expect(offered).toHaveLength(21);
     expect(offered.every((f) => f.requirement === "provision" && !f.mandatoryWhen && !f.workflow)).toBe(true);
     expect(offered.filter((f) => !f.keyed).map((f) => f.tallyName)).toEqual(["HSN Description"]);
-    expect(SO_FIELDS).toHaveLength(115);
+    // The catalogue holds every field of the worksheet: the 115 on by default and the 238 provisions.
+    expect(SO_FIELDS).toHaveLength(353);
+    expect(SO_FIELDS.filter((f) => !f.defaultOff)).toHaveLength(115);
     expect(SO_UPDATE_ONLY).toEqual(["Item Allocations - Pre-Close Quantity", "Item Allocations - Reason for Pre-Close", "Item Allocations - Pre-Close Date"]);
     expect(SO_FIELDS.filter((f) => f.workflow === "preClose").map((f) => f.key)).toEqual(["preCloseQuantity", "preCloseReason", "preCloseDate"]);
     expect(Object.values(SO_NOT_APPLICABLE).flat()).toHaveLength(238);
@@ -40,7 +42,8 @@ describe("the catalogue is the business's matrix", () => {
     expect(Object.values(SO_NOT_APPLICABLE).flat()).not.toEqual(expect.arrayContaining(["GST Classification"]));
     expect(Object.values(SO_NOT_APPLICABLE).flat()).not.toEqual(expect.arrayContaining(["Buyer/Supplier - Is Bill of Entry available"]));
     // Exact Tally names, each once; section headings are never fields.
-    expect(new Set(SO_FIELDS.map((f) => f.tallyName)).size).toBe(115);
+    expect(new Set(SO_FIELDS.map((f) => f.tallyName)).size).toBe(353);
+    expect(new Set(SO_FIELDS.map((f) => f.key)).size).toBe(353);
     for (const heading of ["General Details", "Ledger Details", "Item Details", "Order Details", "Voucher Status", "Export/Import Details"]) expect(SO_FIELDS.some((f) => f.tallyName === heading)).toBe(false);
     // The matrix report: every field once, with the Read Me's own marking.
     const m = soMatrixRows();
@@ -51,15 +54,16 @@ describe("the catalogue is the business's matrix", () => {
     expect(m.find((r) => r.tallyName === "HSN Description")).toMatchObject({ marking: "x", key: "hsnDescription", xStatus: null });
     expect(m.find((r) => r.tallyName === "Port of Loading")).toMatchObject({ marking: "x", key: "portOfLoading", xStatus: null });
     expect(m.find((r) => r.tallyName === "Item Allocations - Pre-Close Date")).toMatchObject({ marking: "Update", key: "preCloseDate" });
-    // Every x field not offered carries the audit's verdict and why.
-    const apart = m.filter((r) => r.marking === "x" && !r.key);
+    // Every x field not offered (a provision) carries the audit's verdict and why, and has a catalogue key.
+    const apart = m.filter((r) => r.marking === "x" && r.xStatus !== null);
+    expect(apart.every((r) => !!r.key)).toBe(true);
     expect(apart).toHaveLength(238);
     const status = (s: string) => apart.filter((r) => r.xStatus === s).map((r) => r.tallyName);
     expect(status("approval")).toEqual(["Discount Rate (Cash/Trade)", "Discount Amount (Cash/Trade)", "Item Allocations - Godown Name", "Item Allocations - Location Name"]);
     expect(status("external")).toHaveLength(5 + 12 + 47);
     expect(status("external")).toEqual(expect.arrayContaining(["Shipping Bill No.", "Bill of Entry Date", "e-Invoice - IRN", "e-Way Bill No."]));
     expect(status("notApplicable")).toHaveLength(238 - 4 - 64);
-    expect(apart.every((r) => /^Not a Sales Order field: .+\. Recognised in a file and ignored\.$/.test(r.rule))).toBe(true);
+    expect(apart.every((r) => /^Not a Sales Order field: .+\. Off unless enabled in Admin & Master Setup → Sales Order Fields\./.test(r.rule))).toBe(true);
   });
 
   it("an x or Update column in a file is recognised and ignored, never mapped", () => {

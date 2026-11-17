@@ -9,6 +9,9 @@ import { CategoryCards } from "@/components/incentive/category-cards";
 import { EmptyState, PageHead } from "@/components/incentive/empty-state";
 import { ActivityFeed } from "@/components/incentive/activity-feed";
 import { getRepAudit } from "@/lib/queries/incentive-admin";
+import { myCategoryA } from "@/lib/queries/incentive-calc";
+import { newCategoryAAuthoritative } from "@/lib/incentives/load";
+import { MyCategoryA } from "@/components/incentive/my-category-a";
 
 export const dynamic = "force-dynamic";
 
@@ -48,16 +51,24 @@ export default async function IncentiveOverviewPage({ searchParams }: PageProps)
   const sp = await searchParams;
   const period = typeof sp.period === "string" ? sp.period : currentPeriodIST();
 
-  const [summary, atRisk, monthlySales, activity] = await Promise.all([
+  const [summary, atRisk, monthlySales, activity, categoryA, newA] = await Promise.all([
     getIncentiveSummary(me.id, period),
     getAtRiskInvoices(me.id),
     getMonthlySales(me.id, period),
     getRepAudit(me.id, 8),
+    myCategoryA(me.id),
+    newCategoryAAuthoritative(period),
   ]);
+  // Category A is shown on its own (new authoritative engine + the old engine's historical lines); everything else on
+  // the page is the old engine's Categories B–G. Nothing is added across the two.
+  const oldA = summary.lines.filter((l) => l.category === "A");
+  const otherLines = summary.lines.filter((l) => l.category !== "A");
+  const otherTotal = otherLines.reduce((s, l) => s + l.amountPaise, 0);
   const chip = STATUS_CHIP[summary.status] ?? STATUS_CHIP.open!;
-  const headroom = Math.max(0, summary.schemeCapPaise - summary.totalPaise);
-  const pct = Math.min(100, (summary.totalPaise / summary.schemeCapPaise) * 100);
-  const nudge = goGet(monthlySales);
+  const headroom = Math.max(0, summary.schemeCapPaise - otherTotal);
+  const pct = Math.min(100, (otherTotal / summary.schemeCapPaise) * 100);
+  // The old engine's sales-slab nudge is Category A logic: shown only for months the new engine doesn't yet cover.
+  const nudge = newA ? null : goGet(monthlySales);
 
   return (
     <main className="mx-auto max-w-[1280px] px-10 max-md:px-4 pt-8 pb-16">
@@ -76,8 +87,9 @@ export default async function IncentiveOverviewPage({ searchParams }: PageProps)
       <section className="relative overflow-hidden rounded-[24px] p-8 max-md:p-6 mb-6" style={{ background: "radial-gradient(90% 140% at 12% 0%, rgba(10,108,255,0.10), transparent 60%),linear-gradient(135deg, #ffffff 0%, #f4f8ff 100%)", border: "1px solid rgba(15,23,42,0.07)", boxShadow: "0 30px 60px -30px rgba(10,108,255,0.3), 0 2px 8px rgba(15,23,42,0.05), inset 0 1px 0 rgba(255,255,255,0.9)" }}>
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
-            <div className="text-ink-subtle text-[12.5px] font-bold uppercase tracking-[0.18em]">Earned this month</div>
-            <div className="mt-1" style={{ fontFamily: "var(--font-display), sans-serif", fontWeight: 800, fontSize: 52, lineHeight: 1, letterSpacing: "-0.03em", fontVariantNumeric: "tabular-nums" }}>{formatInrPaise(summary.totalPaise)}</div>
+            <div className="text-ink-subtle text-[12.5px] font-bold uppercase tracking-[0.18em]">Earned this month · Categories B–G</div>
+            <div className="mt-1" style={{ fontFamily: "var(--font-display), sans-serif", fontWeight: 800, fontSize: 52, lineHeight: 1, letterSpacing: "-0.03em", fontVariantNumeric: "tabular-nums" }}>{formatInrPaise(otherTotal)}</div>
+            <div className="mt-1 text-ink-subtle text-[12px] font-semibold">Category A is shown separately below.</div>
           </div>
           <span className="inline-flex items-center rounded-full px-3.5 py-1.5" style={{ background: chip.bg, color: chip.fg, fontSize: 11.5, fontWeight: 800, letterSpacing: "0.14em" }}>{chip.label}</span>
         </div>
@@ -92,14 +104,18 @@ export default async function IncentiveOverviewPage({ searchParams }: PageProps)
         </div>
       </section>
 
-      <div className="rounded-[18px] p-5 mb-7 flex items-center gap-4 flex-wrap" style={{ background: "linear-gradient(120deg, #eef4ff 0%, #eafaf6 100%)", border: "1px solid rgba(10,108,255,0.14)" }}>
-        <span className="grid place-items-center rounded-xl shrink-0" style={{ width: 44, height: 44, background: "linear-gradient(135deg,#0a6cff,#12b6a0)", color: "#fff", fontSize: 20, fontWeight: 800 }}>↗</span>
-        <div className="flex-1 min-w-[200px]">
-          <div className="font-bold text-ink-strong text-[16px]">{nudge.headline}</div>
-          <div className="text-ink-muted text-[13px] mt-0.5">{nudge.sub}</div>
+      {nudge && (
+        <div className="rounded-[18px] p-5 mb-7 flex items-center gap-4 flex-wrap" style={{ background: "linear-gradient(120deg, #eef4ff 0%, #eafaf6 100%)", border: "1px solid rgba(10,108,255,0.14)" }}>
+          <span className="grid place-items-center rounded-xl shrink-0" style={{ width: 44, height: 44, background: "linear-gradient(135deg,#0a6cff,#12b6a0)", color: "#fff", fontSize: 20, fontWeight: 800 }}>↗</span>
+          <div className="flex-1 min-w-[200px]">
+            <div className="font-bold text-ink-strong text-[16px]">{nudge.headline}</div>
+            <div className="text-ink-muted text-[13px] mt-0.5">{nudge.sub}</div>
+          </div>
+          <span className="text-ink-subtle text-[12.5px] font-semibold">This month: {formatInrCompactPaise(monthlySales)} booked</span>
         </div>
-        <span className="text-ink-subtle text-[12.5px] font-semibold">This month: {formatInrCompactPaise(monthlySales)} booked</span>
-      </div>
+      )}
+
+      <MyCategoryA period={period} ready={categoryA.ready} months={categoryA.months} awaiting={categoryA.awaiting} historical={oldA} />
 
       {atRisk.length > 0 && (
         <section className="mb-7">
@@ -113,15 +129,15 @@ export default async function IncentiveOverviewPage({ searchParams }: PageProps)
         </section>
       )}
 
-      <h2 className="text-display-xs text-ink-strong mb-3">By category <span className="text-ink-subtle text-[13px] font-semibold">· tap a card to drill in</span></h2>
-      <div className="mb-7"><CategoryCards categories={summary.categories} lines={summary.lines} /></div>
+      <h2 className="text-display-xs text-ink-strong mb-3">Categories B–G <span className="text-ink-subtle text-[13px] font-semibold">· tap a card to drill in</span></h2>
+      <div className="mb-7"><CategoryCards categories={summary.categories.filter((c) => c.code !== "A")} lines={otherLines} /></div>
 
-      <h2 className="text-display-xs text-ink-strong mb-3">Breakdown</h2>
-      {summary.lines.length === 0 ? (
-        <EmptyState title="Nothing computed yet this month." sub="Log a sale on My Sales, or submit activity — it appears here as it lands." />
+      <h2 className="text-display-xs text-ink-strong mb-3">Breakdown · Categories B–G</h2>
+      {otherLines.length === 0 ? (
+        <EmptyState title="Nothing computed yet this month." sub="Submit activity or log a sale — it appears here as it lands." />
       ) : (
         <div className="rounded-[18px] overflow-hidden" style={{ border: "1px solid rgba(15,23,42,0.08)" }}>
-          {summary.lines.map((l, i) => (
+          {otherLines.map((l, i) => (
             <div key={`${l.lineCode}-${i}`} className="flex items-start gap-4 px-5 py-4" style={{ background: i % 2 ? "rgba(15,23,42,0.015)" : "#fff", borderTop: i ? "1px solid rgba(15,23,42,0.06)" : undefined }}>
               <span className="shrink-0 inline-flex items-center justify-center rounded-lg px-2.5 py-1 text-[12px] font-extrabold" style={{ background: "rgba(10,108,255,0.08)", color: "#0a47b3", fontVariantNumeric: "tabular-nums", minWidth: 44 }}>{l.lineCode}</span>
               <p className="text-[13.5px] text-ink-muted leading-[1.5] flex-1">{l.explanation}</p>

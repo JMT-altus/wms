@@ -13,6 +13,9 @@ import { canPreCloseSalesOrders } from "@/lib/auth/sales-order-preclose";
 import { getCurrentEmployee } from "@/lib/auth/current";
 import { deliveriesOf } from "@/lib/tally/sales-order-preclose";
 import { BASE_CATALOGUE, isRequired, preCloseFields } from "@/lib/tally/sales-order-config";
+import { incentiveCalcRights } from "@/lib/auth/incentive-calc";
+import { orderSalespeople } from "@/lib/queries/incentive-inputs";
+import { SalesOrderSalespeople } from "@/components/forms/tally/sales-order-salespeople";
 
 export const dynamic = "force-dynamic";
 
@@ -34,6 +37,9 @@ export default async function DocumentPage({ params }: { params: Promise<{ type:
   // A Sales Order's deliveries can be pre-closed (the matrix's "Update" fields): its pre-closures (migration 0129) and
   // whether this employee may record one.
   const [preClosures, canPreClose] = type === "sales-orders" ? await Promise.all([listPreClosures(id), getCurrentEmployee().then(canPreCloseSalesOrders)]) : [null, false];
+  // Its Category A salesperson — shown only to holders of an Incentive Calculation permission (read-only here).
+  const calcRights = type === "sales-orders" ? await getCurrentEmployee().then(incentiveCalcRights) : null;
+  const salespeople = calcRights?.view ? await orderSalespeople(id).catch(() => null) : undefined;
   const preCloseLabels = (() => {
     const f = new Map(preCloseFields(fields?.catalogue ?? BASE_CATALOGUE).map((x) => [x.key, x]));
     const reason = f.get("preCloseReason");
@@ -116,6 +122,7 @@ export default async function DocumentPage({ params }: { params: Promise<{ type:
           labels={preCloseLabels}
         />
       )}
+      {type === "sales-orders" && salespeople !== undefined && <SalesOrderSalespeople documentId={d.id} rows={salespeople} canEdit={!!calcRights?.inputs} />}
 
       {d.lines.length > 0 && (
         <Card className="mt-4">

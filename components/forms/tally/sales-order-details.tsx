@@ -1,8 +1,8 @@
 import type * as React from "react";
 import { Card, Dash, KeyValues, Money, fmtDay } from "@/components/forms/tally/ui";
-import type { SalesOrderDetails } from "@/lib/tally/sales-order-catalogue";
+import { SO_GROUPS, type SalesOrderDetails, type SoGroupKey, type SoGroupRow } from "@/lib/tally/sales-order-catalogue";
 import type { TallyLine } from "@/lib/tally/plan";
-import { BASE_CATALOGUE, STORED_PATH, displayValue, readPath, type SoCatalogue } from "@/lib/tally/sales-order-config";
+import { BASE_CATALOGUE, STORED_PATH, displayValue, groupLabel, readPath, type SoCatalogue } from "@/lib/tally/sales-order-config";
 
 /**
  * The rest of a Sales Order, as imported: every order-level field of Tally's
@@ -66,6 +66,55 @@ function customRows(c: SoCatalogue, custom: Readonly<Record<string, unknown>> | 
     });
 }
 
+/**
+ * A repeating group's stored rows (bill, bank, tax type, TDS or TCS bill allocations, advance lines) as a table: one
+ * column per field any row carries, in the configuration's order, headed as the configuration labels it.
+ */
+function GroupTable({ c, group, rows, owner }: { c: SoCatalogue; group: SoGroupKey; rows: readonly SoGroupRow[]; owner: string }) {
+  const keys = [...new Set(rows.flatMap((r) => Object.keys(r.values)))].sort((a, b) => {
+    const i = (k: string) => c.fields.findIndex((f) => f.key === k);
+    return (i(a) < 0 ? 1e9 : i(a)) - (i(b) < 0 ? 1e9 : i(b));
+  });
+  const heads = keys.map((k) => heading(c, k) ?? null);
+  const shown = keys.map((k, i) => [k, heads[i]] as const).filter(([, h]) => h !== null);
+  if (!shown.length) return null;
+  const title = `${groupLabel(c, group)} — ${owner}`;
+  return (
+    <div className="mt-3">
+      <h3 className="mb-1 text-[13px] font-bold text-ink-strong">{title}</h3>
+      <div className="overflow-x-auto">
+        <table aria-label={title} className="w-full text-[12.5px]">
+          <thead>
+            <tr className="text-left text-ink-subtle">
+              <th className="px-2 py-1 font-semibold">#</th>
+              {shown.map(([k, h]) => (
+                <th key={k} className="px-2 py-1 font-semibold">
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r, i) => (
+              <tr key={i} className="border-t border-hairline align-top">
+                <td className="px-2 py-1 tabular-nums">{i + 1}</td>
+                {shown.map(([k]) => {
+                  const v = r.values[k];
+                  return (
+                    <td key={k} className="px-2 py-1">
+                      {v === undefined || v === "" ? <Dash /> : c.byKey.get(k)?.type === "date" ? fmtDay(v) : v}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 const inline = (rows: Row[]) =>
   rows.map(([k, v]) => (
     <span key={k} className="block">
@@ -94,6 +143,13 @@ export function SalesOrderDetailsView({ details: s, lines, catalogue: c = BASE_C
         {orderTally.length > 0 && <KeyValues title="Other Tally fields" items={orderTally} />}
         {orderCustom.length > 0 && <KeyValues title="Custom fields" items={orderCustom} />}
       </div>
+      {SO_GROUPS.some((g) => s.groups?.[g.key]?.length) && (
+        <Card className="mt-4">
+          {SO_GROUPS.filter((g) => s.groups?.[g.key]?.length).map((g) => (
+            <GroupTable key={g.key} c={c} group={g.key} rows={s.groups![g.key]!} owner="the order" />
+          ))}
+        </Card>
+      )}
 
       <Card className="mt-4">
         <h2 className="mb-2 font-bold text-ink-strong" style={{ fontSize: 15 }}>
@@ -146,6 +202,9 @@ export function SalesOrderDetailsView({ details: s, lines, catalogue: c = BASE_C
             </tbody>
           </table>
         </div>
+        {s.ledgers.flatMap((l, i) =>
+          SO_GROUPS.filter((g) => l.groups?.[g.key]?.length).map((g) => <GroupTable key={`${i}-${g.key}`} c={c} group={g.key} rows={l.groups![g.key]!} owner={`ledger "${l.name}"`} />),
+        )}
         {s.additionalCosts.length > 0 && (
           <p className="mt-2 text-[12.5px] text-ink-muted">
             Additional cost:{" "}

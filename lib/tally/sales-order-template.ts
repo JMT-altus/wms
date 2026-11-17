@@ -1,5 +1,5 @@
 import { SO_EMPTY_SECTIONS, SO_ORDER_FIELDS, SO_UPDATE_ONLY, soField, type SoField } from "./sales-order-catalogue";
-import { BASE_CATALOGUE, describeRule, importFields, type SoCatalogue } from "./sales-order-config";
+import { BASE_CATALOGUE, describeRule, importFields, sectionLabel, type SoCatalogue } from "./sales-order-config";
 
 /**
  * The Sales Order import template: every field of the Sales Order field
@@ -64,8 +64,12 @@ const EXAMPLE_CELLS: Record<string, string>[] = [
 ];
 export const SO_TEMPLATE_EXAMPLE: string[][] = [[...SO_TEMPLATE_HEADINGS], ...EXAMPLE_CELLS.map(soTemplateRow)];
 
+/** What the import checks of a field, in words: its rule, its listed values, and what the WMS doesn't do for it. */
+const whatIsChecked = (f: SoField): string => f.rule + (f.options ? ` Values: ${f.options.join(", ")}.` : "") + (f.dependency ? ` ${f.dependency.text}` : "");
+
 /** "Yes", "Yes, when …", "When it applies" or "Optional": the Required column of the Read Me and the matrix report. */
 export function requirementText(f: SoField): string {
+  if (f.defaultOff) return "Optional — marked x in the Read Me, enabled in Admin & Master Setup";
   if (f.outsideMatrix) return "Optional — marked x in the Read Me, kept by the WMS";
   if (f.requirement === "provision") return "Optional (Provision)";
   if (f.requirement === "conditional" && f.mandatoryWhen) return `When it applies (?) — required when ${soField(f.mandatoryWhen.field).tallyName} is ${f.mandatoryWhen.values.map((v) => `“${v}”`).join(" or ")}`;
@@ -90,12 +94,13 @@ export const SO_TEMPLATE_README: string[][] = [
   ["Tax, freight, discount and round-off ledgers go on their own rows, with no item. Every ledger entry needs its Ledger Rate (0 where it has none), Ledger Narration and Description of Ledger."],
   ["Order, dispatch, buyer, consignee and voucher-state columns may be on any row of the order, but only once per order (or the same value repeated)."],
   ["Leave every Consignee column blank when the goods go to the buyer. All rows of one order must be together."],
+  ["Repeating groups (Bill, Bank, Tax Type, TDS Bill and TCS Bill Allocations; Advance Payment details), when enabled: one row per entry of the group. A ledger's rows go on its own row or the rows just below it (before the next ledger), like cost-centre allocations; advance lines may be on any row of the order."],
   [""],
   ["Column", "Section", "Required", "What the WMS checks"],
-  ...SO_ORDER_FIELDS.map((f) => [f.tallyName, f.section, requirementText(f), f.rule + (f.options ? ` Values: ${f.options.join(", ")}.` : "")]),
+  ...SO_ORDER_FIELDS.map((f) => [f.tallyName, f.section, requirementText(f), whatIsChecked(f)]),
   [""],
   ["NOT IMPORTED"],
-  [`Fields Tally's matrix marks x for Sales Orders that aren't columns above (whole sections: ${SO_EMPTY_SECTIONS.join(", ")}; and single fields elsewhere) are ignored when present; the upload says why for each one.`],
+  [`Fields Tally's matrix marks x for Sales Orders that aren't columns above (whole sections: ${SO_EMPTY_SECTIONS.join(", ")}; and single fields elsewhere) are ignored when present; the upload says why for each one. An administrator can enable one in Admin & Master Setup → Sales Order Fields; it then becomes a column of this template.`],
   [`${SO_UPDATE_ONLY.join(", ")}: marked “Update” — they change an existing order, so they aren't imported with a new one. Pre-close a delivery on the order's own page in the WMS.`],
   [""],
   ["WHAT IS NEVER DONE"],
@@ -129,7 +134,7 @@ export const salesOrderTemplateSheets = (c: SoCatalogue = BASE_CATALOGUE): { nam
   const table = SO_TEMPLATE_README.findIndex((r) => r[0] === "Column" && r[1] === "Section");
   const readMe = [
     ...SO_TEMPLATE_README.slice(0, table + 1),
-    ...fields.map((f) => [f.tallyName, f.section, requiredText(c, f.key), (f.label !== f.tallyName ? `Shown as “${f.label}”. ` : "") + f.rule + (f.options ? ` Values: ${f.options.join(", ")}.` : "")]),
+    ...fields.map((f) => [f.tallyName, sectionLabel(c, f.section), requiredText(c, f.key), (f.label !== f.tallyName ? `Shown as “${f.label}”. ` : "") + whatIsChecked(f) + (f.helpText ? ` ${f.helpText}` : "")]),
     ...SO_TEMPLATE_README.slice(table + 1 + SO_ORDER_FIELDS.length),
   ];
   return [

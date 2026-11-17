@@ -145,11 +145,15 @@ export const MODULES: ModuleDef[] = [
     routes: ["/incentive", "/outstanding", "/record-reference", "/participant-breakthrough"],
     accent: { from: "#6366F1", to: "#3F3FB0", ink: "#4F46E5" },
     items: [
-      { href: "/incentive", label: "My Incentives", icon: "Award", notMatch: ["/incentive/sales", "/incentive/activity", "/incentive/history", "/incentive/admin"] },
+      { href: "/incentive", label: "My Incentives", icon: "Award", notMatch: ["/incentive/sales", "/incentive/activity", "/incentive/history", "/incentive/admin", "/incentive/category-a"] },
       { href: "/incentive/sales", label: "My Sales", icon: "IndianRupee" },
       { href: "/incentive/activity", label: "Activity", icon: "Sparkles" },
       { href: "/incentive/history", label: "History", icon: "CalendarRange" },
       { href: "/incentive/admin", label: "Team", icon: "Users", adminOnly: true },
+      // Category A (authoritative engine). Admin-only in the rail as a courtesy; each page checks the Incentive
+      // Calculation permissions on the server (a salesperson sees their approved amounts on My Incentives).
+      { href: "/incentive/category-a", label: "Category A", icon: "Gauge", adminOnly: true, notMatch: ["/incentive/category-a/approvals"] },
+      { href: "/incentive/category-a/approvals", label: "Category A Approvals", icon: "ListChecks", adminOnly: true },
       { href: "/outstanding", label: "Outstanding", icon: "Contact" },
     ],
   },

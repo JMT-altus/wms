@@ -13,6 +13,8 @@ import { ListChecks,
   DatabaseZap,
   LayoutGrid,
   ShieldCheck,
+  Scale,
+  Calculator,
   ArrowLeft,
   type LucideIcon,
 } from "lucide-react";
@@ -86,6 +88,18 @@ const NAV: ReadonlyArray<NavItem> = [
     icon: ListChecks,
   },
   {
+    href: "/master-setup/incentive-rules" as Route,
+    label: "Incentive Rules",
+    hint: "Versioned, approved incentive configuration",
+    icon: Scale,
+  },
+  {
+    href: "/master-setup/incentive-rules/calculation" as Route,
+    label: "Incentive Calculation",
+    hint: "Category A from Forms and the published rules",
+    icon: Calculator,
+  },
+  {
     href: "/master-setup/collection-weekly-upload" as Route,
     label: "Weekly Bulk Upload",
     hint: "Collection Tracker weekly task",
@@ -102,7 +116,10 @@ export function MasterSidebar({ adminName }: { adminName: string }) {
 
   function isActive(item: NavItem): boolean {
     if (item.exact) return pathname === item.href;
-    return pathname === item.href || pathname.startsWith(`${item.href}/`);
+    if (pathname === item.href) return true;
+    // A more specific entry under this one (Incentive Rules → Calculation) takes the highlight.
+    if (NAV.some((o) => o !== item && o.href.startsWith(`${item.href}/`) && (pathname === o.href || pathname.startsWith(`${o.href}/`)))) return false;
+    return pathname.startsWith(`${item.href}/`);
   }
 
   return (

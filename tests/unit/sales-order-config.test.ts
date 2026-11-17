@@ -31,7 +31,10 @@ const none = () => null;
 
 describe("the matrix alone", () => {
   it("is every field, in section order, each with its scope and the matrix's own requirement", () => {
-    expect(BASE_CATALOGUE.fields).toHaveLength(115);
+    // Every field of the Read Me worksheet is in the catalogue (353); the 238 provisions (x, not offered) are off.
+    expect(BASE_CATALOGUE.fields).toHaveLength(353);
+    expect(BASE_CATALOGUE.fields.filter((f) => f.status === "active")).toHaveLength(115);
+    expect(BASE_CATALOGUE.sections).toHaveLength(38);
     expect(BASE_CATALOGUE.version).toBe(0);
     const rule = (k: string) => BASE_CATALOGUE.byKey.get(k)!.requirementRule;
     const scopes = Object.fromEntries(FIELD_SCOPES.map((s) => [s, activeFields(BASE_CATALOGUE, s).length]));

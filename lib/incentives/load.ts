@@ -4,7 +4,7 @@
 // ledger idempotently. Uses Date here (script/server side) — only the pure
 // engine forbids Date.
 
-import { and, eq, gte, lt, inArray, desc, isNotNull } from "drizzle-orm";
+import { and, eq, ne, gte, lt, inArray, desc, isNotNull, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
   salesOrders, invoices, receipts, customers,
@@ -242,6 +242,23 @@ async function buildNewCustomerCohorts(
   return cohorts;
 }
 
+/**
+ * Whether the NEW Category A engine (lib/incentives/category-a) is authoritative for a month: a PUBLISHED Category A
+ * configuration of any programme (Admin & Master Setup → Incentive Rules, migration 0131) covers the month's first day.
+ * From such a month this old engine no longer calculates Category A; it keeps calculating Categories B–G. Old
+ * Category A ledger rows are never deleted or changed — they stay as historical records. Before 0131 exists, or with
+ * nothing published, nothing changes.
+ */
+export async function newCategoryAAuthoritative(period: string): Promise<boolean> {
+  const start = `${period}-01`;
+  const res = await db.execute(sql`
+    select case when to_regclass('public.incentive_config_versions') is null then false
+      else exists (select 1 from incentive_config_versions v where v.category_code = 'A' and v.status = 'published'
+        and v.effective_from <= ${start}::date and (v.effective_to is null or v.effective_to >= ${start}::date)) end as yes`);
+  const rows = (Array.isArray(res) ? res : ((res as unknown as { rows?: unknown[] }).rows ?? [])) as { yes: boolean }[];
+  return rows[0]?.yes === true;
+}
+
 /** Ensure a period row exists; return its id. */
 export async function ensurePeriod(period: string): Promise<string> {
   const existing = await db.select().from(incentivePeriods).where(eq(incentivePeriods.month, period)).limit(1);
@@ -259,6 +276,10 @@ export async function computePeriodForEmployee(
 ): Promise<EvaluationResult> {
   const scheme = await getSchemeConfigForPeriod(period);
   const input = await buildEvaluationInput(employeeId, period, asOf, scheme);
+  // Where the new Category A engine is authoritative, this engine no longer calculates Category A (its sales slab is
+  // the only thing `sales` feeds). B–G are unaffected.
+  const newA = await newCategoryAAuthoritative(period);
+  if (newA) input.sales = undefined;
   const result = evaluate(input, scheme);
   const periodId = await ensurePeriod(period);
 
@@ -271,9 +292,11 @@ export async function computePeriodForEmployee(
   // Recompute is wholesale for accruals: clear this employee-period's accrual
   // rows first so sources that no longer exist (deleted invoices/submissions)
   // don't linger and double-count. Reversals/adjustments are preserved.
+  // Where the new Category A engine is authoritative, this engine's earlier Category A rows for the month are left
+  // exactly as they are (historical records), so only B–G accruals are cleared and rewritten.
   await db
     .delete(incentiveLedger)
-    .where(and(eq(incentiveLedger.employeeId, employeeId), eq(incentiveLedger.periodId, periodId), eq(incentiveLedger.entryType, "accrual")));
+    .where(and(eq(incentiveLedger.employeeId, employeeId), eq(incentiveLedger.periodId, periodId), eq(incentiveLedger.entryType, "accrual"), ...(newA ? [ne(incentiveLedger.category, "A")] : [])));
 
   for (const line of result.lines) {
     await db

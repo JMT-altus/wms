@@ -1,4 +1,4 @@
-import { SO_ORDER_FIELDS as SO_FIELDS, parsePercent } from "./sales-order-catalogue";
+import { SO_GROUPS, SO_ORDER_FIELDS as SO_FIELDS, parsePercent, type SoGroupKey } from "./sales-order-catalogue";
 import { templateHeadings, templateRow } from "./sales-order-template";
 import { BASE_CATALOGUE, type SoCatalogue } from "./sales-order-config";
 import { parseTallyAmount, parseTallyNumber, partyKey } from "./values";
@@ -37,7 +37,12 @@ export interface SoFormLedger {
   costCentres: SoFormCostCentre[];
   /** Custom ledger-entry fields (Admin & Master Setup → Sales Order Fields), by key. */
   custom?: Record<string, string>;
+  /** Its repeating groups' rows (bill, bank, tax type, TDS and TCS bill allocations), each row by field key. */
+  groups?: SoFormGroups;
 }
+
+/** Rows of repeating groups, by group: each row's values by field key. */
+export type SoFormGroups = Partial<Record<SoGroupKey, Record<string, string>[]>>;
 
 export interface SoFormItem {
   /** The Product Master record chosen: "sku:<id>" or "product:<id>". */
@@ -65,6 +70,8 @@ export interface SoFormOrder {
   ledgers: SoFormLedger[];
   /** `custom`: custom additional-cost fields, by key. */
   additionalCosts: { ledger: string; percent: string; amount: string; custom?: Record<string, string> }[];
+  /** The order's own repeating groups' rows (advance lines). */
+  groups?: SoFormGroups;
 }
 
 export const emptyAllocation = (): Record<string, string> => ({});
@@ -98,6 +105,11 @@ export function itemAmountPaise(values: Record<string, string>): number | null {
   if (pct) v = Math.round(v * (1 - pct / 100));
   const disc = values.discAmount ? parseTallyAmount(values.discAmount) : null;
   if (disc && disc.paise > 0) v -= disc.paise;
+  // The cash/trade discount (when its fields are on): its percentage of what remains, then its amount.
+  const ctPct = values.cashTradeDiscRate ? parsePercent(values.cashTradeDiscRate) : null;
+  if (ctPct) v = Math.round(v * (1 - ctPct / 100));
+  const ct = values.cashTradeDiscAmount ? parseTallyAmount(values.cashTradeDiscAmount) : null;
+  if (ct && ct.paise > 0) v -= ct.paise;
   return v;
 }
 
@@ -160,9 +172,21 @@ export interface SoFormRowSource {
  * in rupees with two decimals, as the template would hold them.
  */
 export function salesOrderFormRows(o: SoFormOrder, c: SoCatalogue = BASE_CATALOGUE): { headers: string[]; rows: RawRow[]; sources: SoFormRowSource[] } {
-  // Custom fields of each scope ride in the same records as the matrix's (voucher, item values, allocations) or in `custom`.
-  // (The matrix's keyed fields — the x fields the WMS offers — are already in SO_FORM_*_KEYS.)
-  const customKeys = (scope: string) => c.fields.filter((f) => f.isCustom && f.scope === scope).map((f) => f.key);
+  // Custom fields of each scope ride in the same records as the matrix's (voucher, item values, allocations) or in `custom`;
+  // so do the provisions an administrator enabled. (The x fields the WMS offers by default are already in SO_FORM_*_KEYS.)
+  const customKeys = (scope: string) => c.fields.filter((f) => (f.isCustom || f.defaultOff) && !f.group && f.scope === scope).map((f) => f.key);
+  // A repeating group's rows: one template row each, right after their parent's rows (a row with no ledger belongs to
+  // the ledger entry above it, exactly as in a file).
+  const groupKeys = (g: SoGroupKey) => new Set(c.fields.filter((f) => f.group === g).map((f) => f.key));
+  const addGroups = (groups: SoFormGroups | undefined, parent: "ledger" | "voucher", label: string) => {
+    for (const g of SO_GROUPS.filter((x) => x.parent === parent)) {
+      const keys = groupKeys(g.key);
+      (groups?.[g.key] ?? []).forEach((row, i) => {
+        const cells = Object.fromEntries(Object.entries(row).filter(([k, v]) => keys.has(k) && v.trim()).map(([k, v]) => [k, v.trim()]));
+        if (Object.keys(cells).length) add(cells, `${label} · ${g.rowLabel} ${i + 1}`);
+      });
+    }
+  };
   const voucherKeys = [...SO_FORM_VOUCHER_KEYS, ...customKeys("voucher")];
   const itemKeys = [...SO_FORM_ITEM_KEYS, ...customKeys("item")];
   const allocKeys = [...SO_FORM_ALLOC_KEYS, ...customKeys("allocation")];
@@ -189,6 +213,7 @@ export function salesOrderFormRows(o: SoFormOrder, c: SoCatalogue = BASE_CATALOG
     "Order and customer ledger",
   );
   for (const c of morePartyCc) add(ccCells(c), "Customer ledger cost centre");
+  addGroups(o.party.groups, "ledger", "Customer ledger");
 
   const [firstSalesCc, ...moreSalesCc] = o.sales.costCentres;
   o.items.forEach((item, i) => {
@@ -210,13 +235,16 @@ export function salesOrderFormRows(o: SoFormOrder, c: SoCatalogue = BASE_CATALOG
     rest.forEach((a, j) => add(alloc(a), `Item ${i + 1} · allocation ${j + 2}`));
   });
   for (const c of moreSalesCc) add(ccCells(c), "Sales ledger cost centre");
+  addGroups(o.sales.groups, "ledger", "Sales ledger");
 
   o.ledgers.forEach((l, i) => {
     const [first, ...more] = l.costCentres;
     add({ partyName: l.name, amount: l.amount, drCr: l.drCr, ledgerRate: l.rate, ledgerNarration: l.narration, ledgerDescription: l.description, ...trimmed(l.custom), ...(first ? ccCells(first) : {}) }, `Ledger ${i + 1}${l.name ? ` (${l.name})` : ""}`);
     for (const c of more) add(ccCells(c), `Ledger ${i + 1} cost centre`);
+    addGroups(l.groups, "ledger", `Ledger ${i + 1}`);
   });
   o.additionalCosts.forEach((a, i) => add({ addlCostLedger: a.ledger, addlCostPct: a.percent, addlCostAmount: a.amount, ...trimmed(a.custom) }, `Additional cost ${i + 1}`));
+  addGroups(o.groups, "voucher", "Order");
 
   // Only the columns the configuration imports: a retired or form-only field's value never reaches the import.
   return { headers: templateHeadings(c), rows: out.map((cells, i) => ({ rowNo: i + 2, cells: templateRow(c, cells) })), sources };

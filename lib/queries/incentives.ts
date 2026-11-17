@@ -1,6 +1,7 @@
 import "server-only";
-import { and, eq, desc, sql } from "drizzle-orm";
+import { and, eq, ne, desc, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
+import { newCategoryAAuthoritative } from "@/lib/incentives/load";
 import { incentiveLedger, incentivePeriods, leadBatches, leadConversions, clientMeetings, testimonials, employees, salesOrders, customers, invoices } from "@/db/schema";
 import { SALES_BH_SCHEME } from "@/lib/incentives";
 import { fmtMonth } from "@/lib/dates";
@@ -45,7 +46,9 @@ export interface IncentiveSummary {
 }
 
 const CATEGORY_LABELS: Record<string, string> = {
-  A: "Sales Slabs",
+  // Category A from THIS (old) engine is historical: the new Category A engine is authoritative (Incentive Tracker →
+  // Category A; a salesperson's approved amounts appear on My Incentives).
+  A: "Sales Slabs — historical (old engine)",
   B: "Cross-sell",
   C: "New Customer",
   D: "Leads & Enquiries",
@@ -75,6 +78,9 @@ export interface PeriodPayout { period: string; status: string; grandTotalPaise:
 
 /** Per-employee payout totals for a period (for review / lock / payout). */
 export async function getPeriodPayout(period: string): Promise<PeriodPayout> {
+  // Where the new Category A engine is authoritative for the month, Category A is paid through it (Incentive
+  // Tracker → Category A Approvals), never here: this old payout then covers Categories B–G only — nothing twice.
+  const newA = await newCategoryAAuthoritative(period);
   const [prow] = await db.select({ status: incentivePeriods.status }).from(incentivePeriods).where(eq(incentivePeriods.month, period)).limit(1);
   const rows = await db
     .select({
@@ -85,7 +91,7 @@ export async function getPeriodPayout(period: string): Promise<PeriodPayout> {
     .from(incentiveLedger)
     .innerJoin(incentivePeriods, eq(incentiveLedger.periodId, incentivePeriods.id))
     .innerJoin(employees, eq(incentiveLedger.employeeId, employees.id))
-    .where(eq(incentivePeriods.month, period))
+    .where(and(eq(incentivePeriods.month, period), ...(newA ? [ne(incentiveLedger.category, "A")] : [])))
     .groupBy(incentiveLedger.employeeId, employees.name);
 
   const mapped = rows

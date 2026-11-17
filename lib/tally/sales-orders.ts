@@ -1,6 +1,7 @@
 import type { TallyMapping } from "./mapping";
 import { describeDifferences, orderDifferences, type OrderDifference } from "./sales-order-compare";
-import { BASE_CATALOGUE, COST_CENTRE_KEYS, isKeyed, isRequired, type ConfiguredField, type SoCatalogue } from "./sales-order-config";
+import { BASE_CATALOGUE, COST_CENTRE_KEYS, groupLabel, isKeyed, isRequired, type ConfiguredField, type SoCatalogue } from "./sales-order-config";
+import { SO_GROUP, SO_GROUPS, type SoGroupKey, type SoGroupRow, type SoGroupRows } from "./sales-order-catalogue";
 import type { Cell, DocumentRecord, LedgerLine, PlanOptions, PlannedRow, RawRow, TallyLine, TallyPlan } from "./plan";
 import { documentKey, financialYear, parseTallyAmount, parseTallyDateValue, parseTallyNumber, partyKey } from "./values";
 import { deriveStateFromGstin, isPlausibleGstin } from "@/lib/masters/gstin";
@@ -118,13 +119,23 @@ interface Ctx {
   entry: ConfiguredField[];
   cc: ConfiguredField[];
   addl: ConfiguredField[];
+  /** Each repeating group's fields the configuration imports (none = the group is off). */
+  groups: Partial<Record<SoGroupKey, ConfiguredField[]>>;
 }
 
 function makeCtx(c: SoCatalogue): Ctx {
   // A new order's fields only: the pre-close fields (marked "Update") change an existing order, on its own page.
-  const active = c.fields.filter((f) => f.status === "active" && f.inImport && !f.workflow);
+  const all = c.fields.filter((f) => f.status === "active" && f.inImport && !f.workflow);
+  // A repeating group's fields are read as its rows, never as fields of the order, an entry or a line.
+  const active = all.filter((f) => !f.group);
+  const groups: Ctx["groups"] = {};
+  for (const g of SO_GROUPS) {
+    const fs = all.filter((f) => f.group === g.key);
+    if (fs.length) groups[g.key] = fs;
+  }
   return {
     c,
+    groups,
     voucher: active.filter((f) => f.scope === "voucher" && !HEAD.has(f.key)),
     consignee: active.filter((f) => f.level === "consignee"),
     itemExtra: active.filter((f) => f.scope === "item" && !LINE_CORE.has(f.key)),
@@ -217,6 +228,22 @@ const amountOf = (raw: string | undefined): number | null => {
   return a && a.paise >= 0 ? a.paise : null;
 };
 const percentOf = (raw: string | undefined): number | null => (raw ? parsePercent(raw) : null);
+/** The line's cash/trade discount, when the configuration imports it: a percentage and an amount, each taken off after the line's own discount. */
+function cashTradeOf(raw: (key: string) => string): { pct: number | null; paise: number | null } | null {
+  const on = (key: string) => CTX.itemExtra.some((f) => f.key === key);
+  const pct = on("cashTradeDiscRate") ? percentOf(squash(raw("cashTradeDiscRate")) || undefined) : null;
+  const paise = on("cashTradeDiscAmount") ? amountOf(squash(raw("cashTradeDiscAmount")) || undefined) : null;
+  return pct || paise ? { pct, paise } : null;
+}
+/** A value less the cash/trade discount: its percentage first, then its amount. */
+const lessCashTrade = (v: number, ct: { pct: number | null; paise: number | null } | null) => {
+  if (!ct) return v;
+  let out = v;
+  if (ct.pct) out = Math.round(out * (1 - ct.pct / 100));
+  if (ct.paise && ct.paise > 0) out -= ct.paise;
+  return out;
+};
+
 /** quantity × rate, less a percentage discount and then a discount amount: the value Tally works out for a line or an allocation. */
 function expectedAmount(quantity: number, ratePaise: number, discPct: number | null, discountPaise: number | null): number {
   let v = Math.round(quantity * ratePaise);
@@ -287,6 +314,11 @@ interface Block {
   /** Each entry's own cells and each additional cost's, for the checks made once the whole order is read. */
   entryRaw: Map<SoLedgerEntry, Raw>;
   addlRaw: Map<SoAdditionalCost, Raw>;
+  /** Repeating-group rows as read: a ledger entry's, and the order's own. Checked and stored by settleGroups. */
+  entryGroups: Map<SoLedgerEntry, Partial<Record<SoGroupKey, AllocDraft[]>>>;
+  orderGroups: Partial<Record<SoGroupKey, AllocDraft[]>>;
+  /** The order's own groups as stored, once checked. */
+  orderGroupRows: SoGroupRows | null;
 }
 
 function readSide(raw: string, errors: string[]): Side {
@@ -332,10 +364,15 @@ function readLine(r: RawRow, cell: Cell, errors: string[], warnings: string[]): 
   }
   const discPct = percentOf(squash(cell(r, "discPct")) || undefined);
   const discountPaise = amountOf(squash(cell(r, "discAmount")) || undefined);
-  if (quantity !== null && quantity > 0 && ratePaise !== null && amountPaise !== null) {
-    const expected = expectedAmount(quantity, ratePaise, discPct, discountPaise);
+  // A cash/trade discount that can't be read is named as such, rather than showing up as an amount that doesn't add up.
+  const badCashTrade = CTX.itemExtra.filter((f) => f.key.startsWith("cashTrade")).map((f) => (squash(cell(r, f.key)) ? badValue(f, squash(cell(r, f.key)), null) : null)).filter((m): m is string => !!m);
+  errors.push(...badCashTrade);
+  if (!badCashTrade.length && quantity !== null && quantity > 0 && ratePaise !== null && amountPaise !== null) {
+    const ct = cashTradeOf((k) => cell(r, k));
+    const expected = lessCashTrade(expectedAmount(quantity, ratePaise, discPct, discountPaise), ct);
     if (!near(expected, amountPaise)) {
-      errors.push(discPct || discountPaise ? `Item amount ${rupees(amountPaise)} doesn't equal quantity × rate less the discount (${rupees(expected)}).` : `Item amount ${rupees(amountPaise)} doesn't equal quantity × rate (${rupees(expected)}).`);
+      const less = [discPct || discountPaise ? "the discount" : "", ct ? "the cash/trade discount" : ""].filter(Boolean).join(" and ");
+      errors.push(less ? `Item amount ${rupees(amountPaise)} doesn't equal quantity × rate less ${less} (${rupees(expected)}).` : `Item amount ${rupees(amountPaise)} doesn't equal quantity × rate (${rupees(expected)}).`);
     }
   }
   if (amountPaise === 0 && (ratePaise ?? 0) === 0) warnings.push("This line has no value (a free item).");
@@ -359,7 +396,8 @@ function readRowExtras(b: Block, r: RawRow, cell: Cell, line: TallyLine | null, 
   const extra = pick(CTX.itemExtra, r, cell);
   const alloc = pick(CTX.alloc, r, cell);
   if (!hasLedger) {
-    const strayEntry = Object.keys(pick(CTX.entry.filter((f) => f.isCustom), r, cell));
+    // A ledger entry's keyed fields (custom ones, and the matrix's enabled in Admin & Master Setup) need their ledger on the row.
+    const strayEntry = Object.keys(pick(CTX.entry.filter(isKeyed), r, cell));
     if (strayEntry.length) errors.push(`${strayEntry.map(q).join(", ")} ${strayEntry.length === 1 ? "belongs" : "belong"} to a ledger entry, but this row has no ledger.`);
   }
   if (line) {
@@ -384,6 +422,25 @@ function readRowExtras(b: Block, r: RawRow, cell: Cell, line: TallyLine | null, 
       const amount = parseTallyAmount(cc.costCentreAmount);
       if (!amount || amount.paise < 0) errors.push(`${q("costCentreAmount")} "${cc.costCentreAmount}" isn't a valid amount.`);
       else target.costCentres.push({ category: cc.categoryName ?? null, costCentre: cc.costCentre, amountPaise: amount.paise, rowNo: r.rowNo });
+    }
+  }
+  // Repeating groups: a row carrying a group's cells is one row of it — under the ledger entry on this row, or else
+  // the one above it (as a cost-centre allocation is); an order-level group's row is the order's.
+  for (const g of SO_GROUPS) {
+    const fields = CTX.groups[g.key];
+    if (!fields) continue;
+    const values = pick(fields, r, cell);
+    if (!Object.keys(values).length) continue;
+    const draft = { raw: values, rowNo: r.rowNo };
+    if (g.parent === "voucher") (b.orderGroups[g.key] ??= []).push(draft);
+    else {
+      const target = entryOnRow ?? b.lastEntry;
+      if (!target) errors.push(`This ${g.rowLabel} comes before any ledger entry of the order.`);
+      else {
+        const byGroup = b.entryGroups.get(target) ?? {};
+        (byGroup[g.key] ??= []).push(draft);
+        b.entryGroups.set(target, byGroup);
+      }
     }
   }
   const addl = pick(CTX.addl, r, cell);
@@ -529,7 +586,7 @@ function planWith(rows: readonly RawRow[], cell: Cell, opts: PlanOptions): Tally
     const line = readLine(r, cell, errors, warnings);
     const fy = rowDate ? financialYear(rowDate) : null;
     const key = fy && documentNo ? salesOrderIdentity(fy, documentNo) : null;
-    const block: Block = { kind: "bad", start: r.rowNo, noKey, fy, rec: null, of: null, badRow: r.rowNo, groupKey: `bad:${r.rowNo}`, rows: [], lastLedger: null, voucher: new Map(), lineDrafts: [], entries: [], lastEntry: null, addl: [], entryRaw: new Map(), addlRaw: new Map() };
+    const block: Block = { kind: "bad", start: r.rowNo, noKey, fy, rec: null, of: null, badRow: r.rowNo, groupKey: `bad:${r.rowNo}`, rows: [], lastLedger: null, voucher: new Map(), lineDrafts: [], entries: [], lastEntry: null, addl: [], entryRaw: new Map(), addlRaw: new Map(), entryGroups: new Map(), orderGroups: {}, orderGroupRows: null };
     blocks.push(block);
     current = block;
     if (errors.length || !rowDate || !key) {
@@ -604,6 +661,7 @@ function planWith(rows: readonly RawRow[], cell: Cell, opts: PlanOptions): Tally
     const first = b.rows[0]!;
     settleVoucher(b);
     settleEntries(b);
+    settleGroups(b);
     settleAdditionalCosts(b);
     if (b.badRow === null) settleLines(b);
     if (b.badRow === null && b.kind === "repeat") {
@@ -722,6 +780,57 @@ function settleEntries(b: Block) {
 }
 
 /**
+ * The repeating groups' rows: every value valid for its field, every field the configuration requires present on each
+ * row — always, or while its condition holds, read from the row itself, then its ledger entry, then the order (and, for
+ * a ledger entry's rows, "the customer's entry / other entries"). Stored on the entry or the order. Where Tally's own
+ * rule is that a group's amounts add up to the ledger entry's, a difference is flagged for review.
+ */
+function settleGroups(b: Block) {
+  const order = (key: string) => b.voucher.get(key)?.value ?? null;
+  const settle = (key: SoGroupKey, drafts: readonly AllocDraft[], parentValue: (k: string) => string | null, kind: "customer" | "other" | undefined): SoGroupRow[] => {
+    const fields = CTX.groups[key] ?? [];
+    const out: SoGroupRow[] = [];
+    for (const d of drafts) {
+      const valueOf = (k: string) => d.raw[k] ?? parentValue(k);
+      const missing = fields.filter((f) => !d.raw[f.key] && isRequired(f, valueOf, kind));
+      if (missing.length) fail(b, d.rowNo, `Required ${missing.length === 1 ? "field is" : "fields are"} blank on this ${SO_GROUP[key].rowLabel}: ${missing.map((f) => `“${f.tallyName}”`).join(", ")}.`);
+      for (const [k, v] of Object.entries(d.raw)) {
+        const problem = badValue(fieldOf(k), v, null);
+        if (problem) fail(b, d.rowNo, problem);
+      }
+      const values: Record<string, string> = {};
+      for (const f of fields) if (d.raw[f.key]) values[f.key] = storedCustom(f, d.raw[f.key]!);
+      out.push({ rowNo: d.rowNo, values });
+    }
+    return out;
+  };
+  for (const e of b.entries) {
+    const byGroup = b.entryGroups.get(e);
+    if (!byGroup) continue;
+    const raw = b.entryRaw.get(e) ?? {};
+    const groups: SoGroupRows = {};
+    for (const g of SO_GROUPS) {
+      const drafts = byGroup[g.key];
+      if (!drafts?.length) continue;
+      const rows = settle(g.key, drafts, (k) => raw[k] ?? order(k), e.isParty ? "customer" : "other");
+      groups[g.key] = rows;
+      const total = g.totalField;
+      if (total && rows.every((r) => r.values[total])) {
+        const sum = rows.reduce((n, r) => n + (parseTallyAmount(r.values[total]!)?.paise ?? 0), 0);
+        if (!near(Math.abs(sum), e.amountPaise)) warn(b, drafts[0]!.rowNo, `The ${groupLabel(CTX.c, g.key)} of ledger "${e.name}" add up to ${rupees(sum)}, not its ${rupees(e.amountPaise)}.`);
+      }
+    }
+    if (Object.keys(groups).length) e.groups = groups;
+  }
+  const own: SoGroupRows = {};
+  for (const g of SO_GROUPS) {
+    const drafts = b.orderGroups[g.key];
+    if (drafts?.length) own[g.key] = settle(g.key, drafts, order, undefined);
+  }
+  b.orderGroupRows = Object.keys(own).length ? own : null;
+}
+
+/**
  * Additional costs. A MATRIX additional-cost field made mandatory means the order must carry an additional cost; a
  * CUSTOM one made mandatory means each additional cost the order carries needs it.
  */
@@ -814,6 +923,9 @@ function settleLine(b: Block, d: LineDraft) {
   };
 
   // ── allocations ──
+  // With a cash/trade discount, the deliveries carry the line's value before it (it is taken off the line as a whole).
+  const cashTrade = cashTradeOf((k) => extra[k] ?? "");
+  const beforeCashTrade = cashTrade && line.quantity !== null && line.ratePaise !== null ? expectedAmount(line.quantity, line.ratePaise, percentOf(extra.discPct), amountOf(extra.discAmount)) : null;
   const drafts = d.allocs.length ? d.allocs : [{ raw: {}, rowNo: d.rowNo }];
   const single = drafts.length === 1;
   const allocations: SoAllocation[] = [];
@@ -827,6 +939,7 @@ function settleLine(b: Block, d: LineDraft) {
       if (!raw.allocDiscPct) raw.allocDiscPct = extra.discPct ?? "";
       if (!raw.allocDiscAmount) raw.allocDiscAmount = extra.discAmount ?? "";
       const sameDiscount = (percentOf(raw.allocDiscPct) ?? 0) === (percentOf(extra.discPct) ?? 0) && (amountOf(raw.allocDiscAmount) ?? 0) === (amountOf(extra.discAmount) ?? 0);
+      if (!raw.allocAmount && sameDiscount && beforeCashTrade !== null) raw.allocAmount = (beforeCashTrade / 100).toFixed(2);
       if (!raw.allocAmount && !sameDiscount) {
         const q = parseTallyNumber(raw.allocQuantity || d.core.quantity || "");
         const rate = amountOf(raw.allocRate || d.core.rate || undefined);
@@ -886,7 +999,11 @@ function settleLine(b: Block, d: LineDraft) {
   const qty = allocations.reduce((n, a) => n + a.quantity, 0);
   const amount = allocations.reduce((n, a) => n + a.amountPaise, 0);
   if (line.quantity !== null && Math.abs(qty - line.quantity) > 1e-6) return fail(b, d.rowNo, `The allocations of this line add up to a quantity of ${qty}, not its Billed Quantity ${line.quantity}.`);
-  if (line.amountPaise !== null && !near(amount, line.amountPaise)) return fail(b, d.rowNo, allocationTotalProblem(allocations, amount, line.amountPaise, percentOf(extra.discPct), amountOf(extra.discAmount)));
+  const allocTarget = beforeCashTrade ?? line.amountPaise;
+  if (allocTarget !== null && !near(amount, allocTarget)) {
+    const problem = allocationTotalProblem(allocations, amount, allocTarget, percentOf(extra.discPct), amountOf(extra.discAmount));
+    return fail(b, d.rowNo, beforeCashTrade !== null ? `${problem.replace("its Item Amount", "the line's value before its cash/trade discount")}` : problem);
+  }
 
   line.description = extra.itemDescription ?? line.description ?? null;
   line.dueDate = allocations.map((a) => a.dueDate).filter((x): x is string => !!x).sort()[0] ?? null;
@@ -945,6 +1062,7 @@ function buildDetails(b: Block): SalesOrderDetails {
     ledgers: b.entries,
     additionalCosts: b.addl,
     ...(custom ? { custom } : {}),
+    ...(b.orderGroupRows ? { groups: b.orderGroupRows } : {}),
   };
 }
 
@@ -1057,6 +1175,12 @@ export function salesOrderViews(planned: readonly PlannedRow[], fileRows: readon
       const value = rows.map((r) => cell(r.rowNo, key)).find(Boolean);
       const f = catalogue.byKey.get(key);
       if (value && f && f.status === "active") facts.push({ label: f.label === f.tallyName ? f.tallyName : `${f.label} (${f.tallyName})`, value });
+    }
+    // Each repeating group the order carries, with how many rows.
+    for (const g of SO_GROUPS) {
+      const fields = catalogue.fields.filter((f) => f.group === g.key && f.status === "active" && f.inImport);
+      const n = rows.filter((r) => fields.some((f) => cell(r.rowNo, f.key))).length;
+      if (n) facts.push({ label: groupLabel(catalogue, g.key), value: `${n} ${g.rowLabel}${n === 1 ? "" : "s"}` });
     }
     views.push({
       rowNo: start,

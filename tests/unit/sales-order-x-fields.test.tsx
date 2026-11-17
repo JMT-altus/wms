@@ -29,7 +29,7 @@ const ITEM_X: SoCells = { actualQuantity: "1", quantityUom: "Box", marks: "AT/1"
 
 describe("the x fields the WMS offers", () => {
   it("are 20 optional fields stored by key, each with the Read Me's own name; none of them is required", () => {
-    const keyed = SO_FIELDS.filter((f) => f.keyed);
+    const keyed = SO_FIELDS.filter((f) => f.keyed && !f.defaultOff);
     expect(keyed.map((f) => f.tallyName)).toEqual([
       "Reference No.", "Reference Date", "Voucher Effective Date", "Voucher Applicable Upto",
       "Actual Quantity", "Quantity UOM", "Marks", "No. of Packages",
@@ -82,7 +82,7 @@ describe("the x fields the WMS offers", () => {
   });
 
   it("a file made from the previous template — without these columns — still maps and imports", () => {
-    const added = new Set(SO_FIELDS.filter((f) => f.keyed).map((f) => f.tallyName));
+    const added = new Set(SO_FIELDS.filter((f) => f.keyed && !f.defaultOff).map((f) => f.tallyName));
     const old = SO_HEADERS.filter((h) => !added.has(h));
     expect(old).toHaveLength(92);
     const project = (cells: string[]) => old.map((h) => cells[SO_HEADERS.indexOf(h)]!);

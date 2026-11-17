@@ -7,10 +7,10 @@ vi.setConfig({ testTimeout: 30_000 });
 
 // Admin & Master Setup → Sales Order Fields, and the Sales Order entry form under a field configuration, with the server
 // action MOCKED. All data is invented.
-const a = vi.hoisted(() => ({ save: vi.fn(), refresh: vi.fn(), toast: vi.fn() }));
+const a = vi.hoisted(() => ({ save: vi.fn(), saveSection: vi.fn(), refresh: vi.fn(), toast: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: a.refresh, push: vi.fn() }) }));
 vi.mock("@/lib/toast", () => ({ fireToast: a.toast }));
-vi.mock("@/app/(masters)/master-setup/sales-order-fields/actions", () => ({ saveSalesOrderField: (...x: unknown[]) => a.save(...x) }));
+vi.mock("@/app/(masters)/master-setup/sales-order-fields/actions", () => ({ saveSalesOrderField: (...x: unknown[]) => a.save(...x), saveSalesOrderSection: (...x: unknown[]) => a.saveSection(...x) }));
 vi.mock("@/components/ui/select", () => ({
   Select: ({ options, value, onValueChange, ariaLabel }: { options: { value: string; label: string }[]; value: string; onValueChange: (v: string) => void; ariaLabel?: string }) => (
     <select aria-label={ariaLabel} value={value} onChange={(e) => onValueChange(e.target.value)}>
@@ -41,18 +41,18 @@ afterEach(() => {
 describe("Sales Order Fields (admin)", () => {
   const settings = [setting({ fieldKey: "carrier", scope: "voucher", label: "Transporter", rowVersion: 3 }), custom("custom_project", "voucher", "Project")];
 
-  it("lists every field with its scope and requirement; locked fields can't be retired", () => {
+  it("lists every field with its scope and requirement; locked fields can't be disabled", () => {
     render(<SalesOrderFieldsManager settings={settings} version={7} ready canManage history={[]} />);
-    expect(screen.getByRole("button", { name: /All fields · 116/ })).toBeTruthy(); // the catalogue's 115 fields and the custom one
-    // A pre-close field is marked as such and can't be retired; an offered x field says so.
+    expect(screen.getByRole("button", { name: /All fields · 354/ })).toBeTruthy(); // the worksheet's 353 fields and the custom one
+    // A pre-close field is marked as such and can't be disabled; an offered x field says so.
     const reason = screen.getByRole("button", { name: "Edit Reason for Pre-Close" }).closest("tr")!;
     expect(within(reason).getByText("Pre-close (Update)")).toBeTruthy();
-    expect(within(reason).queryByRole("button", { name: /Retire/ })).toBeNull();
+    expect(within(reason).queryByRole("button", { name: /Disable/ })).toBeNull();
     expect(within(screen.getByRole("button", { name: "Edit Port of Loading" }).closest("tr")!).getByText(/x in the matrix/)).toBeTruthy();
     const voucherNo = screen.getByRole("button", { name: "Edit Voucher Number" }).closest("tr")!;
     expect(within(voucherNo).getByText("Locked")).toBeTruthy();
-    expect(within(voucherNo).queryByRole("button", { name: /Retire/ })).toBeNull();
-    expect(screen.getByRole("button", { name: "Retire Project" })).toBeTruthy();
+    expect(within(voucherNo).queryByRole("button", { name: /Disable/ })).toBeNull();
+    expect(screen.getByRole("button", { name: "Disable Project" })).toBeTruthy();
   });
 
   it("saves an edit with the row version it read, and shows a refusal from the server", async () => {
@@ -117,8 +117,8 @@ describe("the entry form under a configuration", () => {
   });
 });
 
-describe("adding and retiring from the admin screen", () => {
-  it("a new custom field at the chosen scope, and a retirement, are sent as complete settings", async () => {
+describe("adding and disabling from the admin screen", () => {
+  it("a new custom field at the chosen scope, and a disabling, are sent as complete settings", async () => {
     a.save.mockResolvedValue({ ok: true, fieldKey: "custom_x", version: 8 });
     render(<SalesOrderFieldsManager settings={[custom("custom_project", "voucher", "Project", { rowVersion: 2 })]} version={7} ready canManage history={[]} />);
     fireEvent.click(screen.getByRole("button", { name: /Add custom field/ }));
@@ -131,7 +131,7 @@ describe("adding and retiring from the admin screen", () => {
     expect(a.save.mock.calls[0]![0]).toMatchObject({ fieldKey: null, isCustom: true, scope: "allocation", label: "Batch Ref", section: "Extra", fieldType: "text", requirement: "mandatory", expectedRowVersion: 0 });
     await waitFor(() => expect(a.refresh).toHaveBeenCalled());
 
-    fireEvent.click(screen.getByRole("button", { name: "Retire Project" }));
+    fireEvent.click(screen.getByRole("button", { name: "Disable Project" }));
     await waitFor(() => expect(a.save).toHaveBeenCalledTimes(2));
     expect(a.save.mock.calls[1]![0]).toMatchObject({ fieldKey: "custom_project", status: "retired", expectedRowVersion: 2, label: "Project" });
   });
@@ -242,7 +242,8 @@ describe("every field the Read Me applies to Sales Orders has an input on the fo
       "Ledger Amount": () => labelled.has("Ledger Amount") && /Dr ₹/.test(text) && /Cr ₹/.test(text),
     };
     expect(SO_FIELDS.filter((f) => !f.outsideMatrix && !f.workflow)).toHaveLength(91);
-    const newOrder = SO_FIELDS.filter((f) => !f.workflow);
+    // (The 238 provisions are off by default: tests/unit/sales-order-provisions.test.tsx covers them once enabled.)
+    const newOrder = SO_FIELDS.filter((f) => !f.workflow && !f.defaultOff);
     expect(newOrder).toHaveLength(112);
     const missing = newOrder.filter((f) => !(elsewhere[f.tallyName]?.() ?? labelled.has(f.tallyName))).map((f) => f.tallyName);
     expect(missing).toEqual([]);

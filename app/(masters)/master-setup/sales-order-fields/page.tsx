@@ -7,8 +7,8 @@ import { SalesOrderFieldsManager } from "@/components/admin/master/sales-order-f
 export const dynamic = "force-dynamic";
 
 /**
- * Admin & Master Setup → Sales Order Fields: the fields of TallyPrime's Sales Order matrix, and custom fields, as the
- * Sales Order form, import, template and order page use them. Admins can look; changing anything needs a super-admin
+ * Admin & Master Setup → Sales Order Fields: every field and section of TallyPrime's Sales Order matrix, and custom
+ * fields and sections, as the Sales Order form, import, template and order page use them. Admins can look; changing anything needs a super-admin
  * or the sensitive `sales-orders.fields.manage` permission (checked again by every action).
  */
 export default async function SalesOrderFieldsPage() {
@@ -19,9 +19,9 @@ export default async function SalesOrderFieldsPage() {
       <MasterPageHead
         eyebrow="Admin & Master Setup"
         title="Sales Order Fields"
-        lede={<>Which fields every Sales Order carries — on the form, in Excel/CSV imports, in the template and on the order page — and when each is mandatory. Configuration version {load.catalogue.version}.</>}
+        lede={<>Every section and field of TallyPrime&apos;s Sales Order matrix, and your own: which ones a Sales Order carries — on the form, in Excel/CSV imports, in the template and on the order page — and when each is mandatory. Configuration version {load.catalogue.version}.</>}
       />
-      <SalesOrderFieldsManager settings={load.settings} version={load.catalogue.version} ready={load.ready} canManage={canManage} history={history.rows.map((h) => ({ ...h, changedAt: h.changedAt.toISOString() }))} />
+      <SalesOrderFieldsManager settings={load.settings} version={load.catalogue.version} ready={load.ready} helpTextReady={load.helpTextReady} canManage={canManage} history={history.rows.map((h) => ({ ...h, changedAt: h.changedAt.toISOString() }))} />
     </div>
   );
 }

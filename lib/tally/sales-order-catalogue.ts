@@ -1,4 +1,5 @@
 import { GST_STATES } from "@/lib/masters/gstin";
+import { SO_PROVISION_FIELDS } from "./sales-order-provisions";
 
 /**
  * The Sales Order field catalogue — TallyPrime's voucher field matrix, Sales
@@ -11,12 +12,15 @@ import { GST_STATES } from "@/lib/masters/gstin";
  *   Y          → "mandatory"     every order must carry it
  *   ?          → "conditional"   offered, used when it applies; never required
  *   Provision  → "provision"     offered, optional
- *   x          → not a Sales Order field in the matrix. Each one was audited: those
- *                that describe the order itself and need no master, integration or
- *                other workflow are offered as OPTIONAL WMS fields (`outsideMatrix`,
- *                stored by key — `keyed`), never required; the rest are listed in
- *                SO_NOT_APPLICABLE with why (SO_X_REASON), so a file that carries the
- *                column is told it is ignored and why
+ *   x          → not a Sales Order field in the matrix. Every one of them is in the
+ *                catalogue all the same, so each can be configured. Those that
+ *                describe the order itself and need no master, integration or other
+ *                workflow are offered as OPTIONAL WMS fields (`outsideMatrix`,
+ *                stored by key — `keyed`), never required. The rest are PROVISIONS
+ *                (./sales-order-provisions): off until an administrator enables one
+ *                (`defaultOff`), each with why the matrix marks it x (`xVerdict`)
+ *                and what the WMS doesn't do for it (`dependency`). While one is off,
+ *                a file that carries its column is told it is ignored and why
  *   Update     → (red, not in the business's legend) changing an existing
  *                order, not creating one: the pre-close fields (`workflow:
  *                "preClose"`), entered on the order's page, never imported with a
@@ -37,6 +41,7 @@ import { GST_STATES } from "@/lib/masters/gstin";
  * Nothing else about a requirement is inferred.
  */
 
+/** Every section of the Read Me worksheet, in its own order (38). */
 export const SO_SECTIONS = [
   "General Details",
   "Ledger Details",
@@ -44,21 +49,42 @@ export const SO_SECTIONS = [
   "Order Details",
   "Dispatch/Receipt/Party's Document Details",
   "Export/Import Details",
+  "Additional Details",
   "Item Allocations Details",
+  "Bill Allocations",
   "Category Allocations",
   "Cost Centre Allocations",
   "Original Invoice Details",
+  "e-Invoice Details",
+  "e-Way Bill Details",
   "GST Rate & Related Details",
   "HSN/SAC & Related Details",
   "Party Details (Buyer/Supplier)",
   "Party Details (Consignee)",
+  "Stat Adjustment (GST)",
   "Type of Supply Details",
   "Voucher Status",
   "Additional Cost",
+  "Bank Allocations Details",
+  "Point of Sale Details",
+  "Advance Payment/Receipt/Refund Details",
+  "Tax Type Allocations",
+  "GST Advance Adjustment Details",
+  "TDS Nature of Payment Details",
+  "TDS Party Details",
+  "TDS Bill Allocations",
+  "TCS Nature of Goods Details",
+  "TCS Party Details",
+  "TCS Bill Allocations",
+  "Stat Adjustment (GST) Details",
+  "Stat Adjustment (TDS) Details",
+  "Stat Adjustment (TCS) Details",
+  "Stat Payment (TDS) Details",
+  "Stat Payment (TCS) Details",
 ] as const;
 export type SoSection = (typeof SO_SECTIONS)[number];
 
-/** Sections of the matrix whose every field is marked x for Sales Orders: nothing in them is a Sales Order field. */
+/** Sections of the matrix whose every field is marked x for Sales Orders: nothing in them is on unless an administrator enables it. */
 export const SO_EMPTY_SECTIONS = [
   "Additional Details",
   "Bill Allocations",
@@ -88,8 +114,65 @@ export type SoRequirement = "mandatory" | "conditional" | "provision";
 export type SoLevel = "voucher" | "buyer" | "consignee" | "ledger" | "item" | "allocation" | "costCentre" | "additionalCost";
 export type SoFieldType = "text" | "date" | "amount" | "number" | "percent" | "yesno" | "choice" | "gstin" | "state" | "pincode" | "hsn";
 
+/**
+ * Why the matrix marks a field x for a Sales Order — the audit of every one of them:
+ *   notApplicable — it belongs to another voucher or a later step (dispatch, invoice, receipt, payment, journal);
+ *   external      — it comes from an outside system (the GST e-Invoice or e-Way Bill portal, customs);
+ *   approval      — it could apply to an order but changes pricing or needs a master and a workflow the WMS doesn't
+ *                   have: a business decision first.
+ */
+export type SoXStatus = "notApplicable" | "external" | "approval";
+/**
+ * What stands between a field and working as it does in Tally:
+ *   recordOnly — it can be enabled; the WMS stores, imports and shows the value and does nothing else with it;
+ *   needsWork  — it can't be enabled until the named technical work is done.
+ */
+export interface SoDependency {
+  kind: "recordOnly" | "needsWork";
+  text: string;
+}
+
+/**
+ * A REPEATING GROUP of Tally's voucher: rows of related fields under one parent — several bill references, bank
+ * instruments, tax types or TDS/TCS bills under one ledger entry, or several advance lines under the order. In a file,
+ * each row of a group is one row of the voucher carrying that group's cells; it belongs to the ledger entry on its
+ * own row, or else to the one above it (as a cost-centre allocation does). Stored as `groups.<key>` rows on the
+ * ledger entry or the order. The group's structure is Tally's; which of its fields are on, required or how they are
+ * labelled is the configuration's.
+ */
+export type SoGroupKey = "billAllocations" | "bankAllocations" | "taxTypeAllocations" | "tdsBillAllocations" | "tcsBillAllocations" | "advancePayments";
+export interface SoGroup {
+  key: SoGroupKey;
+  /** The Read Me's own section of the group's fields. */
+  section: SoSection;
+  /** What one row is, for the screens ("bill allocation"). */
+  rowLabel: string;
+  /** Rows belong to a ledger entry, or to the order. */
+  parent: "ledger" | "voucher";
+  /** Tally's own rule: the rows' amounts add up to their ledger entry's amount (a difference is flagged for review). */
+  totalField?: string;
+}
+export const SO_GROUPS: readonly SoGroup[] = [
+  { key: "billAllocations", section: "Bill Allocations", rowLabel: "bill allocation", parent: "ledger", totalField: "billAmount" },
+  { key: "bankAllocations", section: "Bank Allocations Details", rowLabel: "bank allocation", parent: "ledger", totalField: "bankAmount" },
+  { key: "taxTypeAllocations", section: "Tax Type Allocations", rowLabel: "tax type allocation", parent: "ledger", totalField: "taxTypeAmount" },
+  { key: "tdsBillAllocations", section: "TDS Bill Allocations", rowLabel: "TDS bill allocation", parent: "ledger" },
+  { key: "tcsBillAllocations", section: "TCS Bill Allocations", rowLabel: "TCS bill allocation", parent: "ledger" },
+  { key: "advancePayments", section: "Advance Payment/Receipt/Refund Details", rowLabel: "advance line", parent: "voucher" },
+];
+export const SO_GROUP: Readonly<Record<SoGroupKey, SoGroup>> = Object.fromEntries(SO_GROUPS.map((g) => [g.key, g])) as Record<SoGroupKey, SoGroup>;
+
+/** One stored row of a repeating group: its values by field key (as stored text, like a keyed field's), and its file row. */
+export interface SoGroupRow {
+  rowNo: number;
+  values: Record<string, string>;
+}
+export type SoGroupRows = Partial<Record<SoGroupKey, SoGroupRow[]>>;
+
 export interface SoField {
   key: string;
+  /** A field of a repeating group (stored in its rows, not once per ledger entry or order). */
+  group?: SoGroupKey;
   /** Exactly as the matrix prints it. Also the template heading. */
   tallyName: string;
   /** For the form and the screens. */
@@ -131,6 +214,12 @@ export interface SoField {
    * that workflow on the order's page, never on the entry form or in an import.
    */
   workflow?: "preClose";
+  /** A provision: off until an administrator enables it in Admin & Master Setup → Sales Order Fields. */
+  defaultOff?: true;
+  /** A provision: why the matrix marks it x for a Sales Order. */
+  xVerdict?: { status: SoXStatus; why: string };
+  /** What the WMS doesn't do for this field, or what must be built before it can be enabled. Absent = nothing. */
+  dependency?: SoDependency;
   /** The validation rule, in words, for the template's Read Me, the matrix report and the screens. */
   rule: string;
   /** The row of the field in the business's matrix. */
@@ -155,14 +244,13 @@ const OUTSIDE = "Marked x for Sales Orders in the Read Me: offered as an optiona
 const in_ = (section: SoSection, defs: Def[]): SoField[] => defs.map((d) => ({ ...d, section }));
 
 /**
- * The Sales Order fields, in the matrix's own order — the ONE list every screen, the template, the mapping, the
- * planner, the comparison, the order page and the pre-close workflow read:
+ * The fields the WMS has on by default, in the matrix's own order:
  *   · the 91 the "Accounting Voucher (Read Me)" worksheet applies to Sales Orders (65 Y, 18 ?, 8 Provision);
  *   · 21 it marks x that the WMS offers as optional fields (`outsideMatrix`): HSN Description and the 20 audited
  *     as describing the order itself (`keyed`);
  *   · the 3 it marks Update — pre-closing a delivery of an existing order (`workflow: "preClose"`).
  */
-export const SO_FIELDS: readonly SoField[] = [
+const OFFERED_FIELDS: readonly SoField[] = [
   ...in_("General Details", [
     { key: "voucherType", tallyName: "Voucher Type Name", label: "Voucher Type Name", requirement: "mandatory", level: "voucher", type: "text", matrixRow: 3, rule: "A Sales Order voucher type (its name contains “Sales Order”). The same on every row of the order.", synonyms: ["voucher type", "vch type", "type of voucher"] },
     { key: "documentDate", tallyName: "Voucher Date", label: "Voucher Date", requirement: "mandatory", level: "voucher", type: "date", matrixRow: 4, rule: "A real date (dd-mm-yyyy, 1-Apr-26 or yyyy-mm-dd), not before 2000. Sets the financial year.", synonyms: ["date", "vch date", "document date", "sales order date", "so date"] },
@@ -312,6 +400,13 @@ export const SO_FIELDS: readonly SoField[] = [
   ]),
 ];
 
+/**
+ * EVERY field of the Read Me worksheet's Sales Order column (353), in the matrix's own order — the ONE list every
+ * screen, the template, the mapping, the planner, the comparison, the order page, the pre-close workflow and Admin &
+ * Master Setup read: the 115 above and the 238 provisions (marked x, off until an administrator enables one).
+ */
+export const SO_FIELDS: readonly SoField[] = [...OFFERED_FIELDS, ...SO_PROVISION_FIELDS].sort((a, b) => a.matrixRow - b.matrixRow);
+
 export const SO_FIELD: Readonly<Record<string, SoField>> = Object.fromEntries(SO_FIELDS.map((f) => [f.key, f]));
 export const soField = (key: string): SoField => {
   const f = SO_FIELD[key];
@@ -321,7 +416,10 @@ export const soField = (key: string): SoField => {
 
 /** A field of a NEW order (not of the pre-close workflow): what the form, the template, the mapping and the planner use. */
 export const isOrderField = (f: Pick<SoField, "workflow">) => !f.workflow;
-export const SO_ORDER_FIELDS: readonly SoField[] = SO_FIELDS.filter(isOrderField);
+/** A new order's fields as the matrix alone has them: on by default (a provision is one only once it is enabled). */
+export const SO_ORDER_FIELDS: readonly SoField[] = SO_FIELDS.filter((f) => isOrderField(f) && !f.defaultOff);
+/** The provisions: marked x, off until an administrator enables one. */
+export const SO_PROVISIONS: readonly SoField[] = SO_FIELDS.filter((f) => f.defaultOff);
 /** The pre-close workflow's fields (marked "Update"), in the matrix's order. */
 export const SO_PRECLOSE_FIELDS: readonly SoField[] = SO_FIELDS.filter((f) => f.workflow === "preClose");
 
@@ -330,132 +428,36 @@ export const isAlwaysMandatory = (f: SoField) => f.requirement === "mandatory" &
 /** Whether a blank value can hold an order back at all (before any condition or default is applied). */
 export const isEnforced = (f: SoField) => f.requirement === "mandatory" && !f.notEnforced;
 
-/** Fields marked x for Sales Orders, by section, exactly as the matrix prints them. A column with one of these headings is recognised and ignored. */
-export const SO_NOT_APPLICABLE: Readonly<Record<string, readonly string[]>> = {
-  "General Details": ["Name on Receipt"],
-  "Ledger Details": ["Type of Tax Payment"],
-  "Item Details": ["Discount Rate (Cash/Trade)", "Discount Amount (Cash/Trade)"],
-  "Dispatch/Receipt/Party's Document Details": [
-    "Delivery Note No./Receipt Note No./Challan No./Tracking No.",
-    "Delivery Note Date/Receipt Note Date/Challan Date/Tracking Date",
-    "Dispatch Doc No. /Receipt Doc No./Challan Doc No.",
-    "Bill of lading/LR RR No.",
-    "Bill of lading/LR RR No. - Date",
-    "Motor Vehicle No.",
-  ],
-  "Export/Import Details": ["Shipping Bill No.", "Shipping Bill Date", "Port Code", "Bill of Entry No.", "Bill of Entry Date"],
-  "Additional Details": ["Buyer's Debit Note No.", "Buyer's Debit Note - Date", "Supplier's Debit/Credit Note No.", "Supplier's Debit/Credit Note - Date", "Reason for Issuing Note"],
-  "Item Allocations Details": ["Item Allocations - Batch/Lot No.", "Item Allocations - Mfg. Date", "Item Allocations - Expiry Date", "Item Allocations - Godown Name", "Item Allocations - Location Name"],
-  "Bill Allocations": ["Bill Type of Ref", "Bill Name", "Bill Amount", "Bill Amount - Dr/Cr", "Bill Due Dt or Credit Days", "Interest - on", "Interest - From Date", "Interest - To Date", "Interest - % per", "Interest - Rate", "Interest - Applicability", "Interest - By", "Interest - Rounding", "Interest - Limit"],
-  "Original Invoice Details": ["Original Invoice No.", "Original Invoice - Date"],
-  "e-Invoice Details": [
-    "e-Invoice - Ack No.", "e-Invoice - Ack Date", "e-Invoice - IRN", "e-Invoice - Bill to place", "e-Invoice - Ship to place", "e-Invoice - Dispatch From Name", "e-Invoice - Dispatch From Address",
-    "e-Invoice - Dispatch From State", "e-Invoice - Dispatch From Pincode", "e-Invoice - Dispatch From Place", "e-Invoice Cancellation - Reason for Cancellation", "e-Invoice Cancellation - Remarks",
-  ],
-  "e-Way Bill Details": [
-    "e-Way Bill No.", "e-Way Bill Date", "Consolidated e-Way Bill No.", "Consolidated e-Way Bill Date", "e-Way Bill - Sub-Type", "e-Way Bill - Document Type",
-    "Consignor Details (From) - Address-1", "Consignor Details (From) - Address-2", "Consignor Details (From) - Address Type", "Consignor Details (From) - Pincode", "Consignor Details (From) - Place", "Consignor Details (From) - Actual State",
-    "Consignee Details (To) - Address-1", "Consignee Details (To) - Address-2", "Consignee Details (To) - Address Type", "Consignee Details (To) - Place", "Consignee Details (To) - Actual State", "Consignee Details (To) - Pincode",
-    "e-Way Bill Transport Details - Pin to Pin Distance as per Portal", "e-Way Bill Transport Details - Transporter Name", "e-Way Bill Transport Details - Transporter ID", "e-Way Bill Transport Details - Mode",
-    "e-Way Bill Transport Details - Doc/Lading/RR/Airway No.", "e-Way Bill Transport Details - Doc/Lading/RR/Airway Date", "e-Way Bill Transport Details - Vehicle Number", "e-Way Bill Transport Details - Vehicle Type",
-    "e-Way Bill Transport Details - Place", "e-Way Bill Transport Details - State", "e-Way Bill Transport Details - Reason", "e-Way Bill Transport Details - Remarks",
-    "e-Way Bill Extension Details - Remaining Distance(in KM)", "e-Way Bill Extension Details - Mode", "e-Way Bill Extension Details - Doc/Lading/RR/Airway No.", "e-Way Bill Extension Details - Doc/Lading/RR/Airway - Date",
-    "e-Way Bill Extension Details - Vehicle Number", "e-Way Bill Extension Details - Vehicle Type", "e-Way Bill Extension Details - Transit Type", "e-Way Bill Extension Details - Address 1", "e-Way Bill Extension Details - Address 2",
-    "e-Way Bill Extension Details - Address 3", "e-Way Bill Extension Details - Current Pincode", "e-Way Bill Extension Details - Current Place", "e-Way Bill Extension Details - Current State", "e-Way Bill Extension Details - Reason",
-    "e-Way Bill Extension Details - Remarks", "e-Way Bill Cancellation Details - Reason", "e-Way Bill Cancellation Details - Remarks",
-  ],
-  "Stat Adjustment (GST)": [
-    "Stat Adjustment (GST) - Type of Duty/Tax", "Stat Adjustment (GST) - Nature of Adjustment", "Stat Adjustment (GST) - Additional Nature of Adjustment", "Stat Adjustment (GST) - Rate", "Stat Adjustment (GST) - Taxable Value",
-    "Stat Adjustment (GST) - ISD Invoice/Debit/Credit Note No.", "Stat Adjustment (GST) - ISD Invoice/Debit/Credit Note Date", "Stat Adjustment (GST) - Eligible for Input Tax Credit", "Stat Adjustment (GST) - Type of Supply",
-  ],
-  "Bank Allocations Details": [
-    "Bank Allocations - Ref ID", "Bank Allocations - Transaction Type", "Bank Allocations - Amount", "Bank Allocations - A/c No.", "Bank Allocations - Bank Name", "Bank Allocations - Branch", "Bank Allocations - Inst No.",
-    "Bank Allocations - Inst Date", "Bank Allocations - Favouring Name", "Bank Allocations - Beneficiary Code", "Bank Allocations - IFS Code", "Bank Allocations - SWIFT Code", "Bank Allocations - Email ID", "Bank Allocations - Cross Using",
-    "Bank Allocations - Remarks", "Bank Allocations - Cheque Range", "Bank Allocations - Transaction ID", "Bank Allocations - Ledger Name", "Bank Allocations - Transfer Mode", "Bank Allocations - PDC Issue Date", "Bank Allocations - PDC Note",
-    "Bank Allocations - Payable Location", "Bank Allocations - Print Location", "Bank Allocations - Bank Date",
-  ],
-  "Point of Sale Details": [
-    "POS Details - Gift Voucher", "POS Details - Gift Voucher Amount", "POS Details - Credit/Debit Card", "POS Details - Credit/Debit Card Amount", "POS Details - Credit/Debit Card Number", "POS Details - Cheque",
-    "POS Details - Cheque Amount", "POS Details - Bank Name", "POS Details - Cheque Number", "POS Details - Cash Ledger Name", "POS Details - Cash Amount", "POS Details - Cash tendered",
-  ],
-  "Advance Payment/Receipt/Refund Details": [
-    "Ledger Name", "Stock Item Name", "Item Quantity", "Item Rate", "Advance Amount", "Taxable Value", "IGST Rate", "IGST Amount", "SGST Rate", "SGST Amount", "CGST Rate", "CGST Amount", "Cess Rate", "Cess Amount", "Cess Rate Per Unit", "Cess per Unit Amount",
-  ].map((n) => `Advance Payment/Receipt/Refund Details - ${n}`),
-  "Tax Type Allocations": [
-    "Tax Type Allocations - Tax Type", "Tax Type Allocations - Amount", "Tax Type Allocations Additional Details - Nature of Payment", "Tax Type Allocations Additional Details - Amount",
-    "Tax Type Allocations - IGST Liability", "Tax Type Allocations - CGST Liability", "Tax Type Allocations - SGST/UTGST Liability", "Tax Type Allocations - Cess Liability",
-  ],
-  "GST Advance Adjustment Details": ["GST Advance Details - Month Year", "GST Advance Details - Place of Supply", "GST Advance Details - GST Rate", "GST Advance Details - Cess Rate", "GST Advance Details - Advance Amount"],
-  "TDS Nature of Payment Details": ["TDS - Nature of Payments", "TDS - Assessable Value", "Override TDS Exemption u/s 206C"],
-  "TDS Party Details": ["TDS Party Details - Party Name", "TDS Party Details - Deductee Type", "TDS Party Details - PAN Number"],
-  "TDS Bill Allocations": ["Type of Ref", "Name", "TDS Nature of Payment", "Party Ledger", "Expenses Ledger", "Duty Ledger", "Assessable Amount", "Payable Amount", "Paid Amount"].map((n) => `TDS Bill Allocations - ${n}`),
-  "TCS Nature of Goods Details": ["TCS - Nature of Goods", "TCS - Assessable Value", "Exemption from TCS for Buyer-Deductible TDS"],
-  "TCS Party Details": ["TCS Party Details - Party Name", "TCS Party Details - Collectee Type", "TCS Party Details - PAN Number"],
-  "TCS Bill Allocations": ["Type of Ref", "Name", "TCS Nature of Goods", "Party Ledger", "Income Ledger", "Duty Ledger", "Assessable Amount", "Payable Amount", "Paid Amount"].map((n) => `TCS Bill Allocations - ${n}`),
-  "Stat Adjustment (GST) Details": ["Stat Payment (GST) - Tax Type", "Stat Payment (GST) - Type of Payment", "Stat Payment (GST) - Period From", "Stat Payment (GST) - Period To"],
-  "Stat Adjustment (TDS) Details": ["Stat Adjustment (TDS) - Nature of Payment"],
-  "Stat Adjustment (TCS) Details": ["Stat Adjustment (TCS) - Nature of Receipt"],
-  "Stat Payment (TDS) Details": ["Tax Type", "Period From", "Period To", "Section", "Nature of Payment", "Deductee Status", "Residential Status", "Cheque No.", "Cheque Date", "BSR Code", "Challan No.", "Challan Date", "Bank Name", "Branch Name"].map((n) => `Stat Payment (TDS) - ${n}`),
-  "Stat Payment (TCS) Details": ["Tax Type", "Period From", "Period To", "Section", "Nature of Goods", "Deductee Status", "Residential Status", "Cheque No.", "Cheque Date", "BSR Code", "Challan No.", "Challan Date", "Bank Name", "Branch Name"].map((n) => `Stat Payment (TCS) - ${n}`),
-};
+/** The provisions by section, exactly as the matrix prints them: marked x and not on by default. While one is off, a column with its heading is recognised and ignored. */
+export const SO_NOT_APPLICABLE: Readonly<Record<string, readonly string[]>> = SO_PROVISIONS.reduce<Record<string, string[]>>((by, f) => {
+  (by[f.section] ??= []).push(f.tallyName);
+  return by;
+}, {});
 
-/**
- * Why a field marked x isn't offered on a Sales Order — the audit of every one of them:
- *   notApplicable — it belongs to another voucher or a later step (dispatch, invoice, receipt, payment, journal);
- *   external      — it comes from an outside system (the GST e-Invoice or e-Way Bill portal, customs);
- *   approval      — it could apply to an order but changes pricing or needs a master and a workflow the WMS doesn't
- *                   have: a business decision first.
- */
-export type SoXStatus = "notApplicable" | "external" | "approval";
-const XR = (status: SoXStatus, why: string) => ({ status, why });
-const STATUTORY = XR("notApplicable", "Statutory payment and adjustment vouchers, not orders.");
-const TAX_DEDUCTION = XR("notApplicable", "TDS and TCS are worked out on invoices, payments and receipts, not on orders.");
-export const SO_X_REASON: Readonly<Record<string, { status: SoXStatus; why: string }>> = {
-  "General Details": XR("notApplicable", "Receipt vouchers only."),
-  "Ledger Details": XR("notApplicable", "Statutory payment vouchers only."),
-  "Item Details": XR("approval", "Tally's cash/trade discount changes how a line's amount and the order total are worked out: it needs an approved pricing rule first."),
-  "Dispatch/Receipt/Party's Document Details": XR("notApplicable", "Recorded when goods are dispatched (Delivery Note or Sales invoice), after the order."),
-  "Export/Import Details": XR("external", "Customs documents issued at shipment (ICEGATE), after the order: they belong to the export invoice."),
-  "Additional Details": XR("notApplicable", "Debit and credit notes only."),
-  "Item Allocations Details|Item Allocations - Batch/Lot No.": XR("notApplicable", "Chosen from stock when goods are dispatched (Delivery Note), not on the order."),
-  "Item Allocations Details|Item Allocations - Mfg. Date": XR("notApplicable", "Chosen from stock when goods are dispatched (Delivery Note), not on the order."),
-  "Item Allocations Details|Item Allocations - Expiry Date": XR("notApplicable", "Chosen from stock when goods are dispatched (Delivery Note), not on the order."),
-  "Item Allocations Details": XR("approval", "Needs a godown/location master shared with Tally and an inventory workflow the WMS doesn't have: a business decision first."),
-  "Bill Allocations": XR("notApplicable", "Bill-wise receivables and interest are created by the sales invoice, not the order."),
-  "Original Invoice Details": XR("notApplicable", "Credit notes and sales returns refer to an original invoice; an order has none."),
-  "e-Invoice Details": XR("external", "Generated by the GST e-Invoice portal (IRP) for invoices, never for orders."),
-  "e-Way Bill Details": XR("external", "Generated on the e-Way Bill portal when goods move, never for orders."),
-  "Stat Adjustment (GST)": XR("notApplicable", "Journal vouchers for GST adjustments."),
-  "Bank Allocations Details": XR("notApplicable", "Payment and receipt vouchers (banking)."),
-  "Point of Sale Details": XR("notApplicable", "Point-of-sale invoices."),
-  "Advance Payment/Receipt/Refund Details": XR("notApplicable", "An advance against an order is a receipt voucher of its own, recorded separately."),
-  "Tax Type Allocations": STATUTORY,
-  "GST Advance Adjustment Details": XR("notApplicable", "GST on advances: receipt and journal vouchers."),
-  "TDS Nature of Payment Details": TAX_DEDUCTION,
-  "TDS Party Details": TAX_DEDUCTION,
-  "TDS Bill Allocations": TAX_DEDUCTION,
-  "TCS Nature of Goods Details": TAX_DEDUCTION,
-  "TCS Party Details": TAX_DEDUCTION,
-  "TCS Bill Allocations": TAX_DEDUCTION,
-  "Stat Adjustment (GST) Details": STATUTORY,
-  "Stat Adjustment (TDS) Details": STATUTORY,
-  "Stat Adjustment (TCS) Details": STATUTORY,
-  "Stat Payment (TDS) Details": STATUTORY,
-  "Stat Payment (TCS) Details": STATUTORY,
+/** The audit's verdict on one provision: why the matrix marks it x for a Sales Order. */
+export const xReason = (section: string, tallyName: string): { status: SoXStatus; why: string } => {
+  const f = SO_PROVISIONS.find((p) => p.section === section && p.tallyName === tallyName);
+  if (!f?.xVerdict) throw new Error(`No x verdict for ${section} / ${tallyName}`);
+  return f.xVerdict;
 };
-/** The audit's verdict on one x field (by section, with a field's own entry first). */
-export const xReason = (section: string, tallyName: string) => SO_X_REASON[`${section}|${tallyName}`] ?? SO_X_REASON[section]!;
 
 /** Marked "Update" (red) — not in the business's legend. They change an existing order (pre-closing a delivery), so creating one never imports them. */
 export const SO_UPDATE_ONLY: readonly string[] = SO_PRECLOSE_FIELDS.map((f) => f.tallyName);
 
 // Spaces around "/" don't make a different heading ("Dispatch Doc No. /Receipt Doc No." is the Read Me's own spelling).
-const headingKey = (h: string) => h.trim().toLowerCase().replace(/\s+/g, " ").replace(/ ?\/ ?/g, "/");
+export const headingKey = (h: string) => h.trim().toLowerCase().replace(/\s+/g, " ").replace(/ ?\/ ?/g, "/");
+/** Why a provision that is off isn't imported, and what would bring it in. */
+export const provisionOffReason = (f: SoField): string =>
+  `not a Sales Order field (${f.section}): ${f.xVerdict!.why} ${f.dependency?.kind === "needsWork" ? f.dependency.text : "An administrator can enable it in Admin & Master Setup → Sales Order Fields."}`;
+export const UPDATE_ONLY_REASON = "changes an existing order (marked “Update”): pre-close a delivery on the order's own page";
 const IGNORED = new Map<string, string>([
-  ...Object.entries(SO_NOT_APPLICABLE).flatMap(([section, names]) => names.map((n) => [headingKey(n), `not a Sales Order field (${section}): ${xReason(section, n).why}`] as [string, string])),
-  ...SO_UPDATE_ONLY.map((n) => [headingKey(n), "changes an existing order (marked “Update”): pre-close a delivery on the order's own page"] as [string, string]),
+  ...SO_PROVISIONS.map((f) => [headingKey(f.tallyName), provisionOffReason(f)] as [string, string]),
+  ...SO_UPDATE_ONLY.map((n) => [headingKey(n), UPDATE_ONLY_REASON] as [string, string]),
 ]);
-/** Why a heading in the file is deliberately not imported, or null when it isn't one of the matrix's excluded fields. */
+/**
+ * Why a heading in the file is deliberately not imported under the matrix alone (every provision off), or null when
+ * it isn't one of the matrix's excluded fields. Under a configuration, ask ./sales-order-config → ignoredHeading.
+ */
 export const ignoredHeadingReason = (heading: string): string | null => IGNORED.get(headingKey(heading)) ?? null;
 
 /* ── reading a field's value: the same rules for a file, the form and the server ── */
@@ -571,6 +573,8 @@ export interface SoLedgerEntry {
   listedAs?: string | null;
   /** Custom ledger-entry fields, by key. */
   custom?: Record<string, string>;
+  /** Its repeating groups' rows (bill, bank, tax type, TDS and TCS bill allocations), when any were given. */
+  groups?: SoGroupRows;
 }
 
 export interface SoParty {
@@ -618,15 +622,36 @@ export interface SalesOrderDetails {
   additionalCosts: SoAdditionalCost[];
   /** Custom order-level fields, by key. A retired field's value stays here. */
   custom?: Record<string, string>;
+  /** The order's own repeating groups' rows (advance lines), when any were given. */
+  groups?: SoGroupRows;
 }
 
+/** The Read Me worksheet's own marking in its Sales Order column. */
+export type SoMarking = "Y" | "?" | "Provision" | "x" | "Update";
+export const SO_MARKINGS: readonly SoMarking[] = ["Y", "?", "Provision", "x", "Update"];
+export const soMarking = (f: Pick<SoField, "workflow" | "outsideMatrix" | "requirement">): SoMarking =>
+  f.workflow ? "Update" : f.outsideMatrix ? "x" : f.requirement === "mandatory" ? "Y" : f.requirement === "conditional" ? "?" : "Provision";
+
 /** For the field matrix report: every field the matrix lists for Sales Orders, with its marking. */
-export function soMatrixRows(): { section: string; tallyName: string; marking: "Y" | "?" | "Provision" | "x" | "Update"; key: string | null; level: string | null; type: string | null; rule: string; xStatus: SoXStatus | null }[] {
-  const mark = (r: SoRequirement) => (r === "mandatory" ? "Y" : r === "conditional" ? "?" : "Provision") as "Y" | "?" | "Provision";
+export function soMatrixRows(): { section: string; tallyName: string; marking: SoMarking; key: string; level: string; type: string; rule: string; xStatus: SoXStatus | null }[] {
   return [
-    // A field kept outside the matrix (marked x in the Read Me) is reported as x, with why the WMS keeps it; a
-    // pre-close field as Update.
-    ...SO_FIELDS.map((f) => ({ section: f.section, tallyName: f.tallyName, marking: f.workflow ? ("Update" as const) : f.outsideMatrix ? ("x" as const) : mark(f.requirement), key: f.key, level: f.level, type: f.type, rule: f.outsideMatrix ? `${f.rule} ${f.outsideMatrix}` : f.workflow ? `${f.rule} Entered when pre-closing a delivery of an existing order; never imported with a new one.` : f.rule, xStatus: null })),
-    ...Object.entries(SO_NOT_APPLICABLE).flatMap(([section, names]) => names.map((n) => ({ section, tallyName: n, marking: "x" as const, key: null, level: null, type: null, rule: `Not a Sales Order field: ${xReason(section, n).why} Recognised in a file and ignored.`, xStatus: xReason(section, n).status }))),
+    // A field marked x in the Read Me is reported as x: one the WMS offers with why it keeps it, a provision with
+    // why the matrix excludes it; a pre-close field as Update.
+    ...SO_FIELDS.map((f) => ({
+      section: f.section,
+      tallyName: f.tallyName,
+      marking: soMarking(f),
+      key: f.key,
+      level: f.level,
+      type: f.type,
+      rule: f.defaultOff
+        ? `Not a Sales Order field: ${f.xVerdict!.why} Off unless enabled in Admin & Master Setup → Sales Order Fields.${f.dependency ? ` ${f.dependency.text}` : ""}`
+        : f.outsideMatrix
+          ? `${f.rule} ${f.outsideMatrix}`
+          : f.workflow
+            ? `${f.rule} Entered when pre-closing a delivery of an existing order; never imported with a new one.`
+            : f.rule,
+      xStatus: f.xVerdict?.status ?? null,
+    })),
   ];
 }

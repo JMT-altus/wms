@@ -1,5 +1,5 @@
-import { SO_FIELDS } from "./sales-order-catalogue";
-import type { SalesOrderDetails } from "./sales-order-catalogue";
+import { SO_FIELDS, SO_GROUPS } from "./sales-order-catalogue";
+import type { SalesOrderDetails, SoGroupRows } from "./sales-order-catalogue";
 import type { TallyLine } from "./plan";
 import { partyKey } from "./values";
 
@@ -105,7 +105,8 @@ export function canonicalSalesOrder(o: ComparableOrder): CanonicalOrder {
   put("Order total", money(o.totalPaise));
 
   if (hasDetails(o.details)) {
-    const { ledgers, additionalCosts, version: _v, ...rest } = o.details;
+    const { ledgers, additionalCosts, groups, version: _v, ...rest } = o.details;
+    putGroups(put, "Order", groups);
     const flat: [string, unknown][] = [];
     // A consignee who is the buyer is a copy of the buyer's fields: compared once, as the buyer's.
     leaves(rest.consignee.sameAsBuyer ? { ...rest, consignee: { sameAsBuyer: true } } : rest, "", flat);
@@ -124,6 +125,7 @@ export function canonicalSalesOrder(o: ComparableOrder): CanonicalOrder {
       put(`${who} · ${name("ledgerDescription")}`, e.description);
       put(`${who} · cost centres`, e.costCentres.map((c) => `${c.category ?? ""}/${c.costCentre}/${money(c.amountPaise)}`).sort().join("; "));
       for (const [k, v] of Object.entries(e.custom ?? {})) put(`${who} · ${keyedLabel(k, k)}`, v);
+      putGroups(put, who, e.groups);
     }
     put("Additional costs", additionalCosts.map((a) => `${a.ledger}/${a.percent ?? ""}/${money(a.amountPaise)}/${customText(a.custom)}`).sort().join("; "));
   }
@@ -179,6 +181,18 @@ export function canonicalSalesOrder(o: ComparableOrder): CanonicalOrder {
     for (const [k, v] of Object.entries(l.custom ?? {})) put(`${who} · ${keyedLabel(k, k)}`, v);
   }
   return out;
+}
+
+/**
+ * A ledger entry's or the order's repeating-group rows, one label per group ("Ledger "Alpha" · Bill Allocations"): the
+ * rows' values by their Tally names, in any order — the file row numbers they came from are not part of the order.
+ */
+function putGroups(put: (label: string, v: unknown) => void, who: string, groups: SoGroupRows | undefined) {
+  for (const g of SO_GROUPS) {
+    const rows = groups?.[g.key];
+    if (!rows?.length) continue;
+    put(`${who} · ${g.section}`, rows.map((r) => Object.keys(r.values).sort().map((k) => `${keyedLabel(k, k)}=${text(r.values[k])}`).join(", ")).sort().join("; "));
+  }
 }
 
 /** Custom values of an allocation or additional cost, in a stable order. */

@@ -112,18 +112,20 @@ export async function getMyActivity(employeeId: string): Promise<ActivityRow[]> 
 }
 
 // ── My History (earnings by month) ───────────────────────────────────────────
-export interface HistoryRow { period: string; totalPaise: number; status: string; }
+/** One month of the OLD engine's ledger: its total, and the part of it that is (historical) Category A. */
+export interface HistoryRow { period: string; totalPaise: number; status: string; categoryAPaise: number; }
 
 export async function getMyHistory(employeeId: string): Promise<HistoryRow[]> {
   const rows = await db
     .select({
       period: incentivePeriods.month, status: incentivePeriods.status,
       total: sql<number>`sum(${incentiveLedger.amountPaise})::bigint`,
+      categoryA: sql<number>`coalesce(sum(${incentiveLedger.amountPaise}) filter (where ${incentiveLedger.category} = 'A'), 0)::bigint`,
     })
     .from(incentiveLedger)
     .innerJoin(incentivePeriods, eq(incentiveLedger.periodId, incentivePeriods.id))
     .where(eq(incentiveLedger.employeeId, employeeId))
     .groupBy(incentivePeriods.month, incentivePeriods.status)
     .orderBy(desc(incentivePeriods.month));
-  return rows.map((r) => ({ period: r.period, totalPaise: Number(r.total), status: r.status }));
+  return rows.map((r) => ({ period: r.period, totalPaise: Number(r.total), status: r.status, categoryAPaise: Number(r.categoryA) }));
 }
