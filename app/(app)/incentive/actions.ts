@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { eq, isNotNull, desc, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { requireUser, requireAdmin } from "@/lib/auth/current";
+import { getFieldAccessFor } from "@/lib/auth/field-access";
+import type { Employee } from "@/db/schema";
 import { leadBatches, leadConversions, clientMeetings, testimonials, salesOrders, customers, invoices, receipts, incentivePeriods, payoutRuns, incentiveSchemes, ruleVersions, incentiveAudit } from "@/db/schema";
 import { currentPeriodIST, getPeriodPayout } from "@/lib/queries/incentives";
 import { P, CR, SALES_BH_SCHEME } from "@/lib/incentives";
@@ -37,25 +39,58 @@ export type ActionResult = { ok: true } | { ok: false; error: string };
 const clampInt = (v: unknown, lo: number, hi: number) =>
   Math.max(lo, Math.min(hi, Math.round(Number(v) || 0)));
 
+/** The Field Permission that lets someone log their own activity for an earlier month (never a future one). */
+const ACTIVITY_ANY_MONTH = "incentive.activity.anyMonth";
+
+/** Whether the new engine's calculation of `category` for `month` has moved past "open" in any programme. Reads only. */
+async function newEngineMonthClosed(category: "D" | "E" | "F", month: string): Promise<boolean> {
+  const rowsOf = <T,>(r: unknown) => (Array.isArray(r) ? r : ((r as { rows?: unknown[] }).rows ?? [])) as T[];
+  // Two statements: Postgres plans a whole statement first, so a missing table can't be guarded inside it.
+  if (!rowsOf<{ ok: boolean }>(await db.execute(sql`select to_regclass('public.incentive_calc_periods') is not null as ok`))[0]?.ok) return false;
+  const r = await db.execute(sql`select exists (select 1 from incentive_calc_periods where category_code = ${category} and month = ${`${month}-01`}::date and status <> 'open') as closed`);
+  return rowsOf<{ closed: boolean }>(r)[0]?.closed === true;
+}
+
+/**
+ * The month a submission belongs to: the current month, or — with the "Log activity for an earlier month" permission —
+ * an earlier one. Never a future month, never a month the tracker has locked or paid, and never one whose category's
+ * calculation is already locked, submitted, approved or paid (that would change a finalised month).
+ */
+async function activityMonth(me: Employee, requested: unknown, category: "D" | "E" | "F"): Promise<{ ok: true; month: string } | { ok: false; error: string }> {
+  const current = currentPeriodIST();
+  const month = requested === undefined || requested === null || requested === "" ? current : String(requested);
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) return { ok: false, error: "Choose the month (YYYY-MM)." };
+  if (month > current) return { ok: false, error: "Activity can't be logged for a future month." };
+  if (month !== current && (await getFieldAccessFor(me))[ACTIVITY_ANY_MONTH]?.allowed !== true)
+    return { ok: false, error: "Logging activity for an earlier month needs the “Incentive Tracker — Log activity for an earlier month” permission." };
+  if (await isPeriodClosed(month)) return { ok: false, error: `${month} is locked or paid in the Incentive Tracker: nothing can be added to it.` };
+  if (await newEngineMonthClosed(category, month)) return { ok: false, error: `Category ${category} for ${month} is already locked, submitted, approved or paid: nothing can be added to it.` };
+  return { ok: true, month };
+}
+
 // ── Employee submissions (enter pending review) ──────────────────────────────
 
-export async function submitLeadBatch(input: { leadCount: number; profiled: boolean }): Promise<ActionResult> {
+export async function submitLeadBatch(input: { leadCount: number; profiled: boolean; periodMonth?: string }): Promise<ActionResult> {
   const me = await requireUser();
   const leadCount = clampInt(input.leadCount, 0, 100000);
   if (leadCount < 1) return { ok: false, error: "Enter how many leads." };
+  const m = await activityMonth(me, input.periodMonth, "D");
+  if (!m.ok) return m;
   await db.insert(leadBatches).values({
-    employeeId: me.id, periodMonth: currentPeriodIST(), leadCount, profiled: !!input.profiled,
+    employeeId: me.id, periodMonth: m.month, leadCount, profiled: !!input.profiled,
   });
   revalidateIncentive();
   return { ok: true };
 }
 
-export async function submitLeadConversion(input: { convertedCount: number }): Promise<ActionResult> {
+export async function submitLeadConversion(input: { convertedCount: number; periodMonth?: string }): Promise<ActionResult> {
   const me = await requireUser();
   const convertedCount = clampInt(input.convertedCount, 0, 100000);
   if (convertedCount < 1) return { ok: false, error: "Enter how many enquiries." };
+  const m = await activityMonth(me, input.periodMonth, "D");
+  if (!m.ok) return m;
   await db.insert(leadConversions).values({
-    employeeId: me.id, periodMonth: currentPeriodIST(), convertedCount,
+    employeeId: me.id, periodMonth: m.month, convertedCount,
   });
   revalidateIncentive();
   return { ok: true };
@@ -64,32 +99,43 @@ export async function submitLeadConversion(input: { convertedCount: number }): P
 export async function submitMeeting(input: {
   potentialBand: "low" | "medium" | "high";
   justification: string;
+  periodMonth?: string;
 }): Promise<ActionResult> {
   const me = await requireUser();
   const band = ["low", "medium", "high"].includes(input.potentialBand) ? input.potentialBand : "medium";
   const justification = String(input.justification ?? "").slice(0, 500);
   if (!justification.trim()) return { ok: false, error: "Add a short justification." };
+  const m = await activityMonth(me, input.periodMonth, "E");
+  if (!m.ok) return m;
   await db.insert(clientMeetings).values({
-    employeeId: me.id, periodMonth: currentPeriodIST(), potentialBand: band, justification,
+    employeeId: me.id, periodMonth: m.month, potentialBand: band, justification,
   });
   revalidateIncentive();
   return { ok: true };
 }
 
+/**
+ * A review or testimonial is recorded as it is (any 1–5★ rating for a Google review). Whether it earns — five stars
+ * only, the fewest words, evidence — is decided when the month is calculated, by the configuration in force
+ * (Incentive Rules: Category F; or the old engine's scheme), so it is never decided here.
+ */
 export async function submitTestimonial(input: {
   kind: "google_review" | "email" | "letterhead";
   wordCount: number;
   starRating?: number;
   namesTeamMember: boolean;
   evidenceUrl?: string;
+  periodMonth?: string;
 }): Promise<ActionResult> {
   const me = await requireUser();
   const kind = ["google_review", "email", "letterhead"].includes(input.kind) ? input.kind : "email";
   const wordCount = clampInt(input.wordCount, 0, 100000);
-  const starRating = input.starRating != null ? clampInt(input.starRating, 1, 5) : null;
-  if (kind === "google_review" && starRating !== 5) return { ok: false, error: "Only 5★ reviews qualify." };
+  const starRating = input.starRating != null && Number.isFinite(Number(input.starRating)) ? clampInt(input.starRating, 1, 5) : null;
+  if (kind === "google_review" && starRating === null) return { ok: false, error: "Choose the review's star rating (1–5)." };
+  const m = await activityMonth(me, input.periodMonth, "F");
+  if (!m.ok) return m;
   await db.insert(testimonials).values({
-    employeeId: me.id, periodMonth: currentPeriodIST(), kind, wordCount,
+    employeeId: me.id, periodMonth: m.month, kind, wordCount,
     starRating, namesTeamMember: !!input.namesTeamMember, evidenceUrl: input.evidenceUrl?.slice(0, 500) ?? null,
   });
   revalidateIncentive();
@@ -272,6 +318,14 @@ export async function reviewSubmission(input: {
   const decision = input.decision === "approved" ? "approved" : "rejected";
   const base = { reviewStatus: decision as "approved" | "rejected", reviewedById: me.id, reviewedAt: new Date(), note: input.note?.slice(0, 500) ?? null, updatedAt: new Date() };
 
+  // Independent review: whoever logged a submission never approves or rejects it — another admin does.
+  const TABLE = { lead_batch: leadBatches, lead_conversion: leadConversions, meeting: clientMeetings, testimonial: testimonials } as const;
+  const table = TABLE[input.queue as keyof typeof TABLE];
+  if (!table) return { ok: false, error: "Unknown queue" };
+  const [owner] = await db.select({ employeeId: table.employeeId }).from(table).where(eq(table.id, input.id)).limit(1);
+  if (!owner) return { ok: false, error: "That submission no longer exists." };
+  if (owner.employeeId === me.id) return { ok: false, error: "You can't review your own submission: another admin must approve or reject it." };
+
   let affected: { employeeId: string; periodMonth: string } | undefined;
   switch (input.queue) {
     case "lead_batch":
@@ -283,7 +337,11 @@ export async function reviewSubmission(input: {
       [affected] = await db.select({ employeeId: leadConversions.employeeId, periodMonth: leadConversions.periodMonth }).from(leadConversions).where(eq(leadConversions.id, input.id)).limit(1);
       break;
     case "meeting": {
-      const awarded = P(clampInt(input.awardedRupees, 0, 1000));
+      // The admin's award as given: the configuration in force (Category E's smallest and largest award, or the old
+      // engine's scheme) keeps it within its range when the month is calculated, so no amount is fixed here.
+      const rupees = Number(input.awardedRupees ?? 0);
+      if (decision === "approved" && (!Number.isFinite(rupees) || rupees < 0 || !Number.isSafeInteger(Math.round(rupees * 100)))) return { ok: false, error: "Enter the award in rupees (0 or more)." };
+      const awarded = decision === "approved" ? Math.round(rupees * 100) : 0;
       await db.update(clientMeetings).set({ ...base, awardedPaise: awarded }).where(eq(clientMeetings.id, input.id));
       [affected] = await db.select({ employeeId: clientMeetings.employeeId, periodMonth: clientMeetings.periodMonth }).from(clientMeetings).where(eq(clientMeetings.id, input.id)).limit(1);
       break;

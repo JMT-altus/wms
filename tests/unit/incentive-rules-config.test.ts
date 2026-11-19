@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { CONFIGURABLE_CATEGORIES, EMPTY_CONFIG, REFERENCE_TEMPLATE, SECTIONS, SETTING, SETTINGS, type IncentiveConfig } from "@/lib/incentives/rules-config/spec";
+import { CONFIGURABLE_CATEGORIES, EMPTY_CONFIG, REFERENCE_TEMPLATE, SECTIONS, SETTING, SETTINGS, sectionsFor, settingsFor, type IncentiveConfig } from "@/lib/incentives/rules-config/spec";
 import { applies, checkConfig, diffConfigs, readConfig, settingText } from "@/lib/incentives/rules-config/validate";
 import { completeConfig as complete } from "../fixtures/incentive-config";
 
@@ -12,8 +12,8 @@ const completeConfig = (over: Partial<IncentiveConfig> = {}) =>
   complete(over, over.eligibility ?? [{ subjectType: "employee", subjectId: EMP, role: null, subjectLabel: "Sample Rep", mode: "include", effectiveFrom: "2026-04-01", effectiveTo: null }]);
 
 describe("the catalogue", () => {
-  it("has the eleven sections, every setting in one of them, with help text and its source", () => {
-    expect(SECTIONS.map((s) => s.label)).toEqual([
+  it("Category A has its eleven sections, every setting in one of them, with help text and its source", () => {
+    expect(sectionsFor("A").map((s) => s.label)).toEqual([
       "General Eligibility", "Monthly Sales Thresholds", "Incentive Slabs", "Incentive Allocation", "Collection and Payment Delay", "Partial Payment Rules",
       "Refunds and Adjustments", "Salesperson Eligibility", "Calculation Period", "Rounding and Limits", "Approval and Payout Rules",
     ]);
@@ -24,19 +24,32 @@ describe("the catalogue", () => {
       if (d.kind === "choice" || d.kind === "multi" || d.kind === "ordered") expect(d.choices!.length, d.key).toBeGreaterThan(0);
       if (d.requiredWhen) expect(SETTING[d.requiredWhen.key], d.key).toBeTruthy();
     }
-    expect(CONFIGURABLE_CATEGORIES).toEqual(["A"]);
+    expect(CONFIGURABLE_CATEGORIES).toEqual(["A", "B", "C", "D", "E", "F", "G"]);
+    // Category A's 54 settings are unchanged; it gains only optional ones (absent = today's behaviour).
+    const a = settingsFor("A");
+    expect(a.filter((d) => d.required && !d.requiredWhen?.key.startsWith("caps.allCategories"))).toHaveLength(54);
+    expect(a.filter((d) => !d.required).map((d) => d.key).sort()).toEqual(["basis.categoryBOrders", "caps.allCategoriesPolicy"]);
   });
 
-  it("the database accepts exactly the catalogue's settings (migration 0131's list)", () => {
-    const sqlText = readFileSync(resolve(__dirname, "../../db/migrations/0131_incentive_rule_config.sql"), "utf8");
-    const block = sqlText.slice(sqlText.indexOf(`"setting_key" IN (`), sqlText.indexOf("CONSTRAINT \"incentive_config_settings_value_check\""));
-    const listed = [...block.matchAll(/'([a-zA-Z.]+)'/g)].map((m) => m[1]).sort();
-    expect(listed).toEqual(SETTINGS.map((d) => d.key).sort());
+  it("the database accepts exactly the catalogue's settings (0131's list for Category A, widened by 0134, 0135 and 0136)", () => {
+    const listOf = (file: string, from: string, to: string) => {
+      const sqlText = readFileSync(resolve(__dirname, `../../db/migrations/${file}`), "utf8");
+      const block = sqlText.slice(sqlText.indexOf(from), sqlText.indexOf(to));
+      return [...block.matchAll(/'([a-zA-Z.]+)'/g)].map((m) => m[1]).sort();
+    };
+    const original = listOf("0131_incentive_rule_config.sql", `"setting_key" IN (`, "CONSTRAINT \"incentive_config_settings_value_check\"");
+    expect(original).toEqual(settingsFor("A").filter((d) => !["basis.categoryBOrders", "caps.allCategoriesPolicy", "caps.allCategoriesOrder"].includes(d.key)).map((d) => d.key).sort());
+    // 0134 accepts Categories A and B's settings; 0135 every category's as they were; 0136 adds Category C's corrections
+    // (turnover window and basis, minimum payable) — exactly the catalogue.
+    const ADDED_0136 = ["c.turnoverWindowMonths", "c.turnoverBasis", "payout.minimumPayable", "payout.belowMinimum", "payout.carryForwardExpiry", "payout.carryForwardExpiryMonths"];
+    expect(listOf("0134_incentive_category_b.sql", `-- settings-key-list-begin`, `-- settings-key-list-end`)).toEqual(SETTINGS.map((d) => d.key).filter((k) => !/^[c-g]\./.test(k) && !ADDED_0136.includes(k)).sort());
+    expect(listOf("0135_incentive_categories_c_g.sql", `-- settings-key-list-begin`, `-- settings-key-list-end`)).toEqual(SETTINGS.map((d) => d.key).filter((k) => !ADDED_0136.includes(k)).sort());
+    expect(listOf("0136_incentive_category_c_review.sql", `-- settings-key-list-begin`, `-- settings-key-list-end`)).toEqual(SETTINGS.map((d) => d.key).sort());
   });
 
   it("the reference template fills only what the PDF and the April examples establish; every business decision stays empty", () => {
     for (const key of Object.keys(REFERENCE_TEMPLATE.settings)) expect(SETTING[key]!.source, key).not.toBe("option");
-    for (const d of SETTINGS.filter((x) => x.source !== "option")) expect(REFERENCE_TEMPLATE.settings[d.key], d.key).not.toBeUndefined();
+    for (const d of settingsFor("A").filter((x) => x.source === "pdf" || x.source === "screenshot")) expect(REFERENCE_TEMPLATE.settings[d.key], d.key).not.toBeUndefined();
     // Its slabs and steps are the PDF's, and it says nothing about who is covered.
     expect(REFERENCE_TEMPLATE.slabs.map((s) => [s.lineCode, s.fromPaise, s.toPaise, s.ratePpm, s.capPaise])).toEqual([
       ["A.1", 1_00_00_000_00, 1_20_00_000_00, 1000, 2000_00],
@@ -52,7 +65,7 @@ describe("checking a configuration", () => {
   it("an empty draft has no problems, only everything missing", () => {
     const { problems, missing } = checkConfig(EMPTY_CONFIG, ctx);
     expect(problems).toEqual([]);
-    const requiredNow = SETTINGS.filter((d) => d.required && applies(d, {})).length;
+    const requiredNow = settingsFor("A").filter((d) => d.required && applies(d, {})).length;
     expect(missing).toHaveLength(requiredNow + 3); // + slabs, delay steps, eligibility
   });
 

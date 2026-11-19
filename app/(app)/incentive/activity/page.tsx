@@ -1,4 +1,6 @@
 import { requireUser } from "@/lib/auth/current";
+import { getFieldAccessFor } from "@/lib/auth/field-access";
+import { currentPeriodIST } from "@/lib/queries/incentives";
 import { getMyActivity, type ActivityRow } from "@/lib/queries/incentive-views";
 import { SubmitPanel } from "@/components/incentive/submit-panel";
 import { EmptyState, PageHead } from "@/components/incentive/empty-state";
@@ -13,12 +15,13 @@ const A_STATUS: Record<ActivityRow["status"], { bg: string; fg: string }> = {
 
 export default async function ActivityPage() {
   const me = await requireUser();
-  const activity = await getMyActivity(me.id);
+  const [activity, access] = await Promise.all([getMyActivity(me.id), getFieldAccessFor(me)]);
+  const canPickMonth = access["incentive.activity.anyMonth"]?.allowed === true;
 
   return (
     <main className="mx-auto max-w-[1280px] px-10 max-md:px-4 pt-8 pb-16">
       <PageHead eyebrow="ACTIVITY" title="Activity" sub="Log leads, meetings and reviews. Each earns once your admin approves it." />
-      <SubmitPanel />
+      <SubmitPanel currentMonth={currentPeriodIST()} canPickMonth={canPickMonth} />
       <h2 className="text-display-xs text-ink-strong mb-3">Submitted</h2>
       {activity.length === 0 ? (
         <EmptyState title="No submissions yet." sub="Log leads, meetings and reviews above — they appear here with their review status." />

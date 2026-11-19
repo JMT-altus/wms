@@ -81,7 +81,9 @@ export function decide(settings: Readonly<Record<string, SettingValue>>, period:
   if (!diffs.length) return { lockFirst, adopt: false, outcome: `${kept} No difference to carry.`, carries: [] };
   if ((status === "locked" || status === "submitted") && s["period.lateReceipts"] === "reopenRequired") return { lockFirst, adopt: false, outcome: `${kept} It differs; reopen the month to take the difference (Payments that arrive after a month is locked).`, carries: [] };
   if (s["adjust.lockedOrPaidMonths"] === "noAdjustment") return { lockFirst, adopt: false, outcome: `${kept} It differs; no adjustment is made (configured).`, carries: [] };
-  if (status === "paid" && period.paidAt) {
+  // A payout becomes final after the configured days. Category B sets the days only when an expiry was chosen ("When
+  // recovery after payout stops"); without them recovery never lapses on its own. Category A always has them.
+  if (status === "paid" && period.paidAt && typeof s["adjust.windowDays"] === "number" && s["b.recoveryExpiry"] !== "never") {
     const windowEnd = addDays(period.paidAt.slice(0, 10), s["adjust.windowDays"] as number);
     if (asOf > windowEnd) return { lockFirst, adopt: false, outcome: `${kept} It differs, but the payout became final on ${windowEnd} (Days after payout that adjustments are allowed).`, carries: [] };
   }

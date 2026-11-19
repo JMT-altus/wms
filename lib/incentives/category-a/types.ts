@@ -1,4 +1,5 @@
 import type { IncentiveConfig } from "@/lib/incentives/rules-config/spec";
+import type { AllCategoriesIn } from "@/lib/incentives/shared/all-categories";
 
 /**
  * Category A calculation — the engine's input and output. The input is plain data the loader reads from Forms
@@ -143,6 +144,16 @@ export interface CategoryAInput {
   employees: EmployeeIn[];
   /** Other categories' amounts this month, per employee (for the all-categories limit). Categories B–G don't exist yet. */
   otherCategoriesPaise?: Record<string, number>;
+  /**
+   * Sales Orders that earn Category B, given ONLY when the version says "Orders that earn Category B: left out of
+   * Category A" (basis.categoryBOrders = exclude). Absent otherwise, so every earlier input and hash is unchanged.
+   */
+  categoryBOrderIds?: string[];
+  /**
+   * The all-categories limit shared with the other categories calculated this month (Category B), given ONLY when one
+   * is configured for the month. Absent otherwise: Category A applies its own all-categories limit exactly as before.
+   */
+  allCategories?: AllCategoriesIn;
 }
 
 export interface SlabLine {
@@ -171,6 +182,8 @@ export interface EmployeeResult {
   pendingPaise: number;
   /** What the unreceived amounts would earn (configured: pending at full rate, or at today's step). Never payable. */
   projectedPaise: number;
+  /** Earned before the shared all-categories limit; present only when `allCategories` was given. */
+  beforeAllCategoriesPaise?: number;
   limits: string[];
   explanation: string[];
 }

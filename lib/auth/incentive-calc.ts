@@ -16,8 +16,11 @@ import { getFieldAccessFor } from "@/lib/auth/field-access";
  *   submit   submit a locked month for approval (and withdraw it)
  *   approve  approve or reject a submitted month (never one you submitted; the database refuses it too)
  *   pay      record an approved month's payout
+ *   qualify  decide by hand (with a reason) that a Sales Order qualifies for Category B or doesn't, and retire it
+ *   review   decide (with a reason) a Category C review case — link an unmatched record or exclude it — and retire it
+ *   void     void an abandoned, unpaid Category C month (with a reason) so it no longer blocks later months
  */
-export const INCENTIVE_CALC_RIGHTS = ["view", "run", "lock", "inputs", "approvals", "payouts", "submit", "approve", "pay"] as const;
+export const INCENTIVE_CALC_RIGHTS = ["view", "run", "lock", "inputs", "approvals", "payouts", "submit", "approve", "pay", "qualify", "review", "void"] as const;
 export type IncentiveCalcRight = (typeof INCENTIVE_CALC_RIGHTS)[number];
 export type IncentiveCalcRights = Record<IncentiveCalcRight, boolean>;
 export const calcRightKey = (r: IncentiveCalcRight) => `incentive.calc.${r}` as const;

@@ -165,7 +165,8 @@ describe("drafts", () => {
     expect(p).toMatchObject({ ok: true });
     programId = (p as { programId: string }).programId;
     expect(await act.createIncentiveProgram({ code: "SALES-BH", name: "Again", description: null })).toEqual({ ok: false, error: expect.stringMatching(/already a programme with code SALES-BH/) });
-    expect(await act.createIncentiveDraft({ programId, category: "B", startFrom: "blank" })).toEqual({ ok: false, error: expect.stringMatching(/Category B has no specification yet/) });
+    // Every category A–G is configurable now; a code outside the catalogue is refused (the action refuses it before this too).
+    expect(await rules.createDraft({ id: who.editor, name: "editor" }, { programId, category: "Z" as never, startFrom: "blank" })).toEqual({ ok: false, error: expect.stringMatching(/Category Z has no specification yet/) });
     const d = await act.createIncentiveDraft({ programId, category: "A", startFrom: "reference" });
     expect(d).toMatchObject({ ok: true });
     v1 = (d as { versionId: string }).versionId;
@@ -293,6 +294,21 @@ describe("publishing and effective dates", () => {
     signIn("backdater");
     expect(await act.publishIncentiveVersion({ versionId: v, expectedRowVersion: 4, effectiveFrom: monthAdd(thisMonth, -2) })).toMatchObject({ ok: true });
     expect((await historyOf(v)).at(-1)).toMatchObject({ action: "publish", note: `Back-dated to ${monthAdd(thisMonth, -2)}.` });
+  });
+
+  it("Category A is never published over a month the old engine already paid it for (no double payment); a later month is fine", async () => {
+    signIn("editor");
+    const p3 = ((await act.createIncentiveProgram({ code: "CUTOVER", name: "Cut-over team", description: null })) as { programId: string }).programId;
+    const v = ((await act.createIncentiveDraft({ programId: p3, category: "A", startFrom: "blank" })) as { versionId: string }).versionId;
+    expect(await act.saveIncentiveDraft({ versionId: v, expectedRowVersion: 1, config: completeConfig(), changeNote: null })).toMatchObject({ ok: true });
+    expect(await act.submitIncentiveVersion({ versionId: v, expectedRowVersion: 2 })).toMatchObject({ ok: true });
+    signIn("approver");
+    expect(await act.approveIncentiveVersion({ versionId: v, expectedRowVersion: 3, note: null })).toMatchObject({ ok: true });
+    signIn("backdater");
+    // May 2026 is paid by the old engine with Category A amounts: from May (or earlier) it would pay May twice.
+    for (const from of ["2026-05-01", "2026-03-01"]) expect(await act.publishIncentiveVersion({ versionId: v, expectedRowVersion: 4, effectiveFrom: from })).toEqual({ ok: false, error: expect.stringMatching(/old engine's Category A is already paid for 2026-05.*pay Category A twice.*Nothing was changed/) });
+    expect(await version(v)).toMatchObject({ status: "approved", row_version: 4 });
+    expect(await act.publishIncentiveVersion({ versionId: v, expectedRowVersion: 4, effectiveFrom: "2026-06-01" })).toMatchObject({ ok: true });
   });
 });
 

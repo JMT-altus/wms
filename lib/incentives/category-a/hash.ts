@@ -31,6 +31,8 @@ export function normalizeInput(i: CategoryAInput): CategoryAInput {
     repHistory: sortBy(i.repHistory, (r) => `${r.customerId}|${r.from}|${r.employeeId}`),
     attributions: sortBy(i.attributions, (a) => `${a.documentId}|${a.employeeId}`),
     employees: byId(i.employees),
+    // Only present for a version that leaves Category B orders out of Category A (absent: the input is as it always was).
+    ...(i.categoryBOrderIds ? { categoryBOrderIds: [...i.categoryBOrderIds].sort() } : {}),
   };
 }
 

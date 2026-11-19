@@ -22,6 +22,8 @@ export interface WorkflowProps {
   period: { status: string; rowVersion: number; submissionNo: number; approvalsRequired: number | null; submittedByName: string | null; submittedById: string | null; submittedAt: string | null; releaseOn: string | null; payoutReference: string | null };
   approvals: { id: string; submissionNo: number; stepNo: number; decision: "approve" | "reject"; reason: string | null; actorName: string; actorId: string | null; at: string }[];
   payout: { reference: string; releaseOn: string; paidOn: string; totalPaise: number; recordedByName: string; note: string | null; lines: { employeeName: string; payablePaise: number; adjustmentsPaise: number; amountPaise: number }[] } | null;
+  /** The category (absent: Category A). */
+  category?: "A" | "B" | "C" | "D" | "E" | "F" | "G";
 }
 
 export function CalcWorkflow(p: WorkflowProps) {
@@ -30,7 +32,7 @@ export function CalcWorkflow(p: WorkflowProps) {
   const [busy, setBusy] = React.useState(false);
   const [reason, setReason] = React.useState("");
   const [pay, setPay] = React.useState({ reference: "", paidOn: p.period.releaseOn ?? "", amount: "", note: "" });
-  const base = { programId: p.programId, month: p.month, rowVersion: p.period.rowVersion };
+  const base = { programId: p.programId, month: p.month, rowVersion: p.period.rowVersion, ...(p.category && p.category !== "A" ? { category: p.category } : {}) };
   const current = p.approvals.filter((a) => a.submissionNo === p.period.submissionNo);
   const iSubmitted = p.period.submittedById === p.me;
   const iApproved = current.some((a) => a.actorId === p.me);
@@ -56,6 +58,7 @@ export function CalcWorkflow(p: WorkflowProps) {
         {s === "submitted" && `Submitted by ${p.period.submittedByName ?? "—"} on ${day(p.period.submittedAt)}: ${current.length} of ${p.period.approvalsRequired} approval${p.period.approvalsRequired === 1 ? "" : "s"} so far.`}
         {s === "approved" && `Approved for ${rs(p.approvedTotalPaise)}. Released on ${day(p.period.releaseOn)}; record the payout once it has been paid (this records it — the WMS moves no money).`}
         {s === "paid" && `Paid — reference ${p.period.payoutReference}. A paid month is final.`}
+        {s === "voided" && "Voided — it is never submitted, approved or paid. Its calculations and approval history are kept for the record."}
       </p>
       {msg && (
         <div className="mt-2">

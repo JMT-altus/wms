@@ -7,6 +7,7 @@ import { requireAdmin } from "@/lib/auth/current";
 import { incentiveRuleRights } from "@/lib/auth/incentive-rules";
 import { getVersion, incentiveRulesReady } from "@/lib/queries/incentive-rules";
 import { diffConfigs } from "@/lib/incentives/rules-config/validate";
+import type { CategoryCode } from "@/lib/incentives/rules-config/spec";
 import { MasterPageHead } from "@/components/admin/master/page-head";
 import { NoIncentiveRulesAccess } from "@/components/admin/master/incentive-rules/no-access";
 import { CompareView } from "@/components/admin/master/incentive-rules/compare-view";
@@ -37,8 +38,8 @@ export default async function CompareIncentiveVersionsPage({ searchParams }: { s
         a={x ? { id: x.version.id, versionNo: x.version.versionNo, status: x.version.status } : null}
         b={y ? { id: y.version.id, versionNo: y.version.versionNo, status: y.version.status } : null}
         versions={versions}
-        diffs={x && y && sameProgram ? diffConfigs(x.config, y.config) : null}
-        problem={x && y && !sameProgram ? "Choose two versions of the same programme." : !x || !y ? "Choose the two versions to compare." : null}
+        diffs={x && y && sameProgram && x.version.categoryCode === y.version.categoryCode ? diffConfigs(x.config, y.config, y.version.categoryCode as CategoryCode) : null}
+        problem={x && y && !sameProgram ? "Choose two versions of the same programme." : x && y && x.version.categoryCode !== y.version.categoryCode ? "Choose two versions of the same category." : !x || !y ? "Choose the two versions to compare." : null}
       />
     </div>
   );

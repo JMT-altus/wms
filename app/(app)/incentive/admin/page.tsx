@@ -86,6 +86,11 @@ async function PeriodTab({ period }: { period: string }) {
           <div>
             <h2 className="text-display-xs text-ink-strong">Payout · {periodLabel(period)}</h2>
             <p className="text-ink-muted text-[13px] mt-0.5">Total <b className="text-ink-strong">{formatInrPaise(payout.grandTotalPaise)}</b> · {payout.rows.length} employee{payout.rows.length === 1 ? "" : "s"} · tap a row to drill in</p>
+            {payout.recordedPayoutPaise !== null && payout.ledgerRecordedPaise !== null && payout.recordedPayoutPaise !== payout.ledgerRecordedPaise && (
+              <p role="note" className="mt-1 rounded-lg px-2 py-1 text-[12px] font-semibold" style={{ background: "rgba(245,158,11,0.12)", color: "#92400e" }}>
+                Historical old-engine record: this paid month&apos;s ledger ({formatInrPaise(payout.ledgerRecordedPaise)}) differs from the payout recorded ({formatInrPaise(payout.recordedPayoutPaise)}). Shown exactly as recorded; nothing is recalculated or changed.
+              </p>
+            )}
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             <a href={`/incentive/admin/export?period=${period}`} className="rounded-xl px-4 py-2 text-[13px] font-bold" style={{ background: "rgba(15,23,42,0.05)", color: "#334155" }}>Export CSV</a>

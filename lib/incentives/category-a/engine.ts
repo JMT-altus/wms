@@ -1,7 +1,12 @@
-import { CATEGORY_LABEL, type DelayStep, type IncentiveConfig, type SettingValue, type Slab } from "@/lib/incentives/rules-config/spec";
+import { CATEGORY_LABEL, type IncentiveConfig, type SettingValue, type Slab } from "@/lib/incentives/rules-config/spec";
 import { checkConfig, isMonthStart, isDay, rupees } from "@/lib/incentives/rules-config/validate";
 import * as R from "./rational";
 import type { Q } from "./rational";
+import { byKey, daysBetween, docKey, monthEnd, monthOf, natural } from "@/lib/incentives/shared/dates";
+import { makeReferenceDate, stepFor } from "@/lib/incentives/shared/delay";
+import { applyReceipts, type Applied } from "@/lib/incentives/shared/receipts";
+import { makePeople } from "@/lib/incentives/shared/people";
+import { allCategoriesAllowance } from "@/lib/incentives/shared/all-categories";
 import {
   ENGINE_VERSION,
   type CategoryAInput,
@@ -37,19 +42,6 @@ import {
  *   8. Limits and rounding (Rounding and Limits), at the configured level only.
  */
 
-const DAY = 86_400_000;
-const toMs = (d: string) => Date.parse(`${d}T00:00:00Z`);
-const daysBetween = (from: string, to: string) => Math.round((toMs(to) - toMs(from)) / DAY);
-const addDays = (d: string, n: number) => new Date(toMs(d) + n * DAY).toISOString().slice(0, 10);
-const monthOf = (d: string) => d.slice(0, 7);
-const monthEnd = (monthStart: string) => {
-  const [y, m] = monthStart.split("-").map(Number) as [number, number];
-  return new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10);
-};
-const byKey = <T>(xs: readonly T[], key: (x: T) => string) => [...xs].sort((a, b) => (key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : 0));
-/** Document numbers in natural order (INV 2 before INV 10): each run of digits is padded so text order is number order. */
-const natural = (s: string) => s.replace(/\d+/g, (d) => d.replace(/^0+(?=\d)/, "").padStart(20, "0"));
-const docKey = (x: { date: string; no: string; id: string }) => `${x.date}|${natural(x.no)}|${x.id}`;
 const ONE = R.q(1);
 
 type S = Record<string, SettingValue>;
@@ -94,17 +86,8 @@ export function configProblems(input: CategoryAInput): string[] {
   for (const p of problems) out.push(`Configuration problem: ${p.message}`);
   for (const m of missing) out.push(`Configuration incomplete: ${m.message}`);
   if (!problems.length && input.config.settings["period.unit"] !== "calendarMonth") out.push("Only a calendar-month calculation period is supported.");
+  if (input.allCategories?.problem) out.push(input.allCategories.problem);
   return out;
-}
-
-/* ── delay steps ──────────────────────────────────────────────────────── */
-
-function stepFor(steps: readonly DelayStep[], days: number, boundary: string): DelayStep {
-  for (const s of steps) {
-    if (s.toDays === null) return s;
-    if (boundary === "upperInclusive" ? days <= s.toDays : days < s.toDays) return s;
-  }
-  return steps[steps.length - 1]!;
 }
 
 /* ── slabs ────────────────────────────────────────────────────────────── */
@@ -209,6 +192,7 @@ export function calculateCategoryA(input: CategoryAInput): CategoryAResult {
   const monthDateBasis = str(s, "basis.monthDate");
   const filtered = new Set(list(s, "basis.voucherFilter"));
   const preClosure = str(s, "basis.preClosure");
+  const categoryBOrders = s["basis.categoryBOrders"] === "exclude" ? new Set(input.categoryBOrderIds ?? []) : null;
   const amountOf = (d: { totalPaise: number; taxablePaise: number | null; itemsPaise: number | null }): number | null =>
     amountBasis === "total" ? d.totalPaise : amountBasis === "taxable" ? d.taxablePaise : d.itemsPaise;
   const amountLabel = amountBasis === "total" ? "total value" : amountBasis === "taxable" ? "taxable value" : "product lines";
@@ -241,6 +225,11 @@ export function calculateCategoryA(input: CategoryAInput): CategoryAResult {
       const out = (["cancelled", "optional", "postDated"] as const).filter((k) => st[k] && filtered.has(k));
       if (out.length) {
         if (monthOf(monthDate) === month) excluded.push({ documentId: c.id, documentNo: c.no, employeeId: null, message: `Left out: the order is ${out.join(", ")} (Orders left out).` });
+        continue;
+      }
+      // Only for a version that leaves Category B orders out of Category A (not set or "include": they count).
+      if (categoryBOrders && categoryBOrders.has(c.order.id)) {
+        if (monthOf(monthDate) === month) excluded.push({ documentId: c.id, documentNo: c.no, employeeId: null, message: "Left out: the order earns Category B (Orders that earn Category B: left out of Category A)." });
         continue;
       }
     }
@@ -289,91 +278,14 @@ export function calculateCategoryA(input: CategoryAInput): CategoryAResult {
   for (const u of allUnits) for (const i of u.invoices) unitOfInvoice.set(i.id, u);
 
   /* 2. Whose sale */
-  const attrSource = str(s, "attribution.source");
-  const historical = str(s, "attribution.historical");
-  const split = str(s, "attribution.split");
-  const inactive = str(s, "eligibility.inactiveEmployees");
-  const elig = cfg.eligibility;
-  const matches = (e: EmployeeIn, r: (typeof elig)[number]) => (r.subjectType === "employee" ? r.subjectId === e.id : r.subjectType === "department" ? r.subjectId !== null && r.subjectId === e.departmentId : r.role === e.role);
-  const covers = (r: (typeof elig)[number], day: string) => r.effectiveFrom <= day && (r.effectiveTo === null || r.effectiveTo >= day);
-  /** Whether the configuration covers the employee on the day, or why not. */
-  const eligibleOn = (e: EmployeeIn, day: string): string | null => {
-    if (!elig.some((r) => r.mode === "include" && matches(e, r) && covers(r, day))) return `${e.name} isn't included in Salesperson Eligibility on ${day}.`;
-    const ex = elig.find((r) => r.mode === "exclude" && matches(e, r) && covers(r, day));
-    if (ex) return `${e.name} is excluded on ${day} (${ex.subjectLabel}).`;
-    return null;
-  };
-  /** A departed employee's last working day: the end of the inclusion that covers them (the WMS records no leaving date elsewhere). */
-  const lastDayOf = (e: EmployeeIn): string | null => {
-    const ends = elig.filter((r) => r.mode === "include" && matches(e, r)).map((r) => r.effectiveTo);
-    if (!ends.length || ends.some((x) => x === null)) return null;
-    return (ends as string[]).sort().at(-1)!;
-  };
-  const departed = new Map<string, { lastDay: string | null }>();
-  for (const e of input.employees) if (!e.isActive) departed.set(e.id, { lastDay: lastDayOf(e) });
-
-  const sharesOf = (u: Unit): { shares: { employeeId: string; sharePpm: number }[] } | { why: string } => {
-    if (attrSource === "attributionRecord") {
-      const rows = input.attributions.filter((a) => a.documentId === u.id);
-      if (!rows.length) return { why: "No salesperson is assigned to it (Incentive Rules attribution)." };
-      const total = rows.reduce((a, r) => a + r.sharePpm, 0);
-      if (split === "single" && (rows.length !== 1 || rows[0]!.sharePpm !== 1_000_000)) return { why: "Shared credit is set to one salesperson per order, but its assignment names several or less than 100%." };
-      if (total !== 1_000_000) return { why: `Its assigned shares add up to ${total / 10_000}%, not 100%.` };
-      return { shares: rows.map((r) => ({ employeeId: r.employeeId, sharePpm: r.sharePpm })) };
-    }
-    if (attrSource === "orderSalesperson") {
-      // The salesperson recorded for the Forms order (Incentive Rules → Order Salespeople, linked from the order's page):
-      // one person, 100%. Tally's import carries no salesperson, so an order without a record stays unattributed.
-      const rows = input.attributions.filter((a) => a.documentId === u.id);
-      if (!rows.length) return { why: "No salesperson is recorded for this order yet (Order Salespeople)." };
-      if (rows.length !== 1 || rows[0]!.sharePpm !== 1_000_000) return { why: "A salesperson recorded on the order must be one person at 100%; this order's record names several or less." };
-      return { shares: [{ employeeId: rows[0]!.employeeId, sharePpm: 1_000_000 }] };
-    }
-    // customerSalesRep
-    const cust = u.customerId ? customerById.get(u.customerId) : undefined;
-    if (!cust) return { why: "Its customer isn't in the Customer Master." };
-    if (historical === "currentRep") return cust.salesRepId ? { shares: [{ employeeId: cust.salesRepId, sharePpm: 1_000_000 }] } : { why: `${cust.name} has no sales representative.` };
-    const rows = input.repHistory.filter((r) => r.customerId === cust.id && r.from <= u.monthDate && (r.to === null || r.to >= u.monthDate));
-    if (!rows.length) return { why: `No representative of ${cust.name} is on record for ${u.monthDate}.` };
-    if (new Set(rows.map((r) => r.employeeId)).size > 1) return { why: `Several representatives of ${cust.name} are on record for ${u.monthDate}.` };
-    return { shares: [{ employeeId: rows[0]!.employeeId, sharePpm: 1_000_000 }] };
-  };
-
+  const people = makePeople({ settings: s, eligibility: cfg.eligibility, employees: input.employees, customers: input.customers, repHistory: input.repHistory, attributions: input.attributions });
+  const departed = people.departed;
   const sharesByUnit = new Map<string, Share[]>();
   for (const u of allUnits) {
     const inMonth = monthOf(u.monthDate) === month;
-    const r = sharesOf(u);
-    if ("why" in r) {
-      if (inMonth) excluded.push({ documentId: u.id, documentNo: u.no, employeeId: null, message: `Not credited to anyone: ${r.why}` });
-      continue;
-    }
-    const out: Share[] = [];
-    for (const sh of r.shares) {
-      const e = employeeById.get(sh.employeeId);
-      if (!e) {
-        if (inMonth) excluded.push({ documentId: u.id, documentNo: u.no, employeeId: sh.employeeId, message: "Its salesperson is no longer an employee." });
-        continue;
-      }
-      const notEligible = eligibleOn(e, u.monthDate);
-      if (notEligible) {
-        if (inMonth) excluded.push({ documentId: u.id, documentNo: u.no, employeeId: e.id, message: notEligible });
-        continue;
-      }
-      const d = departed.get(e.id);
-      if (d) {
-        if (!d.lastDay) {
-          if (inMonth) excluded.push({ documentId: u.id, documentNo: u.no, employeeId: e.id, message: `${e.name} has left and no last working day is recorded (end their inclusion in Salesperson Eligibility).` });
-          continue;
-        }
-        const out1 = inactive === "excludeFromMonthLeft" ? month >= monthOf(d.lastDay) : u.monthDate > d.lastDay;
-        if (out1) {
-          if (inMonth) excluded.push({ documentId: u.id, documentNo: u.no, employeeId: e.id, message: inactive === "excludeFromMonthLeft" ? `${e.name} left in ${monthOf(d.lastDay)}: nothing from that month on.` : `${e.name}'s last working day was ${d.lastDay}.` });
-          continue;
-        }
-      }
-      out.push({ unit: u, employee: e, sharePpm: sh.sharePpm });
-    }
-    sharesByUnit.set(u.id, out);
+    const r = people.resolve({ id: u.id, no: u.no, customerId: u.customerId, repDay: u.monthDate, day: u.monthDate }, inMonth, month, excluded);
+    if (!r) continue;
+    sharesByUnit.set(u.id, r.map((x) => ({ unit: u, employee: x.employee, sharePpm: x.sharePpm })));
   }
 
   /* 3. Monthly sales per salesperson */
@@ -403,143 +315,18 @@ export function calculateCategoryA(input: CategoryAInput): CategoryAResult {
   }
 
   /* 6. Receipts applied to invoices (done for every customer involved, in date order, so the oldest-first rules are exact) */
-  const refundRule = str(s, "adjust.refund");
-  const bounceRule = str(s, "adjust.bouncedCheque");
-  const reversedRule = str(s, "adjust.reversedReceipt");
-  const onAccount = str(s, "collection.onAccountReceipts");
-  const multi = str(s, "collection.multiInvoiceReceipts");
   const invoiceDue = new Map<string, Q>(); // what is still to be collected on each invoice
   for (const inv of invoices) {
     let due = R.q(inv.totalPaise);
     for (const cn of creditNotes) if (cn.invoiceId === inv.id && cnRule(cn) !== "ignore") due = R.sub(due, R.q(cn.totalPaise));
     invoiceDue.set(inv.id, R.max(R.ZERO, due));
   }
-  const oldestOpen = (customerId: string | null, day: string, except?: string) =>
-    invoices.filter((i) => i.customerId === customerId && i.id !== except && i.date <= day && R.cmp(invoiceDue.get(i.id)!, R.ZERO) > 0);
-  interface Applied { receiptId: string; receiptNo: string; date: string; invoiceId: string; amount: Q; how: string }
-  const applied: Applied[] = [];
-  const pieces: ReceiptPiece[] = [];
-  const piece = (r: (typeof receipts)[number], amount: number | Q, status: ReceiptPiece["status"], note: string, invoiceId: string | null = null) => {
-    const unit = invoiceId ? unitOfInvoice.get(invoiceId) ?? null : null;
-    pieces.push({ receiptId: r.id, receiptNo: r.no, receiptDate: r.date, invoiceId, unitId: unit?.id ?? null, employeeId: null, amountPaise: typeof amount === "number" ? amount : R.round(amount, "halfUp", "paise"), referenceDate: null, delayDays: null, multiplierPpm: null, earnedExact: "0", status, note });
-  };
-  const apply = (r: (typeof receipts)[number], inv: InvoiceIn, amount: Q, how: string) => {
-    if (R.isZero(amount)) return;
-    invoiceDue.set(inv.id, R.max(R.ZERO, R.sub(invoiceDue.get(inv.id)!, amount)));
-    applied.push({ receiptId: r.id, receiptNo: r.no, date: r.date, invoiceId: inv.id, amount, how });
-  };
-  const fifo = (r: (typeof receipts)[number], amount: Q, how: string, except?: string): Q => {
-    let left = amount;
-    for (const inv of oldestOpen(r.customerId, r.date, except)) {
-      if (R.isZero(left)) break;
-      const take = R.min(left, invoiceDue.get(inv.id)!);
-      apply(r, inv, take, how);
-      left = R.sub(left, take);
-    }
-    return left;
-  };
-  for (const r of receipts) {
-    const evs = events.filter((e) => e.documentId === r.id);
-    if (evs.some((e) => e.kind === "bounced")) {
-      piece(r, r.amountPaise, "reversed", bounceRule === "reverseAndRestartDelay" ? "Cheque bounced: it earns nothing, and the delay keeps running until a payment that clears." : "Cheque bounced: it earns nothing.");
-      continue;
-    }
-    if (evs.some((e) => e.kind === "reversed")) {
-      if (reversedRule === "holdForReview") {
-        piece(r, r.amountPaise, "held", "Receipt reversed: held for review.");
-        held.push({ documentId: r.id, documentNo: r.no, employeeId: null, message: "Receipt reversed: held for review." });
-      } else piece(r, r.amountPaise, "reversed", "Receipt reversed: it earns nothing.");
-      continue;
-    }
-    if (evs.some((e) => e.kind === "hold")) {
-      piece(r, r.amountPaise, "held", "Held for review by hand: it earns nothing until the hold is released.");
-      held.push({ documentId: r.id, documentNo: r.no, employeeId: null, message: "Held for review by hand." });
-      continue;
-    }
-    let amount = R.q(r.amountPaise);
-    if (refundRule === "reverseReceiptShare") {
-      const refunded = evs.filter((e) => e.kind === "refund").reduce((a, e) => a + (e.amountPaise ?? 0), 0);
-      if (refunded > 0) {
-        const cut = Math.min(refunded, r.amountPaise);
-        amount = R.q(r.amountPaise - cut);
-        piece(r, cut, "reversed", `Refunded ${rupees(cut)}: that part earns nothing.`);
-      }
-    }
-    const manual = evs.filter((e) => e.kind === "allocation");
-    if (manual.length) {
-      const total = manual.reduce((a, e) => a + (e.amountPaise ?? 0), 0);
-      if (R.cmp(R.q(total), amount) > 0 || manual.some((e) => !e.invoiceId || !invoiceById.has(e.invoiceId))) {
-        piece(r, amount, "held", "Its allocation by hand is more than the receipt, or names an unknown invoice: held.");
-        held.push({ documentId: r.id, documentNo: r.no, employeeId: null, message: "Allocation by hand doesn't fit the receipt." });
-        continue;
-      }
-      for (const e of manual) apply(r, invoiceById.get(e.invoiceId!)!, R.q(e.amountPaise ?? 0), "allocated by hand");
-      const rest = R.sub(amount, R.q(total));
-      if (!R.isZero(rest)) piece(r, rest, "held", "Part of the receipt isn't allocated by hand yet.");
-      continue;
-    }
-    if (r.invoiceId && invoiceById.has(r.invoiceId)) {
-      const inv = invoiceById.get(r.invoiceId)!;
-      const due = invoiceDue.get(inv.id)!;
-      if (R.cmp(amount, due) <= 0 || multi === "useImportedReference") {
-        apply(r, inv, amount, "the invoice it names");
-        continue;
-      }
-      apply(r, inv, due, "the invoice it names");
-      const excess = R.sub(amount, due);
-      if (multi === "oldestFirst") {
-        const left = fifo(r, excess, "the customer's oldest open invoice", inv.id);
-        if (!R.isZero(left)) piece(r, left, "excluded", "More than the customer's open invoices: the excess isn't applied.");
-      } else {
-        piece(r, excess, "held", "It pays more than the invoice it names: the excess waits to be split by hand.");
-        held.push({ documentId: r.id, documentNo: r.no, employeeId: null, message: "Pays several invoices: split it by hand." });
-      }
-      continue;
-    }
-    if (r.invoiceId && !invoiceById.has(r.invoiceId)) {
-      piece(r, amount, "excluded", "The invoice it names isn't in Forms.");
-      continue;
-    }
-    // On account.
-    if (onAccount === "allocateOldestInvoiceFirst") {
-      const left = fifo(r, amount, "on account: the customer's oldest open invoice");
-      if (!R.isZero(left)) piece(r, left, "excluded", "On account, and more than the customer's open invoices: the excess isn't applied.");
-    } else if (onAccount === "manualAllocationRequired") {
-      piece(r, amount, "held", "On account: held until it is allocated by hand.");
-      held.push({ documentId: r.id, documentNo: r.no, employeeId: null, message: "On-account receipt: allocate it by hand." });
-    } else piece(r, amount, "excluded", "On account: ignored until it is allocated.");
-  }
+  const { applied, pieces } = applyReceipts({ settings: s, receipts, events, invoices, invoiceById, invoiceDue, unitIdOfInvoice: (id) => unitOfInvoice.get(id)?.id ?? null, held }) as { applied: Applied[]; pieces: ReceiptPiece[] };
 
   /* delay reference dates */
-  const delayFrom = str(s, "collection.delayFrom");
-  const fallback = list(s, "collection.dueDateFallback");
   const missingDue = str(s, "collection.missingDueDate");
   const boundary = str(s, "collection.stepBoundary");
-  const termsDays = (t: string | null) => {
-    const m = t ? /(\d{1,3})\s*days?\b/i.exec(t) : null;
-    return m ? Number(m[1]) : null;
-  };
-  const referenceDate = (inv: InvoiceIn): { date: string; from: string } | null => {
-    if (delayFrom === "invoiceDate") return { date: inv.date, from: "the invoice date" };
-    if (delayFrom === "orderDate") {
-      const o = inv.orderId ? orderById.get(inv.orderId) : undefined;
-      return o ? { date: o.date, from: "the order date" } : null;
-    }
-    for (const src of fallback) {
-      if (src === "invoiceDueDate" && inv.dueDate) return { date: inv.dueDate, from: "the invoice's due date" };
-      if (src === "orderPaymentTerms") {
-        const o = inv.orderId ? orderById.get(inv.orderId) : undefined;
-        const n = termsDays(o?.paymentTerms ?? null);
-        if (n !== null) return { date: addDays(inv.date, n), from: `the order's payment terms (${n} days)` };
-      }
-      if (src === "customerTerms") {
-        const c = inv.customerId ? customerById.get(inv.customerId) : undefined;
-        if (c?.creditPeriodDays != null) return { date: addDays(inv.date, c.creditPeriodDays), from: `${c.name}'s credit period (${c.creditPeriodDays} days)` };
-      }
-      if (src === "defaultDays") return { date: addDays(inv.date, num(s, "collection.defaultDays")), from: `the default ${num(s, "collection.defaultDays")} days` };
-    }
-    return null;
-  };
+  const referenceDate = makeReferenceDate(s, (id) => orderById.get(id), (id) => customerById.get(id));
 
   /* 4–5, 7. Pool, sharing and earnings, per salesperson */
   const allocation = str(s, "allocation.method");
@@ -742,7 +529,17 @@ export function calculateCategoryA(input: CategoryAInput): CategoryAResult {
       payableQ = R.min(payableQ, R.q(c));
     };
     applyCap(capMonth, "Limited to the most a salesperson can earn from Category A in a month");
-    if (capAll !== null) applyCap(Math.max(0, capAll - (input.otherCategoriesPaise?.[eid] ?? 0)), "Limited by the most a salesperson can earn from all categories in a month");
+    let before: number | undefined;
+    if (input.allCategories) {
+      // Shared with Category B this month, as the published policy says (lib/incentives/shared/all-categories.ts).
+      before = R.round(earned, method, precision);
+      const a = allCategoriesAllowance({ capPaise: input.allCategories.capPaise, policy: input.allCategories.policy, order: input.allCategories.order, own: "A", ownPrePaise: before, others: input.allCategories.others[eid] ?? [] });
+      if (a.allowedPaise < before) {
+        earned = R.min(earned, R.q(a.allowedPaise));
+        payableQ = R.min(payableQ, R.q(a.allowedPaise));
+        if (a.note) limits.push(a.note);
+      }
+    } else if (capAll !== null) applyCap(Math.max(0, capAll - (input.otherCategoriesPaise?.[eid] ?? 0)), "Limited by the most a salesperson can earn from all categories in a month");
     const earnedPaise = R.round(earned, method, precision);
     const payablePaise = R.round(payableQ, method, precision);
     employeesOut.push({
@@ -759,6 +556,7 @@ export function calculateCategoryA(input: CategoryAInput): CategoryAResult {
       payablePaise,
       pendingPaise: earnedPaise - payablePaise,
       projectedPaise: R.round(projectedSum, method, precision),
+      ...(before !== undefined ? { beforeAllCategoriesPaise: before } : {}),
       limits,
       explanation: why,
     });

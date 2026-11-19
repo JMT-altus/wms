@@ -20,8 +20,8 @@
 
 export const CATEGORY_CODES = ["A", "B", "C", "D", "E", "F", "G"] as const;
 export type CategoryCode = (typeof CATEGORY_CODES)[number];
-/** The categories whose configuration is specified (Stage 2). The others can't have versions yet. */
-export const CONFIGURABLE_CATEGORIES: readonly CategoryCode[] = ["A"];
+/** The categories whose configuration is specified. The others can't have versions yet. */
+export const CONFIGURABLE_CATEGORIES: readonly CategoryCode[] = ["A", "B", "C", "D", "E", "F", "G"];
 export const CATEGORY_LABEL: Record<CategoryCode, string> = {
   A: "Sales Order Received",
   B: "Old Customer – New Product / New Brand",
@@ -33,6 +33,10 @@ export const CATEGORY_LABEL: Record<CategoryCode, string> = {
 };
 
 export const SECTIONS = [
+  { key: "qualification", label: "Category B Qualification" },
+  { key: "newCustomer", label: "New Customer Rules" },
+  { key: "rewards", label: "Reward Amounts" },
+  { key: "streak", label: "Consecutive Purchases" },
   { key: "general", label: "General Eligibility" },
   { key: "threshold", label: "Monthly Sales Thresholds" },
   { key: "slabs", label: "Incentive Slabs" },
@@ -47,8 +51,8 @@ export const SECTIONS = [
 ] as const;
 export type SectionKey = (typeof SECTIONS)[number]["key"];
 
-export type Source = "pdf" | "screenshot" | "option";
-export const SOURCE_LABEL: Record<Source, string> = { pdf: "From the PDF", screenshot: "From the April examples", option: "Business decision" };
+export type Source = "pdf" | "screenshot" | "option" | "decision";
+export const SOURCE_LABEL: Record<Source, string> = { pdf: "From the PDF", screenshot: "From the April examples", option: "Business decision", decision: "Confirmed decision" };
 
 /** A choice offered by a setting. */
 export interface Choice {
@@ -64,8 +68,9 @@ export interface Choice {
  *   amount   — paise, 0 or more;
  *   cap      — "none" (confirmed: no limit) or paise, 0 or more;
  *   integer  — a whole number within min…max;
+ *   rate     — a percentage in parts per million (1% = 10,000), from 0% to 100%.
  */
-export type SettingKind = "choice" | "multi" | "ordered" | "amount" | "cap" | "integer";
+export type SettingKind = "choice" | "multi" | "ordered" | "amount" | "cap" | "integer" | "rate";
 export type SettingValue = string | string[] | number;
 
 export interface SettingDef {
@@ -77,16 +82,24 @@ export interface SettingDef {
   choices?: readonly Choice[];
   min?: number;
   max?: number;
+  /** A "cap" setting's word for "none" (default "No limit"; a minimum reads "No minimum"). */
+  noneLabel?: string;
   /** Required before a version can be submitted. A setting with `requiredWhen` is required only while it holds. */
   required: boolean;
   /** Required (and shown) only while another setting holds one of these values (or, for a multi/ordered setting, includes one). */
   requiredWhen?: { key: string; values: readonly string[] };
   source: Source;
+  /**
+   * The categories that use it (absent: Category A only). A shared setting has its own value in each category's
+   * versions; CATEGORY_OVERRIDES may word or narrow it for one category.
+   */
+  categories?: readonly CategoryCode[];
 }
 
 const C = (value: string, label: string): Choice => ({ value, label });
 
-export const SETTINGS: readonly SettingDef[] = [
+/** Category A's 54 settings, exactly as Category A has always defined them. */
+const CATEGORY_A_SETTINGS: readonly SettingDef[] = [
   // ── General Eligibility ──
   { key: "basis.document", section: "general", label: "Sales are counted from", kind: "choice", required: true, source: "option",
     help: "Which document's value makes up a salesperson's monthly sales. The PDF's heading is \"Sales Order Received\", but it doesn't say which value is meant.",
@@ -260,8 +273,216 @@ export const SETTINGS: readonly SettingDef[] = [
     choices: [C("afterApproval", "As soon as it is approved"), C("withPayrollMonth", "With the next payroll month")] },
 ];
 
+/**
+ * Category A's settings that Category B uses too, with the same meaning (its own value in each B version). Category B
+ * reuses Category A's receipt, delay, adjustment, attribution, period, rounding, limit and payout rules.
+ */
+const SHARED_WITH_B = new Set([
+  "basis.voucherFilter",
+  "collection.delayFrom", "collection.stepBoundary", "collection.dueDateFallback", "collection.defaultDays", "collection.missingDueDate", "collection.recoveryAfterNil",
+  "collection.earningBasis", "collection.unreceivedPortion", "collection.onAccountReceipts", "collection.multiInvoiceReceipts",
+  "adjust.refund", "adjust.bouncedCheque", "adjust.reversedReceipt", "adjust.openMonths", "adjust.lockedOrPaidMonths", "adjust.negativeBalance", "adjust.carryForwardMonths", "adjust.windowDays",
+  "attribution.source", "attribution.historical", "attribution.split", "eligibility.inactiveEmployees",
+  "period.unit", "period.recalcUntil", "period.recalcDays", "period.lockMode", "period.autoLockDays", "period.lateReceipts",
+  "rounding.method", "rounding.precision", "rounding.level",
+  "caps.perOrder", "caps.perEmployeeCategoryMonth", "caps.perEmployeeAllCategoriesMonth",
+  "payout.approvalSteps", "payout.release",
+]);
+
+/**
+ * Which of Category A's settings Categories C–G use as well — only where the setting means something for them:
+ *   C (new customers) and G (consecutive purchases) are worked out from Forms' documents, so they use the order filter,
+ *   attribution and (C, whose first transactions must be paid) the receipt and due-date rules;
+ *   D, E and F reward approved submissions (leads, meetings, testimonials) by the salesperson who made them, so they
+ *   have no document, attribution or collection settings;
+ *   every category has the period, adjustment, rounding, limit and payout settings.
+ */
+const ALL_CATEGORIES = ["A", "B", "C", "D", "E", "F", "G"] as const;
+const SHARED_WITH_C_G: Record<string, readonly CategoryCode[]> = Object.fromEntries([
+  ...["basis.voucherFilter", "attribution.source", "attribution.historical", "attribution.split", "caps.perOrder"].map((k) => [k, ["C", "G"]]),
+  ...["collection.delayFrom", "collection.stepBoundary", "collection.dueDateFallback", "collection.defaultDays", "collection.missingDueDate", "collection.onAccountReceipts", "collection.multiInvoiceReceipts", "adjust.refund", "adjust.bouncedCheque", "adjust.reversedReceipt"].map((k) => [k, ["C"]]),
+  // Category C uses Category A's receipt-based earning and its credit-note / sales-return rules (confirmed decisions),
+  // narrowed for C in CATEGORY_OVERRIDES to the choices those decisions allow (0136 lets the database accept them for C).
+  ...["collection.earningBasis", "collection.payableWhen", "adjust.creditNote", "adjust.salesReturn"].map((k) => [k, ["C"]]),
+  ...["eligibility.inactiveEmployees", "period.unit", "period.recalcUntil", "period.recalcDays", "period.lockMode", "period.autoLockDays", "period.lateReceipts", "adjust.openMonths", "adjust.lockedOrPaidMonths", "adjust.negativeBalance", "adjust.carryForwardMonths", "adjust.windowDays", "rounding.method", "rounding.precision", "caps.perEmployeeCategoryMonth", "caps.perEmployeeAllCategoriesMonth", "payout.approvalSteps", "payout.release"].map((k) => [k, ["C", "D", "E", "F", "G"]]),
+]);
+const categoriesOf = (key: string): readonly CategoryCode[] | undefined => {
+  const base: CategoryCode[] = SHARED_WITH_B.has(key) ? ["A", "B"] : [];
+  const more = SHARED_WITH_C_G[key] ?? [];
+  return base.length || more.length ? [...(base.length ? base : ["A" as const]), ...more] : undefined;
+};
+
+/**
+ * Settings added with Category B. Every value is configurable; none is a rule of the code. Where a confirmed business
+ * decision gives the value (the 24-month look back, the ₹1,00,000 minimum) it is offered only as an editable starting
+ * value of a new draft (CATEGORY_B_TEMPLATE); the rate and the per-order and monthly limits start EMPTY and must be
+ * entered before a version can be submitted or published.
+ */
+const ADDED_SETTINGS: readonly SettingDef[] = [
+  // ── Category B Qualification ──
+  { key: "b.existingLookbackMonths", section: "qualification", label: "Existing customer: months looked back", kind: "integer", min: 1, max: 120, required: true, source: "decision", categories: ["B"],
+    help: "A customer is an existing customer when it has at least one earlier eligible Sales Order (Orders left out never count) dated within this many months before the order. Confirmed decision: 24 months." },
+  { key: "b.noveltyWindow", section: "qualification", label: "New product or brand: months looked back", kind: "choice", required: true, source: "decision", categories: ["B"],
+    help: "A product or brand is new when none of the customer's earlier eligible Sales Orders in this window has it. A new product OR a new brand qualifies.",
+    choices: [C("sameAsExisting", "The same months as the existing-customer look back"), C("own", "Its own number of months")] },
+  { key: "b.noveltyLookbackMonths", section: "qualification", label: "New product or brand: its own months", kind: "integer", min: 1, max: 120, required: true, requiredWhen: { key: "b.noveltyWindow", values: ["own"] }, source: "option", categories: ["B"],
+    help: "Used only when the novelty window has its own length." },
+  { key: "b.minAmount", section: "qualification", label: "Minimum taxable value of one invoice", kind: "amount", required: true, source: "decision", categories: ["B"],
+    help: "The FIRST individual invoice of the Sales Order whose whole taxable value (after credit notes) is at least this amount qualifies, once per Sales Order. Invoices are never added together. Confirmed decision: ₹1,00,000." },
+  { key: "b.ratePpm", section: "qualification", label: "Incentive rate", kind: "rate", required: true, source: "option", categories: ["B"],
+    help: "A percentage of the qualifying invoice's taxable value. No rate is assumed: enter the approved rate." },
+
+  // ── Refunds and Adjustments (Category B) ──
+  { key: "b.salesReturns", section: "adjustments", label: "Sales returns", kind: "choice", required: true, source: "decision", categories: ["B"],
+    help: "A credit note marked as a sales return. Confirmed decision: treated like any credit note — before the order's Category B is paid out it reassesses the order; after payout the difference is recovered from later months.",
+    choices: [C("asCreditNote", "Treated as a credit note (reassessed before payout, recovered after)"), C("ignore", "Ignored")] },
+  { key: "b.recoveryExpiry", section: "adjustments", label: "When recovery after payout stops", kind: "choice", required: true, source: "decision", categories: ["B"],
+    help: "A credit note or return after payout is recovered from later months. Confirmed decision: recovery doesn't lapse on its own; choose a number of days only if an expiry has been approved.",
+    choices: [C("never", "Never: recovered whenever it arrives"), C("afterWindowDays", "After a number of days from payout")] },
+
+  // ── Category A: Category B orders ──
+  { key: "basis.categoryBOrders", section: "general", label: "Orders that earn Category B", kind: "choice", required: false, source: "decision", categories: ["A"],
+    help: "Whether a Sales Order that earns Category B still counts toward Category A sales. Confirmed decision: it counts (not set = counts). Leaving them out applies from the month a version saying so is published; a locked or paid month never changes.",
+    choices: [C("include", "Counted in Category A too"), C("exclude", "Left out of Category A")] },
+
+  // ── Rounding and Limits: sharing the all-categories limit ──
+  { key: "caps.allCategoriesPolicy", section: "rounding", label: "Sharing the all-categories limit between categories", kind: "choice", required: false, source: "decision", categories: ALL_CATEGORIES,
+    help: "When a salesperson's categories together exceed the all-categories limit in a month. In proportion: each category keeps its share (rounded down to the paisa, so the total never exceeds the limit). In order: the categories are filled one after another in the order chosen. A locked, approved or paid category's figures are never changed; the limit left is shared by the others.",
+    choices: [C("proportional", "In proportion to each category's amount"), C("categoryOrder", "One category after another, in a chosen order")] },
+  { key: "caps.allCategoriesOrder", section: "rounding", label: "Order the categories are filled in", kind: "ordered", required: true, requiredWhen: { key: "caps.allCategoriesPolicy", values: ["categoryOrder"] }, source: "option", categories: ALL_CATEGORIES,
+    help: "Only for \"One category after another\".",
+    choices: ALL_CATEGORIES.map((c) => C(c, `Category ${c}`)) },
+];
+
+/**
+ * Categories C–G. Each rule below is the one the OLD engine pays today (lib/incentives/config.ts and rules.ts, taken
+ * from the PDF "Sales BH" sheet), made configurable — nothing new is invented. Their PDF values are offered only as an
+ * editable starting template (CATEGORY_TEMPLATES) and every value is approved before it applies. Where the old engine
+ * has no rule (G, and how C recognises a "new" customer in Forms), every setting starts EMPTY and must be decided.
+ */
+const C_TO_G_SETTINGS: readonly SettingDef[] = [
+  // ── C · New customer acquisition (old engine C.1) ──
+  { key: "c.newCustomerLookbackMonths", section: "newCustomer", label: "New customer: months with no earlier order", kind: "integer", min: 1, max: 120, required: true, source: "decision", categories: ["C"],
+    help: "Rolling look-back (confirmed: 12 months). A customer is new at a Sales Order when it has no other eligible Sales Order dated within this many months before it — inclusive: an order on the same calendar day this many months earlier (or the month's last day, when that day doesn't exist) is within it. Earlier orders not yet invoiced still count; cancelled and fully returned orders don't. An unlinked earlier order whose Tally party matches holds the customer for review." },
+  { key: "c.requiredTransactions", section: "newCustomer", label: "Transactions that complete the acquisition", kind: "integer", min: 1, max: 20, required: true, source: "pdf", categories: ["C"],
+    help: "The incentive is earned on the new customer's first this-many qualifying Sales Orders (one Sales Order is one transaction, however many invoices it has; cancelled and fully returned orders don't count), in the month of the Sales Order that completes them (PDF: first 3 transactions)." },
+  { key: "c.turnoverWindowMonths", section: "newCustomer", label: "Turnover window: months from the first qualifying order", kind: "integer", min: 1, max: 120, required: true, source: "option", categories: ["C"],
+    help: "Recommended: 12. The new customer's net turnover and its transactions are counted from its FIRST QUALIFYING Sales Order (invoiced, net above ₹0) for this many months: 12 months from 10 Feb 2026 runs to 9 Feb 2027 inclusive; when the end day doesn't exist it is the month's last day, included (from 29 Feb 2028: to 28 Feb 2029; one month from 31 Jan: to 28 Feb). If that order is later cancelled or fully returned, the next qualifying order becomes the start. Orders after the window never count, so a later calculation date doesn't change who qualified." },
+  { key: "c.minTurnover", section: "newCustomer", label: "Net turnover needed", kind: "amount", required: true, source: "pdf", categories: ["C"],
+    help: "The new customer's net turnover in the turnover window — after credit notes and sales returns — must reach this amount (PDF: ₹2.5 L). A return that takes it below loses the incentive (recalculated before payout; recovered after payout)." },
+  { key: "c.turnoverBasis", section: "newCustomer", label: "Net turnover counts", kind: "choice", required: true, source: "option", categories: ["C"],
+    help: "Recommended: invoiced value. Invoiced: each Sales Order counts what has been invoiced against it, less its credit notes and returns (an order not yet invoiced counts nothing yet; a pre-closed, never-invoiced part never counts). Ordered: the Sales Order's value, less its credit notes and returns.",
+    choices: [C("invoiced", "Invoiced value, less credit notes and returns"), C("ordered", "Sales Order value, less credit notes and returns")] },
+  { key: "c.amountBasis", section: "newCustomer", label: "Amount counted", kind: "choice", required: true, source: "option", categories: ["C"],
+    help: "Which amount counts — of orders, invoices, credit notes and returns alike — towards the turnover and the incentive.",
+    choices: [C("taxable", "Taxable value, excluding GST"), C("total", "Total value, including GST")] },
+  { key: "c.ratePpm", section: "newCustomer", label: "Incentive rate on the first transactions", kind: "rate", required: true, source: "pdf", categories: ["C"],
+    help: "A percentage of the first transactions' net amount (initial draft: 1%). Payable only once their invoices are fully collected (net of credit notes and returns); each receipt earns at its own delay step, as Category A." },
+  // ── Minimum payable (shared design; Category C uses it first) ──
+  { key: "payout.minimumPayable", section: "payout", label: "Smallest amount paid in a month", kind: "cap", noneLabel: "No minimum", required: true, source: "decision", categories: ["C"],
+    help: "Applied to each salesperson's TOTAL for the month — this month's amount after every limit, plus the balances carried forward and the adjustments carried into the month. Choose \"No minimum\" deliberately or enter the amount; nothing is assumed. This isn't an eligibility threshold." },
+  { key: "payout.belowMinimum", section: "payout", label: "A month below the smallest amount", kind: "choice", required: true, source: "decision", categories: ["C"],
+    help: "Confirmed: carry forward. Below the smallest amount, the month's total is held in the carry-forward ledger and added to the next months until it is reached; only then is it released, once. \"Not released\" holds and expires it at once (recorded, never silent).",
+    choices: [C("carryForward", "Carry forward until the smallest amount is reached"), C("notReleased", "Not released (recorded as expired)")] },
+  { key: "payout.carryForwardExpiry", section: "payout", label: "Carried-forward balances expire", kind: "choice", required: true, source: "decision", categories: ["C"],
+    help: "Confirmed default: never. An expired balance is recorded in the ledger with the month it expired in; an authorised person can also write a balance off, with a reason.",
+    requiredWhen: { key: "payout.belowMinimum", values: ["carryForward"] },
+    choices: [C("never", "Never (no expiry)"), C("afterMonths", "After a number of months")] },
+  { key: "payout.carryForwardExpiryMonths", section: "payout", label: "Months before a carried balance expires", kind: "integer", min: 1, max: 120, required: true, source: "option", categories: ["C"],
+    help: "A balance held in a month expires when it is still unreleased this many months later.",
+    requiredWhen: { key: "payout.carryForwardExpiry", values: ["afterMonths"] } },
+
+  // ── D · Leads and enquiries (old engine D.1, D.2) ──
+  { key: "d.leadsPerUnit", section: "rewards", label: "Profiled leads per reward", kind: "integer", min: 1, max: 1000, required: true, source: "pdf", categories: ["D"], help: "An approved batch earns one reward per this many leads (PDF: 10)." },
+  { key: "d.leadUnitAmount", section: "rewards", label: "Reward per lead unit", kind: "amount", required: true, source: "pdf", categories: ["D"], help: "The reward for each full unit of profiled leads (PDF: ₹250 per 10 profiled leads)." },
+  { key: "d.leadsMustBeProfiled", section: "rewards", label: "Leads must be profiled", kind: "choice", required: true, source: "pdf", categories: ["D"], help: "Whether only a batch marked as profiled earns (PDF: profiled leads).",
+    choices: [C("yes", "Only profiled batches"), C("no", "Any approved batch")] },
+  { key: "d.conversionsPerUnit", section: "rewards", label: "Leads turned into enquiries per reward", kind: "integer", min: 1, max: 1000, required: true, source: "pdf", categories: ["D"], help: "An approved conversion earns one reward per this many leads turned into enquiries (PDF: 5)." },
+  { key: "d.conversionUnitAmount", section: "rewards", label: "Reward per enquiry unit", kind: "amount", required: true, source: "pdf", categories: ["D"], help: "The reward for each full unit of enquiries (PDF: ₹250 per 5 leads turned into enquiries)." },
+  { key: "d.unitCounting", section: "rewards", label: "How units are counted", kind: "choice", required: true, source: "option", categories: ["D"], help: "The old engine counts each approved submission on its own (leftover leads of a batch don't carry over).",
+    choices: [C("perSubmission", "Each submission on its own"), C("perMonth", "The month's submissions together")] },
+
+  // ── E · High-value / high-potential client meetings (old engine E.1) ──
+  { key: "e.minAward", section: "rewards", label: "Smallest award for a meeting", kind: "amount", required: true, source: "pdf", categories: ["E"], help: "An approved meeting's award is raised to at least this (PDF: ₹250)." },
+  { key: "e.maxAward", section: "rewards", label: "Largest award for a meeting", kind: "amount", required: true, source: "pdf", categories: ["E"], help: "…and lowered to at most this (PDF: ₹1,000). The award itself is set by the admin who approves the meeting." },
+
+  // ── F · Reviews and testimonials (old engine F.1–F.4) ──
+  { key: "f.googleReviewAmount", section: "rewards", label: "Google review", kind: "amount", required: true, source: "pdf", categories: ["F"], help: "The reward for an approved Google review that meets the conditions below (PDF: ₹100)." },
+  { key: "f.googleMinWords", section: "rewards", label: "Google review: fewest words", kind: "integer", min: 0, max: 10000, required: true, source: "pdf", categories: ["F"], help: "A Google review shorter than this earns nothing (PDF: 50 words)." },
+  { key: "f.googleFiveStarOnly", section: "rewards", label: "Google review: five stars only", kind: "choice", required: true, source: "pdf", categories: ["F"], help: "Whether only a five-star Google review earns (PDF: a 5-star review).", choices: [C("yes", "Five stars only"), C("no", "Any rating")] },
+  { key: "f.googleNeedsEvidence", section: "rewards", label: "Google review: evidence needed", kind: "choice", required: true, source: "option", categories: ["F"], help: "The old engine refuses a review recorded without its screenshot.", choices: [C("yes", "A screenshot is needed"), C("no", "Not needed")] },
+  { key: "f.emailAmount", section: "rewards", label: "Email testimonial", kind: "amount", required: true, source: "pdf", categories: ["F"], help: "The reward for an approved testimonial sent by email (PDF: ₹100)." },
+  { key: "f.letterheadAmount", section: "rewards", label: "Letterhead testimonial", kind: "amount", required: true, source: "pdf", categories: ["F"], help: "The reward for an approved testimonial on the customer's letterhead (PDF: ₹150)." },
+  { key: "f.namedMultiple", section: "rewards", label: "When it names the salesperson or a teammate", kind: "integer", min: 1, max: 10, required: true, source: "pdf", categories: ["F"], help: "The reward is multiplied by this (PDF F.4: doubled — 2)." },
+
+  // ── G · Consecutive monthly customer purchases — NO rule exists yet (old engine: disabled) ──
+  { key: "g.consecutiveMonths", section: "streak", label: "Consecutive months of purchases", kind: "integer", min: 2, max: 24, required: true, source: "option", categories: ["G"],
+    help: "PROPOSED STRUCTURE, awaiting the business rule: a customer buying in this many consecutive months earns the reward. The PDF names the category but gives no rule, so every value here must be decided." },
+  { key: "g.minMonthlyPurchase", section: "streak", label: "Smallest purchase that counts for a month", kind: "amount", required: true, source: "option", categories: ["G"], help: "A month counts when the customer's eligible Sales Orders reach this amount." },
+  { key: "g.purchaseBasis", section: "streak", label: "Amount counted", kind: "choice", required: true, source: "option", categories: ["G"], help: "Which amount of each Sales Order counts.",
+    choices: [C("taxable", "Taxable value, excluding GST"), C("total", "Total value, including GST")] },
+  { key: "g.rewardAmount", section: "streak", label: "Reward for a completed run", kind: "amount", required: true, source: "option", categories: ["G"], help: "Paid to the customer's salesperson in the month the run completes." },
+  { key: "g.afterReward", section: "streak", label: "After a reward", kind: "choice", required: true, source: "option", categories: ["G"], help: "Whether the count starts again after a reward, or every further consecutive month earns again.",
+    choices: [C("restart", "The count starts again"), C("everyFurtherMonth", "Every further consecutive month earns")] },
+];
+
+/** How a shared setting reads, or is narrowed, for one category. */
+const CATEGORY_OVERRIDES: Partial<Record<CategoryCode, Record<string, Partial<SettingDef>>>> = {
+  B: {
+    "basis.voucherFilter": { section: "qualification", label: "Orders left out", help: "Sales Orders whose Voucher Status says so are left out of Category B and of every customer's order history. Cancelled orders are always left out (confirmed decision), so Cancelled must be chosen.", source: "decision" },
+    "collection.delayFrom": { help: "The qualifying invoice's receipts are measured from this date, each at its own delay (as Category A)." },
+    "adjust.lockedOrPaidMonths": { label: "Changes affecting a locked or paid month", help: "Confirmed decision: a locked or paid month never changes; a difference (a credit note, return or reversal after payout) is recovered in the current month.", choices: [C("adjustInCurrentMonth", "Adjust the difference in the current month")], source: "decision" },
+    "adjust.negativeBalance": { help: "Confirmed decision: recovery is made from later months' Category B payouts.", choices: [C("recoverFromNextPayout", "Recover it from the next payout"), C("carryForwardMonths", "Carry it forward for a number of months")], source: "decision" },
+    "adjust.carryForwardMonths": { help: "After this many months the remaining balance is written off (an explicit, approved expiry)." },
+    "adjust.windowDays": { label: "Days after payout that recovery is allowed", help: "Used only when recovery stops after a number of days.", requiredWhen: { key: "b.recoveryExpiry", values: ["afterWindowDays"] } },
+    "period.unit": { help: "Category B is calculated per calendar month: the month of the qualifying invoice's date." },
+    "rounding.level": { help: "Where Category B amounts are rounded.", choices: [C("employeeMonthTotal", "Once, on each salesperson's monthly total"), C("perOrder", "On each Sales Order"), C("perReceipt", "On each receipt")], source: "option" },
+    "caps.perOrder": { label: "Most one Sales Order can earn from Category B", help: "Applied to the order's incentive BEFORE collection decay (confirmed decision). Choose \"No limit\" deliberately or enter the approved amount; nothing is assumed.", source: "decision" },
+    "caps.perEmployeeCategoryMonth": { label: "Most a salesperson can earn from Category B in a month", help: "Required before publishing. Choose \"No limit\" deliberately or enter the approved amount; a missing value is never treated as no limit.", source: "decision" },
+    "caps.perEmployeeAllCategoriesMonth": { help: "Across the categories the WMS calculates. Shared as \"Sharing the all-categories limit between categories\" says." },
+    "caps.allCategoriesPolicy": { required: true },
+  },
+  ...Object.fromEntries(
+    (["C", "D", "E", "F", "G"] as const).map((c) => [
+      c,
+      {
+        "caps.perEmployeeCategoryMonth": { label: `Most a salesperson can earn from Category ${c} in a month`, help: c === "G" ? "No amount exists yet: choose \"No limit\" deliberately or enter the approved amount." : `PDF ceiling for Category ${c}: ${({ C: "₹5,000", D: "₹1,000", E: "₹1,000", F: "₹750" } as Record<string, string>)[c]}. Choose "No limit" deliberately or enter the approved amount.` },
+        "caps.allCategoriesPolicy": { required: true },
+        "period.unit": { help: `Category ${c} is calculated per calendar month.` },
+        ...(c === "C"
+          ? {
+              "caps.perOrder": { label: "Most one new customer can earn, per salesperson", help: "Initial draft: ₹5,000 per customer, per salesperson, per month (confirmed). Applied to each salesperson's share before the collection delay step. Choose \"No limit\" deliberately or enter the amount." },
+              "collection.earningBasis": { help: "Confirmed: Category A's receipt-based rules. Each receipt: each payment earns its share at its own delay step. Whole order, latest payment: everything at the last payment's step. Weighted: the same as each receipt (Category C is paid only once fully collected).", source: "decision" },
+              "collection.payableWhen": { help: "Confirmed: partial collections don't qualify — payable only once every invoice of the transactions is fully collected (net of credit notes and returns).", choices: [C("orderFullyCollected", "Only once fully collected")], source: "decision" },
+              "adjust.creditNote": { help: "Confirmed: net sales — a credit note reduces its Sales Order's net amount in the original period (recalculated before payout; recovered after payout).", choices: [C("reduceOriginalMonthSales", "Reduce the original Sales Order's net amount")], source: "decision" },
+              "adjust.salesReturn": { help: "Confirmed: a sales return reduces its Sales Order's net amount in the original period; a fully returned order isn't a transaction.", choices: [C("reduceOriginalMonthSales", "Reduce the original Sales Order's net amount")], source: "decision" },
+            }
+          : {}),
+        ...(c === "G" ? { "caps.perOrder": { label: "Most one customer's run can earn", help: "No amount exists yet." } } : {}),
+      },
+    ]),
+  ),
+};
+
+/** Every setting definition (all categories). A definition's own `categories` says which categories use it. */
+export const SETTINGS: readonly SettingDef[] = [...CATEGORY_A_SETTINGS.map((d) => (categoriesOf(d.key) ? { ...d, categories: categoriesOf(d.key) } : d)), ...ADDED_SETTINGS, ...C_TO_G_SETTINGS];
+
 export const SETTING: Readonly<Record<string, SettingDef>> = Object.fromEntries(SETTINGS.map((s) => [s.key, s]));
 export const SETTING_KEYS: readonly string[] = SETTINGS.map((s) => s.key);
+
+const usedBy = (d: SettingDef, c: CategoryCode) => (d.categories ?? ["A"]).includes(c);
+/** The settings one category's versions hold, worded for that category. */
+export function settingsFor(category: CategoryCode): readonly SettingDef[] {
+  const over = CATEGORY_OVERRIDES[category] ?? {};
+  return SETTINGS.filter((d) => usedBy(d, category)).map((d) => (over[d.key] ? { ...d, ...over[d.key] } : d));
+}
+/** The sections a category's versions have (a section with no setting of the category isn't shown). */
+export function sectionsFor(category: CategoryCode): readonly (typeof SECTIONS)[number][] {
+  const defs = settingsFor(category);
+  return SECTIONS.filter((s) => defs.some((d) => d.section === s.key) || (category === "A" && s.key === "slabs"));
+}
+/** Whether a category's versions have incentive slabs (Category B has none). */
+export const hasSlabs = (category: CategoryCode) => category === "A";
 
 /* ── the structured lists ─────────────────────────────────────────────── */
 
@@ -344,3 +565,57 @@ export const REFERENCE_TEMPLATE: IncentiveConfig = {
   ],
   eligibility: [],
 };
+
+/**
+ * Category B's starting values for a new draft: ONLY what a confirmed decision or the existing Category A reference
+ * gives (the 24-month look back, the ₹1,00,000 minimum, cancelled orders left out, credit-note treatment of returns,
+ * recovery that doesn't lapse, adjustments in the current month, proportional sharing of the all-categories limit, and
+ * Category A's receipt, delay and rounding references). The incentive rate, the per-order limit and the monthly limit
+ * are NOT here: they start empty and block submission and publishing until the approved values are entered. Every
+ * value is editable and approved like any other change. Not used by any calculation.
+ */
+export const CATEGORY_B_TEMPLATE: IncentiveConfig = {
+  settings: {
+    "b.existingLookbackMonths": 24,
+    "b.noveltyWindow": "sameAsExisting",
+    "b.minAmount": RS(1_00_000),
+    "b.salesReturns": "asCreditNote",
+    "b.recoveryExpiry": "never",
+    "basis.voucherFilter": ["cancelled"],
+    "adjust.lockedOrPaidMonths": "adjustInCurrentMonth",
+    "collection.delayFrom": "invoiceDueDate",
+    "collection.earningBasis": "perReceipt",
+    "period.unit": "calendarMonth",
+    "rounding.level": "employeeMonthTotal",
+    "caps.perEmployeeAllCategoriesMonth": RS(18250),
+    "caps.allCategoriesPolicy": "proportional",
+  },
+  slabs: [],
+  delaySteps: REFERENCE_TEMPLATE.delaySteps,
+  eligibility: [],
+};
+
+/**
+ * Categories C–G: the values the OLD engine pays today (lib/incentives/config.ts — the PDF "Sales BH" sheet), as an
+ * editable starting point. A decision the PDF doesn't settle (C's "new customer" look back and amount basis, D's unit
+ * counting, F's evidence rule, every limit's final choice, approvals) stays empty. Category G has NO rule: its template
+ * holds no value at all. The shared ₹18,250 all-categories limit and proportional sharing are as Category B's.
+ */
+const SHARED_TEMPLATE: IncentiveConfig["settings"] = { "period.unit": "calendarMonth", "caps.perEmployeeAllCategoriesMonth": RS(18250), "caps.allCategoriesPolicy": "proportional" };
+export const CATEGORY_TEMPLATES: Partial<Record<CategoryCode, IncentiveConfig>> = {
+  C: { settings: { ...SHARED_TEMPLATE, "c.requiredTransactions": 3, "c.minTurnover": RS(2_50_000), "c.ratePpm": 10_000, "caps.perOrder": RS(5_000), "caps.perEmployeeCategoryMonth": RS(5_000), "basis.voucherFilter": ["cancelled"], "collection.delayFrom": "invoiceDueDate",
+    // Confirmed decisions and the recommended defaults (H1, H3, H4): editable starting values of a new draft only.
+    "c.newCustomerLookbackMonths": 12, "c.turnoverWindowMonths": 12, "c.turnoverBasis": "invoiced",
+    "collection.earningBasis": "perReceipt", "collection.payableWhen": "orderFullyCollected", "adjust.creditNote": "reduceOriginalMonthSales", "adjust.salesReturn": "reduceOriginalMonthSales",
+    "payout.belowMinimum": "carryForward", "payout.carryForwardExpiry": "never" }, slabs: [], delaySteps: REFERENCE_TEMPLATE.delaySteps, eligibility: [] },
+  D: { settings: { ...SHARED_TEMPLATE, "d.leadsPerUnit": 10, "d.leadUnitAmount": RS(250), "d.leadsMustBeProfiled": "yes", "d.conversionsPerUnit": 5, "d.conversionUnitAmount": RS(250), "caps.perEmployeeCategoryMonth": RS(1_000) }, slabs: [], delaySteps: [], eligibility: [] },
+  E: { settings: { ...SHARED_TEMPLATE, "e.minAward": RS(250), "e.maxAward": RS(1_000), "caps.perEmployeeCategoryMonth": RS(1_000) }, slabs: [], delaySteps: [], eligibility: [] },
+  F: { settings: { ...SHARED_TEMPLATE, "f.googleReviewAmount": RS(100), "f.googleMinWords": 50, "f.googleFiveStarOnly": "yes", "f.emailAmount": RS(100), "f.letterheadAmount": RS(150), "f.namedMultiple": 2, "caps.perEmployeeCategoryMonth": RS(750) }, slabs: [], delaySteps: [], eligibility: [] },
+  G: { settings: {}, slabs: [], delaySteps: [], eligibility: [] },
+};
+
+/** A category's reference template (Category A's is REFERENCE_TEMPLATE, unchanged). */
+export const referenceTemplateFor = (category: CategoryCode): IncentiveConfig => (category === "A" ? REFERENCE_TEMPLATE : category === "B" ? CATEGORY_B_TEMPLATE : (CATEGORY_TEMPLATES[category] ?? EMPTY_CONFIG));
+
+/** Whether a category's versions have collection delay steps (C has; D, E, F and G don't — they aren't collected). */
+export const hasDelaySteps = (category: CategoryCode) => category === "A" || category === "B" || category === "C";

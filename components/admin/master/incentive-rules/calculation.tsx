@@ -8,6 +8,8 @@ import { fireToast } from "@/lib/toast";
 import { MASTERS_GRADIENT, MASTERS_INK } from "@/components/masters/theme";
 import { calculateCategoryAMonth, setCategoryAMonthLocked } from "@/app/(masters)/master-setup/incentive-rules/calculation/actions";
 import { CalcWorkflow, type WorkflowProps } from "./calc-workflow";
+import { BQualifications, type BQualificationRow, type BReviewInvoice } from "./b-qualifications";
+import { XItems, type XItemRow } from "./x-items";
 
 /**
  * Admin & Master Setup → Incentive Rules → Calculation (Category A). Choose a programme and month; Calculate records a
@@ -18,7 +20,7 @@ import { CalcWorkflow, type WorkflowProps } from "./calc-workflow";
 const CARD: React.CSSProperties = { border: "1px solid var(--color-hairline)", boxShadow: "0 2px 6px -2px rgba(15, 23, 42, 0.06)" };
 const FIELD = "h-9 rounded-lg border border-hairline-strong bg-white px-2.5 text-[13px] text-ink-strong";
 const rs = (p: number) => `₹${(p / 100).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-const STATUS_LABEL: Record<string, string> = { open: "Open", locked: "Locked", submitted: "Submitted for approval", approved: "Approved", paid: "Paid" };
+const STATUS_LABEL: Record<string, string> = { open: "Open", locked: "Locked", submitted: "Submitted for approval", approved: "Approved", paid: "Paid", voided: "Voided" };
 
 export interface CalcProps {
   /** Where this screen lives (Admin & Master Setup or the Incentive Tracker): month and programme links stay there. */
@@ -46,20 +48,34 @@ export interface CalcProps {
   adjustmentsIn: { id: string; employeeName: string; kind: string; amountPaise: number; fromMonth: string; note: string }[];
   /** Approval and payout of the month (absent until it has been calculated). */
   workflow?: WorkflowProps | null;
+  /** The category (absent: Category A). */
+  category?: "A" | "B" | "C" | "D" | "E" | "F" | "G";
+  /** Categories C–G: each credited item, and why others weren't credited. */
+  items?: XItemRow[];
+  excludedNotes?: { documentNo: string | null; message: string }[];
+  /** Category B: each order's qualification and evidence, and the month's invoices with no Sales Order. */
+  qualifications?: BQualificationRow[];
+  reviewInvoices?: BReviewInvoice[];
+  /** Category B: whether the signed-in admin may decide qualification by hand (links to Review & decisions). */
+  canQualify?: boolean;
 }
 
 export function CategoryACalculation(p: CalcProps) {
   const router = useRouter();
   const [busy, setBusy] = React.useState(false);
   const [message, setMessage] = React.useState<{ tone: "ok" | "bad"; text: string; list?: string[] } | null>(null);
-  const go = (programId: string | null, month: string) => router.push(`${p.basePath ?? "/master-setup/incentive-rules/calculation"}?${new URLSearchParams({ ...(programId ? { program: programId } : {}), month: month.slice(0, 7) })}` as Route);
+  const isB = p.category === "B";
+  const isX = !!p.category && p.category !== "A" && p.category !== "B";
+  // Categories B–G carry their category in every request and link; Category A's are exactly as before.
+  const cat = p.category && p.category !== "A" ? { category: p.category } : {};
+  const go = (programId: string | null, month: string) => router.push(`${p.basePath ?? "/master-setup/incentive-rules/calculation"}?${new URLSearchParams({ ...(programId ? { program: programId } : {}), month: month.slice(0, 7), ...(p.category && p.category !== "A" && !(p.basePath ?? "").startsWith("/incentive/") ? { category: p.category } : {}) })}` as Route);
   const status = p.period?.status ?? "open";
 
   async function calculate() {
     if (!p.programId) return;
     setBusy(true);
     setMessage(null);
-    const r = await calculateCategoryAMonth({ programId: p.programId, month: p.month });
+    const r = await calculateCategoryAMonth({ programId: p.programId, month: p.month, ...cat });
     setBusy(false);
     if (!r.ok) return setMessage({ tone: "bad", text: r.error });
     setMessage({ tone: r.status === "blocked" ? "bad" : "ok", text: r.status === "blocked" ? "Not calculated:" : r.outcome, list: r.problems });
@@ -69,7 +85,7 @@ export function CategoryACalculation(p: CalcProps) {
   async function lock(on: boolean) {
     if (!p.programId || !p.period) return;
     setBusy(true);
-    const r = await setCategoryAMonthLocked({ programId: p.programId, month: p.month, lock: on, rowVersion: p.period.rowVersion });
+    const r = await setCategoryAMonthLocked({ programId: p.programId, month: p.month, lock: on, rowVersion: p.period.rowVersion, ...cat });
     setBusy(false);
     if (!r.ok) return setMessage({ tone: "bad", text: r.error });
     setMessage({ tone: "ok", text: on ? "Month locked." : "Month reopened.", list: r.notes });
@@ -79,7 +95,7 @@ export function CategoryACalculation(p: CalcProps) {
   if (!p.ready)
     return (
       <div role="status" className="rounded-section px-5 py-4 text-[14px] text-ink-muted" style={{ background: "var(--color-amber-bg)", border: "1px solid color-mix(in srgb, var(--color-amber) 35%, transparent)" }}>
-        <strong className="text-ink-strong">Database updates 0132 and 0133 needed.</strong> Calculations can be made once they are applied. The live Incentive Tracker is not affected.
+        <strong className="text-ink-strong">{p.category === "C" ? "Database updates 0134, 0135 and 0136 needed." : isX ? "Database updates 0134 and 0135 needed." : isB ? "Database update 0134 needed." : "Database updates 0132 and 0133 needed."}</strong> Calculations can be made once {isB ? "it is" : "they are"} applied. The live Incentive Tracker is not affected.
       </div>
     );
 
@@ -106,7 +122,7 @@ export function CategoryACalculation(p: CalcProps) {
         </span>
         <span className="ml-auto flex gap-2">
           {p.canRun && (
-            <button type="button" disabled={busy || !p.programId || status === "paid"} onClick={calculate} className="inline-flex h-9 items-center gap-1.5 rounded-pill px-4 text-[13px] font-bold text-white disabled:opacity-50" style={{ background: MASTERS_GRADIENT }}>
+            <button type="button" disabled={busy || !p.programId || status === "paid" || status === "voided"} onClick={calculate} className="inline-flex h-9 items-center gap-1.5 rounded-pill px-4 text-[13px] font-bold text-white disabled:opacity-50" style={{ background: MASTERS_GRADIENT }}>
               <Calculator size={15} aria-hidden /> Calculate
             </button>
           )}
@@ -159,7 +175,7 @@ export function CategoryACalculation(p: CalcProps) {
             <table className="w-full text-[12.5px]" style={{ minWidth: 720 }}>
               <thead>
                 <tr className="text-left text-ink-subtle">
-                  {["Salesperson", "Sales", "Qualifies", "Earned", "Payable", "Pending", "Not yet received"].map((h) => (
+                  {(isB ? ["Salesperson", "Qualifying taxable", "Credited", "Earned", "Payable", "Pending", "Not yet received"] : ["Salesperson", "Sales", "Qualifies", "Earned", "Payable", "Pending", "Not yet received"]).map((h) => (
                     <th key={h} className="px-2 py-1 font-semibold">
                       {h}
                     </th>
@@ -192,12 +208,12 @@ export function CategoryACalculation(p: CalcProps) {
             </table>
           </div>
           <details className="mt-3">
-            <summary className="cursor-pointer text-[13px] font-semibold text-ink-strong">Orders ({p.current.orders.length})</summary>
+            <summary className="cursor-pointer text-[13px] font-semibold text-ink-strong">{isB ? "Qualifying invoices" : "Orders"} ({p.current.orders.length})</summary>
             <div className="mt-1 overflow-x-auto">
               <table className="w-full text-[12.5px]" style={{ minWidth: 760 }} aria-label="Orders">
                 <thead>
                   <tr className="text-left text-ink-subtle">
-                    {["Sales Order", "Salesperson", "Counted value", "To collect", "Collected", "Status"].map((h) => (
+                    {[isB ? "Invoice" : "Sales Order", "Salesperson", isB ? "Net taxable" : "Counted value", "To collect", "Collected", "Status"].map((h) => (
                       <th key={h} className="px-2 py-1 font-semibold">
                         {h}
                       </th>
@@ -261,7 +277,11 @@ export function CategoryACalculation(p: CalcProps) {
         </section>
       )}
 
-      {p.workflow && <CalcWorkflow {...p.workflow} />}
+      {isX && <XItems items={p.items ?? []} excluded={p.excludedNotes ?? []} />}
+
+      {isB && <BQualifications rows={p.qualifications ?? []} reviewInvoices={p.reviewInvoices ?? []} canQualify={!!p.canQualify} />}
+
+      {p.workflow && <CalcWorkflow {...p.workflow} category={p.category} />}
 
       {!!p.adjustmentsIn.length && (
         <section aria-label="Carried into this month" className="rounded-section bg-white p-4 text-[12.5px]" style={CARD}>

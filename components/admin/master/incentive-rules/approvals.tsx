@@ -4,7 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import type { Route } from "next";
 import { useRouter } from "next/navigation";
-import { BLUE, CARD, FIELD, NotReady, day, rs } from "./calc-ui";
+import { BLUE, CARD, FIELD, NotReady, day, rs, type CalcCat } from "./calc-ui";
 
 /**
  * Approvals: every calculated month of a programme — its status, calculation, who submitted it and when, the current
@@ -16,6 +16,10 @@ import { BLUE, CARD, FIELD, NotReady, day, rs } from "./calc-ui";
 export interface ApprovalsProps {
   /** Where the Calculation screen lives for month links (Admin & Master Setup or the Incentive Tracker). */
   basePath?: string;
+  /** Added to every link (Category B in Admin & Master Setup: "&category=B"). */
+  extraQuery?: string;
+  /** The category shown, so a missing database update is named correctly (A: 0132/0133; B: 0134; C–G: 0134 + 0135). */
+  category?: CalcCat;
   ready: boolean;
   today: string;
   programs: { id: string; code: string; name: string }[];
@@ -35,6 +39,8 @@ export interface ApprovalsProps {
     approvals: { submissionNo: number; stepNo: number; decision: string; reason: string | null; actorName: string; at: string }[];
     releaseOn: string | null;
     payout: { reference: string; paidOn: string; totalPaise: number; recordedByName: string; lines?: { employeeName: string; payablePaise: number; adjustmentsPaise: number; amountPaise: number }[] } | null;
+    /** Category C: the month was voided (its status then reads "voided"). */
+    voided?: { reason: string; byName: string; at: string; carriedToMonth: string | null } | null;
   }[];
 }
 
@@ -44,19 +50,20 @@ const STATUS: Record<string, { label: string; color: string; bg: string }> = {
   submitted: { label: "Awaiting approval", color: "#B45309", bg: "#FFFBEB" },
   approved: { label: "Approved", color: "#047857", bg: "#ECFDF5" },
   paid: { label: "Paid", color: "#334155", bg: "#E2E8F0" },
+  voided: { label: "Voided", color: "#B91C1C", bg: "#FEF2F2" },
 };
 const monthLabel = (m: string) => new Date(`${m}T00:00:00Z`).toLocaleDateString("en-IN", { month: "short", year: "numeric", timeZone: "UTC" });
 
 export function Approvals(p: ApprovalsProps) {
   const router = useRouter();
   const [filter, setFilter] = React.useState<"all" | "action" | "paid">("all");
-  if (!p.ready) return <NotReady />;
+  if (!p.ready) return <NotReady category={p.category ?? "A"} />;
   const shown = p.periods.filter((x) => (filter === "action" ? x.status === "submitted" || x.status === "approved" : filter === "paid" ? x.status === "paid" : true));
 
   return (
     <div className="grid gap-3">
       <div className="flex flex-wrap items-end gap-2">
-        <select className={FIELD} value={p.programId ?? ""} onChange={(e) => router.push(`${p.basePath ?? "/master-setup/incentive-rules/calculation"}/approvals?program=${e.target.value}` as Route)} aria-label="Programme">
+        <select className={FIELD} value={p.programId ?? ""} onChange={(e) => router.push(`${p.basePath ?? "/master-setup/incentive-rules/calculation"}/approvals?program=${e.target.value}${p.extraQuery ?? ""}` as Route)} aria-label="Programme">
           {!p.programs.length && <option value="">No programme yet</option>}
           {p.programs.map((x) => (
             <option key={x.id} value={x.id}>
@@ -97,7 +104,7 @@ export function Approvals(p: ApprovalsProps) {
               return (
                 <tr key={x.id} className="border-t border-hairline align-top" aria-label={`Month ${x.month.slice(0, 7)}`}>
                   <td className="px-3 py-2 font-semibold">
-                    <Link href={`${p.basePath ?? "/master-setup/incentive-rules/calculation"}?program=${p.programId}&month=${x.month.slice(0, 7)}` as Route} className="underline-offset-2 hover:underline" style={{ color: BLUE }}>
+                    <Link href={`${p.basePath ?? "/master-setup/incentive-rules/calculation"}?program=${p.programId}&month=${x.month.slice(0, 7)}${p.extraQuery ?? ""}` as Route} className="underline-offset-2 hover:underline" style={{ color: BLUE }}>
                       {monthLabel(x.month)}
                     </Link>
                   </td>
@@ -105,6 +112,12 @@ export function Approvals(p: ApprovalsProps) {
                     <span className="rounded px-1.5 py-0.5 text-[11.5px] font-bold" style={{ color: st.color, background: st.bg }}>
                       {st.label}
                     </span>
+                    {x.voided && (
+                      <span className="mt-0.5 block text-[11.5px] text-ink-muted">
+                        by {x.voided.byName}, {day(x.voided.at)}: {x.voided.reason}
+                        {x.voided.carriedToMonth ? ` (carried into ${x.voided.carriedToMonth.slice(0, 7)})` : ""}
+                      </span>
+                    )}
                   </td>
                   <td className="px-3 py-2">
                     {x.run ? (
@@ -167,6 +180,8 @@ export function Approvals(p: ApprovalsProps) {
                       </>
                     ) : x.status === "paid" ? (
                       "Paid"
+                    ) : x.status === "voided" ? (
+                      <span className="text-ink-subtle">Never paid (voided)</span>
                     ) : x.status === "approved" ? (
                       <span className={eligible ? "font-semibold text-[#047857]" : "text-[#B45309]"}>{eligible ? `Eligible since ${day(x.releaseOn)}` : `Eligible from ${day(x.releaseOn)}`}</span>
                     ) : (

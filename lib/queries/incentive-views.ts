@@ -112,8 +112,8 @@ export async function getMyActivity(employeeId: string): Promise<ActivityRow[]> 
 }
 
 // ── My History (earnings by month) ───────────────────────────────────────────
-/** One month of the OLD engine's ledger: its total, and the part of it that is (historical) Category A. */
-export interface HistoryRow { period: string; totalPaise: number; status: string; categoryAPaise: number; }
+/** One month of the OLD engine's ledger: its total, and the parts of it that are Category A and Category B. */
+export interface HistoryRow { period: string; totalPaise: number; status: string; categoryAPaise: number; categoryBPaise: number; byCategory: Record<string, number>; }
 
 export async function getMyHistory(employeeId: string): Promise<HistoryRow[]> {
   const rows = await db
@@ -121,11 +121,19 @@ export async function getMyHistory(employeeId: string): Promise<HistoryRow[]> {
       period: incentivePeriods.month, status: incentivePeriods.status,
       total: sql<number>`sum(${incentiveLedger.amountPaise})::bigint`,
       categoryA: sql<number>`coalesce(sum(${incentiveLedger.amountPaise}) filter (where ${incentiveLedger.category} = 'A'), 0)::bigint`,
+      categoryB: sql<number>`coalesce(sum(${incentiveLedger.amountPaise}) filter (where ${incentiveLedger.category} = 'B'), 0)::bigint`,
     })
     .from(incentiveLedger)
     .innerJoin(incentivePeriods, eq(incentiveLedger.periodId, incentivePeriods.id))
     .where(eq(incentiveLedger.employeeId, employeeId))
     .groupBy(incentivePeriods.month, incentivePeriods.status)
     .orderBy(desc(incentivePeriods.month));
-  return rows.map((r) => ({ period: r.period, totalPaise: Number(r.total), status: r.status, categoryAPaise: Number(r.categoryA) }));
+  // Per-category totals of each month (the history keeps a cut-over category's old lines apart).
+  const per = await db
+    .select({ period: incentivePeriods.month, category: incentiveLedger.category, t: sql<number>`sum(${incentiveLedger.amountPaise})::bigint` })
+    .from(incentiveLedger)
+    .innerJoin(incentivePeriods, eq(incentiveLedger.periodId, incentivePeriods.id))
+    .where(eq(incentiveLedger.employeeId, employeeId))
+    .groupBy(incentivePeriods.month, incentiveLedger.category);
+  return rows.map((r) => ({ period: r.period, totalPaise: Number(r.total), status: r.status, categoryAPaise: Number(r.categoryA), categoryBPaise: Number(r.categoryB), byCategory: Object.fromEntries(per.filter((x) => x.period === r.period).map((x) => [x.category, Number(x.t)])) }));
 }

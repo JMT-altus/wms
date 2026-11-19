@@ -33,10 +33,12 @@ export function VerificationQueue({ items }: { items: PendingItem[] }) {
 function Row({ it, first }: { it: PendingItem; first: boolean }) {
   const router = useRouter();
   const [pending, start] = useTransition();
-  const [award, setAward] = useState("250");
+  const [award, setAward] = useState("");
   const [names, setNames] = useState(!!it.namesTeamMember);
+  const [error, setError] = useState<string | null>(null);
 
   function decide(decision: "approved" | "rejected") {
+    setError(null);
     start(async () => {
       const res = await reviewSubmission({
         queue: it.queue, id: it.id, decision,
@@ -44,6 +46,7 @@ function Row({ it, first }: { it: PendingItem; first: boolean }) {
         namesTeamMember: it.queue === "testimonial" ? names : undefined,
       });
       if (res.ok) router.refresh();
+      else setError(res.error);
     });
   }
 
@@ -55,12 +58,13 @@ function Row({ it, first }: { it: PendingItem; first: boolean }) {
       <div className="flex-1 min-w-0">
         <div className="font-bold text-ink-strong text-[14px]">{it.employeeName} <span className="text-ink-subtle font-semibold">· {it.period}</span></div>
         <div className="text-ink-muted text-[13px] mt-0.5 truncate">{it.summary}</div>
+        {error && <div role="alert" className="text-[12.5px] font-semibold mt-1" style={{ color: "#b91c1c" }}>{error}</div>}
       </div>
 
       {it.needsAward && (
-        <label className="shrink-0 flex items-center gap-1.5">
-          <span className="text-ink-subtle text-[12px] font-bold">₹</span>
-          <input value={award} onChange={(e) => setAward(e.target.value)} type="number" min={250} max={1000} className="w-20 rounded-lg px-2 py-1.5 text-[13px]" style={{ border: "1px solid rgba(15,23,42,0.14)" }} />
+        <label className="shrink-0 flex items-center gap-1.5" title="Kept within the configured smallest and largest award when the month is calculated">
+          <span className="text-ink-subtle text-[12px] font-bold">Award ₹</span>
+          <input aria-label="Award (₹)" value={award} onChange={(e) => setAward(e.target.value)} type="number" min={0} className="w-24 rounded-lg px-2 py-1.5 text-[13px]" style={{ border: "1px solid rgba(15,23,42,0.14)" }} />
         </label>
       )}
       {it.queue === "testimonial" && (

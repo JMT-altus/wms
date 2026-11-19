@@ -250,13 +250,38 @@ async function buildNewCustomerCohorts(
  * nothing published, nothing changes.
  */
 export async function newCategoryAAuthoritative(period: string): Promise<boolean> {
+  return newEngineAuthoritative("A", period);
+}
+
+/**
+ * Whether the NEW engine of a category (Category A, or Category B — lib/incentives/category-b) is authoritative for a
+ * month: a PUBLISHED configuration of that category, of any programme, covers the month's first day — that is, from
+ * the published configuration's effective (cut-over) month on. From such a month this old engine no longer calculates
+ * the category and never deletes or changes its own earlier rows for it (they stay as historical records); before it,
+ * nothing changes. Before 0131 exists, or with nothing published, the old engine stays authoritative.
+ */
+export async function newEngineAuthoritative(category: "A" | "B", period: string): Promise<boolean> {
   const start = `${period}-01`;
   const res = await db.execute(sql`
     select case when to_regclass('public.incentive_config_versions') is null then false
-      else exists (select 1 from incentive_config_versions v where v.category_code = 'A' and v.status = 'published'
+      else exists (select 1 from incentive_config_versions v where v.category_code = ${category} and v.status = 'published'
         and v.effective_from <= ${start}::date and (v.effective_to is null or v.effective_to >= ${start}::date)) end as yes`);
   const rows = (Array.isArray(res) ? res : ((res as unknown as { rows?: unknown[] }).rows ?? [])) as { yes: boolean }[];
   return rows[0]?.yes === true;
+}
+
+/**
+ * Every category whose NEW engine is authoritative for the month (a published configuration of it covers the month's
+ * first day). One read; before 0131 exists, none.
+ */
+export async function authoritativeCategories(period: string): Promise<Set<string>> {
+  const start = `${period}-01`;
+  const res = await db.execute(sql`
+    select case when to_regclass('public.incentive_config_versions') is null then null
+      else (select coalesce(string_agg(distinct v.category_code, ','), '') from incentive_config_versions v where v.status = 'published'
+        and v.effective_from <= ${start}::date and (v.effective_to is null or v.effective_to >= ${start}::date)) end as cats`);
+  const rows = (Array.isArray(res) ? res : ((res as unknown as { rows?: unknown[] }).rows ?? [])) as { cats: string | null }[];
+  return new Set((rows[0]?.cats ?? "").split(",").filter(Boolean));
 }
 
 /** Ensure a period row exists; return its id. */
@@ -280,6 +305,20 @@ export async function computePeriodForEmployee(
   // the only thing `sales` feeds). B–G are unaffected.
   const newA = await newCategoryAAuthoritative(period);
   if (newA) input.sales = undefined;
+  // Likewise Category B (cross-sell): from the published Category B configuration's cut-over month, the new engine
+  // calculates it and this one no longer does.
+  const newB = await newEngineAuthoritative("B", period);
+  if (newB) input.crossSellInvoices = [];
+  // And Categories C–F, each from its own published configuration's month (G has no old-engine rule).
+  const newer = await authoritativeCategories(period);
+  if (newer.has("C")) input.newCustomerCohorts = [];
+  if (newer.has("D")) {
+    input.leadBatches = [];
+    input.leadConversions = [];
+  }
+  if (newer.has("E")) input.meetings = [];
+  if (newer.has("F")) input.testimonials = [];
+  const kept = (["C", "D", "E", "F"] as const).filter((c) => newer.has(c));
   const result = evaluate(input, scheme);
   const periodId = await ensurePeriod(period);
 
@@ -296,7 +335,7 @@ export async function computePeriodForEmployee(
   // exactly as they are (historical records), so only B–G accruals are cleared and rewritten.
   await db
     .delete(incentiveLedger)
-    .where(and(eq(incentiveLedger.employeeId, employeeId), eq(incentiveLedger.periodId, periodId), eq(incentiveLedger.entryType, "accrual"), ...(newA ? [ne(incentiveLedger.category, "A")] : [])));
+    .where(and(eq(incentiveLedger.employeeId, employeeId), eq(incentiveLedger.periodId, periodId), eq(incentiveLedger.entryType, "accrual"), ...(newA ? [ne(incentiveLedger.category, "A")] : []), ...(newB ? [ne(incentiveLedger.category, "B")] : []), ...kept.map((c) => ne(incentiveLedger.category, c))));
 
   for (const line of result.lines) {
     await db

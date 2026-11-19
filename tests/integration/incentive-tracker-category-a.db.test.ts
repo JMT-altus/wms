@@ -59,7 +59,8 @@ beforeAll(async () => {
   views = await import("@/lib/queries/incentive-views");
 
   // The OLD tracker's own records for the rep: June 2026 — ₹1.2 Cr category-A sales (paid on time) and a ₹2 L
-  // category-B order; July 2026 — a PAID month with its ledger and payout run.
+  // category-B order; March 2026 — a PAID month with its ledger and payout run (before the April cut-over: a
+  // Category A version is never published over a month the old engine already paid).
   const cust = (await one<{ id: string }>(`insert into customers (name) values ('Tracker Customer') returning id`)).id;
   const sale = async (cat: string, value: number, date: string) => {
     const o = (await one<{ id: string }>(`insert into sales_orders (customer_id, owner_id, order_value_paise, category_code, booked_at, confirmed) values ($1, $2, $3, $4, $5, true) returning id`, [cust, who.rep, value, cat, date])).id;
@@ -69,9 +70,9 @@ beforeAll(async () => {
   await sale("A", L(120), "2026-06-05");
   await sale("B", L(2), "2026-06-06");
   await load.computePeriodForEmployee(who.rep!, "2026-06", new Date("2026-08-01T00:00:00Z"));
-  const july = (await one<{ id: string }>(`insert into incentive_periods (month, status) values ('2026-07', 'paid') returning id`)).id;
-  await pg.query(`insert into incentive_ledger (employee_id, period_id, rule_line_code, category, entry_type, amount_paise, source_ref) values ($1, $2, 'A.1', 'A', 'accrual', 150000, 'slab:A.1'), ($1, $2, 'B.1', 'B', 'accrual', 50000, 'crosssell:x')`, [who.rep, july]);
-  await pg.query(`insert into payout_runs (period_id, total_paise) values ($1, 200000)`, [july]);
+  const paidMonth = (await one<{ id: string }>(`insert into incentive_periods (month, status) values ('2026-03', 'paid') returning id`)).id;
+  await pg.query(`insert into incentive_ledger (employee_id, period_id, rule_line_code, category, entry_type, amount_paise, source_ref) values ($1, $2, 'A.1', 'A', 'accrual', 150000, 'slab:A.1'), ($1, $2, 'B.1', 'B', 'accrual', 50000, 'crosssell:x')`, [who.rep, paidMonth]);
+  await pg.query(`insert into payout_runs (period_id, total_paise) values ($1, 200000)`, [paidMonth]);
 }, 180_000);
 afterAll(async () => {
   await pg.close();
@@ -88,10 +89,10 @@ describe("before any Category A configuration is published: the old engine is un
 
 describe("once Category A is published from April: the new engine is authoritative", () => {
   let juneA: Awaited<ReturnType<typeof ledger>>;
-  let julyBefore = "";
+  let paidBefore = "";
   it("publishing a Category A configuration makes April onwards authoritative", async () => {
     juneA = (await ledger("2026-06")).filter((r) => r.category === "A");
-    julyBefore = await fp(`select l.* from incentive_ledger l join incentive_periods p on p.id = l.period_id where p.month = '2026-07'`) + (await fp(`select * from incentive_periods where month = '2026-07'`)) + (await fp(`select * from payout_runs`));
+    paidBefore = await fp(`select l.* from incentive_ledger l join incentive_periods p on p.id = l.period_id where p.month = '2026-03'`) + (await fp(`select * from incentive_periods where month = '2026-03'`)) + (await fp(`select * from payout_runs`));
     const author = actor("author"), checker = actor("checker");
     const p = await rules.createProgram(author, { code: "SALES", name: "Sales team", description: null });
     if (!p.ok) throw new Error(p.error);
@@ -128,10 +129,10 @@ describe("once Category A is published from April: the new engine is authoritati
     const b = (await ledger("2026-06")).filter((x) => x.category === "B").reduce((s, x) => s + x.amount_paise, 0);
     expect(p.grandTotalPaise).toBe(b);
   });
-  it("the paid July month is untouched by recomputing it", async () => {
-    await load.computePeriodForEmployee(who.rep!, "2026-07", new Date("2026-08-15T00:00:00Z"));
-    const after = await fp(`select l.* from incentive_ledger l join incentive_periods p on p.id = l.period_id where p.month = '2026-07'`) + (await fp(`select * from incentive_periods where month = '2026-07'`)) + (await fp(`select * from payout_runs`));
-    expect(after).toBe(julyBefore);
+  it("the paid March month (the old engine's, before the cut-over) is untouched by recomputing it", async () => {
+    await load.computePeriodForEmployee(who.rep!, "2026-03", new Date("2026-04-15T00:00:00Z"));
+    const after = await fp(`select l.* from incentive_ledger l join incentive_periods p on p.id = l.period_id where p.month = '2026-03'`) + (await fp(`select * from incentive_periods where month = '2026-03'`)) + (await fp(`select * from payout_runs`));
+    expect(after).toBe(paidBefore);
   });
   it("history keeps historical Category A apart from the rest", async () => {
     const hist = await views.getMyHistory(who.rep!);

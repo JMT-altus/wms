@@ -145,7 +145,7 @@ export const MODULES: ModuleDef[] = [
     routes: ["/incentive", "/outstanding", "/record-reference", "/participant-breakthrough"],
     accent: { from: "#6366F1", to: "#3F3FB0", ink: "#4F46E5" },
     items: [
-      { href: "/incentive", label: "My Incentives", icon: "Award", notMatch: ["/incentive/sales", "/incentive/activity", "/incentive/history", "/incentive/admin", "/incentive/category-a"] },
+      { href: "/incentive", label: "My Incentives", icon: "Award", notMatch: ["/incentive/sales", "/incentive/activity", "/incentive/history", "/incentive/admin", "/incentive/category-a", "/incentive/category-b", "/incentive/category/"] },
       { href: "/incentive/sales", label: "My Sales", icon: "IndianRupee" },
       { href: "/incentive/activity", label: "Activity", icon: "Sparkles" },
       { href: "/incentive/history", label: "History", icon: "CalendarRange" },
@@ -154,6 +154,11 @@ export const MODULES: ModuleDef[] = [
       // Calculation permissions on the server (a salesperson sees their approved amounts on My Incentives).
       { href: "/incentive/category-a", label: "Category A", icon: "Gauge", adminOnly: true, notMatch: ["/incentive/category-a/approvals"] },
       { href: "/incentive/category-a/approvals", label: "Category A Approvals", icon: "ListChecks", adminOnly: true },
+      // Category B (authoritative from its published configuration's cut-over month), the same way.
+      { href: "/incentive/category-b", label: "Category B", icon: "Gauge", adminOnly: true, notMatch: ["/incentive/category-b/approvals"] },
+      { href: "/incentive/category-b/approvals", label: "Category B Approvals", icon: "ListChecks", adminOnly: true },
+      // Categories C–G (each authoritative from its own published configuration's month), the same way.
+      { href: "/incentive/category/c", label: "Categories C–G", icon: "Gauge", adminOnly: true, notMatch: ["/incentive/category-a", "/incentive/category-b"] },
       { href: "/outstanding", label: "Outstanding", icon: "Contact" },
     ],
   },

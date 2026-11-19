@@ -2,8 +2,11 @@ import {
   ELIGIBILITY_SUBJECTS,
   SECTIONS,
   SETTING,
-  SETTINGS,
   SLAB_VALUE_TYPES,
+  hasDelaySteps,
+  hasSlabs,
+  settingsFor,
+  type CategoryCode,
   type DelayStep,
   type EligibilityRow,
   type IncentiveConfig,
@@ -36,6 +39,8 @@ export interface Issue {
 export interface CheckContext {
   /** Employee roles a "role" eligibility row may name (the employees' own role values). */
   roles: readonly string[];
+  /** The category the configuration is for (absent: Category A). */
+  category?: CategoryCode;
 }
 
 const sectionLabel = (k: SectionKey) => SECTIONS.find((s) => s.key === k)!.label;
@@ -70,9 +75,11 @@ export function settingProblem(def: SettingDef, v: unknown): string | null {
     case "amount":
       return isInt(v, 0, MAX_PAISE) ? null : "Enter an amount of ₹0 or more.";
     case "cap":
-      return v === "none" || isInt(v, 0, MAX_PAISE) ? null : "Choose \"No limit\" or enter an amount of ₹0 or more.";
+      return v === "none" || isInt(v, 0, MAX_PAISE) ? null : `Choose "${def.noneLabel ?? "No limit"}" or enter an amount of ₹0 or more.`;
     case "integer":
       return isInt(v, def.min ?? 0, def.max ?? Number.MAX_SAFE_INTEGER) ? null : `Enter a whole number from ${def.min ?? 0} to ${def.max ?? "any"}.`;
+    case "rate":
+      return isInt(v, 0, PPM_100) ? null : "Enter a percentage from 0% to 100%.";
   }
 }
 
@@ -154,29 +161,54 @@ function eligibilityIssues(rows: readonly EligibilityRow[], ctx: CheckContext): 
 
 /** Every problem and everything missing. `problems` must be empty to save; both must be empty to submit or publish. */
 export function checkConfig(c: IncentiveConfig, ctx: CheckContext): { problems: Issue[]; missing: Issue[] } {
+  const category = ctx.category ?? "A";
+  const defs = settingsFor(category);
+  const defOf = new Map(defs.map((d) => [d.key, d]));
   const problems: Issue[] = [];
   const missing: Issue[] = [];
   for (const [key, value] of Object.entries(c.settings)) {
-    const def = SETTING[key];
+    const def = defOf.get(key);
     if (!def) {
-      problems.push({ section: "general", where: key, message: `“${key}” isn't an Incentive Rules setting.` });
+      problems.push({ section: "general", where: key, message: SETTING[key] ? `“${SETTING[key]!.label}” isn't a Category ${category} setting.` : `“${key}” isn't an Incentive Rules setting.` });
       continue;
     }
     const p = settingProblem(def, value);
     if (p) problems.push({ section: def.section, where: key, message: `${def.label}: ${p}` });
   }
-  for (const def of SETTINGS) {
+  for (const def of defs) {
     if (def.required && applies(def, c.settings) && c.settings[def.key] === undefined) {
       missing.push({ section: def.section, where: def.key, message: `${def.label} (${sectionLabel(def.section)}) isn't set.` });
     }
   }
-  for (const m of slabIssues(c.slabs, c.settings["slabs.gaps"])) problems.push({ section: "slabs", where: "slabs", message: m });
-  if (!c.slabs.length) missing.push({ section: "slabs", where: "slabs", message: "No incentive slab yet (Incentive Slabs)." });
-  for (const m of stepIssues(c.delaySteps)) problems.push({ section: "delay", where: "delaySteps", message: m });
-  if (!c.delaySteps.length) missing.push({ section: "delay", where: "delaySteps", message: "No collection delay step yet (Collection and Payment Delay)." });
+  if (hasSlabs(category)) {
+    for (const m of slabIssues(c.slabs, c.settings["slabs.gaps"])) problems.push({ section: "slabs", where: "slabs", message: m });
+    if (!c.slabs.length) missing.push({ section: "slabs", where: "slabs", message: "No incentive slab yet (Incentive Slabs)." });
+  } else if (c.slabs.length) problems.push({ section: "qualification", where: "slabs", message: `Category ${category} has no incentive slabs; remove them.` });
+  if (hasDelaySteps(category)) {
+    for (const m of stepIssues(c.delaySteps)) problems.push({ section: "delay", where: "delaySteps", message: m });
+    if (!c.delaySteps.length) missing.push({ section: "delay", where: "delaySteps", message: "No collection delay step yet (Collection and Payment Delay)." });
+  } else if (c.delaySteps.length) problems.push({ section: "rewards", where: "delaySteps", message: `Category ${category} isn't collected, so it has no delay steps; remove them.` });
   for (const m of eligibilityIssues(c.eligibility, ctx)) problems.push({ section: "people", where: "eligibility", message: m });
   if (!c.eligibility.some((r) => r.mode === "include")) missing.push({ section: "people", where: "eligibility", message: "Nobody is included yet (Salesperson Eligibility)." });
+  if (category === "B") for (const p of categoryBIssues(c)) problems.push(p);
+  if (category === "C") {
+    const vf = c.settings["basis.voucherFilter"];
+    if (Array.isArray(vf) && !vf.includes("cancelled")) problems.push({ section: "general", where: "basis.voucherFilter", message: "Orders left out: a cancelled order is never a customer's transaction; choose Cancelled." });
+  }
+  if (category === "E" && typeof c.settings["e.minAward"] === "number" && typeof c.settings["e.maxAward"] === "number" && (c.settings["e.minAward"] as number) > (c.settings["e.maxAward"] as number))
+    problems.push({ section: "rewards", where: "e.minAward", message: "The smallest award for a meeting is more than the largest." });
   return { problems, missing };
+}
+
+/**
+ * Category B's cross-checks, from its confirmed decisions: cancelled orders are always left out (they must be among
+ * "Orders left out"). The narrowed choices of the recovery settings are checked as each setting's own choices.
+ */
+function categoryBIssues(c: IncentiveConfig): Issue[] {
+  const out: Issue[] = [];
+  const vf = c.settings["basis.voucherFilter"];
+  if (Array.isArray(vf) && !vf.includes("cancelled")) out.push({ section: "qualification", where: "basis.voucherFilter", message: "Orders left out: cancelled orders are always left out of Category B (confirmed decision); choose Cancelled." });
+  return out;
 }
 
 /* ── reading untrusted input ─────────────────────────────────────────── */
@@ -253,9 +285,11 @@ export function settingText(def: SettingDef, v: SettingValue | undefined): strin
     case "amount":
       return typeof v === "number" ? rupees(v) : String(v);
     case "cap":
-      return v === "none" ? "No limit" : typeof v === "number" ? rupees(v) : String(v);
+      return v === "none" ? (def.noneLabel ?? "No limit") : typeof v === "number" ? rupees(v) : String(v);
     case "integer":
       return String(v);
+    case "rate":
+      return typeof v === "number" ? pct(v) : String(v);
   }
 }
 export const slabText = (s: Slab) => `${s.lineCode} ${s.label}: ${rupees(s.fromPaise)} – ${rupees(s.toPaise)} at ${s.valueType === "percent" ? pct(s.ratePpm ?? 0) : rupees(s.fixedPaise ?? 0)}${s.capPaise !== null ? `, at most ${rupees(s.capPaise)}` : ""}`;
@@ -264,9 +298,9 @@ export const eligibilityText = (r: EligibilityRow) => `${r.mode === "include" ? 
 export { rupees, pct };
 
 /** What changed from `a` to `b`: each setting, and each list as a whole. */
-export function diffConfigs(a: IncentiveConfig, b: IncentiveConfig): Difference[] {
+export function diffConfigs(a: IncentiveConfig, b: IncentiveConfig, category: CategoryCode = "A"): Difference[] {
   const out: Difference[] = [];
-  for (const def of SETTINGS) {
+  for (const def of settingsFor(category)) {
     const x = settingText(def, a.settings[def.key]);
     const y = settingText(def, b.settings[def.key]);
     if (x !== y) out.push({ section: def.section, label: def.label, before: x, after: y });

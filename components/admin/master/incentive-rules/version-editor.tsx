@@ -12,8 +12,9 @@ import { MASTERS_GRADIENT, MASTERS_GRADIENT_BAR, MASTERS_INK } from "@/component
 import {
   CATEGORY_LABEL,
   SECTIONS,
-  SETTINGS,
   SOURCE_LABEL,
+  sectionsFor,
+  settingsFor,
   type CategoryCode,
   type DelayStep,
   type EligibilityRow,
@@ -50,7 +51,7 @@ const FIELD = "h-9 w-full rounded-lg border bg-white px-2.5 text-[13px] text-ink
 const OK = "border-hairline-strong";
 const BAD = "border-[#DC2626] bg-[#FEF2F2]";
 const CARD: React.CSSProperties = { border: "1px solid var(--color-hairline)", boxShadow: "0 2px 6px -2px rgba(15, 23, 42, 0.06)" };
-const SOURCE_TONE: Record<Source, [string, string]> = { pdf: ["#047857", "#ECFDF5"], screenshot: ["#0369A1", "#E0F2FE"], option: ["#B45309", "#FFFBEB"] };
+const SOURCE_TONE: Record<Source, [string, string]> = { pdf: ["#047857", "#ECFDF5"], screenshot: ["#0369A1", "#E0F2FE"], option: ["#B45309", "#FFFBEB"], decision: ["#6D28D9", "#F5F3FF"] };
 
 export interface EditorVersion {
   id: string;
@@ -216,13 +217,15 @@ function SettingInput({ def, value, onChange, disabled }: { def: SettingDef; val
       return <NumberInput aria={aria} disabled={disabled} value={typeof value === "number" ? value : null} toText={rupeesText} parse={parseRupees} onChange={(v) => onChange(v ?? undefined)} suffix="₹" placeholder="Not set" />;
     case "integer":
       return <NumberInput aria={aria} disabled={disabled} value={typeof value === "number" ? value : null} toText={intText} parse={parseInt_} onChange={(v) => onChange(v ?? undefined)} placeholder="Not set" />;
+    case "rate":
+      return <NumberInput aria={aria} disabled={disabled} value={typeof value === "number" ? value : null} toText={percentText} parse={parsePercentPpm} onChange={(v) => onChange(v ?? undefined)} suffix="%" placeholder="Not set" />;
     case "cap": {
       const mode = value === undefined ? "" : value === "none" ? "none" : "amount";
       return (
         <div className="grid grid-cols-[160px_1fr] max-sm:grid-cols-1 gap-2">
           <select aria-label={`${aria} — kind`} disabled={disabled} className={`${FIELD} ${OK}`} value={mode} onChange={(e) => onChange(e.target.value === "none" ? "none" : e.target.value === "amount" ? 0 : undefined)}>
             <option value="">Not set</option>
-            <option value="none">No limit</option>
+            <option value="none">{def.noneLabel ?? "No limit"}</option>
             <option value="amount">An amount</option>
           </select>
           {mode === "amount" && <NumberInput aria={aria} disabled={disabled} value={typeof value === "number" ? value : null} toText={rupeesText} parse={parseRupees} onChange={(v) => onChange(v ?? 0)} suffix="₹" />}
@@ -436,7 +439,7 @@ function DiffTable({ diffs, empty }: { diffs: Difference[]; empty: string }) {
 }
 export { DiffTable };
 
-function Preview({ config, inForce, published, currentMonth, isDraft }: { config: IncentiveConfig; inForce: { versionNo: number; config: IncentiveConfig } | null; published: PublishedRange[]; currentMonth: string; isDraft: boolean }) {
+function Preview({ config, inForce, published, currentMonth, isDraft, category }: { config: IncentiveConfig; inForce: { versionNo: number; config: IncentiveConfig } | null; published: PublishedRange[]; currentMonth: string; isDraft: boolean; category: CategoryCode }) {
   const [month, setMonth] = React.useState(currentMonth.slice(0, 7));
   const day = `${month}-01`;
   const applying = published.find((p) => p.effectiveFrom <= day && (!p.effectiveTo || p.effectiveTo >= day));
@@ -452,8 +455,8 @@ function Preview({ config, inForce, published, currentMonth, isDraft }: { config
         </label>
         <span role="status" className="text-ink-strong">{applying ? `Version ${applying.versionNo} applies to ${month} (${applying.effectiveFrom} → ${applying.effectiveTo ?? "open"}).` : `No published version applies to ${month}.`}</span>
       </div>
-      {SECTIONS.map((s) => {
-        const defs = SETTINGS.filter((d) => d.section === s.key && applies(d, config.settings));
+      {sectionsFor(category).map((s) => {
+        const defs = settingsFor(category).filter((d) => d.section === s.key && applies(d, config.settings));
         return (
           <section key={s.key} aria-label={`Preview ${s.label}`}>
             <h3 className="mb-1 text-[13px] font-bold text-ink-strong">{s.label}</h3>
@@ -473,20 +476,20 @@ function Preview({ config, inForce, published, currentMonth, isDraft }: { config
       })}
       <section aria-label="Differences from the version in force">
         <h3 className="mb-1 text-[13px] font-bold text-ink-strong">{inForce ? `What ${isDraft ? "would change" : "differs"} from version ${inForce.versionNo} (in force this month)` : "Differences from the version in force"}</h3>
-        {inForce ? <DiffTable diffs={diffConfigs(inForce.config, config)} empty="Nothing differs." /> : <p className="text-[12.5px] text-ink-subtle">No version is in force this month.</p>}
+        {inForce ? <DiffTable diffs={diffConfigs(inForce.config, config, category)} empty="Nothing differs." /> : <p className="text-[12.5px] text-ink-subtle">No version is in force this month.</p>}
       </section>
     </div>
   );
 }
 
-function HistoryList({ history }: { history: EditorHistory[] }) {
+function HistoryList({ history, category }: { history: EditorHistory[]; category: CategoryCode }) {
   if (!history.length) return <p className="text-[12.5px] text-ink-subtle">No change yet.</p>;
   return (
     <ol className="grid gap-2">
       {history.map((h) => {
         const b = h.before as { config?: IncentiveConfig; status?: string; effectiveFrom?: string | null; effectiveTo?: string | null } | null;
         const a = h.after as { config?: IncentiveConfig; status?: string; effectiveFrom?: string | null; effectiveTo?: string | null } | null;
-        const diffs = b?.config && a?.config ? diffConfigs(b.config, a.config) : null;
+        const diffs = b?.config && a?.config ? diffConfigs(b.config, a.config, category) : null;
         return (
           <li key={h.eventNo} className="rounded-lg p-2.5 text-[12.5px]" style={{ border: "1px solid var(--color-hairline)" }}>
             <div className="flex flex-wrap gap-x-2">
@@ -532,15 +535,19 @@ export function IncentiveVersionEditor({ version, config: initial, inForce, publ
   currentMonth: string;
 }) {
   const router = useRouter();
+  // Every list below is this version's category's: its sections and settings (Category B has no slabs).
+  const category = version.categoryCode as CategoryCode;
+  const sections = sectionsFor(category);
+  const defs = settingsFor(category);
   const [config, setConfig] = React.useState<IncentiveConfig>(initial);
   const [changeNote, setChangeNote] = React.useState(version.changeNote ?? "");
   const [dirty, setDirty] = React.useState(false);
-  const [tab, setTab] = React.useState<Tab>("general");
+  const [tab, setTab] = React.useState<Tab>(sections[0]!.key);
   const [busy, setBusy] = React.useState(false);
   const [problem, setProblem] = React.useState<string | null>(null);
   const [dialog, setDialog] = React.useState<null | { kind: "approve" | "reject"; note: string } | { kind: "publish"; month: string }>(null);
   const editable = (version.status === "draft" || version.status === "rejected") && rights.edit;
-  const { problems, missing } = React.useMemo(() => checkConfig(config, { roles: choices.roles }), [config, choices.roles]);
+  const { problems, missing } = React.useMemo(() => checkConfig(config, { roles: choices.roles, category }), [config, choices.roles, category]);
 
   const update = (next: IncentiveConfig) => {
     setConfig(next);
@@ -685,7 +692,7 @@ export function IncentiveVersionEditor({ version, config: initial, inForce, publ
       </section>
 
       <div role="tablist" aria-label="Sections" className="flex flex-wrap gap-1.5">
-        {[...SECTIONS.map((s) => ({ key: s.key as Tab, label: s.label, count: sectionMissing(s.key) })), { key: "preview" as Tab, label: "Preview", count: 0 }, ...(history && rights.history ? [{ key: "history" as Tab, label: "History", count: 0 }] : [])].map((t) => (
+        {[...sections.map((s) => ({ key: s.key as Tab, label: s.label, count: sectionMissing(s.key) })), { key: "preview" as Tab, label: "Preview", count: 0 }, ...(history && rights.history ? [{ key: "history" as Tab, label: "History", count: 0 }] : [])].map((t) => (
           <button key={t.key} type="button" role="tab" aria-selected={tab === t.key} onClick={() => setTab(t.key)} className="rounded-pill px-3 py-1 text-[12.5px] font-bold" style={tab === t.key ? { background: MASTERS_INK, color: "#fff" } : { background: "#EEF1F6", color: "#172B4D" }}>
             {t.label}
             {t.count > 0 && <span className="ml-1 rounded-full px-1.5 text-[10.5px]" style={{ background: tab === t.key ? "rgba(255,255,255,.25)" : "#FDE68A", color: tab === t.key ? "#fff" : "#92400E" }}>{t.count}</span>}
@@ -695,13 +702,13 @@ export function IncentiveVersionEditor({ version, config: initial, inForce, publ
 
       <section role="tabpanel" aria-label={tab === "preview" ? "Preview" : tab === "history" ? "History" : SECTIONS.find((s) => s.key === tab)!.label} className="rounded-section bg-white p-4" style={CARD}>
         {tab === "preview" ? (
-          <Preview config={config} inForce={inForce} published={published} currentMonth={currentMonth} isDraft={editable} />
+          <Preview config={config} inForce={inForce} published={published} currentMonth={currentMonth} isDraft={editable} category={category} />
         ) : tab === "history" && rights.history ? (
-          <HistoryList history={history ?? []} />
+          <HistoryList history={history ?? []} category={category} />
         ) : (
           <>
             <div className="grid gap-3">
-              {SETTINGS.filter((d) => d.section === tab).map((d) => {
+              {defs.filter((d) => d.section === tab).map((d) => {
                 const shown = applies(d, config.settings);
                 if (!shown && config.settings[d.key] === undefined) return null;
                 const unset = d.required && shown && config.settings[d.key] === undefined;

@@ -9,8 +9,8 @@ import { CategoryCards } from "@/components/incentive/category-cards";
 import { EmptyState, PageHead } from "@/components/incentive/empty-state";
 import { ActivityFeed } from "@/components/incentive/activity-feed";
 import { getRepAudit } from "@/lib/queries/incentive-admin";
-import { myCategoryA } from "@/lib/queries/incentive-calc";
-import { newCategoryAAuthoritative } from "@/lib/incentives/load";
+import { myCategoryA, myCategoryB } from "@/lib/queries/incentive-calc";
+import { authoritativeCategories, newCategoryAAuthoritative, newEngineAuthoritative } from "@/lib/incentives/load";
 import { MyCategoryA } from "@/components/incentive/my-category-a";
 
 export const dynamic = "force-dynamic";
@@ -51,18 +51,27 @@ export default async function IncentiveOverviewPage({ searchParams }: PageProps)
   const sp = await searchParams;
   const period = typeof sp.period === "string" ? sp.period : currentPeriodIST();
 
-  const [summary, atRisk, monthlySales, activity, categoryA, newA] = await Promise.all([
+  const [summary, atRisk, monthlySales, activity, categoryA, newA, categoryB, newB] = await Promise.all([
     getIncentiveSummary(me.id, period),
     getAtRiskInvoices(me.id),
     getMonthlySales(me.id, period),
     getRepAudit(me.id, 8),
     myCategoryA(me.id),
     newCategoryAAuthoritative(period),
+    myCategoryB(me.id),
+    newEngineAuthoritative("B", period),
   ]);
-  // Category A is shown on its own (new authoritative engine + the old engine's historical lines); everything else on
-  // the page is the old engine's Categories B–G. Nothing is added across the two.
+  // Categories C–G: the person's own approved / paid figures from the new engine, category by category.
+  const newer = await authoritativeCategories(period);
+  const extra = await Promise.all((["C", "D", "E", "F", "G"] as const).map(async (c) => ({ c, mine: await myCategoryA(me.id, undefined, c), authoritative: newer.has(c) })));
+  // Category A is shown on its own (new authoritative engine + the old engine's historical lines); so is Category B
+  // from its cut-over month on. Everything else on the page is the old engine's. Nothing is added across them.
   const oldA = summary.lines.filter((l) => l.category === "A");
-  const otherLines = summary.lines.filter((l) => l.category !== "A");
+  const oldB = newB ? summary.lines.filter((l) => l.category === "B") : [];
+  const separate = new Set(["A", ...(newB ? ["B"] : []), ...[...newer].filter((c) => c !== "A")]);
+  const otherLines = summary.lines.filter((l) => !separate.has(l.category));
+  const remaining = ["B", "C", "D", "E", "F", "G"].filter((c) => !separate.has(c));
+  const others = remaining.length ? `Categories ${remaining.length > 1 ? `${remaining[0]}–${remaining[remaining.length - 1]}` : remaining[0]}` : "Other categories";
   const otherTotal = otherLines.reduce((s, l) => s + l.amountPaise, 0);
   const chip = STATUS_CHIP[summary.status] ?? STATUS_CHIP.open!;
   const headroom = Math.max(0, summary.schemeCapPaise - otherTotal);
@@ -87,9 +96,9 @@ export default async function IncentiveOverviewPage({ searchParams }: PageProps)
       <section className="relative overflow-hidden rounded-[24px] p-8 max-md:p-6 mb-6" style={{ background: "radial-gradient(90% 140% at 12% 0%, rgba(10,108,255,0.10), transparent 60%),linear-gradient(135deg, #ffffff 0%, #f4f8ff 100%)", border: "1px solid rgba(15,23,42,0.07)", boxShadow: "0 30px 60px -30px rgba(10,108,255,0.3), 0 2px 8px rgba(15,23,42,0.05), inset 0 1px 0 rgba(255,255,255,0.9)" }}>
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
-            <div className="text-ink-subtle text-[12.5px] font-bold uppercase tracking-[0.18em]">Earned this month · Categories B–G</div>
+            <div className="text-ink-subtle text-[12.5px] font-bold uppercase tracking-[0.18em]">Earned this month · {others}</div>
             <div className="mt-1" style={{ fontFamily: "var(--font-display), sans-serif", fontWeight: 800, fontSize: 52, lineHeight: 1, letterSpacing: "-0.03em", fontVariantNumeric: "tabular-nums" }}>{formatInrPaise(otherTotal)}</div>
-            <div className="mt-1 text-ink-subtle text-[12px] font-semibold">Category A is shown separately below.</div>
+            <div className="mt-1 text-ink-subtle text-[12px] font-semibold">{newB ? "Categories A and B are shown separately below." : "Category A is shown separately below."}</div>
           </div>
           <span className="inline-flex items-center rounded-full px-3.5 py-1.5" style={{ background: chip.bg, color: chip.fg, fontSize: 11.5, fontWeight: 800, letterSpacing: "0.14em" }}>{chip.label}</span>
         </div>
@@ -116,6 +125,10 @@ export default async function IncentiveOverviewPage({ searchParams }: PageProps)
       )}
 
       <MyCategoryA period={period} ready={categoryA.ready} months={categoryA.months} awaiting={categoryA.awaiting} historical={oldA} />
+      {(newB || categoryB.months.length > 0) && <MyCategoryA category="B" period={period} ready={categoryB.ready} months={categoryB.months} awaiting={categoryB.awaiting} historical={oldB} oldEngineMonth={!newB} />}
+      {extra.filter((x) => x.authoritative || x.mine.months.length > 0).map((x) => (
+        <MyCategoryA key={x.c} category={x.c} period={period} ready={x.mine.ready} months={x.mine.months} awaiting={x.mine.awaiting} historical={x.authoritative ? summary.lines.filter((l) => l.category === x.c) : []} oldEngineMonth={!x.authoritative} />
+      ))}
 
       {atRisk.length > 0 && (
         <section className="mb-7">
@@ -129,10 +142,10 @@ export default async function IncentiveOverviewPage({ searchParams }: PageProps)
         </section>
       )}
 
-      <h2 className="text-display-xs text-ink-strong mb-3">Categories B–G <span className="text-ink-subtle text-[13px] font-semibold">· tap a card to drill in</span></h2>
-      <div className="mb-7"><CategoryCards categories={summary.categories.filter((c) => c.code !== "A")} lines={otherLines} /></div>
+      <h2 className="text-display-xs text-ink-strong mb-3">{others} <span className="text-ink-subtle text-[13px] font-semibold">· tap a card to drill in</span></h2>
+      <div className="mb-7"><CategoryCards categories={summary.categories.filter((c) => !separate.has(c.code))} lines={otherLines} /></div>
 
-      <h2 className="text-display-xs text-ink-strong mb-3">Breakdown · Categories B–G</h2>
+      <h2 className="text-display-xs text-ink-strong mb-3">Breakdown · {others}</h2>
       {otherLines.length === 0 ? (
         <EmptyState title="Nothing computed yet this month." sub="Submit activity or log a sale — it appears here as it lands." />
       ) : (

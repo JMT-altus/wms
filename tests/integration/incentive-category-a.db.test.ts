@@ -124,11 +124,12 @@ beforeAll(async () => {
   for (const k of PEOPLE) who[k] = (await q1<{ id: string }>(`insert into employees (name, email, role, is_admin) values ($1, $2, 'both', $3) returning id`, [k, `${k.toLowerCase()}@example.test`, k !== "staff" && k !== "rep"]))[0]!.id;
   for (const [k, rights] of Object.entries(GRANTS)) for (const r of rights!) await pg.query(`insert into field_permission_grants (field_key, subject_type, subject_id, allowed) values ($1, 'employee', $2, true)`, [`incentive.calc.${r}`, who[k as Who]]);
 
-  // The live tracker's records, with a paid period: they must never change.
+  // The live tracker's records, with a paid period: they must never change. The paid month precedes the April
+  // cut-over: a Category A version is never published over a month the old engine already paid.
   const cust = (await q1<{ id: string }>(`insert into customers (name) values ('Tracker Customer') returning id`))[0]!.id;
   const order = (await q1<{ id: string }>(`insert into sales_orders (customer_id, owner_id, order_value_paise, category_code, booked_at, confirmed) values ($1, $2, 100000000, 'A', '2026-04-05', true) returning id`, [cust, who.rep]))[0]!.id;
   await pg.query(`insert into invoices (order_id, invoice_value_paise, invoice_date, agreed_terms_days) values ($1, 100000000, '2026-04-05', 30)`, [order]);
-  const paid = (await q1<{ id: string }>(`insert into incentive_periods (month, status) values ('2026-04', 'paid') returning id`))[0]!.id;
+  const paid = (await q1<{ id: string }>(`insert into incentive_periods (month, status) values ('2026-03', 'paid') returning id`))[0]!.id;
   await pg.query(`insert into payout_runs (period_id, total_paise) values ($1, 900000)`, [paid]);
   await pg.query(`insert into incentive_ledger (employee_id, period_id, rule_line_code, category, entry_type, amount_paise, source_ref) values ($1, $2, 'A.1', 'A', 'accrual', 200000, 'slab:A.1')`, [who.rep, paid]);
   trackerBefore = await fingerprint(TRACKER);

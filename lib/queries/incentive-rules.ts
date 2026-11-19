@@ -14,7 +14,9 @@ import {
 } from "@/db/schema";
 import { EMPLOYEE_ROLES } from "@/db/enums";
 import { isMissingTable } from "@/lib/queries/collection-master";
-import { CONFIGURABLE_CATEGORIES, EMPTY_CONFIG, REFERENCE_TEMPLATE, type CategoryCode, type IncentiveConfig } from "@/lib/incentives/rules-config/spec";
+import { createHash } from "node:crypto";
+import { CONFIGURABLE_CATEGORIES, EMPTY_CONFIG, referenceTemplateFor, type CategoryCode, type IncentiveConfig } from "@/lib/incentives/rules-config/spec";
+import { canonical } from "@/lib/incentives/category-a/hash";
 import { checkConfig, dayBefore, isMonthStart, type CheckContext } from "@/lib/incentives/rules-config/validate";
 
 /**
@@ -34,6 +36,10 @@ export type Status = "draft" | "submitted" | "approved" | "rejected" | "publishe
 export type Result<T = object> = ({ ok: true } & T) | { ok: false; error: string };
 
 export const CHECK_CONTEXT: CheckContext = { roles: EMPLOYEE_ROLES };
+/** The checking context for a version of a category. */
+export const checkContextFor = (category: string): CheckContext => ({ ...CHECK_CONTEXT, category: category as CategoryCode });
+/** A configuration's fingerprint: sha256 of its canonical JSON, recorded in the history when a version is published. */
+export const configHash = (c: IncentiveConfig) => createHash("sha256").update(canonical(c)).digest("hex");
 const STALE = "This version was changed by someone else meanwhile. Nothing was saved; reload to see it as it is now.";
 export const NOT_READY = "Incentive Rules need database update 0131 first, so nothing was saved.";
 
@@ -201,7 +207,7 @@ export async function createDraft(actor: Actor, input: { programId: string; cate
     if (!p) return { ok: false as const, error: "That programme doesn't exist." };
     if (!p.isActive) return { ok: false as const, error: "That programme is inactive." };
     let config: IncentiveConfig = EMPTY_CONFIG;
-    if (input.startFrom === "reference") config = REFERENCE_TEMPLATE;
+    if (input.startFrom === "reference") config = referenceTemplateFor(input.category);
     else if (typeof input.startFrom === "object") {
       const [src] = await tx.select().from(incentiveConfigVersions).where(eq(incentiveConfigVersions.id, input.startFrom.versionId)).limit(1);
       if (!src || src.programId !== p.id || src.categoryCode !== input.category) return { ok: false as const, error: "Copy a version of the same programme and category." };
@@ -252,13 +258,14 @@ async function forChange(tx: Tx, versionId: string, expectedRowVersion: number):
 
 /** Saves a draft's (or a rejected version's) configuration. It may be incomplete; it may not be wrong. A rejected version becomes a draft again. */
 export async function saveDraft(actor: Actor, versionId: string, expectedRowVersion: number, config: IncentiveConfig, changeNote: string | null): Promise<Result<{ rowVersion: number; missing: number }>> {
-  const { problems, missing } = checkConfig(config, CHECK_CONTEXT);
-  if (problems.length) return { ok: false, error: problems.map((p) => p.message).join(" ") };
   if ((changeNote ?? "").length > 1000) return { ok: false, error: "The change note is longer than 1,000 characters." };
   return db.transaction(async (tx) => {
     const q = tx as unknown as Q;
     const v = await forChange(tx, versionId, expectedRowVersion);
     if (typeof v === "string") return { ok: false as const, error: v };
+    // Checked against the version's own category's settings.
+    const { problems, missing } = checkConfig(config, checkContextFor(v.categoryCode));
+    if (problems.length) return { ok: false as const, error: problems.map((p) => p.message).join(" ") };
     if (v.status !== "draft" && v.status !== "rejected") return { ok: false as const, error: `A ${v.status} version can't be edited. Create a new draft instead.` };
     const gone = await missingSubjects(q, config);
     if (gone.length) return { ok: false as const, error: `No longer exists: ${gone.join(", ")}.` };
@@ -299,7 +306,7 @@ async function transition(
 /** Whether a version is complete and right; the reason it isn't, or null. */
 async function incomplete(q: Q, v: VersionRow): Promise<string | null> {
   const config = await loadConfig(q, v.id);
-  const { problems, missing } = checkConfig(config, CHECK_CONTEXT);
+  const { problems, missing } = checkConfig(config, checkContextFor(v.categoryCode));
   if (problems.length) return `It has problems: ${problems.map((p) => p.message).join(" ")}`;
   if (missing.length) return `It isn't complete: ${missing.map((m) => m.message).join(" ")}`;
   const gone = await missingSubjects(q, config);
@@ -366,6 +373,11 @@ export async function publish(actor: Actor, versionId: string, expectedRowVersio
     if (v.status !== "approved") return { ok: false as const, error: "Only an approved version can be published." };
     const why = await incomplete(q, v);
     if (why) return { ok: false as const, error: why };
+    {
+      const c = v.categoryCode;
+      const overlap = await oldEngineCategoryFinal(q, c, effectiveFrom);
+      if (overlap.length) return { ok: false as const, error: `The old engine's Category ${c} is already ${overlap.map((o) => `${o.status} for ${o.month}`).join(", ")}. Publishing Category ${c} from ${effectiveFrom.slice(0, 7)} would pay Category ${c} twice for ${overlap.length === 1 ? "that month" : "those months"}: publish from a later month. Nothing was changed.` };
+    }
     const later = await tx
       .select({ versionNo: incentiveConfigVersions.versionNo, from: incentiveConfigVersions.effectiveFrom })
       .from(incentiveConfigVersions)
@@ -385,9 +397,28 @@ export async function publish(actor: Actor, versionId: string, expectedRowVersio
       .set({ status: "published", effectiveFrom, effectiveTo: null, publishedById: actor.id, publishedAt: new Date(), rowVersion: v.rowVersion + 1, updatedById: actor.id, updatedAt: new Date() })
       .where(eq(incentiveConfigVersions.id, v.id))
       .returning();
-    await history(tx, actor, v.programId, v.id, "publish", versionState(v), versionState(u!), effectiveFrom < currentMonthStartIST(opts.today) ? `Back-dated to ${effectiveFrom}.` : null);
+    // The published configuration's fingerprint is recorded with the publication (the version itself never changes).
+    await history(tx, actor, v.programId, v.id, "publish", versionState(v), { ...versionState(u!), configHash: configHash(await loadConfig(q, v.id)) }, effectiveFrom < currentMonthStartIST(opts.today) ? `Back-dated to ${effectiveFrom}.` : null);
     return { ok: true as const, rowVersion: u!.rowVersion, superseded };
   });
+}
+
+/**
+ * The cut-over safeguard for every category (A–G): the OLD engine's months, from `effectiveFrom` on, that are locked or paid
+ * and hold amounts of that category. Publishing the category's version over one of them would pay it twice, so it is
+ * refused. No reconciliation of an old-engine month with the new engine exists, so there is no exception. Reads only.
+ */
+export async function oldEngineCategoryFinal(q: Q, category: string, effectiveFrom: string): Promise<{ month: string; status: string }[]> {
+  const r = await q.execute(sql`
+    select case when to_regclass('public.incentive_periods') is null or to_regclass('public.incentive_ledger') is null then null else 1 end as ok`);
+  const ok = ((Array.isArray(r) ? r : ((r as unknown as { rows?: unknown[] }).rows ?? [])) as { ok: number | null }[])[0]?.ok;
+  if (!ok) return [];
+  const rows = await q.execute(sql`
+    select p.month, p.status from incentive_periods p
+    where p.status in ('locked', 'paid') and p.month >= ${effectiveFrom.slice(0, 7)}
+      and exists (select 1 from incentive_ledger l where l.period_id = p.id and l.category = ${category} and l.amount_paise <> 0)
+    order by p.month`);
+  return (Array.isArray(rows) ? rows : ((rows as unknown as { rows?: unknown[] }).rows ?? [])) as { month: string; status: string }[];
 }
 
 /** Whether a database error means 0131 isn't applied (so the screens can say so). */

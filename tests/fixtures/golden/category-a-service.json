@@ -1,0 +1,4226 @@
+{
+ "steps": [
+  [
+   "approve 1",
+   {
+    "ok": true,
+    "rowVersion": 5,
+    "status": "submitted",
+    "step": 1
+   }
+  ],
+  [
+   "approve 2",
+   {
+    "ok": true,
+    "rowVersion": 6,
+    "status": "approved",
+    "step": 2
+   }
+  ],
+  [
+   "calculate October (open)",
+   {
+    "ok": true,
+    "runId": "run:3",
+    "unchanged": false,
+    "adopted": true,
+    "status": "computed",
+    "outcome": "Adopted: the month's first calculation.",
+    "problems": []
+   }
+  ],
+  [
+   "calculate again",
+   {
+    "ok": true,
+    "runId": "run:1",
+    "unchanged": true,
+    "adopted": false,
+    "status": "computed",
+    "outcome": "Nothing changed since the last calculation: no new run was recorded.",
+    "problems": []
+   }
+  ],
+  [
+   "calculate",
+   {
+    "ok": true,
+    "runId": "run:1",
+    "unchanged": false,
+    "adopted": true,
+    "status": "computed",
+    "outcome": "Adopted: the month's first calculation.",
+    "problems": []
+   }
+  ],
+  [
+   "lock",
+   {
+    "ok": true,
+    "rowVersion": 3,
+    "notes": []
+   }
+  ],
+  [
+   "pay",
+   {
+    "ok": true,
+    "rowVersion": 7,
+    "totalPaise": 92500
+   }
+  ],
+  [
+   "recalculate a locked month",
+   {
+    "ok": true,
+    "runId": "run:2",
+    "unchanged": false,
+    "adopted": false,
+    "status": "computed",
+    "outcome": "Kept for the record, not adopted: the month is locked. The difference is carried into 2026-10.",
+    "problems": []
+   }
+  ],
+  [
+   "submit",
+   {
+    "ok": true,
+    "rowVersion": 4,
+    "approvalsRequired": 2
+   }
+  ]
+ ],
+ "runs": [
+  {
+   "id": "run:1",
+   "program_id": "program:SALES",
+   "category_code": "A",
+   "month": "<time>",
+   "as_of": "<time>",
+   "config_version_id": "version:1",
+   "config_version_no": 1,
+   "engine_version": "category-a/1",
+   "status": "computed",
+   "adopted": true,
+   "outcome": "Adopted: the month's first calculation.",
+   "inputs": {
+    "asOf": "2026-09-30",
+    "month": "2026-04-01",
+    "roles": [
+     "doer",
+     "initiator",
+     "both"
+    ],
+    "config": {
+     "slabs": [
+      {
+       "label": "₹1.0 Cr – ₹1.2 Cr",
+       "ratePpm": 1000,
+       "toPaise": 1200000000,
+       "capPaise": 200000,
+       "lineCode": "A.1",
+       "fromPaise": 1000000000,
+       "valueType": "percent",
+       "fixedPaise": null
+      },
+      {
+       "label": "₹1.2 Cr – ₹1.4 Cr",
+       "ratePpm": 1500,
+       "toPaise": 1400000000,
+       "capPaise": 300000,
+       "lineCode": "A.2",
+       "fromPaise": 1200000000,
+       "valueType": "percent",
+       "fixedPaise": null
+      },
+      {
+       "label": "₹1.4 Cr – ₹1.6 Cr",
+       "ratePpm": 2000,
+       "toPaise": 1600000000,
+       "capPaise": 400000,
+       "lineCode": "A.3",
+       "fromPaise": 1400000000,
+       "valueType": "percent",
+       "fixedPaise": null
+      }
+     ],
+     "settings": {
+      "slabs.gaps": "refuse",
+      "period.unit": "calendarMonth",
+      "basis.amount": "total",
+      "slabs.method": "marginal",
+      "adjust.refund": "reverseReceiptShare",
+      "caps.perOrder": "none",
+      "basis.document": "salesOrder",
+      "payout.release": "afterApproval",
+      "rounding.level": "employeeMonthTotal",
+      "slabs.aboveTop": "noFurtherIncentive",
+      "basis.monthDate": "orderDate",
+      "period.lockMode": "manual",
+      "rounding.method": "halfUp",
+      "basis.preClosure": "ignore",
+      "slabs.boundaries": "lowerInclusive",
+      "adjust.creditNote": "reduceOriginalMonthSales",
+      "adjust.openMonths": "recalculate",
+      "adjust.windowDays": 1,
+      "allocation.method": "equalPerOrder",
+      "attribution.split": "single",
+      "period.recalcDays": 1,
+      "adjust.salesReturn": "reduceOriginalMonthSales",
+      "attribution.source": "customerSalesRep",
+      "period.recalcUntil": "untilLocked",
+      "rounding.precision": "paise",
+      "basis.voucherFilter": [
+       "cancelled"
+      ],
+      "period.autoLockDays": 1,
+      "period.lateReceipts": "adjustInCurrentOpenMonth",
+      "adjust.bouncedCheque": "reverseReceiptShare",
+      "collection.delayFrom": "invoiceDueDate",
+      "payout.approvalSteps": 2,
+      "slabs.aboveTopAmount": 100,
+      "eligibility.threshold": 1000000000,
+      "adjust.negativeBalance": "recoverFromNextPayout",
+      "adjust.reversedReceipt": "reverseReceiptShare",
+      "attribution.historical": "currentRep",
+      "collection.defaultDays": 1,
+      "collection.payableWhen": "orderFullyCollected",
+      "collection.earningBasis": "perReceipt",
+      "collection.stepBoundary": "upperInclusive",
+      "adjust.carryForwardMonths": 2,
+      "adjust.lockedOrPaidMonths": "adjustInCurrentMonth",
+      "allocation.eligibleOrders": "allInMonth",
+      "allocation.minOrderAmount": 100,
+      "collection.missingDueDate": "treatAsOnTime",
+      "collection.dueDateFallback": [
+       "invoiceDueDate"
+      ],
+      "collection.recoveryAfterNil": "recoverToStepAtReceipt",
+      "collection.onAccountReceipts": "ignoreUntilAllocated",
+      "collection.unreceivedPortion": "pendingUntilReceived",
+      "caps.perEmployeeCategoryMonth": 900000,
+      "eligibility.inactiveEmployees": "excludeFromMonthLeft",
+      "collection.multiInvoiceReceipts": "useImportedReference",
+      "eligibility.thresholdComparison": "atLeast",
+      "caps.perEmployeeAllCategoriesMonth": 1825000
+     },
+     "delaySteps": [
+      {
+       "toDays": 100,
+       "fromDays": 75,
+       "multiplierPpm": 250000
+      },
+      {
+       "toDays": 45,
+       "fromDays": 0,
+       "multiplierPpm": 1000000
+      },
+      {
+       "toDays": 75,
+       "fromDays": 45,
+       "multiplierPpm": 500000
+      },
+      {
+       "toDays": null,
+       "fromDays": 100,
+       "multiplierPpm": 0
+      }
+     ],
+     "eligibility": [
+      {
+       "mode": "include",
+       "role": null,
+       "subjectId": "emp:rep",
+       "effectiveTo": null,
+       "subjectType": "employee",
+       "subjectLabel": "rep",
+       "effectiveFrom": "2026-01-01"
+      }
+     ]
+    },
+    "events": [],
+    "orders": [
+     {
+      "id": "doc:SO 1",
+      "no": "SO 1",
+      "date": "2026-04-05",
+      "states": {
+       "optional": false,
+       "cancelled": false,
+       "postDated": false
+      },
+      "customerId": "customer:Customer One",
+      "itemsPaise": 100000000,
+      "totalPaise": 100000000,
+      "paymentTerms": null,
+      "taxablePaise": 100000000,
+      "customerOrderDate": null
+     },
+     {
+      "id": "doc:SO 10",
+      "no": "SO 10",
+      "date": "2026-04-05",
+      "states": {
+       "optional": false,
+       "cancelled": false,
+       "postDated": false
+      },
+      "customerId": "customer:Customer One",
+      "itemsPaise": 100000000,
+      "totalPaise": 100000000,
+      "paymentTerms": null,
+      "taxablePaise": 100000000,
+      "customerOrderDate": null
+     },
+     {
+      "id": "doc:SO 11",
+      "no": "SO 11",
+      "date": "2026-04-05",
+      "states": {
+       "optional": false,
+       "cancelled": false,
+       "postDated": false
+      },
+      "customerId": "customer:Customer One",
+      "itemsPaise": 100000000,
+      "totalPaise": 100000000,
+      "paymentTerms": null,
+      "taxablePaise": 100000000,
+      "customerOrderDate": null
+     },
+     {
+      "id": "doc:SO 12",
+      "no": "SO 12",
+      "date": "2026-04-05",
+      "states": {
+       "optional": false,
+       "cancelled": false,
+       "postDated": false
+      },
+      "customerId": "customer:Customer One",
+      "itemsPaise": 100000000,
+      "totalPaise": 100000000,
+      "paymentTerms": null,
+      "taxablePaise": 100000000,
+      "customerOrderDate": null
+     },
+     {
+      "id": "doc:SO 2",
+      "no": "SO 2",
+      "date": "2026-04-05",
+      "states": {
+       "optional": false,
+       "cancelled": false,
+       "postDated": false
+      },
+      "customerId": "customer:Customer One",
+      "itemsPaise": 100000000,
+      "totalPaise": 100000000,
+      "paymentTerms": null,
+      "taxablePaise": 100000000,
+      "customerOrderDate": null
+     },
+     {
+      "id": "doc:SO 3",
+      "no": "SO 3",
+      "date": "2026-04-05",
+      "states": {
+       "optional": false,
+       "cancelled": false,
+       "postDated": false
+      },
+      "customerId": "customer:Customer One",
+      "itemsPaise": 100000000,
+      "totalPaise": 100000000,
+      "paymentTerms": null,
+      "taxablePaise": 100000000,
+      "customerOrderDate": null
+     },
+     {
+      "id": "doc:SO 4",
+      "no": "SO 4",
+      "date": "2026-04-05",
+      "states": {
+       "optional": false,
+       "cancelled": false,
+       "postDated": false
+      },
+      "customerId": "customer:Customer One",
+      "itemsPaise": 100000000,
+      "totalPaise": 100000000,
+      "paymentTerms": null,
+      "taxablePaise": 100000000,
+      "customerOrderDate": null
+     },
+     {
+      "id": "doc:SO 5",
+      "no": "SO 5",
+      "date": "2026-04-05",
+      "states": {
+       "optional": false,
+       "cancelled": false,
+       "postDated": false
+      },
+      "customerId": "customer:Customer One",
+      "itemsPaise": 100000000,
+      "totalPaise": 100000000,
+      "paymentTerms": null,
+      "taxablePaise": 100000000,
+      "customerOrderDate": null
+     },
+     {
+      "id": "doc:SO 6",
+      "no": "SO 6",
+      "date": "2026-04-05",
+      "states": {
+       "optional": false,
+       "cancelled": false,
+       "postDated": false
+      },
+      "customerId": "customer:Customer One",
+      "itemsPaise": 100000000,
+      "totalPaise": 100000000,
+      "paymentTerms": null,
+      "taxablePaise": 100000000,
+      "customerOrderDate": null
+     },
+     {
+      "id": "doc:SO 7",
+      "no": "SO 7",
+      "date": "2026-04-05",
+      "states": {
+       "optional": false,
+       "cancelled": false,
+       "postDated": false
+      },
+      "customerId": "customer:Customer One",
+      "itemsPaise": 100000000,
+      "totalPaise": 100000000,
+      "paymentTerms": null,
+      "taxablePaise": 100000000,
+      "customerOrderDate": null
+     },
+     {
+      "id": "doc:SO 8",
+      "no": "SO 8",
+      "date": "2026-04-05",
+      "states": {
+       "optional": false,
+       "cancelled": false,
+       "postDated": false
+      },
+      "customerId": "customer:Customer One",
+      "itemsPaise": 100000000,
+      "totalPaise": 100000000,
+      "paymentTerms": null,
+      "taxablePaise": 100000000,
+      "customerOrderDate": null
+     },
+     {
+      "id": "doc:SO 9",
+      "no": "SO 9",
+      "date": "2026-04-05",
+      "states": {
+       "optional": false,
+       "cancelled": false,
+       "postDated": false
+      },
+      "customerId": "customer:Customer One",
+      "itemsPaise": 100000000,
+      "totalPaise": 100000000,
+      "paymentTerms": null,
+      "taxablePaise": 100000000,
+      "customerOrderDate": null
+     }
+    ],
+    "invoices": [
+     {
+      "id": "doc:INV 1",
+      "no": "INV 1",
+      "date": "2026-04-05",
+      "dueDate": "2026-04-05",
+      "orderId": "doc:SO 1",
+      "customerId": "customer:Customer One",
+      "itemsPaise": null,
+      "totalPaise": 100000000,
+      "taxablePaise": 100000000
+     },
+     {
+      "id": "doc:INV 10",
+      "no": "INV 10",
+      "date": "2026-04-05",
+      "dueDate": "2026-04-05",
+      "orderId": "doc:SO 10",
+      "customerId": "customer:Customer One",
+      "itemsPaise": null,
+      "totalPaise": 100000000,
+      "taxablePaise": 100000000
+     },
+     {
+      "id": "doc:INV 11",
+      "no": "INV 11",
+      "date": "2026-04-05",
+      "dueDate": "2026-04-05",
+      "orderId": "doc:SO 11",
+      "customerId": "customer:Customer One",
+      "itemsPaise": null,
+      "totalPaise": 100000000,
+      "taxablePaise": 100000000
+     },
+     {
+      "id": "doc:INV 12",
+      "no": "INV 12",
+      "date": "2026-04-05",
+      "dueDate": "2026-04-05",
+      "orderId": "doc:SO 12",
+      "customerId": "customer:Customer One",
+      "itemsPaise": null,
+      "totalPaise": 100000000,
+      "taxablePaise": 100000000
+     },
+     {
+      "id": "doc:INV 2",
+      "no": "INV 2",
+      "date": "2026-04-05",
+      "dueDate": "2026-04-05",
+      "orderId": "doc:SO 2",
+      "customerId": "customer:Customer One",
+      "itemsPaise": null,
+      "totalPaise": 100000000,
+      "taxablePaise": 100000000
+     },
+     {
+      "id": "doc:INV 3",
+      "no": "INV 3",
+      "date": "2026-04-05",
+      "dueDate": "2026-04-05",
+      "orderId": "doc:SO 3",
+      "customerId": "customer:Customer One",
+      "itemsPaise": null,
+      "totalPaise": 100000000,
+      "taxablePaise": 100000000
+     },
+     {
+      "id": "doc:INV 4",
+      "no": "INV 4",
+      "date": "2026-04-05",
+      "dueDate": "2026-04-05",
+      "orderId": "doc:SO 4",
+      "customerId": "customer:Customer One",
+      "itemsPaise": null,
+      "totalPaise": 100000000,
+      "taxablePaise": 100000000
+     },
+     {
+      "id": "doc:INV 5",
+      "no": "INV 5",
+      "date": "2026-04-05",
+      "dueDate": "2026-04-05",
+      "orderId": "doc:SO 5",
+      "customerId": "customer:Customer One",
+      "itemsPaise": null,
+      "totalPaise": 100000000,
+      "taxablePaise": 100000000
+     },
+     {
+      "id": "doc:INV 6",
+      "no": "INV 6",
+      "date": "2026-04-05",
+      "dueDate": "2026-04-05",
+      "orderId": "doc:SO 6",
+      "customerId": "customer:Customer One",
+      "itemsPaise": null,
+      "totalPaise": 100000000,
+      "taxablePaise": 100000000
+     },
+     {
+      "id": "doc:INV 7",
+      "no": "INV 7",
+      "date": "2026-04-05",
+      "dueDate": "2026-04-05",
+      "orderId": "doc:SO 7",
+      "customerId": "customer:Customer One",
+      "itemsPaise": null,
+      "totalPaise": 100000000,
+      "taxablePaise": 100000000
+     },
+     {
+      "id": "doc:INV 8",
+      "no": "INV 8",
+      "date": "2026-04-05",
+      "dueDate": "2026-04-05",
+      "orderId": "doc:SO 8",
+      "customerId": "customer:Customer One",
+      "itemsPaise": null,
+      "totalPaise": 100000000,
+      "taxablePaise": 100000000
+     },
+     {
+      "id": "doc:INV 9",
+      "no": "INV 9",
+      "date": "2026-04-05",
+      "dueDate": "2026-04-05",
+      "orderId": "doc:SO 9",
+      "customerId": "customer:Customer One",
+      "itemsPaise": null,
+      "totalPaise": 100000000,
+      "taxablePaise": 100000000
+     }
+    ],
+    "receipts": [
+     {
+      "id": "doc:RC 1.1",
+      "no": "RC 1.1",
+      "date": "2026-04-15",
+      "invoiceId": "doc:INV 1",
+      "customerId": "customer:Customer One",
+      "amountPaise": 50000000
+     },
+     {
+      "id": "doc:RC 1.2",
+      "no": "RC 1.2",
+      "date": "2026-06-04",
+      "invoiceId": "doc:INV 1",
+      "customerId": "customer:Customer One",
+      "amountPaise": 50000000
+     },
+     {
+      "id": "doc:RC 10.1",
+      "no": "RC 10.1",
+      "date": "2026-06-24",
+      "invoiceId": "doc:INV 10",
+      "customerId": "customer:Customer One",
+      "amountPaise": 100000000
+     },
+     {
+      "id": "doc:RC 11.1",
+      "no": "RC 11.1",
+      "date": "2026-07-24",
+      "invoiceId": "doc:INV 11",
+      "customerId": "customer:Customer One",
+      "amountPaise": 100000000
+     },
+     {
+      "id": "doc:RC 12.1",
+      "no": "RC 12.1",
+      "date": "2026-07-24",
+      "invoiceId": "doc:INV 12",
+      "customerId": "customer:Customer One",
+      "amountPaise": 100000000
+     },
+     {
+      "id": "doc:RC 2.1",
+      "no": "RC 2.1",
+      "date": "2026-04-15",
+      "invoiceId": "doc:INV 2",
+      "customerId": "customer:Customer One",
+      "amountPaise": 25000000
+     },
+     {
+      "id": "doc:RC 2.2",
+      "no": "RC 2.2",
+      "date": "2026-06-04",
+      "invoiceId": "doc:INV 2",
+      "customerId": "customer:Customer One",
+      "amountPaise": 25000000
+     },
+     {
+      "id": "doc:RC 2.3",
+      "no": "RC 2.3",
+      "date": "2026-07-04",
+      "invoiceId": "doc:INV 2",
+      "customerId": "customer:Customer One",
+      "amountPaise": 50000000
+     },
+     {
+      "id": "doc:RC 3.1",
+      "no": "RC 3.1",
+      "date": "2026-04-15",
+      "invoiceId": "doc:INV 3",
+      "customerId": "customer:Customer One",
+      "amountPaise": 80000000
+     },
+     {
+      "id": "doc:RC 3.2",
+      "no": "RC 3.2",
+      "date": "2026-08-03",
+      "invoiceId": "doc:INV 3",
+      "customerId": "customer:Customer One",
+      "amountPaise": 20000000
+     },
+     {
+      "id": "doc:RC 4.1",
+      "no": "RC 4.1",
+      "date": "2026-05-05",
+      "invoiceId": "doc:INV 4",
+      "customerId": "customer:Customer One",
+      "amountPaise": 100000000
+     },
+     {
+      "id": "doc:RC 5.1",
+      "no": "RC 5.1",
+      "date": "2026-05-25",
+      "invoiceId": "doc:INV 5",
+      "customerId": "customer:Customer One",
+      "amountPaise": 100000000
+     },
+     {
+      "id": "doc:RC 6.1",
+      "no": "RC 6.1",
+      "date": "2026-05-25",
+      "invoiceId": "doc:INV 6",
+      "customerId": "customer:Customer One",
+      "amountPaise": 100000000
+     },
+     {
+      "id": "doc:RC 7.1",
+      "no": "RC 7.1",
+      "date": "2026-05-25",
+      "invoiceId": "doc:INV 7",
+      "customerId": "customer:Customer One",
+      "amountPaise": 100000000
+     },
+     {
+      "id": "doc:RC 8.1",
+      "no": "RC 8.1",
+      "date": "2026-05-25",
+      "invoiceId": "doc:INV 8",
+      "customerId": "customer:Customer One",
+      "amountPaise": 100000000
+     },
+     {
+      "id": "doc:RC 9.1",
+      "no": "RC 9.1",
+      "date": "2026-06-24",
+      "invoiceId": "doc:INV 9",
+      "customerId": "customer:Customer One",
+      "amountPaise": 100000000
+     }
+    ],
+    "customers": [
+     {
+      "id": "customer:Customer One",
+      "name": "Customer One",
+      "salesRepId": "emp:rep",
+      "creditPeriodDays": 30
+     }
+    ],
+    "employees": [
+     {
+      "id": "emp:a1",
+      "name": "a1",
+      "role": "both",
+      "isActive": true,
+      "departmentId": null
+     },
+     {
+      "id": "emp:a2",
+      "name": "a2",
+      "role": "both",
+      "isActive": true,
+      "departmentId": null
+     },
+     {
+      "id": "emp:author",
+      "name": "author",
+      "role": "both",
+      "isActive": true,
+      "departmentId": null
+     },
+     {
+      "id": "emp:checker",
+      "name": "checker",
+      "role": "both",
+      "isActive": true,
+      "departmentId": null
+     },
+     {
+      "id": "emp:locker",
+      "name": "locker",
+      "role": "both",
+      "isActive": true,
+      "departmentId": null
+     },
+     {
+      "id": "emp:payer",
+      "name": "payer",
+      "role": "both",
+      "isActive": true,
+      "departmentId": null
+     },
+     {
+      "id": "emp:rep",
+      "name": "rep",
+      "role": "both",
+      "isActive": true,
+      "departmentId": null
+     },
+     {
+      "id": "emp:runner",
+      "name": "runner",
+      "role": "both",
+      "isActive": true,
+      "departmentId": null
+     }
+    ],
+    "repHistory": [],
+    "creditNotes": [],
+    "preclosures": [],
+    "attributions": [],
+    "configVersion": {
+     "id": "version:1",
+     "status": "published",
+     "programId": "program:SALES",
+     "versionNo": 1,
+     "effectiveTo": null,
+     "effectiveFrom": "2026-04-01"
+    }
+   },
+   "result": {
+    "asOf": "2026-09-30",
+    "held": [],
+    "month": "2026-04-01",
+    "units": [
+     {
+      "unitId": "doc:SO 1",
+      "unitNo": "SO 1",
+      "sharePpm": 1000000,
+      "unitType": "sales-orders",
+      "allocated": "50000/3",
+      "employeeId": "emp:rep",
+      "takesShare": true,
+      "valuePaise": 100000000,
+      "earnedExact": "12500",
+      "explanation": [
+       "Order SO 1 of 2026-04-05: total value ₹10,00,000.",
+       "Its share of the month's incentive: ₹166.67 for collecting ₹10,00,000."
+      ],
+      "payableExact": "12500",
+      "collectedPaise": 100000000,
+      "fullyCollected": true,
+      "collectiblePaise": 100000000
+     },
+     {
+      "unitId": "doc:SO 10",
+      "unitNo": "SO 10",
+      "sharePpm": 1000000,
+      "unitType": "sales-orders",
+      "allocated": "50000/3",
+      "employeeId": "emp:rep",
+      "takesShare": true,
+      "valuePaise": 100000000,
+      "earnedExact": "12500/3",
+      "explanation": [
+       "Order SO 10 of 2026-04-05: total value ₹10,00,000.",
+       "Its share of the month's incentive: ₹166.67 for collecting ₹10,00,000."
+      ],
+      "payableExact": "12500/3",
+      "collectedPaise": 100000000,
+      "fullyCollected": true,
+      "collectiblePaise": 100000000
+     },
+     {
+      "unitId": "doc:SO 11",
+      "unitNo": "SO 11",
+      "sharePpm": 1000000,
+      "unitType": "sales-orders",
+      "allocated": "50000/3",
+      "employeeId": "emp:rep",
+      "takesShare": true,
+      "valuePaise": 100000000,
+      "earnedExact": "0",
+      "explanation": [
+       "Order SO 11 of 2026-04-05: total value ₹10,00,000.",
+       "Its share of the month's incentive: ₹166.67 for collecting ₹10,00,000."
+      ],
+      "payableExact": "0",
+      "collectedPaise": 100000000,
+      "fullyCollected": true,
+      "collectiblePaise": 100000000
+     },
+     {
+      "unitId": "doc:SO 12",
+      "unitNo": "SO 12",
+      "sharePpm": 1000000,
+      "unitType": "sales-orders",
+      "allocated": "50000/3",
+      "employeeId": "emp:rep",
+      "takesShare": true,
+      "valuePaise": 100000000,
+      "earnedExact": "0",
+      "explanation": [
+       "Order SO 12 of 2026-04-05: total value ₹10,00,000.",
+       "Its share of the month's incentive: ₹166.67 for collecting ₹10,00,000."
+      ],
+      "payableExact": "0",
+      "collectedPaise": 100000000,
+      "fullyCollected": true,
+      "collectiblePaise": 100000000
+     },
+     {
+      "unitId": "doc:SO 2",
+      "unitNo": "SO 2",
+      "sharePpm": 1000000,
+      "unitType": "sales-orders",
+      "allocated": "50000/3",
+      "employeeId": "emp:rep",
+      "takesShare": true,
+      "valuePaise": 100000000,
+      "earnedExact": "25000/3",
+      "explanation": [
+       "Order SO 2 of 2026-04-05: total value ₹10,00,000.",
+       "Its share of the month's incentive: ₹166.67 for collecting ₹10,00,000."
+      ],
+      "payableExact": "25000/3",
+      "collectedPaise": 100000000,
+      "fullyCollected": true,
+      "collectiblePaise": 100000000
+     },
+     {
+      "unitId": "doc:SO 3",
+      "unitNo": "SO 3",
+      "sharePpm": 1000000,
+      "unitType": "sales-orders",
+      "allocated": "50000/3",
+      "employeeId": "emp:rep",
+      "takesShare": true,
+      "valuePaise": 100000000,
+      "earnedExact": "40000/3",
+      "explanation": [
+       "Order SO 3 of 2026-04-05: total value ₹10,00,000.",
+       "Its share of the month's incentive: ₹166.67 for collecting ₹10,00,000."
+      ],
+      "payableExact": "40000/3",
+      "collectedPaise": 100000000,
+      "fullyCollected": true,
+      "collectiblePaise": 100000000
+     },
+     {
+      "unitId": "doc:SO 4",
+      "unitNo": "SO 4",
+      "sharePpm": 1000000,
+      "unitType": "sales-orders",
+      "allocated": "50000/3",
+      "employeeId": "emp:rep",
+      "takesShare": true,
+      "valuePaise": 100000000,
+      "earnedExact": "50000/3",
+      "explanation": [
+       "Order SO 4 of 2026-04-05: total value ₹10,00,000.",
+       "Its share of the month's incentive: ₹166.67 for collecting ₹10,00,000."
+      ],
+      "payableExact": "50000/3",
+      "collectedPaise": 100000000,
+      "fullyCollected": true,
+      "collectiblePaise": 100000000
+     },
+     {
+      "unitId": "doc:SO 5",
+      "unitNo": "SO 5",
+      "sharePpm": 1000000,
+      "unitType": "sales-orders",
+      "allocated": "50000/3",
+      "employeeId": "emp:rep",
+      "takesShare": true,
+      "valuePaise": 100000000,
+      "earnedExact": "25000/3",
+      "explanation": [
+       "Order SO 5 of 2026-04-05: total value ₹10,00,000.",
+       "Its share of the month's incentive: ₹166.67 for collecting ₹10,00,000."
+      ],
+      "payableExact": "25000/3",
+      "collectedPaise": 100000000,
+      "fullyCollected": true,
+      "collectiblePaise": 100000000
+     },
+     {
+      "unitId": "doc:SO 6",
+      "unitNo": "SO 6",
+      "sharePpm": 1000000,
+      "unitType": "sales-orders",
+      "allocated": "50000/3",
+      "employeeId": "emp:rep",
+      "takesShare": true,
+      "valuePaise": 100000000,
+      "earnedExact": "25000/3",
+      "explanation": [
+       "Order SO 6 of 2026-04-05: total value ₹10,00,000.",
+       "Its share of the month's incentive: ₹166.67 for collecting ₹10,00,000."
+      ],
+      "payableExact": "25000/3",
+      "collectedPaise": 100000000,
+      "fullyCollected": true,
+      "collectiblePaise": 100000000
+     },
+     {
+      "unitId": "doc:SO 7",
+      "unitNo": "SO 7",
+      "sharePpm": 1000000,
+      "unitType": "sales-orders",
+      "allocated": "50000/3",
+      "employeeId": "emp:rep",
+      "takesShare": true,
+      "valuePaise": 100000000,
+      "earnedExact": "25000/3",
+      "explanation": [
+       "Order SO 7 of 2026-04-05: total value ₹10,00,000.",
+       "Its share of the month's incentive: ₹166.67 for collecting ₹10,00,000."
+      ],
+      "payableExact": "25000/3",
+      "collectedPaise": 100000000,
+      "fullyCollected": true,
+      "collectiblePaise": 100000000
+     },
+     {
+      "unitId": "doc:SO 8",
+      "unitNo": "SO 8",
+      "sharePpm": 1000000,
+      "unitType": "sales-orders",
+      "allocated": "50000/3",
+      "employeeId": "emp:rep",
+      "takesShare": true,
+      "valuePaise": 100000000,
+      "earnedExact": "25000/3",
+      "explanation": [
+       "Order SO 8 of 2026-04-05: total value ₹10,00,000.",
+       "Its share of the month's incentive: ₹166.67 for collecting ₹10,00,000."
+      ],
+      "payableExact": "25000/3",
+      "collectedPaise": 100000000,
+      "fullyCollected": true,
+      "collectiblePaise": 100000000
+     },
+     {
+      "unitId": "doc:SO 9",
+      "unitNo": "SO 9",
+      "sharePpm": 1000000,
+      "unitType": "sales-orders",
+      "allocated": "50000/3",
+      "employeeId": "emp:rep",
+      "takesShare": true,
+      "valuePaise": 100000000,
+      "earnedExact": "12500/3",
+      "explanation": [
+       "Order SO 9 of 2026-04-05: total value ₹10,00,000.",
+       "Its share of the month's incentive: ₹166.67 for collecting ₹10,00,000."
+      ],
+      "payableExact": "12500/3",
+      "collectedPaise": 100000000,
+      "fullyCollected": true,
+      "collectiblePaise": 100000000
+     }
+    ],
+    "pieces": [
+     {
+      "note": "10 days after the invoice's due date (2026-04-05): 100%. Applied to the invoice it names.",
+      "status": "credited",
+      "unitId": "doc:SO 1",
+      "delayDays": 10,
+      "invoiceId": "doc:INV 1",
+      "receiptId": "doc:RC 1.1",
+      "receiptNo": "RC 1.1",
+      "employeeId": "emp:rep",
+      "amountPaise": 50000000,
+      "earnedExact": "25000/3",
+      "receiptDate": "2026-04-15",
+      "multiplierPpm": 1000000,
+      "referenceDate": "2026-04-05"
+     },
+     {
+      "note": "10 days after the invoice's due date (2026-04-05): 100%. Applied to the invoice it names.",
+      "status": "credited",
+      "unitId": "doc:SO 2",
+      "delayDays": 10,
+      "invoiceId": "doc:INV 2",
+      "receiptId": "doc:RC 2.1",
+      "receiptNo": "RC 2.1",
+      "employeeId": "emp:rep",
+      "amountPaise": 25000000,
+      "earnedExact": "12500/3",
+      "receiptDate": "2026-04-15",
+      "multiplierPpm": 1000000,
+      "referenceDate": "2026-04-05"
+     },
+     {
+      "note": "10 days after the invoice's due date (2026-04-05): 100%. Applied to the invoice it names.",
+      "status": "credited",
+      "unitId": "doc:SO 3",
+      "delayDays": 10,
+      "invoiceId": "doc:INV 3",
+      "receiptId": "doc:RC 3.1",
+      "receiptNo": "RC 3.1",
+      "employeeId": "emp:rep",
+      "amountPaise": 80000000,
+      "earnedExact": "40000/3",
+      "receiptDate": "2026-04-15",
+      "multiplierPpm": 1000000,
+      "referenceDate": "2026-04-05"
+     },
+     {
+      "note": "110 days after the invoice's due date (2026-04-05): 0%. Applied to the invoice it names.",
+      "status": "credited",
+      "unitId": "doc:SO 11",
+      "delayDays": 110,
+      "invoiceId": "doc:INV 11",
+      "receiptId": "doc:RC 11.1",
+      "receiptNo": "RC 11.1",
+      "employeeId": "emp:rep",
+      "amountPaise": 100000000,
+      "earnedExact": "0",
+      "receiptDate": "2026-07-24",
+      "multiplierPpm": 0,
+      "referenceDate": "2026-04-05"
+     },
+     {
+      "note": "110 days after the invoice's due date (2026-04-05): 0%. Applied to the invoice it names.",
+      "status": "credited",
+      "unitId": "doc:SO 12",
+      "delayDays": 110,
+      "invoiceId": "doc:INV 12",
+      "receiptId": "doc:RC 12.1",
+      "receiptNo": "RC 12.1",
+      "employeeId": "emp:rep",
+      "amountPaise": 100000000,
+      "earnedExact": "0",
+      "receiptDate": "2026-07-24",
+      "multiplierPpm": 0,
+      "referenceDate": "2026-04-05"
+     },
+     {
+      "note": "120 days after the invoice's due date (2026-04-05): 0%. Applied to the invoice it names.",
+      "status": "credited",
+      "unitId": "doc:SO 3",
+      "delayDays": 120,
+      "invoiceId": "doc:INV 3",
+      "receiptId": "doc:RC 3.2",
+      "receiptNo": "RC 3.2",
+      "employeeId": "emp:rep",
+      "amountPaise": 20000000,
+      "earnedExact": "0",
+      "receiptDate": "2026-08-03",
+      "multiplierPpm": 0,
+      "referenceDate": "2026-04-05"
+     },
+     {
+      "note": "30 days after the invoice's due date (2026-04-05): 100%. Applied to the invoice it names.",
+      "status": "credited",
+      "unitId": "doc:SO 4",
+      "delayDays": 30,
+      "invoiceId": "doc:INV 4",
+      "receiptId": "doc:RC 4.1",
+      "receiptNo": "RC 4.1",
+      "employeeId": "emp:rep",
+      "amountPaise": 100000000,
+      "earnedExact": "50000/3",
+      "receiptDate": "2026-05-05",
+      "multiplierPpm": 1000000,
+      "referenceDate": "2026-04-05"
+     },
+     {
+      "note": "50 days after the invoice's due date (2026-04-05): 50%. Applied to the invoice it names.",
+      "status": "credited",
+      "unitId": "doc:SO 5",
+      "delayDays": 50,
+      "invoiceId": "doc:INV 5",
+      "receiptId": "doc:RC 5.1",
+      "receiptNo": "RC 5.1",
+      "employeeId": "emp:rep",
+      "amountPaise": 100000000,
+      "earnedExact": "25000/3",
+      "receiptDate": "2026-05-25",
+      "multiplierPpm": 500000,
+      "referenceDate": "2026-04-05"
+     },
+     {
+      "note": "50 days after the invoice's due date (2026-04-05): 50%. Applied to the invoice it names.",
+      "status": "credited",
+      "unitId": "doc:SO 6",
+      "delayDays": 50,
+      "invoiceId": "doc:INV 6",
+      "receiptId": "doc:RC 6.1",
+      "receiptNo": "RC 6.1",
+      "employeeId": "emp:rep",
+      "amountPaise": 100000000,
+      "earnedExact": "25000/3",
+      "receiptDate": "2026-05-25",
+      "multiplierPpm": 500000,
+      "referenceDate": "2026-04-05"
+     },
+     {
+      "note": "50 days after the invoice's due date (2026-04-05): 50%. Applied to the invoice it names.",
+      "status": "credited",
+      "unitId": "doc:SO 7",
+      "delayDays": 50,
+      "invoiceId": "doc:INV 7",
+      "receiptId": "doc:RC 7.1",
+      "receiptNo": "RC 7.1",
+      "employeeId": "emp:rep",
+      "amountPaise": 100000000,
+      "earnedExact": "25000/3",
+      "receiptDate": "2026-05-25",
+      "multiplierPpm": 500000,
+      "referenceDate": "2026-04-05"
+     },
+     {
+      "note": "50 days after the invoice's due date (2026-04-05): 50%. Applied to the invoice it names.",
+      "status": "credited",
+      "unitId": "doc:SO 8",
+      "delayDays": 50,
+      "invoiceId": "doc:INV 8",
+      "receiptId": "doc:RC 8.1",
+      "receiptNo": "RC 8.1",
+      "employeeId": "emp:rep",
+      "amountPaise": 100000000,
+      "earnedExact": "25000/3",
+      "receiptDate": "2026-05-25",
+      "multiplierPpm": 500000,
+      "referenceDate": "2026-04-05"
+     },
+     {
+      "note": "60 days after the invoice's due date (2026-04-05): 50%. Applied to the invoice it names.",
+      "status": "credited",
+      "unitId": "doc:SO 1",
+      "delayDays": 60,
+      "invoiceId": "doc:INV 1",
+      "receiptId": "doc:RC 1.2",
+      "receiptNo": "RC 1.2",
+      "employeeId": "emp:rep",
+      "amountPaise": 50000000,
+      "earnedExact": "12500/3",
+      "receiptDate": "2026-06-04",
+      "multiplierPpm": 500000,
+      "referenceDate": "2026-04-05"
+     },
+     {
+      "note": "60 days after the invoice's due date (2026-04-05): 50%. Applied to the invoice it names.",
+      "status": "credited",
+      "unitId": "doc:SO 2",
+      "delayDays": 60,
+      "invoiceId": "doc:INV 2",
+      "receiptId": "doc:RC 2.2",
+      "receiptNo": "RC 2.2",
+      "employeeId": "emp:rep",
+      "amountPaise": 25000000,
+      "earnedExact": "6250/3",
+      "receiptDate": "2026-06-04",
+      "multiplierPpm": 500000,
+      "referenceDate": "2026-04-05"
+     },
+     {
+      "note": "80 days after the invoice's due date (2026-04-05): 25%. Applied to the invoice it names.",
+      "status": "credited",
+      "unitId": "doc:SO 10",
+      "delayDays": 80,
+      "invoiceId": "doc:INV 10",
+      "receiptId": "doc:RC 10.1",
+      "receiptNo": "RC 10.1",
+      "employeeId": "emp:rep",
+      "amountPaise": 100000000,
+      "earnedExact": "12500/3",
+      "receiptDate": "2026-06-24",
+      "multiplierPpm": 250000,
+      "referenceDate": "2026-04-05"
+     },
+     {
+      "note": "80 days after the invoice's due date (2026-04-05): 25%. Applied to the invoice it names.",
+      "status": "credited",
+      "unitId": "doc:SO 9",
+      "delayDays": 80,
+      "invoiceId": "doc:INV 9",
+      "receiptId": "doc:RC 9.1",
+      "receiptNo": "RC 9.1",
+      "employeeId": "emp:rep",
+      "amountPaise": 100000000,
+      "earnedExact": "12500/3",
+      "receiptDate": "2026-06-24",
+      "multiplierPpm": 250000,
+      "referenceDate": "2026-04-05"
+     },
+     {
+      "note": "90 days after the invoice's due date (2026-04-05): 25%. Applied to the invoice it names.",
+      "status": "credited",
+      "unitId": "doc:SO 2",
+      "delayDays": 90,
+      "invoiceId": "doc:INV 2",
+      "receiptId": "doc:RC 2.3",
+      "receiptNo": "RC 2.3",
+      "employeeId": "emp:rep",
+      "amountPaise": 50000000,
+      "earnedExact": "6250/3",
+      "receiptDate": "2026-07-04",
+      "multiplierPpm": 250000,
+      "referenceDate": "2026-04-05"
+     }
+    ],
+    "status": "computed",
+    "settled": true,
+    "excluded": [],
+    "problems": [],
+    "employees": [
+     {
+      "name": "rep",
+      "pool": "200000",
+      "limits": [],
+      "qualified": true,
+      "slabLines": [
+       {
+        "note": "0.1% of ₹20,00,000 inside the slab",
+        "label": "₹1.0 Cr – ₹1.2 Cr",
+        "amount": "200000",
+        "limited": "200000",
+        "lineCode": "A.1"
+       }
+      ],
+      "employeeId": "emp:rep",
+      "salesPaise": 1200000000,
+      "earnedExact": "92500",
+      "earnedPaise": 92500,
+      "explanation": [
+       "Sales in 2026-04: ₹1,20,00,000; threshold ₹1,00,00,000 — qualifies.",
+       "Incentive for the month: ₹2,000 (A.1: 0.1% of ₹20,00,000 inside the slab).",
+       "Shared between 12 orders equally."
+      ],
+      "payableExact": "92500",
+      "payablePaise": 92500,
+      "pendingPaise": 0,
+      "ordersSharing": 12,
+      "projectedPaise": 0
+     }
+    ],
+    "settingsUsed": {
+     "slabs.gaps": "refuse",
+     "period.unit": "calendarMonth",
+     "basis.amount": "total",
+     "slabs.method": "marginal",
+     "adjust.refund": "reverseReceiptShare",
+     "caps.perOrder": "none",
+     "basis.document": "salesOrder",
+     "payout.release": "afterApproval",
+     "rounding.level": "employeeMonthTotal",
+     "slabs.aboveTop": "noFurtherIncentive",
+     "basis.monthDate": "orderDate",
+     "period.lockMode": "manual",
+     "rounding.method": "halfUp",
+     "basis.preClosure": "ignore",
+     "slabs.boundaries": "lowerInclusive",
+     "adjust.creditNote": "reduceOriginalMonthSales",
+     "adjust.openMonths": "recalculate",
+     "adjust.windowDays": 1,
+     "allocation.method": "equalPerOrder",
+     "attribution.split": "single",
+     "period.recalcDays": 1,
+     "adjust.salesReturn": "reduceOriginalMonthSales",
+     "attribution.source": "customerSalesRep",
+     "period.recalcUntil": "untilLocked",
+     "rounding.precision": "paise",
+     "basis.voucherFilter": [
+      "cancelled"
+     ],
+     "period.autoLockDays": 1,
+     "period.lateReceipts": "adjustInCurrentOpenMonth",
+     "adjust.bouncedCheque": "reverseReceiptShare",
+     "collection.delayFrom": "invoiceDueDate",
+     "payout.approvalSteps": 2,
+     "slabs.aboveTopAmount": 100,
+     "eligibility.threshold": 1000000000,
+     "adjust.negativeBalance": "recoverFromNextPayout",
+     "adjust.reversedReceipt": "reverseReceiptShare",
+     "attribution.historical": "currentRep",
+     "collection.defaultDays": 1,
+     "collection.payableWhen": "orderFullyCollected",
+     "collection.earningBasis": "perReceipt",
+     "collection.stepBoundary": "upperInclusive",
+     "adjust.carryForwardMonths": 2,
+     "adjust.lockedOrPaidMonths": "adjustInCurrentMonth",
+     "allocation.eligibleOrders": "allInMonth",
+     "allocation.minOrderAmount": 100,
+     "collection.missingDueDate": "treatAsOnTime",
+     "collection.dueDateFallback": [
+      "invoiceDueDate"
+     ],
+     "collection.recoveryAfterNil": "recoverToStepAtReceipt",
+     "collection.onAccountReceipts": "ignoreUntilAllocated",
+     "collection.unreceivedPortion": "pendingUntilReceived",
+     "caps.perEmployeeCategoryMonth": 900000,
+     "eligibility.inactiveEmployees": "excludeFromMonthLeft",
+     "collection.multiInvoiceReceipts": "useImportedReference",
+     "eligibility.thresholdComparison": "atLeast",
+     "caps.perEmployeeAllCategoriesMonth": 1825000
+    },
+    "engineVersion": "category-a/1",
+    "configVersionId": "version:1",
+    "configVersionNo": 1
+   },
+   "computed_by_id": "emp:runner",
+   "computed_by_name": "runner"
+  },
+  {
+   "id": "run:2",
+   "program_id": "program:SALES",
+   "category_code": "A",
+   "month": "<time>",
+   "as_of": "<time>",
+   "config_version_id": "version:1",
+   "config_version_no": 1,
+   "engine_version": "category-a/1",
+   "status": "computed",
+   "adopted": false,
+   "outcome": "Kept for the record, not adopted: the month is locked. The difference is carried into 2026-10.",
+   "inputs": {
+    "asOf": "2026-10-05",
+    "month": "2026-04-01",
+    "roles": [
+     "doer",
+     "initiator",
+     "both"
+    ],
+    "config": {
+     "slabs": [
+      {
+       "label": "₹1.0 Cr – ₹1.2 Cr",
+       "ratePpm": 1000,
+       "toPaise": 1200000000,
+       "capPaise": 200000,
+       "lineCode": "A.1",
+       "fromPaise": 1000000000,
+       "valueType": "percent",
+       "fixedPaise": null
+      },
+      {
+       "label": "₹1.2 Cr – ₹1.4 Cr",
+       "ratePpm": 1500,
+       "toPaise": 1400000000,
+       "capPaise": 300000,
+       "lineCode": "A.2",
+       "fromPaise": 1200000000,
+       "valueType": "percent",
+       "fixedPaise": null
+      },
+      {
+       "label": "₹1.4 Cr – ₹1.6 Cr",
+       "ratePpm": 2000,
+       "toPaise": 1600000000,
+       "capPaise": 400000,
+       "lineCode": "A.3",
+       "fromPaise": 1400000000,
+       "valueType": "percent",
+       "fixedPaise": null
+      }
+     ],
+     "settings": {
+      "slabs.gaps": "refuse",
+      "period.unit": "calendarMonth",
+      "basis.amount": "total",
+      "slabs.method": "marginal",
+      "adjust.refund": "reverseReceiptShare",
+      "caps.perOrder": "none",
+      "basis.document": "salesOrder",
+      "payout.release": "afterApproval",
+      "rounding.level": "employeeMonthTotal",
+      "slabs.aboveTop": "noFurtherIncentive",
+      "basis.monthDate": "orderDate",
+      "period.lockMode": "manual",
+      "rounding.method": "halfUp",
+      "basis.preClosure": "ignore",
+      "slabs.boundaries": "lowerInclusive",
+      "adjust.creditNote": "reduceOriginalMonthSales",
+      "adjust.openMonths": "recalculate",
+      "adjust.windowDays": 1,
+      "allocation.method": "equalPerOrder",
+      "attribution.split": "single",
+      "period.recalcDays": 1,
+      "adjust.salesReturn": "reduceOriginalMonthSales",
+      "attribution.source": "customerSalesRep",
+      "period.recalcUntil": "untilLocked",
+      "rounding.precision": "paise",
+      "basis.voucherFilter": [
+       "cancelled"
+      ],
+      "period.autoLockDays": 1,
+      "period.lateReceipts": "adjustInCurrentOpenMonth",
+      "adjust.bouncedCheque": "reverseReceiptShare",
+      "collection.delayFrom": "invoiceDueDate",
+      "payout.approvalSteps": 2,
+      "slabs.aboveTopAmount": 100,
+      "eligibility.threshold": 1000000000,
+      "adjust.negativeBalance": "recoverFromNextPayout",
+      "adjust.reversedReceipt": "reverseReceiptShare",
+      "attribution.historical": "currentRep",
+      "collection.defaultDays": 1,
+      "collection.payableWhen": "orderFullyCollected",
+      "collection.earningBasis": "perReceipt",
+      "collection.stepBoundary": "upperInclusive",
+      "adjust.carryForwardMonths": 2,
+      "adjust.lockedOrPaidMonths": "adjustInCurrentMonth",
+      "allocation.eligibleOrders": "allInMonth",
+      "allocation.minOrderAmount": 100,
+      "collection.missingDueDate": "treatAsOnTime",
+      "collection.dueDateFallback": [
+       "invoiceDueDate"
+      ],
+      "collection.recoveryAfterNil": "recoverToStepAtReceipt",
+      "collection.onAccountReceipts": "ignoreUntilAllocated",
+      "collection.unreceivedPortion": "pendingUntilReceived",
+      "caps.perEmployeeCategoryMonth": 900000,
+      "eligibility.inactiveEmployees": "excludeFromMonthLeft",
+      "collection.multiInvoiceReceipts": "useImportedReference",
+      "eligibility.thresholdComparison": "atLeast",
+      "caps.perEmployeeAllCategoriesMonth": 1825000
+     },
+     "delaySteps": [
+      {
+       "toDays": 100,
+       "fromDays": 75,
+       "multiplierPpm": 250000
+      },
+      {
+       "toDays": 45,
+       "fromDays": 0,
+       "multiplierPpm": 1000000
+      },
+      {
+       "toDays": 75,
+       "fromDays": 45,
+       "multiplierPpm": 500000
+      },
+      {
+       "toDays": null,
+       "fromDays": 100,
+       "multiplierPpm": 0
+      }
+     ],
+     "eligibility": [
+      {
+       "mode": "include",
+       "role": null,
+       "subjectId": "emp:rep",
+       "effectiveTo": null,
+       "subjectType": "employee",
+       "subjectLabel": "rep",
+       "effectiveFrom": "2026-01-01"
+      }
+     ]
+    },
+    "events": [
+     {
+      "id": "event:refund",
+      "date": "2026-10-01",
+      "kind": "refund",
+      "invoiceId": null,
+      "documentId": "doc:RC 4.1",
+      "amountPaise": 50000000
+     }
+    ],
+    "orders": [
+     {
+      "id": "doc:SO 1",
+      "no": "SO 1",
+      "date": "2026-04-05",
+      "states": {
+       "optional": false,
+       "cancelled": false,
+       "postDated": false
+      },
+      "customerId": "customer:Customer One",
+      "itemsPaise": 100000000,
+      "totalPaise": 100000000,
+      "paymentTerms": null,
+      "taxablePaise": 100000000,
+      "customerOrderDate": null
+     },
+     {
+      "id": "doc:SO 10",
+      "no": "SO 10",
+      "date": "2026-04-05",
+      "states": {
+       "optional": false,
+       "cancelled": false,
+       "postDated": false
+      },
+      "customerId": "customer:Customer One",
+      "itemsPaise": 100000000,
+      "totalPaise": 100000000,
+      "paymentTerms": null,
+      "taxablePaise": 100000000,
+      "customerOrderDate": null
+     },
+     {
+      "id": "doc:SO 11",
+      "no": "SO 11",
+      "date": "2026-04-05",
+      "states": {
+       "optional": false,
+       "cancelled": false,
+       "postDated": false
+      },
+      "customerId": "customer:Customer One",
+      "itemsPaise": 100000000,
+      "totalPaise": 100000000,
+      "paymentTerms": null,
+      "taxablePaise": 100000000,
+      "customerOrderDate": null
+     },
+     {
+      "id": "doc:SO 12",
+      "no": "SO 12",
+      "date": "2026-04-05",
+      "states": {
+       "optional": false,
+       "cancelled": false,
+       "postDated": false
+      },
+      "customerId": "customer:Customer One",
+      "itemsPaise": 100000000,
+      "totalPaise": 100000000,
+      "paymentTerms": null,
+      "taxablePaise": 100000000,
+      "customerOrderDate": null
+     },
+     {
+      "id": "doc:SO 2",
+      "no": "SO 2",
+      "date": "2026-04-05",
+      "states": {
+       "optional": false,
+       "cancelled": false,
+       "postDated": false
+      },
+      "customerId": "customer:Customer One",
+      "itemsPaise": 100000000,
+      "totalPaise": 100000000,
+      "paymentTerms": null,
+      "taxablePaise": 100000000,
+      "customerOrderDate": null
+     },
+     {
+      "id": "doc:SO 3",
+      "no": "SO 3",
+      "date": "2026-04-05",
+      "states": {
+       "optional": false,
+       "cancelled": false,
+       "postDated": false
+      },
+      "customerId": "customer:Customer One",
+      "itemsPaise": 100000000,
+      "totalPaise": 100000000,
+      "paymentTerms": null,
+      "taxablePaise": 100000000,
+      "customerOrderDate": null
+     },
+     {
+      "id": "doc:SO 4",
+      "no": "SO 4",
+      "date": "2026-04-05",
+      "states": {
+       "optional": false,
+       "cancelled": false,
+       "postDated": false
+      },
+      "customerId": "customer:Customer One",
+      "itemsPaise": 100000000,
+      "totalPaise": 100000000,
+      "paymentTerms": null,
+      "taxablePaise": 100000000,
+      "customerOrderDate": null
+     },
+     {
+      "id": "doc:SO 5",
+      "no": "SO 5",
+      "date": "2026-04-05",
+      "states": {
+       "optional": false,
+       "cancelled": false,
+       "postDated": false
+      },
+      "customerId": "customer:Customer One",
+      "itemsPaise": 100000000,
+      "totalPaise": 100000000,
+      "paymentTerms": null,
+      "taxablePaise": 100000000,
+      "customerOrderDate": null
+     },
+     {
+      "id": "doc:SO 6",
+      "no": "SO 6",
+      "date": "2026-04-05",
+      "states": {
+       "optional": false,
+       "cancelled": false,
+       "postDated": false
+      },
+      "customerId": "customer:Customer One",
+      "itemsPaise": 100000000,
+      "totalPaise": 100000000,
+      "paymentTerms": null,
+      "taxablePaise": 100000000,
+      "customerOrderDate": null
+     },
+     {
+      "id": "doc:SO 7",
+      "no": "SO 7",
+      "date": "2026-04-05",
+      "states": {
+       "optional": false,
+       "cancelled": false,
+       "postDated": false
+      },
+      "customerId": "customer:Customer One",
+      "itemsPaise": 100000000,
+      "totalPaise": 100000000,
+      "paymentTerms": null,
+      "taxablePaise": 100000000,
+      "customerOrderDate": null
+     },
+     {
+      "id": "doc:SO 8",
+      "no": "SO 8",
+      "date": "2026-04-05",
+      "states": {
+       "optional": false,
+       "cancelled": false,
+       "postDated": false
+      },
+      "customerId": "customer:Customer One",
+      "itemsPaise": 100000000,
+      "totalPaise": 100000000,
+      "paymentTerms": null,
+      "taxablePaise": 100000000,
+      "customerOrderDate": null
+     },
+     {
+      "id": "doc:SO 9",
+      "no": "SO 9",
+      "date": "2026-04-05",
+      "states": {
+       "optional": false,
+       "cancelled": false,
+       "postDated": false
+      },
+      "customerId": "customer:Customer One",
+      "itemsPaise": 100000000,
+      "totalPaise": 100000000,
+      "paymentTerms": null,
+      "taxablePaise": 100000000,
+      "customerOrderDate": null
+     }
+    ],
+    "invoices": [
+     {
+      "id": "doc:INV 1",
+      "no": "INV 1",
+      "date": "2026-04-05",
+      "dueDate": "2026-04-05",
+      "orderId": "doc:SO 1",
+      "customerId": "customer:Customer One",
+      "itemsPaise": null,
+      "totalPaise": 100000000,
+      "taxablePaise": 100000000
+     },
+     {
+      "id": "doc:INV 10",
+      "no": "INV 10",
+      "date": "2026-04-05",
+      "dueDate": "2026-04-05",
+      "orderId": "doc:SO 10",
+      "customerId": "customer:Customer One",
+      "itemsPaise": null,
+      "totalPaise": 100000000,
+      "taxablePaise": 100000000
+     },
+     {
+      "id": "doc:INV 11",
+      "no": "INV 11",
+      "date": "2026-04-05",
+      "dueDate": "2026-04-05",
+      "orderId": "doc:SO 11",
+      "customerId": "customer:Customer One",
+      "itemsPaise": null,
+      "totalPaise": 100000000,
+      "taxablePaise": 100000000
+     },
+     {
+      "id": "doc:INV 12",
+      "no": "INV 12",
+      "date": "2026-04-05",
+      "dueDate": "2026-04-05",
+      "orderId": "doc:SO 12",
+      "customerId": "customer:Customer One",
+      "itemsPaise": null,
+      "totalPaise": 100000000,
+      "taxablePaise": 100000000
+     },
+     {
+      "id": "doc:INV 2",
+      "no": "INV 2",
+      "date": "2026-04-05",
+      "dueDate": "2026-04-05",
+      "orderId": "doc:SO 2",
+      "customerId": "customer:Customer One",
+      "itemsPaise": null,
+      "totalPaise": 100000000,
+      "taxablePaise": 100000000
+     },
+     {
+      "id": "doc:INV 3",
+      "no": "INV 3",
+      "date": "2026-04-05",
+      "dueDate": "2026-04-05",
+      "orderId": "doc:SO 3",
+      "customerId": "customer:Customer One",
+      "itemsPaise": null,
+      "totalPaise": 100000000,
+      "taxablePaise": 100000000
+     },
+     {
+      "id": "doc:INV 4",
+      "no": "INV 4",
+      "date": "2026-04-05",
+      "dueDate": "2026-04-05",
+      "orderId": "doc:SO 4",
+      "customerId": "customer:Customer One",
+      "itemsPaise": null,
+      "totalPaise": 100000000,
+      "taxablePaise": 100000000
+     },
+     {
+      "id": "doc:INV 5",
+      "no": "INV 5",
+      "date": "2026-04-05",
+      "dueDate": "2026-04-05",
+      "orderId": "doc:SO 5",
+      "customerId": "customer:Customer One",
+      "itemsPaise": null,
+      "totalPaise": 100000000,
+      "taxablePaise": 100000000
+     },
+     {
+      "id": "doc:INV 6",
+      "no": "INV 6",
+      "date": "2026-04-05",
+      "dueDate": "2026-04-05",
+      "orderId": "doc:SO 6",
+      "customerId": "customer:Customer One",
+      "itemsPaise": null,
+      "totalPaise": 100000000,
+      "taxablePaise": 100000000
+     },
+     {
+      "id": "doc:INV 7",
+      "no": "INV 7",
+      "date": "2026-04-05",
+      "dueDate": "2026-04-05",
+      "orderId": "doc:SO 7",
+      "customerId": "customer:Customer One",
+      "itemsPaise": null,
+      "totalPaise": 100000000,
+      "taxablePaise": 100000000
+     },
+     {
+      "id": "doc:INV 8",
+      "no": "INV 8",
+      "date": "2026-04-05",
+      "dueDate": "2026-04-05",
+      "orderId": "doc:SO 8",
+      "customerId": "customer:Customer One",
+      "itemsPaise": null,
+      "totalPaise": 100000000,
+      "taxablePaise": 100000000
+     },
+     {
+      "id": "doc:INV 9",
+      "no": "INV 9",
+      "date": "2026-04-05",
+      "dueDate": "2026-04-05",
+      "orderId": "doc:SO 9",
+      "customerId": "customer:Customer One",
+      "itemsPaise": null,
+      "totalPaise": 100000000,
+      "taxablePaise": 100000000
+     }
+    ],
+    "receipts": [
+     {
+      "id": "doc:RC 1.1",
+      "no": "RC 1.1",
+      "date": "2026-04-15",
+      "invoiceId": "doc:INV 1",
+      "customerId": "customer:Customer One",
+      "amountPaise": 50000000
+     },
+     {
+      "id": "doc:RC 1.2",
+      "no": "RC 1.2",
+      "date": "2026-06-04",
+      "invoiceId": "doc:INV 1",
+      "customerId": "customer:Customer One",
+      "amountPaise": 50000000
+     },
+     {
+      "id": "doc:RC 10.1",
+      "no": "RC 10.1",
+      "date": "2026-06-24",
+      "invoiceId": "doc:INV 10",
+      "customerId": "customer:Customer One",
+      "amountPaise": 100000000
+     },
+     {
+      "id": "doc:RC 11.1",
+      "no": "RC 11.1",
+      "date": "2026-07-24",
+      "invoiceId": "doc:INV 11",
+      "customerId": "customer:Customer One",
+      "amountPaise": 100000000
+     },
+     {
+      "id": "doc:RC 12.1",
+      "no": "RC 12.1",
+      "date": "2026-07-24",
+      "invoiceId": "doc:INV 12",
+      "customerId": "customer:Customer One",
+      "amountPaise": 100000000
+     },
+     {
+      "id": "doc:RC 2.1",
+      "no": "RC 2.1",
+      "date": "2026-04-15",
+      "invoiceId": "doc:INV 2",
+      "customerId": "customer:Customer One",
+      "amountPaise": 25000000
+     },
+     {
+      "id": "doc:RC 2.2",
+      "no": "RC 2.2",
+      "date": "2026-06-04",
+      "invoiceId": "doc:INV 2",
+      "customerId": "customer:Customer One",
+      "amountPaise": 25000000
+     },
+     {
+      "id": "doc:RC 2.3",
+      "no": "RC 2.3",
+      "date": "2026-07-04",
+      "invoiceId": "doc:INV 2",
+      "customerId": "customer:Customer One",
+      "amountPaise": 50000000
+     },
+     {
+      "id": "doc:RC 3.1",
+      "no": "RC 3.1",
+      "date": "2026-04-15",
+      "invoiceId": "doc:INV 3",
+      "customerId": "customer:Customer One",
+      "amountPaise": 80000000
+     },
+     {
+      "id": "doc:RC 3.2",
+      "no": "RC 3.2",
+      "date": "2026-08-03",
+      "invoiceId": "doc:INV 3",
+      "customerId": "customer:Customer One",
+      "amountPaise": 20000000
+     },
+     {
+      "id": "doc:RC 4.1",
+      "no": "RC 4.1",
+      "date": "2026-05-05",
+      "invoiceId": "doc:INV 4",
+      "customerId": "customer:Customer One",
+      "amountPaise": 100000000
+     },
+     {
+      "id": "doc:RC 5.1",
+      "no": "RC 5.1",
+      "date": "2026-05-25",
+      "invoiceId": "doc:INV 5",
+      "customerId": "customer:Customer One",
+      "amountPaise": 100000000
+     },
+     {
+      "id": "doc:RC 6.1",
+      "no": "RC 6.1",
+      "date": "2026-05-25",
+      "invoiceId": "doc:INV 6",
+      "customerId": "customer:Customer One",
+      "amountPaise": 100000000
+     },
+     {
+      "id": "doc:RC 7.1",
+      "no": "RC 7.1",
+      "date": "2026-05-25",
+      "invoiceId": "doc:INV 7",
+      "customerId": "customer:Customer One",
+      "amountPaise": 100000000
+     },
+     {
+      "id": "doc:RC 8.1",
+      "no": "RC 8.1",
+      "date": "2026-05-25",
+      "invoiceId": "doc:INV 8",
+      "customerId": "customer:Customer One",
+      "amountPaise": 100000000
+     },
+     {
+      "id": "doc:RC 9.1",
+      "no": "RC 9.1",
+      "date": "2026-06-24",
+      "invoiceId": "doc:INV 9",
+      "customerId": "customer:Customer One",
+      "amountPaise": 100000000
+     }
+    ],
+    "customers": [
+     {
+      "id": "customer:Customer One",
+      "name": "Customer One",
+      "salesRepId": "emp:rep",
+      "creditPeriodDays": 30
+     }
+    ],
+    "employees": [
+     {
+      "id": "emp:a1",
+      "name": "a1",
+      "role": "both",
+      "isActive": true,
+      "departmentId": null
+     },
+     {
+      "id": "emp:a2",
+      "name": "a2",
+      "role": "both",
+      "isActive": true,
+      "departmentId": null
+     },
+     {
+      "id": "emp:author",
+      "name": "author",
+      "role": "both",
+      "isActive": true,
+      "departmentId": null
+     },
+     {
+      "id": "emp:checker",
+      "name": "checker",
+      "role": "both",
+      "isActive": true,
+      "departmentId": null
+     },
+     {
+      "id": "emp:locker",
+      "name": "locker",
+      "role": "both",
+      "isActive": true,
+      "departmentId": null
+     },
+     {
+      "id": "emp:payer",
+      "name": "payer",
+      "role": "both",
+      "isActive": true,
+      "departmentId": null
+     },
+     {
+      "id": "emp:rep",
+      "name": "rep",
+      "role": "both",
+      "isActive": true,
+      "departmentId": null
+     },
+     {
+      "id": "emp:runner",
+      "name": "runner",
+      "role": "both",
+      "isActive": true,
+      "departmentId": null
+     }
+    ],
+    "repHistory": [],
+    "creditNotes": [],
+    "preclosures": [],
+    "attributions": [],
+    "configVersion": {
+     "id": "version:1",
+     "status": "published",
+     "programId": "program:SALES",
+     "versionNo": 1,
+     "effectiveTo": null,
+     "effectiveFrom": "2026-04-01"
+    }
+   },
+   "result": {
+    "asOf": "2026-10-05",
+    "held": [],
+    "month": "2026-04-01",
+    "units": [
+     {
+      "unitId": "doc:SO 1",
+      "unitNo": "SO 1",
+      "sharePpm": 1000000,
+      "unitType": "sales-orders",
+      "allocated": "50000/3",
+      "employeeId": "emp:rep",
+      "takesShare": true,
+      "valuePaise": 100000000,
+      "earnedExact": "12500",
+      "explanation": [
+       "Order SO 1 of 2026-04-05: total value ₹10,00,000.",
+       "Its share of the month's incentive: ₹166.67 for collecting ₹10,00,000."
+      ],
+      "payableExact": "12500",
+      "collectedPaise": 100000000,
+      "fullyCollected": true,
+      "collectiblePaise": 100000000
+     },
+     {
+      "unitId": "doc:SO 10",
+      "unitNo": "SO 10",
+      "sharePpm": 1000000,
+      "unitType": "sales-orders",
+      "allocated": "50000/3",
+      "employeeId": "emp:rep",
+      "takesShare": true,
+      "valuePaise": 100000000,
+      "earnedExact": "12500/3",
+      "explanation": [
+       "Order SO 10 of 2026-04-05: total value ₹10,00,000.",
+       "Its share of the month's incentive: ₹166.67 for collecting ₹10,00,000."
+      ],
+      "payableExact": "12500/3",
+      "collectedPaise": 100000000,
+      "fullyCollected": true,
+      "collectiblePaise": 100000000
+     },
+     {
+      "unitId": "doc:SO 11",
+      "unitNo": "SO 11",
+      "sharePpm": 1000000,
+      "unitType": "sales-orders",
+      "allocated": "50000/3",
+      "employeeId": "emp:rep",
+      "takesShare": true,
+      "valuePaise": 100000000,
+      "earnedExact": "0",
+      "explanation": [
+       "Order SO 11 of 2026-04-05: total value ₹10,00,000.",
+       "Its share of the month's incentive: ₹166.67 for collecting ₹10,00,000."
+      ],
+      "payableExact": "0",
+      "collectedPaise": 100000000,
+      "fullyCollected": true,
+      "collectiblePaise": 100000000
+     },
+     {
+      "unitId": "doc:SO 12",
+      "unitNo": "SO 12",
+      "sharePpm": 1000000,
+      "unitType": "sales-orders",
+      "allocated": "50000/3",
+      "employeeId": "emp:rep",
+      "takesShare": true,
+      "valuePaise": 100000000,
+      "earnedExact": "0",
+      "explanation": [
+       "Order SO 12 of 2026-04-05: total value ₹10,00,000.",
+       "Its share of the month's incentive: ₹166.67 for collecting ₹10,00,000."
+      ],
+      "payableExact": "0",
+      "collectedPaise": 100000000,
+      "fullyCollected": true,
+      "collectiblePaise": 100000000
+     },
+     {
+      "unitId": "doc:SO 2",
+      "unitNo": "SO 2",
+      "sharePpm": 1000000,
+      "unitType": "sales-orders",
+      "allocated": "50000/3",
+      "employeeId": "emp:rep",
+      "takesShare": true,
+      "valuePaise": 100000000,
+      "earnedExact": "25000/3",
+      "explanation": [
+       "Order SO 2 of 2026-04-05: total value ₹10,00,000.",
+       "Its share of the month's incentive: ₹166.67 for collecting ₹10,00,000."
+      ],
+      "payableExact": "25000/3",
+      "collectedPaise": 100000000,
+      "fullyCollected": true,
+      "collectiblePaise": 100000000
+     },
+     {
+      "unitId": "doc:SO 3",
+      "unitNo": "SO 3",
+      "sharePpm": 1000000,
+      "unitType": "sales-orders",
+      "allocated": "50000/3",
+      "employeeId": "emp:rep",
+      "takesShare": true,
+      "valuePaise": 100000000,
+      "earnedExact": "40000/3",
+      "explanation": [
+       "Order SO 3 of 2026-04-05: total value ₹10,00,000.",
+       "Its share of the month's incentive: ₹166.67 for collecting ₹10,00,000."
+      ],
+      "payableExact": "40000/3",
+      "collectedPaise": 100000000,
+      "fullyCollected": true,
+      "collectiblePaise": 100000000
+     },
+     {
+      "unitId": "doc:SO 4",
+      "unitNo": "SO 4",
+      "sharePpm": 1000000,
+      "unitType": "sales-orders",
+      "allocated": "50000/3",
+      "employeeId": "emp:rep",
+      "takesShare": true,
+      "valuePaise": 100000000,
+      "earnedExact": "25000/3",
+      "explanation": [
+       "Order SO 4 of 2026-04-05: total value ₹10,00,000.",
+       "Its share of the month's incentive: ₹166.67 for collecting ₹10,00,000.",
+       "Collected ₹5,00,000: payable once fully collected."
+      ],
+      "payableExact": "0",
+      "collectedPaise": 50000000,
+      "fullyCollected": false,
+      "collectiblePaise": 100000000
+     },
+     {
+      "unitId": "doc:SO 5",
+      "unitNo": "SO 5",
+      "sharePpm": 1000000,
+      "unitType": "sales-orders",
+      "allocated": "50000/3",
+      "employeeId": "emp:rep",
+      "takesShare": true,
+      "valuePaise": 100000000,
+      "earnedExact": "25000/3",
+      "explanation": [
+       "Order SO 5 of 2026-04-05: total value ₹10,00,000.",
+       "Its share of the month's incentive: ₹166.67 for collecting ₹10,00,000."
+      ],
+      "payableExact": "25000/3",
+      "collectedPaise": 100000000,
+      "fullyCollected": true,
+      "collectiblePaise": 100000000
+     },
+     {
+      "unitId": "doc:SO 6",
+      "unitNo": "SO 6",
+      "sharePpm": 1000000,
+      "unitType": "sales-orders",
+      "allocated": "50000/3",
+      "employeeId": "emp:rep",
+      "takesShare": true,
+      "valuePaise": 100000000,
+      "earnedExact": "25000/3",
+      "explanation": [
+       "Order SO 6 of 2026-04-05: total value ₹10,00,000.",
+       "Its share of the month's incentive: ₹166.67 for collecting ₹10,00,000."
+      ],
+      "payableExact": "25000/3",
+      "collectedPaise": 100000000,
+      "fullyCollected": true,
+      "collectiblePaise": 100000000
+     },
+     {
+      "unitId": "doc:SO 7",
+      "unitNo": "SO 7",
+      "sharePpm": 1000000,
+      "unitType": "sales-orders",
+      "allocated": "50000/3",
+      "employeeId": "emp:rep",
+      "takesShare": true,
+      "valuePaise": 100000000,
+      "earnedExact": "25000/3",
+      "explanation": [
+       "Order SO 7 of 2026-04-05: total value ₹10,00,000.",
+       "Its share of the month's incentive: ₹166.67 for collecting ₹10,00,000."
+      ],
+      "payableExact": "25000/3",
+      "collectedPaise": 100000000,
+      "fullyCollected": true,
+      "collectiblePaise": 100000000
+     },
+     {
+      "unitId": "doc:SO 8",
+      "unitNo": "SO 8",
+      "sharePpm": 1000000,
+      "unitType": "sales-orders",
+      "allocated": "50000/3",
+      "employeeId": "emp:rep",
+      "takesShare": true,
+      "valuePaise": 100000000,
+      "earnedExact": "25000/3",
+      "explanation": [
+       "Order SO 8 of 2026-04-05: total value ₹10,00,000.",
+       "Its share of the month's incentive: ₹166.67 for collecting ₹10,00,000."
+      ],
+      "payableExact": "25000/3",
+      "collectedPaise": 100000000,
+      "fullyCollected": true,
+      "collectiblePaise": 100000000
+     },
+     {
+      "unitId": "doc:SO 9",
+      "unitNo": "SO 9",
+      "sharePpm": 1000000,
+      "unitType": "sales-orders",
+      "allocated": "50000/3",
+      "employeeId": "emp:rep",
+      "takesShare": true,
+      "valuePaise": 100000000,
+      "earnedExact": "12500/3",
+      "explanation": [
+       "Order SO 9 of 2026-04-05: total value ₹10,00,000.",
+       "Its share of the month's incentive: ₹166.67 for collecting ₹10,00,000."
+      ],
+      "payableExact": "12500/3",
+      "collectedPaise": 100000000,
+      "fullyCollected": true,
+      "collectiblePaise": 100000000
+     }
+    ],
+    "pieces": [
+     {
+      "note": "10 days after the invoice's due date (2026-04-05): 100%. Applied to the invoice it names.",
+      "status": "credited",
+      "unitId": "doc:SO 1",
+      "delayDays": 10,
+      "invoiceId": "doc:INV 1",
+      "receiptId": "doc:RC 1.1",
+      "receiptNo": "RC 1.1",
+      "employeeId": "emp:rep",
+      "amountPaise": 50000000,
+      "earnedExact": "25000/3",
+      "receiptDate": "2026-04-15",
+      "multiplierPpm": 1000000,
+      "referenceDate": "2026-04-05"
+     },
+     {
+      "note": "10 days after the invoice's due date (2026-04-05): 100%. Applied to the invoice it names.",
+      "status": "credited",
+      "unitId": "doc:SO 2",
+      "delayDays": 10,
+      "invoiceId": "doc:INV 2",
+      "receiptId": "doc:RC 2.1",
+      "receiptNo": "RC 2.1",
+      "employeeId": "emp:rep",
+      "amountPaise": 25000000,
+      "earnedExact": "12500/3",
+      "receiptDate": "2026-04-15",
+      "multiplierPpm": 1000000,
+      "referenceDate": "2026-04-05"
+     },
+     {
+      "note": "10 days after the invoice's due date (2026-04-05): 100%. Applied to the invoice it names.",
+      "status": "credited",
+      "unitId": "doc:SO 3",
+      "delayDays": 10,
+      "invoiceId": "doc:INV 3",
+      "receiptId": "doc:RC 3.1",
+      "receiptNo": "RC 3.1",
+      "employeeId": "emp:rep",
+      "amountPaise": 80000000,
+      "earnedExact": "40000/3",
+      "receiptDate": "2026-04-15",
+      "multiplierPpm": 1000000,
+      "referenceDate": "2026-04-05"
+     },
+     {
+      "note": "110 days after the invoice's due date (2026-04-05): 0%. Applied to the invoice it names.",
+      "status": "credited",
+      "unitId": "doc:SO 11",
+      "delayDays": 110,
+      "invoiceId": "doc:INV 11",
+      "receiptId": "doc:RC 11.1",
+      "receiptNo": "RC 11.1",
+      "employeeId": "emp:rep",
+      "amountPaise": 100000000,
+      "earnedExact": "0",
+      "receiptDate": "2026-07-24",
+      "multiplierPpm": 0,
+      "referenceDate": "2026-04-05"
+     },
+     {
+      "note": "110 days after the invoice's due date (2026-04-05): 0%. Applied to the invoice it names.",
+      "status": "credited",
+      "unitId": "doc:SO 12",
+      "delayDays": 110,
+      "invoiceId": "doc:INV 12",
+      "receiptId": "doc:RC 12.1",
+      "receiptNo": "RC 12.1",
+      "employeeId": "emp:rep",
+      "amountPaise": 100000000,
+      "earnedExact": "0",
+      "receiptDate": "2026-07-24",
+      "multiplierPpm": 0,
+      "referenceDate": "2026-04-05"
+     },
+     {
+      "note": "120 days after the invoice's due date (2026-04-05): 0%. Applied to the invoice it names.",
+      "status": "credited",
+      "unitId": "doc:SO 3",
+      "delayDays": 120,
+      "invoiceId": "doc:INV 3",
+      "receiptId": "doc:RC 3.2",
+      "receiptNo": "RC 3.2",
+      "employeeId": "emp:rep",
+      "amountPaise": 20000000,
+      "earnedExact": "0",
+      "receiptDate": "2026-08-03",
+      "multiplierPpm": 0,
+      "referenceDate": "2026-04-05"
+     },
+     {
+      "note": "30 days after the invoice's due date (2026-04-05): 100%. Applied to the invoice it names.",
+      "status": "credited",
+      "unitId": "doc:SO 4",
+      "delayDays": 30,
+      "invoiceId": "doc:INV 4",
+      "receiptId": "doc:RC 4.1",
+      "receiptNo": "RC 4.1",
+      "employeeId": "emp:rep",
+      "amountPaise": 50000000,
+      "earnedExact": "25000/3",
+      "receiptDate": "2026-05-05",
+      "multiplierPpm": 1000000,
+      "referenceDate": "2026-04-05"
+     },
+     {
+      "note": "50 days after the invoice's due date (2026-04-05): 50%. Applied to the invoice it names.",
+      "status": "credited",
+      "unitId": "doc:SO 5",
+      "delayDays": 50,
+      "invoiceId": "doc:INV 5",
+      "receiptId": "doc:RC 5.1",
+      "receiptNo": "RC 5.1",
+      "employeeId": "emp:rep",
+      "amountPaise": 100000000,
+      "earnedExact": "25000/3",
+      "receiptDate": "2026-05-25",
+      "multiplierPpm": 500000,
+      "referenceDate": "2026-04-05"
+     },
+     {
+      "note": "50 days after the invoice's due date (2026-04-05): 50%. Applied to the invoice it names.",
+      "status": "credited",
+      "unitId": "doc:SO 6",
+      "delayDays": 50,
+      "invoiceId": "doc:INV 6",
+      "receiptId": "doc:RC 6.1",
+      "receiptNo": "RC 6.1",
+      "employeeId": "emp:rep",
+      "amountPaise": 100000000,
+      "earnedExact": "25000/3",
+      "receiptDate": "2026-05-25",
+      "multiplierPpm": 500000,
+      "referenceDate": "2026-04-05"
+     },
+     {
+      "note": "50 days after the invoice's due date (2026-04-05): 50%. Applied to the invoice it names.",
+      "status": "credited",
+      "unitId": "doc:SO 7",
+      "delayDays": 50,
+      "invoiceId": "doc:INV 7",
+      "receiptId": "doc:RC 7.1",
+      "receiptNo": "RC 7.1",
+      "employeeId": "emp:rep",
+      "amountPaise": 100000000,
+      "earnedExact": "25000/3",
+      "receiptDate": "2026-05-25",
+      "multiplierPpm": 500000,
+      "referenceDate": "2026-04-05"
+     },
+     {
+      "note": "50 days after the invoice's due date (2026-04-05): 50%. Applied to the invoice it names.",
+      "status": "credited",
+      "unitId": "doc:SO 8",
+      "delayDays": 50,
+      "invoiceId": "doc:INV 8",
+      "receiptId": "doc:RC 8.1",
+      "receiptNo": "RC 8.1",
+      "employeeId": "emp:rep",
+      "amountPaise": 100000000,
+      "earnedExact": "25000/3",
+      "receiptDate": "2026-05-25",
+      "multiplierPpm": 500000,
+      "referenceDate": "2026-04-05"
+     },
+     {
+      "note": "60 days after the invoice's due date (2026-04-05): 50%. Applied to the invoice it names.",
+      "status": "credited",
+      "unitId": "doc:SO 1",
+      "delayDays": 60,
+      "invoiceId": "doc:INV 1",
+      "receiptId": "doc:RC 1.2",
+      "receiptNo": "RC 1.2",
+      "employeeId": "emp:rep",
+      "amountPaise": 50000000,
+      "earnedExact": "12500/3",
+      "receiptDate": "2026-06-04",
+      "multiplierPpm": 500000,
+      "referenceDate": "2026-04-05"
+     },
+     {
+      "note": "60 days after the invoice's due date (2026-04-05): 50%. Applied to the invoice it names.",
+      "status": "credited",
+      "unitId": "doc:SO 2",
+      "delayDays": 60,
+      "invoiceId": "doc:INV 2",
+      "receiptId": "doc:RC 2.2",
+      "receiptNo": "RC 2.2",
+      "employeeId": "emp:rep",
+      "amountPaise": 25000000,
+      "earnedExact": "6250/3",
+      "receiptDate": "2026-06-04",
+      "multiplierPpm": 500000,
+      "referenceDate": "2026-04-05"
+     },
+     {
+      "note": "80 days after the invoice's due date (2026-04-05): 25%. Applied to the invoice it names.",
+      "status": "credited",
+      "unitId": "doc:SO 10",
+      "delayDays": 80,
+      "invoiceId": "doc:INV 10",
+      "receiptId": "doc:RC 10.1",
+      "receiptNo": "RC 10.1",
+      "employeeId": "emp:rep",
+      "amountPaise": 100000000,
+      "earnedExact": "12500/3",
+      "receiptDate": "2026-06-24",
+      "multiplierPpm": 250000,
+      "referenceDate": "2026-04-05"
+     },
+     {
+      "note": "80 days after the invoice's due date (2026-04-05): 25%. Applied to the invoice it names.",
+      "status": "credited",
+      "unitId": "doc:SO 9",
+      "delayDays": 80,
+      "invoiceId": "doc:INV 9",
+      "receiptId": "doc:RC 9.1",
+      "receiptNo": "RC 9.1",
+      "employeeId": "emp:rep",
+      "amountPaise": 100000000,
+      "earnedExact": "12500/3",
+      "receiptDate": "2026-06-24",
+      "multiplierPpm": 250000,
+      "referenceDate": "2026-04-05"
+     },
+     {
+      "note": "90 days after the invoice's due date (2026-04-05): 25%. Applied to the invoice it names.",
+      "status": "credited",
+      "unitId": "doc:SO 2",
+      "delayDays": 90,
+      "invoiceId": "doc:INV 2",
+      "receiptId": "doc:RC 2.3",
+      "receiptNo": "RC 2.3",
+      "employeeId": "emp:rep",
+      "amountPaise": 50000000,
+      "earnedExact": "6250/3",
+      "receiptDate": "2026-07-04",
+      "multiplierPpm": 250000,
+      "referenceDate": "2026-04-05"
+     }
+    ],
+    "status": "computed",
+    "settled": true,
+    "excluded": [],
+    "problems": [],
+    "employees": [
+     {
+      "name": "rep",
+      "pool": "200000",
+      "limits": [],
+      "qualified": true,
+      "slabLines": [
+       {
+        "note": "0.1% of ₹20,00,000 inside the slab",
+        "label": "₹1.0 Cr – ₹1.2 Cr",
+        "amount": "200000",
+        "limited": "200000",
+        "lineCode": "A.1"
+       }
+      ],
+      "employeeId": "emp:rep",
+      "salesPaise": 1200000000,
+      "earnedExact": "252500/3",
+      "earnedPaise": 84167,
+      "explanation": [
+       "Sales in 2026-04: ₹1,20,00,000; threshold ₹1,00,00,000 — qualifies.",
+       "Incentive for the month: ₹2,000 (A.1: 0.1% of ₹20,00,000 inside the slab).",
+       "Shared between 12 orders equally."
+      ],
+      "payableExact": "227500/3",
+      "payablePaise": 75833,
+      "pendingPaise": 8334,
+      "ordersSharing": 12,
+      "projectedPaise": 8333
+     }
+    ],
+    "settingsUsed": {
+     "slabs.gaps": "refuse",
+     "period.unit": "calendarMonth",
+     "basis.amount": "total",
+     "slabs.method": "marginal",
+     "adjust.refund": "reverseReceiptShare",
+     "caps.perOrder": "none",
+     "basis.document": "salesOrder",
+     "payout.release": "afterApproval",
+     "rounding.level": "employeeMonthTotal",
+     "slabs.aboveTop": "noFurtherIncentive",
+     "basis.monthDate": "orderDate",
+     "period.lockMode": "manual",
+     "rounding.method": "halfUp",
+     "basis.preClosure": "ignore",
+     "slabs.boundaries": "lowerInclusive",
+     "adjust.creditNote": "reduceOriginalMonthSales",
+     "adjust.openMonths": "recalculate",
+     "adjust.windowDays": 1,
+     "allocation.method": "equalPerOrder",
+     "attribution.split": "single",
+     "period.recalcDays": 1,
+     "adjust.salesReturn": "reduceOriginalMonthSales",
+     "attribution.source": "customerSalesRep",
+     "period.recalcUntil": "untilLocked",
+     "rounding.precision": "paise",
+     "basis.voucherFilter": [
+      "cancelled"
+     ],
+     "period.autoLockDays": 1,
+     "period.lateReceipts": "adjustInCurrentOpenMonth",
+     "adjust.bouncedCheque": "reverseReceiptShare",
+     "collection.delayFrom": "invoiceDueDate",
+     "payout.approvalSteps": 2,
+     "slabs.aboveTopAmount": 100,
+     "eligibility.threshold": 1000000000,
+     "adjust.negativeBalance": "recoverFromNextPayout",
+     "adjust.reversedReceipt": "reverseReceiptShare",
+     "attribution.historical": "currentRep",
+     "collection.defaultDays": 1,
+     "collection.payableWhen": "orderFullyCollected",
+     "collection.earningBasis": "perReceipt",
+     "collection.stepBoundary": "upperInclusive",
+     "adjust.carryForwardMonths": 2,
+     "adjust.lockedOrPaidMonths": "adjustInCurrentMonth",
+     "allocation.eligibleOrders": "allInMonth",
+     "allocation.minOrderAmount": 100,
+     "collection.missingDueDate": "treatAsOnTime",
+     "collection.dueDateFallback": [
+      "invoiceDueDate"
+     ],
+     "collection.recoveryAfterNil": "recoverToStepAtReceipt",
+     "collection.onAccountReceipts": "ignoreUntilAllocated",
+     "collection.unreceivedPortion": "pendingUntilReceived",
+     "caps.perEmployeeCategoryMonth": 900000,
+     "eligibility.inactiveEmployees": "excludeFromMonthLeft",
+     "collection.multiInvoiceReceipts": "useImportedReference",
+     "eligibility.thresholdComparison": "atLeast",
+     "caps.perEmployeeAllCategoriesMonth": 1825000
+    },
+    "engineVersion": "category-a/1",
+    "configVersionId": "version:1",
+    "configVersionNo": 1
+   },
+   "computed_by_id": "emp:runner",
+   "computed_by_name": "runner"
+  },
+  {
+   "id": "run:3",
+   "program_id": "program:SALES",
+   "category_code": "A",
+   "month": "<time>",
+   "as_of": "<time>",
+   "config_version_id": "version:1",
+   "config_version_no": 1,
+   "engine_version": "category-a/1",
+   "status": "computed",
+   "adopted": true,
+   "outcome": "Adopted: the month's first calculation.",
+   "inputs": {
+    "asOf": "2026-10-31",
+    "month": "2026-10-01",
+    "roles": [
+     "doer",
+     "initiator",
+     "both"
+    ],
+    "config": {
+     "slabs": [
+      {
+       "label": "₹1.0 Cr – ₹1.2 Cr",
+       "ratePpm": 1000,
+       "toPaise": 1200000000,
+       "capPaise": 200000,
+       "lineCode": "A.1",
+       "fromPaise": 1000000000,
+       "valueType": "percent",
+       "fixedPaise": null
+      },
+      {
+       "label": "₹1.2 Cr – ₹1.4 Cr",
+       "ratePpm": 1500,
+       "toPaise": 1400000000,
+       "capPaise": 300000,
+       "lineCode": "A.2",
+       "fromPaise": 1200000000,
+       "valueType": "percent",
+       "fixedPaise": null
+      },
+      {
+       "label": "₹1.4 Cr – ₹1.6 Cr",
+       "ratePpm": 2000,
+       "toPaise": 1600000000,
+       "capPaise": 400000,
+       "lineCode": "A.3",
+       "fromPaise": 1400000000,
+       "valueType": "percent",
+       "fixedPaise": null
+      }
+     ],
+     "settings": {
+      "slabs.gaps": "refuse",
+      "period.unit": "calendarMonth",
+      "basis.amount": "total",
+      "slabs.method": "marginal",
+      "adjust.refund": "reverseReceiptShare",
+      "caps.perOrder": "none",
+      "basis.document": "salesOrder",
+      "payout.release": "afterApproval",
+      "rounding.level": "employeeMonthTotal",
+      "slabs.aboveTop": "noFurtherIncentive",
+      "basis.monthDate": "orderDate",
+      "period.lockMode": "manual",
+      "rounding.method": "halfUp",
+      "basis.preClosure": "ignore",
+      "slabs.boundaries": "lowerInclusive",
+      "adjust.creditNote": "reduceOriginalMonthSales",
+      "adjust.openMonths": "recalculate",
+      "adjust.windowDays": 1,
+      "allocation.method": "equalPerOrder",
+      "attribution.split": "single",
+      "period.recalcDays": 1,
+      "adjust.salesReturn": "reduceOriginalMonthSales",
+      "attribution.source": "customerSalesRep",
+      "period.recalcUntil": "untilLocked",
+      "rounding.precision": "paise",
+      "basis.voucherFilter": [
+       "cancelled"
+      ],
+      "period.autoLockDays": 1,
+      "period.lateReceipts": "adjustInCurrentOpenMonth",
+      "adjust.bouncedCheque": "reverseReceiptShare",
+      "collection.delayFrom": "invoiceDueDate",
+      "payout.approvalSteps": 2,
+      "slabs.aboveTopAmount": 100,
+      "eligibility.threshold": 1000000000,
+      "adjust.negativeBalance": "recoverFromNextPayout",
+      "adjust.reversedReceipt": "reverseReceiptShare",
+      "attribution.historical": "currentRep",
+      "collection.defaultDays": 1,
+      "collection.payableWhen": "orderFullyCollected",
+      "collection.earningBasis": "perReceipt",
+      "collection.stepBoundary": "upperInclusive",
+      "adjust.carryForwardMonths": 2,
+      "adjust.lockedOrPaidMonths": "adjustInCurrentMonth",
+      "allocation.eligibleOrders": "allInMonth",
+      "allocation.minOrderAmount": 100,
+      "collection.missingDueDate": "treatAsOnTime",
+      "collection.dueDateFallback": [
+       "invoiceDueDate"
+      ],
+      "collection.recoveryAfterNil": "recoverToStepAtReceipt",
+      "collection.onAccountReceipts": "ignoreUntilAllocated",
+      "collection.unreceivedPortion": "pendingUntilReceived",
+      "caps.perEmployeeCategoryMonth": 900000,
+      "eligibility.inactiveEmployees": "excludeFromMonthLeft",
+      "collection.multiInvoiceReceipts": "useImportedReference",
+      "eligibility.thresholdComparison": "atLeast",
+      "caps.perEmployeeAllCategoriesMonth": 1825000
+     },
+     "delaySteps": [
+      {
+       "toDays": 100,
+       "fromDays": 75,
+       "multiplierPpm": 250000
+      },
+      {
+       "toDays": 45,
+       "fromDays": 0,
+       "multiplierPpm": 1000000
+      },
+      {
+       "toDays": 75,
+       "fromDays": 45,
+       "multiplierPpm": 500000
+      },
+      {
+       "toDays": null,
+       "fromDays": 100,
+       "multiplierPpm": 0
+      }
+     ],
+     "eligibility": [
+      {
+       "mode": "include",
+       "role": null,
+       "subjectId": "emp:rep",
+       "effectiveTo": null,
+       "subjectType": "employee",
+       "subjectLabel": "rep",
+       "effectiveFrom": "2026-01-01"
+      }
+     ]
+    },
+    "events": [],
+    "orders": [],
+    "invoices": [],
+    "receipts": [],
+    "customers": [],
+    "employees": [
+     {
+      "id": "emp:a1",
+      "name": "a1",
+      "role": "both",
+      "isActive": true,
+      "departmentId": null
+     },
+     {
+      "id": "emp:a2",
+      "name": "a2",
+      "role": "both",
+      "isActive": true,
+      "departmentId": null
+     },
+     {
+      "id": "emp:author",
+      "name": "author",
+      "role": "both",
+      "isActive": true,
+      "departmentId": null
+     },
+     {
+      "id": "emp:checker",
+      "name": "checker",
+      "role": "both",
+      "isActive": true,
+      "departmentId": null
+     },
+     {
+      "id": "emp:locker",
+      "name": "locker",
+      "role": "both",
+      "isActive": true,
+      "departmentId": null
+     },
+     {
+      "id": "emp:payer",
+      "name": "payer",
+      "role": "both",
+      "isActive": true,
+      "departmentId": null
+     },
+     {
+      "id": "emp:rep",
+      "name": "rep",
+      "role": "both",
+      "isActive": true,
+      "departmentId": null
+     },
+     {
+      "id": "emp:runner",
+      "name": "runner",
+      "role": "both",
+      "isActive": true,
+      "departmentId": null
+     }
+    ],
+    "repHistory": [],
+    "creditNotes": [],
+    "preclosures": [],
+    "attributions": [],
+    "configVersion": {
+     "id": "version:1",
+     "status": "published",
+     "programId": "program:SALES",
+     "versionNo": 1,
+     "effectiveTo": null,
+     "effectiveFrom": "2026-04-01"
+    }
+   },
+   "result": {
+    "asOf": "2026-10-31",
+    "held": [],
+    "month": "2026-10-01",
+    "units": [],
+    "pieces": [],
+    "status": "computed",
+    "settled": false,
+    "excluded": [],
+    "problems": [],
+    "employees": [],
+    "settingsUsed": {
+     "slabs.gaps": "refuse",
+     "period.unit": "calendarMonth",
+     "basis.amount": "total",
+     "slabs.method": "marginal",
+     "adjust.refund": "reverseReceiptShare",
+     "caps.perOrder": "none",
+     "basis.document": "salesOrder",
+     "payout.release": "afterApproval",
+     "rounding.level": "employeeMonthTotal",
+     "slabs.aboveTop": "noFurtherIncentive",
+     "basis.monthDate": "orderDate",
+     "period.lockMode": "manual",
+     "rounding.method": "halfUp",
+     "basis.preClosure": "ignore",
+     "slabs.boundaries": "lowerInclusive",
+     "adjust.creditNote": "reduceOriginalMonthSales",
+     "adjust.openMonths": "recalculate",
+     "adjust.windowDays": 1,
+     "allocation.method": "equalPerOrder",
+     "attribution.split": "single",
+     "period.recalcDays": 1,
+     "adjust.salesReturn": "reduceOriginalMonthSales",
+     "attribution.source": "customerSalesRep",
+     "period.recalcUntil": "untilLocked",
+     "rounding.precision": "paise",
+     "basis.voucherFilter": [
+      "cancelled"
+     ],
+     "period.autoLockDays": 1,
+     "period.lateReceipts": "adjustInCurrentOpenMonth",
+     "adjust.bouncedCheque": "reverseReceiptShare",
+     "collection.delayFrom": "invoiceDueDate",
+     "payout.approvalSteps": 2,
+     "slabs.aboveTopAmount": 100,
+     "eligibility.threshold": 1000000000,
+     "adjust.negativeBalance": "recoverFromNextPayout",
+     "adjust.reversedReceipt": "reverseReceiptShare",
+     "attribution.historical": "currentRep",
+     "collection.defaultDays": 1,
+     "collection.payableWhen": "orderFullyCollected",
+     "collection.earningBasis": "perReceipt",
+     "collection.stepBoundary": "upperInclusive",
+     "adjust.carryForwardMonths": 2,
+     "adjust.lockedOrPaidMonths": "adjustInCurrentMonth",
+     "allocation.eligibleOrders": "allInMonth",
+     "allocation.minOrderAmount": 100,
+     "collection.missingDueDate": "treatAsOnTime",
+     "collection.dueDateFallback": [
+      "invoiceDueDate"
+     ],
+     "collection.recoveryAfterNil": "recoverToStepAtReceipt",
+     "collection.onAccountReceipts": "ignoreUntilAllocated",
+     "collection.unreceivedPortion": "pendingUntilReceived",
+     "caps.perEmployeeCategoryMonth": 900000,
+     "eligibility.inactiveEmployees": "excludeFromMonthLeft",
+     "collection.multiInvoiceReceipts": "useImportedReference",
+     "eligibility.thresholdComparison": "atLeast",
+     "caps.perEmployeeAllCategoriesMonth": 1825000
+    },
+    "engineVersion": "category-a/1",
+    "configVersionId": "version:1",
+    "configVersionNo": 1
+   },
+   "computed_by_id": "emp:runner",
+   "computed_by_name": "runner"
+  }
+ ],
+ "periods": [
+  {
+   "id": "period:2026-04-01",
+   "program_id": "program:SALES",
+   "category_code": "A",
+   "month": "<time>",
+   "status": "paid",
+   "current_run_id": "run:1",
+   "row_version": 7,
+   "locked_by_id": "emp:locker",
+   "approved_by_id": "emp:a2",
+   "paid_by_id": "emp:payer",
+   "submission_no": 1,
+   "submitted_by_id": "emp:locker",
+   "approvals_required": 2,
+   "payout_reference": "PAY-APR"
+  },
+  {
+   "id": "period:2026-10-01",
+   "program_id": "program:SALES",
+   "category_code": "A",
+   "month": "<time>",
+   "status": "open",
+   "current_run_id": "run:3",
+   "row_version": 2,
+   "locked_by_id": null,
+   "approved_by_id": null,
+   "paid_by_id": null,
+   "submission_no": 0,
+   "submitted_by_id": null,
+   "approvals_required": null,
+   "payout_reference": null
+  }
+ ],
+ "results": [
+  {
+   "id": "<id>",
+   "run_id": "run:1",
+   "employee_id": "emp:rep",
+   "employee_name": "rep",
+   "sales_paise": 1200000000,
+   "qualified": true,
+   "pool_exact": "200000",
+   "earned_exact": "92500",
+   "payable_exact": "92500",
+   "earned_paise": 92500,
+   "payable_paise": 92500,
+   "pending_paise": 0,
+   "projected_paise": 0,
+   "explanation": [
+    "Sales in 2026-04: ₹1,20,00,000; threshold ₹1,00,00,000 — qualifies.",
+    "Incentive for the month: ₹2,000 (A.1: 0.1% of ₹20,00,000 inside the slab).",
+    "Shared between 12 orders equally."
+   ]
+  },
+  {
+   "id": "<id>",
+   "run_id": "run:2",
+   "employee_id": "emp:rep",
+   "employee_name": "rep",
+   "sales_paise": 1200000000,
+   "qualified": true,
+   "pool_exact": "200000",
+   "earned_exact": "252500/3",
+   "payable_exact": "227500/3",
+   "earned_paise": 84167,
+   "payable_paise": 75833,
+   "pending_paise": 8334,
+   "projected_paise": 8333,
+   "explanation": [
+    "Sales in 2026-04: ₹1,20,00,000; threshold ₹1,00,00,000 — qualifies.",
+    "Incentive for the month: ₹2,000 (A.1: 0.1% of ₹20,00,000 inside the slab).",
+    "Shared between 12 orders equally."
+   ]
+  }
+ ],
+ "orderCredits": [
+  {
+   "id": "<id>",
+   "run_id": "run:1",
+   "employee_id": "emp:rep",
+   "document_id": "doc:SO 1",
+   "document_type": "sales-orders",
+   "document_no": "SO 1",
+   "share_ppm": 1000000,
+   "value_paise": 100000000,
+   "collectible_paise": 100000000,
+   "collected_paise": 100000000,
+   "fully_collected": true,
+   "takes_share": true,
+   "allocated_exact": "50000/3",
+   "earned_exact": "12500",
+   "payable_exact": "12500",
+   "explanation": [
+    "Order SO 1 of 2026-04-05: total value ₹10,00,000.",
+    "Its share of the month's incentive: ₹166.67 for collecting ₹10,00,000."
+   ]
+  },
+  {
+   "id": "<id>",
+   "run_id": "run:1",
+   "employee_id": "emp:rep",
+   "document_id": "doc:SO 10",
+   "document_type": "sales-orders",
+   "document_no": "SO 10",
+   "share_ppm": 1000000,
+   "value_paise": 100000000,
+   "collectible_paise": 100000000,
+   "collected_paise": 100000000,
+   "fully_collected": true,
+   "takes_share": true,
+   "allocated_exact": "50000/3",
+   "earned_exact": "12500/3",
+   "payable_exact": "12500/3",
+   "explanation": [
+    "Order SO 10 of 2026-04-05: total value ₹10,00,000.",
+    "Its share of the month's incentive: ₹166.67 for collecting ₹10,00,000."
+   ]
+  },
+  {
+   "id": "<id>",
+   "run_id": "run:1",
+   "employee_id": "emp:rep",
+   "document_id": "doc:SO 11",
+   "document_type": "sales-orders",
+   "document_no": "SO 11",
+   "share_ppm": 1000000,
+   "value_paise": 100000000,
+   "collectible_paise": 100000000,
+   "collected_paise": 100000000,
+   "fully_collected": true,
+   "takes_share": true,
+   "allocated_exact": "50000/3",
+   "earned_exact": "0",
+   "payable_exact": "0",
+   "explanation": [
+    "Order SO 11 of 2026-04-05: total value ₹10,00,000.",
+    "Its share of the month's incentive: ₹166.67 for collecting ₹10,00,000."
+   ]
+  },
+  {
+   "id": "<id>",
+   "run_id": "run:1",
+   "employee_id": "emp:rep",
+   "document_id": "doc:SO 12",
+   "document_type": "sales-orders",
+   "document_no": "SO 12",
+   "share_ppm": 1000000,
+   "value_paise": 100000000,
+   "collectible_paise": 100000000,
+   "collected_paise": 100000000,
+   "fully_collected": true,
+   "takes_share": true,
+   "allocated_exact": "50000/3",
+   "earned_exact": "0",
+   "payable_exact": "0",
+   "explanation": [
+    "Order SO 12 of 2026-04-05: total value ₹10,00,000.",
+    "Its share of the month's incentive: ₹166.67 for collecting ₹10,00,000."
+   ]
+  },
+  {
+   "id": "<id>",
+   "run_id": "run:1",
+   "employee_id": "emp:rep",
+   "document_id": "doc:SO 2",
+   "document_type": "sales-orders",
+   "document_no": "SO 2",
+   "share_ppm": 1000000,
+   "value_paise": 100000000,
+   "collectible_paise": 100000000,
+   "collected_paise": 100000000,
+   "fully_collected": true,
+   "takes_share": true,
+   "allocated_exact": "50000/3",
+   "earned_exact": "25000/3",
+   "payable_exact": "25000/3",
+   "explanation": [
+    "Order SO 2 of 2026-04-05: total value ₹10,00,000.",
+    "Its share of the month's incentive: ₹166.67 for collecting ₹10,00,000."
+   ]
+  },
+  {
+   "id": "<id>",
+   "run_id": "run:1",
+   "employee_id": "emp:rep",
+   "document_id": "doc:SO 3",
+   "document_type": "sales-orders",
+   "document_no": "SO 3",
+   "share_ppm": 1000000,
+   "value_paise": 100000000,
+   "collectible_paise": 100000000,
+   "collected_paise": 100000000,
+   "fully_collected": true,
+   "takes_share": true,
+   "allocated_exact": "50000/3",
+   "earned_exact": "40000/3",
+   "payable_exact": "40000/3",
+   "explanation": [
+    "Order SO 3 of 2026-04-05: total value ₹10,00,000.",
+    "Its share of the month's incentive: ₹166.67 for collecting ₹10,00,000."
+   ]
+  },
+  {
+   "id": "<id>",
+   "run_id": "run:1",
+   "employee_id": "emp:rep",
+   "document_id": "doc:SO 4",
+   "document_type": "sales-orders",
+   "document_no": "SO 4",
+   "share_ppm": 1000000,
+   "value_paise": 100000000,
+   "collectible_paise": 100000000,
+   "collected_paise": 100000000,
+   "fully_collected": true,
+   "takes_share": true,
+   "allocated_exact": "50000/3",
+   "earned_exact": "50000/3",
+   "payable_exact": "50000/3",
+   "explanation": [
+    "Order SO 4 of 2026-04-05: total value ₹10,00,000.",
+    "Its share of the month's incentive: ₹166.67 for collecting ₹10,00,000."
+   ]
+  },
+  {
+   "id": "<id>",
+   "run_id": "run:1",
+   "employee_id": "emp:rep",
+   "document_id": "doc:SO 5",
+   "document_type": "sales-orders",
+   "document_no": "SO 5",
+   "share_ppm": 1000000,
+   "value_paise": 100000000,
+   "collectible_paise": 100000000,
+   "collected_paise": 100000000,
+   "fully_collected": true,
+   "takes_share": true,
+   "allocated_exact": "50000/3",
+   "earned_exact": "25000/3",
+   "payable_exact": "25000/3",
+   "explanation": [
+    "Order SO 5 of 2026-04-05: total value ₹10,00,000.",
+    "Its share of the month's incentive: ₹166.67 for collecting ₹10,00,000."
+   ]
+  },
+  {
+   "id": "<id>",
+   "run_id": "run:1",
+   "employee_id": "emp:rep",
+   "document_id": "doc:SO 6",
+   "document_type": "sales-orders",
+   "document_no": "SO 6",
+   "share_ppm": 1000000,
+   "value_paise": 100000000,
+   "collectible_paise": 100000000,
+   "collected_paise": 100000000,
+   "fully_collected": true,
+   "takes_share": true,
+   "allocated_exact": "50000/3",
+   "earned_exact": "25000/3",
+   "payable_exact": "25000/3",
+   "explanation": [
+    "Order SO 6 of 2026-04-05: total value ₹10,00,000.",
+    "Its share of the month's incentive: ₹166.67 for collecting ₹10,00,000."
+   ]
+  },
+  {
+   "id": "<id>",
+   "run_id": "run:1",
+   "employee_id": "emp:rep",
+   "document_id": "doc:SO 7",
+   "document_type": "sales-orders",
+   "document_no": "SO 7",
+   "share_ppm": 1000000,
+   "value_paise": 100000000,
+   "collectible_paise": 100000000,
+   "collected_paise": 100000000,
+   "fully_collected": true,
+   "takes_share": true,
+   "allocated_exact": "50000/3",
+   "earned_exact": "25000/3",
+   "payable_exact": "25000/3",
+   "explanation": [
+    "Order SO 7 of 2026-04-05: total value ₹10,00,000.",
+    "Its share of the month's incentive: ₹166.67 for collecting ₹10,00,000."
+   ]
+  },
+  {
+   "id": "<id>",
+   "run_id": "run:1",
+   "employee_id": "emp:rep",
+   "document_id": "doc:SO 8",
+   "document_type": "sales-orders",
+   "document_no": "SO 8",
+   "share_ppm": 1000000,
+   "value_paise": 100000000,
+   "collectible_paise": 100000000,
+   "collected_paise": 100000000,
+   "fully_collected": true,
+   "takes_share": true,
+   "allocated_exact": "50000/3",
+   "earned_exact": "25000/3",
+   "payable_exact": "25000/3",
+   "explanation": [
+    "Order SO 8 of 2026-04-05: total value ₹10,00,000.",
+    "Its share of the month's incentive: ₹166.67 for collecting ₹10,00,000."
+   ]
+  },
+  {
+   "id": "<id>",
+   "run_id": "run:1",
+   "employee_id": "emp:rep",
+   "document_id": "doc:SO 9",
+   "document_type": "sales-orders",
+   "document_no": "SO 9",
+   "share_ppm": 1000000,
+   "value_paise": 100000000,
+   "collectible_paise": 100000000,
+   "collected_paise": 100000000,
+   "fully_collected": true,
+   "takes_share": true,
+   "allocated_exact": "50000/3",
+   "earned_exact": "12500/3",
+   "payable_exact": "12500/3",
+   "explanation": [
+    "Order SO 9 of 2026-04-05: total value ₹10,00,000.",
+    "Its share of the month's incentive: ₹166.67 for collecting ₹10,00,000."
+   ]
+  },
+  {
+   "id": "<id>",
+   "run_id": "run:2",
+   "employee_id": "emp:rep",
+   "document_id": "doc:SO 1",
+   "document_type": "sales-orders",
+   "document_no": "SO 1",
+   "share_ppm": 1000000,
+   "value_paise": 100000000,
+   "collectible_paise": 100000000,
+   "collected_paise": 100000000,
+   "fully_collected": true,
+   "takes_share": true,
+   "allocated_exact": "50000/3",
+   "earned_exact": "12500",
+   "payable_exact": "12500",
+   "explanation": [
+    "Order SO 1 of 2026-04-05: total value ₹10,00,000.",
+    "Its share of the month's incentive: ₹166.67 for collecting ₹10,00,000."
+   ]
+  },
+  {
+   "id": "<id>",
+   "run_id": "run:2",
+   "employee_id": "emp:rep",
+   "document_id": "doc:SO 10",
+   "document_type": "sales-orders",
+   "document_no": "SO 10",
+   "share_ppm": 1000000,
+   "value_paise": 100000000,
+   "collectible_paise": 100000000,
+   "collected_paise": 100000000,
+   "fully_collected": true,
+   "takes_share": true,
+   "allocated_exact": "50000/3",
+   "earned_exact": "12500/3",
+   "payable_exact": "12500/3",
+   "explanation": [
+    "Order SO 10 of 2026-04-05: total value ₹10,00,000.",
+    "Its share of the month's incentive: ₹166.67 for collecting ₹10,00,000."
+   ]
+  },
+  {
+   "id": "<id>",
+   "run_id": "run:2",
+   "employee_id": "emp:rep",
+   "document_id": "doc:SO 11",
+   "document_type": "sales-orders",
+   "document_no": "SO 11",
+   "share_ppm": 1000000,
+   "value_paise": 100000000,
+   "collectible_paise": 100000000,
+   "collected_paise": 100000000,
+   "fully_collected": true,
+   "takes_share": true,
+   "allocated_exact": "50000/3",
+   "earned_exact": "0",
+   "payable_exact": "0",
+   "explanation": [
+    "Order SO 11 of 2026-04-05: total value ₹10,00,000.",
+    "Its share of the month's incentive: ₹166.67 for collecting ₹10,00,000."
+   ]
+  },
+  {
+   "id": "<id>",
+   "run_id": "run:2",
+   "employee_id": "emp:rep",
+   "document_id": "doc:SO 12",
+   "document_type": "sales-orders",
+   "document_no": "SO 12",
+   "share_ppm": 1000000,
+   "value_paise": 100000000,
+   "collectible_paise": 100000000,
+   "collected_paise": 100000000,
+   "fully_collected": true,
+   "takes_share": true,
+   "allocated_exact": "50000/3",
+   "earned_exact": "0",
+   "payable_exact": "0",
+   "explanation": [
+    "Order SO 12 of 2026-04-05: total value ₹10,00,000.",
+    "Its share of the month's incentive: ₹166.67 for collecting ₹10,00,000."
+   ]
+  },
+  {
+   "id": "<id>",
+   "run_id": "run:2",
+   "employee_id": "emp:rep",
+   "document_id": "doc:SO 2",
+   "document_type": "sales-orders",
+   "document_no": "SO 2",
+   "share_ppm": 1000000,
+   "value_paise": 100000000,
+   "collectible_paise": 100000000,
+   "collected_paise": 100000000,
+   "fully_collected": true,
+   "takes_share": true,
+   "allocated_exact": "50000/3",
+   "earned_exact": "25000/3",
+   "payable_exact": "25000/3",
+   "explanation": [
+    "Order SO 2 of 2026-04-05: total value ₹10,00,000.",
+    "Its share of the month's incentive: ₹166.67 for collecting ₹10,00,000."
+   ]
+  },
+  {
+   "id": "<id>",
+   "run_id": "run:2",
+   "employee_id": "emp:rep",
+   "document_id": "doc:SO 3",
+   "document_type": "sales-orders",
+   "document_no": "SO 3",
+   "share_ppm": 1000000,
+   "value_paise": 100000000,
+   "collectible_paise": 100000000,
+   "collected_paise": 100000000,
+   "fully_collected": true,
+   "takes_share": true,
+   "allocated_exact": "50000/3",
+   "earned_exact": "40000/3",
+   "payable_exact": "40000/3",
+   "explanation": [
+    "Order SO 3 of 2026-04-05: total value ₹10,00,000.",
+    "Its share of the month's incentive: ₹166.67 for collecting ₹10,00,000."
+   ]
+  },
+  {
+   "id": "<id>",
+   "run_id": "run:2",
+   "employee_id": "emp:rep",
+   "document_id": "doc:SO 4",
+   "document_type": "sales-orders",
+   "document_no": "SO 4",
+   "share_ppm": 1000000,
+   "value_paise": 100000000,
+   "collectible_paise": 100000000,
+   "collected_paise": 50000000,
+   "fully_collected": false,
+   "takes_share": true,
+   "allocated_exact": "50000/3",
+   "earned_exact": "25000/3",
+   "payable_exact": "0",
+   "explanation": [
+    "Order SO 4 of 2026-04-05: total value ₹10,00,000.",
+    "Its share of the month's incentive: ₹166.67 for collecting ₹10,00,000.",
+    "Collected ₹5,00,000: payable once fully collected."
+   ]
+  },
+  {
+   "id": "<id>",
+   "run_id": "run:2",
+   "employee_id": "emp:rep",
+   "document_id": "doc:SO 5",
+   "document_type": "sales-orders",
+   "document_no": "SO 5",
+   "share_ppm": 1000000,
+   "value_paise": 100000000,
+   "collectible_paise": 100000000,
+   "collected_paise": 100000000,
+   "fully_collected": true,
+   "takes_share": true,
+   "allocated_exact": "50000/3",
+   "earned_exact": "25000/3",
+   "payable_exact": "25000/3",
+   "explanation": [
+    "Order SO 5 of 2026-04-05: total value ₹10,00,000.",
+    "Its share of the month's incentive: ₹166.67 for collecting ₹10,00,000."
+   ]
+  },
+  {
+   "id": "<id>",
+   "run_id": "run:2",
+   "employee_id": "emp:rep",
+   "document_id": "doc:SO 6",
+   "document_type": "sales-orders",
+   "document_no": "SO 6",
+   "share_ppm": 1000000,
+   "value_paise": 100000000,
+   "collectible_paise": 100000000,
+   "collected_paise": 100000000,
+   "fully_collected": true,
+   "takes_share": true,
+   "allocated_exact": "50000/3",
+   "earned_exact": "25000/3",
+   "payable_exact": "25000/3",
+   "explanation": [
+    "Order SO 6 of 2026-04-05: total value ₹10,00,000.",
+    "Its share of the month's incentive: ₹166.67 for collecting ₹10,00,000."
+   ]
+  },
+  {
+   "id": "<id>",
+   "run_id": "run:2",
+   "employee_id": "emp:rep",
+   "document_id": "doc:SO 7",
+   "document_type": "sales-orders",
+   "document_no": "SO 7",
+   "share_ppm": 1000000,
+   "value_paise": 100000000,
+   "collectible_paise": 100000000,
+   "collected_paise": 100000000,
+   "fully_collected": true,
+   "takes_share": true,
+   "allocated_exact": "50000/3",
+   "earned_exact": "25000/3",
+   "payable_exact": "25000/3",
+   "explanation": [
+    "Order SO 7 of 2026-04-05: total value ₹10,00,000.",
+    "Its share of the month's incentive: ₹166.67 for collecting ₹10,00,000."
+   ]
+  },
+  {
+   "id": "<id>",
+   "run_id": "run:2",
+   "employee_id": "emp:rep",
+   "document_id": "doc:SO 8",
+   "document_type": "sales-orders",
+   "document_no": "SO 8",
+   "share_ppm": 1000000,
+   "value_paise": 100000000,
+   "collectible_paise": 100000000,
+   "collected_paise": 100000000,
+   "fully_collected": true,
+   "takes_share": true,
+   "allocated_exact": "50000/3",
+   "earned_exact": "25000/3",
+   "payable_exact": "25000/3",
+   "explanation": [
+    "Order SO 8 of 2026-04-05: total value ₹10,00,000.",
+    "Its share of the month's incentive: ₹166.67 for collecting ₹10,00,000."
+   ]
+  },
+  {
+   "id": "<id>",
+   "run_id": "run:2",
+   "employee_id": "emp:rep",
+   "document_id": "doc:SO 9",
+   "document_type": "sales-orders",
+   "document_no": "SO 9",
+   "share_ppm": 1000000,
+   "value_paise": 100000000,
+   "collectible_paise": 100000000,
+   "collected_paise": 100000000,
+   "fully_collected": true,
+   "takes_share": true,
+   "allocated_exact": "50000/3",
+   "earned_exact": "12500/3",
+   "payable_exact": "12500/3",
+   "explanation": [
+    "Order SO 9 of 2026-04-05: total value ₹10,00,000.",
+    "Its share of the month's incentive: ₹166.67 for collecting ₹10,00,000."
+   ]
+  }
+ ],
+ "receiptCredits": [
+  {
+   "id": "<id>",
+   "run_id": "run:1",
+   "employee_id": "emp:rep",
+   "receipt_document_id": "doc:RC 1.1",
+   "invoice_document_id": "doc:INV 1",
+   "unit_document_id": "doc:SO 1",
+   "receipt_no": "RC 1.1",
+   "receipt_date": "<time>",
+   "amount_paise": 50000000,
+   "reference_date": "<time>",
+   "delay_days": 10,
+   "multiplier_ppm": 1000000,
+   "earned_exact": "25000/3",
+   "status": "credited",
+   "note": "10 days after the invoice's due date (2026-04-05): 100%. Applied to the invoice it names."
+  },
+  {
+   "id": "<id>",
+   "run_id": "run:1",
+   "employee_id": "emp:rep",
+   "receipt_document_id": "doc:RC 1.2",
+   "invoice_document_id": "doc:INV 1",
+   "unit_document_id": "doc:SO 1",
+   "receipt_no": "RC 1.2",
+   "receipt_date": "<time>",
+   "amount_paise": 50000000,
+   "reference_date": "<time>",
+   "delay_days": 60,
+   "multiplier_ppm": 500000,
+   "earned_exact": "12500/3",
+   "status": "credited",
+   "note": "60 days after the invoice's due date (2026-04-05): 50%. Applied to the invoice it names."
+  },
+  {
+   "id": "<id>",
+   "run_id": "run:1",
+   "employee_id": "emp:rep",
+   "receipt_document_id": "doc:RC 10.1",
+   "invoice_document_id": "doc:INV 10",
+   "unit_document_id": "doc:SO 10",
+   "receipt_no": "RC 10.1",
+   "receipt_date": "<time>",
+   "amount_paise": 100000000,
+   "reference_date": "<time>",
+   "delay_days": 80,
+   "multiplier_ppm": 250000,
+   "earned_exact": "12500/3",
+   "status": "credited",
+   "note": "80 days after the invoice's due date (2026-04-05): 25%. Applied to the invoice it names."
+  },
+  {
+   "id": "<id>",
+   "run_id": "run:1",
+   "employee_id": "emp:rep",
+   "receipt_document_id": "doc:RC 11.1",
+   "invoice_document_id": "doc:INV 11",
+   "unit_document_id": "doc:SO 11",
+   "receipt_no": "RC 11.1",
+   "receipt_date": "<time>",
+   "amount_paise": 100000000,
+   "reference_date": "<time>",
+   "delay_days": 110,
+   "multiplier_ppm": 0,
+   "earned_exact": "0",
+   "status": "credited",
+   "note": "110 days after the invoice's due date (2026-04-05): 0%. Applied to the invoice it names."
+  },
+  {
+   "id": "<id>",
+   "run_id": "run:1",
+   "employee_id": "emp:rep",
+   "receipt_document_id": "doc:RC 12.1",
+   "invoice_document_id": "doc:INV 12",
+   "unit_document_id": "doc:SO 12",
+   "receipt_no": "RC 12.1",
+   "receipt_date": "<time>",
+   "amount_paise": 100000000,
+   "reference_date": "<time>",
+   "delay_days": 110,
+   "multiplier_ppm": 0,
+   "earned_exact": "0",
+   "status": "credited",
+   "note": "110 days after the invoice's due date (2026-04-05): 0%. Applied to the invoice it names."
+  },
+  {
+   "id": "<id>",
+   "run_id": "run:1",
+   "employee_id": "emp:rep",
+   "receipt_document_id": "doc:RC 2.1",
+   "invoice_document_id": "doc:INV 2",
+   "unit_document_id": "doc:SO 2",
+   "receipt_no": "RC 2.1",
+   "receipt_date": "<time>",
+   "amount_paise": 25000000,
+   "reference_date": "<time>",
+   "delay_days": 10,
+   "multiplier_ppm": 1000000,
+   "earned_exact": "12500/3",
+   "status": "credited",
+   "note": "10 days after the invoice's due date (2026-04-05): 100%. Applied to the invoice it names."
+  },
+  {
+   "id": "<id>",
+   "run_id": "run:1",
+   "employee_id": "emp:rep",
+   "receipt_document_id": "doc:RC 2.2",
+   "invoice_document_id": "doc:INV 2",
+   "unit_document_id": "doc:SO 2",
+   "receipt_no": "RC 2.2",
+   "receipt_date": "<time>",
+   "amount_paise": 25000000,
+   "reference_date": "<time>",
+   "delay_days": 60,
+   "multiplier_ppm": 500000,
+   "earned_exact": "6250/3",
+   "status": "credited",
+   "note": "60 days after the invoice's due date (2026-04-05): 50%. Applied to the invoice it names."
+  },
+  {
+   "id": "<id>",
+   "run_id": "run:1",
+   "employee_id": "emp:rep",
+   "receipt_document_id": "doc:RC 2.3",
+   "invoice_document_id": "doc:INV 2",
+   "unit_document_id": "doc:SO 2",
+   "receipt_no": "RC 2.3",
+   "receipt_date": "<time>",
+   "amount_paise": 50000000,
+   "reference_date": "<time>",
+   "delay_days": 90,
+   "multiplier_ppm": 250000,
+   "earned_exact": "6250/3",
+   "status": "credited",
+   "note": "90 days after the invoice's due date (2026-04-05): 25%. Applied to the invoice it names."
+  },
+  {
+   "id": "<id>",
+   "run_id": "run:1",
+   "employee_id": "emp:rep",
+   "receipt_document_id": "doc:RC 3.1",
+   "invoice_document_id": "doc:INV 3",
+   "unit_document_id": "doc:SO 3",
+   "receipt_no": "RC 3.1",
+   "receipt_date": "<time>",
+   "amount_paise": 80000000,
+   "reference_date": "<time>",
+   "delay_days": 10,
+   "multiplier_ppm": 1000000,
+   "earned_exact": "40000/3",
+   "status": "credited",
+   "note": "10 days after the invoice's due date (2026-04-05): 100%. Applied to the invoice it names."
+  },
+  {
+   "id": "<id>",
+   "run_id": "run:1",
+   "employee_id": "emp:rep",
+   "receipt_document_id": "doc:RC 3.2",
+   "invoice_document_id": "doc:INV 3",
+   "unit_document_id": "doc:SO 3",
+   "receipt_no": "RC 3.2",
+   "receipt_date": "<time>",
+   "amount_paise": 20000000,
+   "reference_date": "<time>",
+   "delay_days": 120,
+   "multiplier_ppm": 0,
+   "earned_exact": "0",
+   "status": "credited",
+   "note": "120 days after the invoice's due date (2026-04-05): 0%. Applied to the invoice it names."
+  },
+  {
+   "id": "<id>",
+   "run_id": "run:1",
+   "employee_id": "emp:rep",
+   "receipt_document_id": "doc:RC 4.1",
+   "invoice_document_id": "doc:INV 4",
+   "unit_document_id": "doc:SO 4",
+   "receipt_no": "RC 4.1",
+   "receipt_date": "<time>",
+   "amount_paise": 100000000,
+   "reference_date": "<time>",
+   "delay_days": 30,
+   "multiplier_ppm": 1000000,
+   "earned_exact": "50000/3",
+   "status": "credited",
+   "note": "30 days after the invoice's due date (2026-04-05): 100%. Applied to the invoice it names."
+  },
+  {
+   "id": "<id>",
+   "run_id": "run:1",
+   "employee_id": "emp:rep",
+   "receipt_document_id": "doc:RC 5.1",
+   "invoice_document_id": "doc:INV 5",
+   "unit_document_id": "doc:SO 5",
+   "receipt_no": "RC 5.1",
+   "receipt_date": "<time>",
+   "amount_paise": 100000000,
+   "reference_date": "<time>",
+   "delay_days": 50,
+   "multiplier_ppm": 500000,
+   "earned_exact": "25000/3",
+   "status": "credited",
+   "note": "50 days after the invoice's due date (2026-04-05): 50%. Applied to the invoice it names."
+  },
+  {
+   "id": "<id>",
+   "run_id": "run:1",
+   "employee_id": "emp:rep",
+   "receipt_document_id": "doc:RC 6.1",
+   "invoice_document_id": "doc:INV 6",
+   "unit_document_id": "doc:SO 6",
+   "receipt_no": "RC 6.1",
+   "receipt_date": "<time>",
+   "amount_paise": 100000000,
+   "reference_date": "<time>",
+   "delay_days": 50,
+   "multiplier_ppm": 500000,
+   "earned_exact": "25000/3",
+   "status": "credited",
+   "note": "50 days after the invoice's due date (2026-04-05): 50%. Applied to the invoice it names."
+  },
+  {
+   "id": "<id>",
+   "run_id": "run:1",
+   "employee_id": "emp:rep",
+   "receipt_document_id": "doc:RC 7.1",
+   "invoice_document_id": "doc:INV 7",
+   "unit_document_id": "doc:SO 7",
+   "receipt_no": "RC 7.1",
+   "receipt_date": "<time>",
+   "amount_paise": 100000000,
+   "reference_date": "<time>",
+   "delay_days": 50,
+   "multiplier_ppm": 500000,
+   "earned_exact": "25000/3",
+   "status": "credited",
+   "note": "50 days after the invoice's due date (2026-04-05): 50%. Applied to the invoice it names."
+  },
+  {
+   "id": "<id>",
+   "run_id": "run:1",
+   "employee_id": "emp:rep",
+   "receipt_document_id": "doc:RC 8.1",
+   "invoice_document_id": "doc:INV 8",
+   "unit_document_id": "doc:SO 8",
+   "receipt_no": "RC 8.1",
+   "receipt_date": "<time>",
+   "amount_paise": 100000000,
+   "reference_date": "<time>",
+   "delay_days": 50,
+   "multiplier_ppm": 500000,
+   "earned_exact": "25000/3",
+   "status": "credited",
+   "note": "50 days after the invoice's due date (2026-04-05): 50%. Applied to the invoice it names."
+  },
+  {
+   "id": "<id>",
+   "run_id": "run:1",
+   "employee_id": "emp:rep",
+   "receipt_document_id": "doc:RC 9.1",
+   "invoice_document_id": "doc:INV 9",
+   "unit_document_id": "doc:SO 9",
+   "receipt_no": "RC 9.1",
+   "receipt_date": "<time>",
+   "amount_paise": 100000000,
+   "reference_date": "<time>",
+   "delay_days": 80,
+   "multiplier_ppm": 250000,
+   "earned_exact": "12500/3",
+   "status": "credited",
+   "note": "80 days after the invoice's due date (2026-04-05): 25%. Applied to the invoice it names."
+  },
+  {
+   "id": "<id>",
+   "run_id": "run:2",
+   "employee_id": "emp:rep",
+   "receipt_document_id": "doc:RC 1.1",
+   "invoice_document_id": "doc:INV 1",
+   "unit_document_id": "doc:SO 1",
+   "receipt_no": "RC 1.1",
+   "receipt_date": "<time>",
+   "amount_paise": 50000000,
+   "reference_date": "<time>",
+   "delay_days": 10,
+   "multiplier_ppm": 1000000,
+   "earned_exact": "25000/3",
+   "status": "credited",
+   "note": "10 days after the invoice's due date (2026-04-05): 100%. Applied to the invoice it names."
+  },
+  {
+   "id": "<id>",
+   "run_id": "run:2",
+   "employee_id": "emp:rep",
+   "receipt_document_id": "doc:RC 1.2",
+   "invoice_document_id": "doc:INV 1",
+   "unit_document_id": "doc:SO 1",
+   "receipt_no": "RC 1.2",
+   "receipt_date": "<time>",
+   "amount_paise": 50000000,
+   "reference_date": "<time>",
+   "delay_days": 60,
+   "multiplier_ppm": 500000,
+   "earned_exact": "12500/3",
+   "status": "credited",
+   "note": "60 days after the invoice's due date (2026-04-05): 50%. Applied to the invoice it names."
+  },
+  {
+   "id": "<id>",
+   "run_id": "run:2",
+   "employee_id": "emp:rep",
+   "receipt_document_id": "doc:RC 10.1",
+   "invoice_document_id": "doc:INV 10",
+   "unit_document_id": "doc:SO 10",
+   "receipt_no": "RC 10.1",
+   "receipt_date": "<time>",
+   "amount_paise": 100000000,
+   "reference_date": "<time>",
+   "delay_days": 80,
+   "multiplier_ppm": 250000,
+   "earned_exact": "12500/3",
+   "status": "credited",
+   "note": "80 days after the invoice's due date (2026-04-05): 25%. Applied to the invoice it names."
+  },
+  {
+   "id": "<id>",
+   "run_id": "run:2",
+   "employee_id": "emp:rep",
+   "receipt_document_id": "doc:RC 11.1",
+   "invoice_document_id": "doc:INV 11",
+   "unit_document_id": "doc:SO 11",
+   "receipt_no": "RC 11.1",
+   "receipt_date": "<time>",
+   "amount_paise": 100000000,
+   "reference_date": "<time>",
+   "delay_days": 110,
+   "multiplier_ppm": 0,
+   "earned_exact": "0",
+   "status": "credited",
+   "note": "110 days after the invoice's due date (2026-04-05): 0%. Applied to the invoice it names."
+  },
+  {
+   "id": "<id>",
+   "run_id": "run:2",
+   "employee_id": "emp:rep",
+   "receipt_document_id": "doc:RC 12.1",
+   "invoice_document_id": "doc:INV 12",
+   "unit_document_id": "doc:SO 12",
+   "receipt_no": "RC 12.1",
+   "receipt_date": "<time>",
+   "amount_paise": 100000000,
+   "reference_date": "<time>",
+   "delay_days": 110,
+   "multiplier_ppm": 0,
+   "earned_exact": "0",
+   "status": "credited",
+   "note": "110 days after the invoice's due date (2026-04-05): 0%. Applied to the invoice it names."
+  },
+  {
+   "id": "<id>",
+   "run_id": "run:2",
+   "employee_id": "emp:rep",
+   "receipt_document_id": "doc:RC 2.1",
+   "invoice_document_id": "doc:INV 2",
+   "unit_document_id": "doc:SO 2",
+   "receipt_no": "RC 2.1",
+   "receipt_date": "<time>",
+   "amount_paise": 25000000,
+   "reference_date": "<time>",
+   "delay_days": 10,
+   "multiplier_ppm": 1000000,
+   "earned_exact": "12500/3",
+   "status": "credited",
+   "note": "10 days after the invoice's due date (2026-04-05): 100%. Applied to the invoice it names."
+  },
+  {
+   "id": "<id>",
+   "run_id": "run:2",
+   "employee_id": "emp:rep",
+   "receipt_document_id": "doc:RC 2.2",
+   "invoice_document_id": "doc:INV 2",
+   "unit_document_id": "doc:SO 2",
+   "receipt_no": "RC 2.2",
+   "receipt_date": "<time>",
+   "amount_paise": 25000000,
+   "reference_date": "<time>",
+   "delay_days": 60,
+   "multiplier_ppm": 500000,
+   "earned_exact": "6250/3",
+   "status": "credited",
+   "note": "60 days after the invoice's due date (2026-04-05): 50%. Applied to the invoice it names."
+  },
+  {
+   "id": "<id>",
+   "run_id": "run:2",
+   "employee_id": "emp:rep",
+   "receipt_document_id": "doc:RC 2.3",
+   "invoice_document_id": "doc:INV 2",
+   "unit_document_id": "doc:SO 2",
+   "receipt_no": "RC 2.3",
+   "receipt_date": "<time>",
+   "amount_paise": 50000000,
+   "reference_date": "<time>",
+   "delay_days": 90,
+   "multiplier_ppm": 250000,
+   "earned_exact": "6250/3",
+   "status": "credited",
+   "note": "90 days after the invoice's due date (2026-04-05): 25%. Applied to the invoice it names."
+  },
+  {
+   "id": "<id>",
+   "run_id": "run:2",
+   "employee_id": "emp:rep",
+   "receipt_document_id": "doc:RC 3.1",
+   "invoice_document_id": "doc:INV 3",
+   "unit_document_id": "doc:SO 3",
+   "receipt_no": "RC 3.1",
+   "receipt_date": "<time>",
+   "amount_paise": 80000000,
+   "reference_date": "<time>",
+   "delay_days": 10,
+   "multiplier_ppm": 1000000,
+   "earned_exact": "40000/3",
+   "status": "credited",
+   "note": "10 days after the invoice's due date (2026-04-05): 100%. Applied to the invoice it names."
+  },
+  {
+   "id": "<id>",
+   "run_id": "run:2",
+   "employee_id": "emp:rep",
+   "receipt_document_id": "doc:RC 3.2",
+   "invoice_document_id": "doc:INV 3",
+   "unit_document_id": "doc:SO 3",
+   "receipt_no": "RC 3.2",
+   "receipt_date": "<time>",
+   "amount_paise": 20000000,
+   "reference_date": "<time>",
+   "delay_days": 120,
+   "multiplier_ppm": 0,
+   "earned_exact": "0",
+   "status": "credited",
+   "note": "120 days after the invoice's due date (2026-04-05): 0%. Applied to the invoice it names."
+  },
+  {
+   "id": "<id>",
+   "run_id": "run:2",
+   "employee_id": "emp:rep",
+   "receipt_document_id": "doc:RC 4.1",
+   "invoice_document_id": "doc:INV 4",
+   "unit_document_id": "doc:SO 4",
+   "receipt_no": "RC 4.1",
+   "receipt_date": "<time>",
+   "amount_paise": 50000000,
+   "reference_date": "<time>",
+   "delay_days": 30,
+   "multiplier_ppm": 1000000,
+   "earned_exact": "25000/3",
+   "status": "credited",
+   "note": "30 days after the invoice's due date (2026-04-05): 100%. Applied to the invoice it names."
+  },
+  {
+   "id": "<id>",
+   "run_id": "run:2",
+   "employee_id": "emp:rep",
+   "receipt_document_id": "doc:RC 5.1",
+   "invoice_document_id": "doc:INV 5",
+   "unit_document_id": "doc:SO 5",
+   "receipt_no": "RC 5.1",
+   "receipt_date": "<time>",
+   "amount_paise": 100000000,
+   "reference_date": "<time>",
+   "delay_days": 50,
+   "multiplier_ppm": 500000,
+   "earned_exact": "25000/3",
+   "status": "credited",
+   "note": "50 days after the invoice's due date (2026-04-05): 50%. Applied to the invoice it names."
+  },
+  {
+   "id": "<id>",
+   "run_id": "run:2",
+   "employee_id": "emp:rep",
+   "receipt_document_id": "doc:RC 6.1",
+   "invoice_document_id": "doc:INV 6",
+   "unit_document_id": "doc:SO 6",
+   "receipt_no": "RC 6.1",
+   "receipt_date": "<time>",
+   "amount_paise": 100000000,
+   "reference_date": "<time>",
+   "delay_days": 50,
+   "multiplier_ppm": 500000,
+   "earned_exact": "25000/3",
+   "status": "credited",
+   "note": "50 days after the invoice's due date (2026-04-05): 50%. Applied to the invoice it names."
+  },
+  {
+   "id": "<id>",
+   "run_id": "run:2",
+   "employee_id": "emp:rep",
+   "receipt_document_id": "doc:RC 7.1",
+   "invoice_document_id": "doc:INV 7",
+   "unit_document_id": "doc:SO 7",
+   "receipt_no": "RC 7.1",
+   "receipt_date": "<time>",
+   "amount_paise": 100000000,
+   "reference_date": "<time>",
+   "delay_days": 50,
+   "multiplier_ppm": 500000,
+   "earned_exact": "25000/3",
+   "status": "credited",
+   "note": "50 days after the invoice's due date (2026-04-05): 50%. Applied to the invoice it names."
+  },
+  {
+   "id": "<id>",
+   "run_id": "run:2",
+   "employee_id": "emp:rep",
+   "receipt_document_id": "doc:RC 8.1",
+   "invoice_document_id": "doc:INV 8",
+   "unit_document_id": "doc:SO 8",
+   "receipt_no": "RC 8.1",
+   "receipt_date": "<time>",
+   "amount_paise": 100000000,
+   "reference_date": "<time>",
+   "delay_days": 50,
+   "multiplier_ppm": 500000,
+   "earned_exact": "25000/3",
+   "status": "credited",
+   "note": "50 days after the invoice's due date (2026-04-05): 50%. Applied to the invoice it names."
+  },
+  {
+   "id": "<id>",
+   "run_id": "run:2",
+   "employee_id": "emp:rep",
+   "receipt_document_id": "doc:RC 9.1",
+   "invoice_document_id": "doc:INV 9",
+   "unit_document_id": "doc:SO 9",
+   "receipt_no": "RC 9.1",
+   "receipt_date": "<time>",
+   "amount_paise": 100000000,
+   "reference_date": "<time>",
+   "delay_days": 80,
+   "multiplier_ppm": 250000,
+   "earned_exact": "12500/3",
+   "status": "credited",
+   "note": "80 days after the invoice's due date (2026-04-05): 25%. Applied to the invoice it names."
+  }
+ ],
+ "adjustments": [
+  {
+   "id": "<id>",
+   "program_id": "program:SALES",
+   "category_code": "A",
+   "from_month": "<time>",
+   "to_month": "<time>",
+   "employee_id": "emp:rep",
+   "employee_name": "rep",
+   "kind": "recalc-difference",
+   "amount_paise": -16667,
+   "months_left": null,
+   "source_run_id": "run:2",
+   "note": "Kept for the record, not adopted: the month is locked. The difference is carried into 2026-10.",
+   "created_by_id": "emp:runner"
+  }
+ ],
+ "approvals": [
+  {
+   "id": "<id>",
+   "period_id": "period:2026-04-01",
+   "run_id": "run:1",
+   "submission_no": 1,
+   "step_no": 1,
+   "decision": "approve",
+   "reason": null,
+   "actor_id": "emp:a1",
+   "actor_name": "a1"
+  },
+  {
+   "id": "<id>",
+   "period_id": "period:2026-04-01",
+   "run_id": "run:1",
+   "submission_no": 1,
+   "step_no": 2,
+   "decision": "approve",
+   "reason": "fine",
+   "actor_id": "emp:a2",
+   "actor_name": "a2"
+  }
+ ],
+ "payouts": [
+  {
+   "id": "payout:1",
+   "period_id": "period:2026-04-01",
+   "run_id": "run:1",
+   "reference": "PAY-APR",
+   "total_paise": 92500,
+   "note": null,
+   "recorded_by_id": "emp:payer",
+   "recorded_by_name": "payer"
+  }
+ ],
+ "payoutLines": [
+  {
+   "id": "<id>",
+   "payout_id": "payout:1",
+   "employee_id": "emp:rep",
+   "employee_name": "rep",
+   "payable_paise": 92500,
+   "adjustments_paise": 0,
+   "amount_paise": 92500
+  }
+ ],
+ "audit": [
+  {
+   "action": "approved",
+   "entity_type": "incentive-calc-period",
+   "entity_id": "period:2026-04-01",
+   "detail": {
+    "step": 1,
+    "month": "2026-04-01",
+    "reason": null,
+    "status": "submitted",
+    "submissionNo": 1
+   }
+  },
+  {
+   "action": "approved",
+   "entity_type": "incentive-calc-period",
+   "entity_id": "period:2026-04-01",
+   "detail": {
+    "step": 2,
+    "month": "2026-04-01",
+    "reason": "fine",
+    "status": "approved",
+    "submissionNo": 1
+   }
+  },
+  {
+   "action": "calculated",
+   "entity_type": "incentive-calc-period",
+   "entity_id": "period:2026-04-01",
+   "detail": {
+    "asOf": "2026-09-30",
+    "month": "2026-04-01",
+    "runId": "run:1",
+    "status": "computed",
+    "adopted": true,
+    "outcome": "Adopted: the month's first calculation.",
+    "configVersionId": "version:1"
+   }
+  },
+  {
+   "action": "calculated",
+   "entity_type": "incentive-calc-period",
+   "entity_id": "period:2026-04-01",
+   "detail": {
+    "asOf": "2026-10-05",
+    "month": "2026-04-01",
+    "runId": "run:2",
+    "status": "computed",
+    "adopted": false,
+    "outcome": "Kept for the record, not adopted: the month is locked. The difference is carried into 2026-10.",
+    "configVersionId": "version:1"
+   }
+  },
+  {
+   "action": "calculated",
+   "entity_type": "incentive-calc-period",
+   "entity_id": "period:2026-10-01",
+   "detail": {
+    "asOf": "2026-10-31",
+    "month": "2026-10-01",
+    "runId": "run:3",
+    "status": "computed",
+    "adopted": true,
+    "outcome": "Adopted: the month's first calculation.",
+    "configVersionId": "version:1"
+   }
+  },
+  {
+   "action": "locked",
+   "entity_type": "incentive-calc-period",
+   "entity_id": "period:2026-04-01",
+   "detail": {
+    "month": "2026-04-01",
+    "notes": []
+   }
+  },
+  {
+   "action": "paid",
+   "entity_type": "incentive-calc-period",
+   "entity_id": "period:2026-04-01",
+   "detail": {
+    "month": "2026-04-01",
+    "runId": "run:1",
+    "paidOn": "2026-11-17",
+    "reference": "PAY-APR",
+    "totalPaise": 92500
+   }
+  },
+  {
+   "action": "submitted",
+   "entity_type": "incentive-calc-period",
+   "entity_id": "period:2026-04-01",
+   "detail": {
+    "month": "2026-04-01",
+    "runId": "run:1",
+    "submissionNo": 1,
+    "approvalsRequired": 2
+   }
+  }
+ ]
+}

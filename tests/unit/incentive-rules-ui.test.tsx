@@ -24,7 +24,7 @@ vi.mock("@/app/(masters)/master-setup/incentive-rules/actions", () => ({
 
 import { IncentiveVersionEditor, type EditorRights, type EditorVersion } from "@/components/admin/master/incentive-rules/version-editor";
 import { IncentiveRulesHome } from "@/components/admin/master/incentive-rules/home";
-import { EMPTY_CONFIG, REFERENCE_TEMPLATE, SECTIONS } from "@/lib/incentives/rules-config/spec";
+import { EMPTY_CONFIG, REFERENCE_TEMPLATE, sectionsFor } from "@/lib/incentives/rules-config/spec";
 import { completeConfig } from "../fixtures/incentive-config";
 
 const VERSION: EditorVersion = { id: "11111111-1111-4111-8111-111111111111", programId: "22222222-2222-4222-8222-222222222222", programCode: "SALES-BH", programName: "Sales BH", categoryCode: "A", versionNo: 2, status: "draft", effectiveFrom: null, effectiveTo: null, rowVersion: 4, changeNote: null, rejectionReason: null, createdByName: "Sample Editor", approvedByName: null, publishedByName: null };
@@ -42,7 +42,7 @@ describe("the version editor", () => {
   it("has a tab for each of the eleven sections, a preview and the history; lists what isn't configured; badges each setting's source", () => {
     editor();
     const tabs = screen.getAllByRole("tab").map((t) => t.textContent!.replace(/\d+$/, ""));
-    expect(tabs).toEqual([...SECTIONS.map((s) => s.label), "Preview", "History"]);
+    expect(tabs).toEqual([...sectionsFor("A").map((s) => s.label), "Preview", "History"]); // a Category A version: its eleven sections
     const missing = screen.getByRole("region", { name: "Not yet configured" });
     expect(missing.textContent).toMatch(/must be chosen before it can be submitted/);
     expect(within(missing).getByText(/Sales are counted from \(General Eligibility\) isn't set\./)).toBeTruthy();

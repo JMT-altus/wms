@@ -1,8 +1,8 @@
 import "server-only";
 import { and, eq, ne, desc, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { newCategoryAAuthoritative } from "@/lib/incentives/load";
-import { incentiveLedger, incentivePeriods, leadBatches, leadConversions, clientMeetings, testimonials, employees, salesOrders, customers, invoices } from "@/db/schema";
+import { authoritativeCategories, newCategoryAAuthoritative, newEngineAuthoritative } from "@/lib/incentives/load";
+import { incentiveLedger, incentivePeriods, payoutRuns, leadBatches, leadConversions, clientMeetings, testimonials, employees, salesOrders, customers, invoices } from "@/db/schema";
 import { SALES_BH_SCHEME } from "@/lib/incentives";
 import { fmtMonth } from "@/lib/dates";
 
@@ -74,13 +74,28 @@ export function periodLabel(period: string): string {
 }
 
 export interface PayoutRow { employeeId: string; employeeName: string; totalPaise: number; }
-export interface PeriodPayout { period: string; status: string; grandTotalPaise: number; rows: PayoutRow[]; }
+export interface PeriodPayout {
+  period: string;
+  status: string;
+  grandTotalPaise: number;
+  rows: PayoutRow[];
+  /**
+   * For a PAID month: what its payout run(s) recorded, and what its ledger holds (every category, as recorded). When
+   * they differ the month is shown as a historical old-engine record with that difference; nothing is recalculated,
+   * repaired or changed (e.g. the seeded July 2026 month).
+   */
+  recordedPayoutPaise: number | null;
+  ledgerRecordedPaise: number | null;
+}
 
 /** Per-employee payout totals for a period (for review / lock / payout). */
 export async function getPeriodPayout(period: string): Promise<PeriodPayout> {
   // Where the new Category A engine is authoritative for the month, Category A is paid through it (Incentive
   // Tracker → Category A Approvals), never here: this old payout then covers Categories B–G only — nothing twice.
   const newA = await newCategoryAAuthoritative(period);
+  // The same for Category B from its published configuration's cut-over month (Incentive Tracker → Category B).
+  const newB = await newEngineAuthoritative("B", period);
+  const newer = [...(await authoritativeCategories(period))].filter((c) => ["C", "D", "E", "F"].includes(c));
   const [prow] = await db.select({ status: incentivePeriods.status }).from(incentivePeriods).where(eq(incentivePeriods.month, period)).limit(1);
   const rows = await db
     .select({
@@ -91,18 +106,33 @@ export async function getPeriodPayout(period: string): Promise<PeriodPayout> {
     .from(incentiveLedger)
     .innerJoin(incentivePeriods, eq(incentiveLedger.periodId, incentivePeriods.id))
     .innerJoin(employees, eq(incentiveLedger.employeeId, employees.id))
-    .where(and(eq(incentivePeriods.month, period), ...(newA ? [ne(incentiveLedger.category, "A")] : [])))
+    .where(and(eq(incentivePeriods.month, period), ...(newA ? [ne(incentiveLedger.category, "A")] : []), ...(newB ? [ne(incentiveLedger.category, "B")] : []), ...newer.map((c) => ne(incentiveLedger.category, c))))
     .groupBy(incentiveLedger.employeeId, employees.name);
 
   const mapped = rows
     .map((r) => ({ employeeId: r.employeeId, employeeName: r.employeeName, totalPaise: Number(r.totalPaise) }))
     .filter((r) => r.totalPaise > 0)
     .sort((a, b) => b.totalPaise - a.totalPaise);
+  let recordedPayoutPaise: number | null = null;
+  let ledgerRecordedPaise: number | null = null;
+  if (prow?.status === "paid") {
+    const [run] = await db.select({ t: sql<number>`coalesce(sum(${payoutRuns.totalPaise}), 0)::bigint` }).from(payoutRuns).innerJoin(incentivePeriods, eq(payoutRuns.periodId, incentivePeriods.id)).where(eq(incentivePeriods.month, period));
+    const all = await db
+      .select({ t: sql<number>`sum(${incentiveLedger.amountPaise})::bigint` })
+      .from(incentiveLedger)
+      .innerJoin(incentivePeriods, eq(incentiveLedger.periodId, incentivePeriods.id))
+      .where(eq(incentivePeriods.month, period))
+      .groupBy(incentiveLedger.employeeId);
+    recordedPayoutPaise = Number(run?.t ?? 0);
+    ledgerRecordedPaise = all.map((r) => Number(r.t)).filter((t) => t > 0).reduce((s, t) => s + t, 0);
+  }
   return {
     period,
     status: prow?.status ?? "open",
     grandTotalPaise: mapped.reduce((s, r) => s + r.totalPaise, 0),
     rows: mapped,
+    recordedPayoutPaise,
+    ledgerRecordedPaise,
   };
 }
 
@@ -166,9 +196,11 @@ export async function getIncentiveSummary(employeeId: string, period: string): P
     totalPaise += r.amountPaise;
   }
 
+  // From Category B's cut-over month its old-engine lines are historical too (the new Category B is shown on its own).
+  const newer = await authoritativeCategories(period);
   const categories: CategoryMeta[] = (["A", "B", "C", "D", "E", "F"] as const).map((code) => ({
     code,
-    label: CATEGORY_LABELS[code]!,
+    label: code !== "A" && newer.has(code) ? `${CATEGORY_LABELS[code]} — historical (old engine)` : CATEGORY_LABELS[code]!,
     earnedPaise: byCategory[code] ?? 0,
     capPaise: SALES_BH_SCHEME.categoryCaps[code],
   }));

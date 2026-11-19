@@ -26,7 +26,7 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-const NONE: IncentiveCalcRights = { view: false, run: false, lock: false, inputs: false, approvals: false, payouts: false, submit: false, approve: false, pay: false };
+const NONE: IncentiveCalcRights = { view: false, run: false, lock: false, inputs: false, approvals: false, payouts: false, submit: false, approve: false, pay: false, qualify: false, review: false, void: false };
 
 describe("Incentive Tracker navigation", () => {
   const tracker = MODULES.find((x) => x.label === "Incentive Tracker")!;

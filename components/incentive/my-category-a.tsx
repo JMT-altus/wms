@@ -25,15 +25,22 @@ function Status({ m }: { m: MyCategoryAMonth }) {
   );
 }
 
-export function MyCategoryA({ period, ready, months, awaiting, historical }: { period: string; ready: boolean; months: MyCategoryAMonth[]; awaiting: string[]; historical: IncentiveLine[] }) {
+const TITLE = { A: "Sales Order Received", B: "Old Customer – New Product / New Brand", C: "New Customer Acquisition", D: "Leads & Enquiries", E: "High-Value Client Meetings", F: "Reviews & Testimonials", G: "Consecutive Monthly Purchases" } as const;
+
+/**
+ * Also Category B (category="B"): the same safeguards — own figures, approved or paid months only. `oldEngineMonth`:
+ * the month is before Category B's cut-over, so the old engine's Category B (in Categories B–G) is the one that counts.
+ */
+export function MyCategoryA({ period, ready, months, awaiting, historical, category = "A", oldEngineMonth = false }: { period: string; ready: boolean; months: MyCategoryAMonth[]; awaiting: string[]; historical: IncentiveLine[]; category?: keyof typeof TITLE; oldEngineMonth?: boolean }) {
+  const C = category;
   const thisMonth = months.filter((m) => m.month.slice(0, 7) === period);
   const waiting = awaiting.some((m) => m.slice(0, 7) === period);
   const histTotal = historical.reduce((s, l) => s + l.amountPaise, 0);
   return (
-    <section className="mb-7" aria-label="Category A">
-      <h2 className="text-display-xs text-ink-strong mb-3">Category A · Sales Order Received</h2>
+    <section className="mb-7" aria-label={`Category ${C}`}>
+      <h2 className="text-display-xs text-ink-strong mb-3">Category {C} · {TITLE[C]}</h2>
       <div className="grid grid-cols-2 max-lg:grid-cols-1 gap-4">
-        <div className="rounded-[18px] p-5" style={CARD} aria-label="New Category A">
+        <div className="rounded-[18px] p-5" style={CARD} aria-label={`New Category ${C}`}>
           <div className="flex items-center gap-2">
             <span className="text-[11px] font-extrabold tracking-[0.14em] rounded-full px-2 py-0.5" style={{ background: "rgba(10,108,255,0.10)", color: "#0a47b3" }}>
               NEW · AUTHORITATIVE
@@ -67,10 +74,10 @@ export function MyCategoryA({ period, ready, months, awaiting, historical }: { p
               </div>
             ))
           ) : (
-            <p className="mt-3 text-[13.5px] text-ink-muted">{waiting ? "Calculated and awaiting approval — your amount appears here once it is approved." : "No approved Category A for this month."}</p>
+            <p className="mt-3 text-[13.5px] text-ink-muted">{waiting ? "Calculated and awaiting approval — your amount appears here once it is approved." : oldEngineMonth ? `Before Category ${C}'s new engine starts: this month's Category ${C} is the old engine's, shown with the other categories.` : `No approved Category ${C} for this month.`}</p>
           )}
         </div>
-        <div className="rounded-[18px] p-5" style={CARD} aria-label="Historical Category A">
+        <div className="rounded-[18px] p-5" style={CARD} aria-label={`Historical Category ${C}`}>
           <div className="flex items-center gap-2">
             <span className="text-[11px] font-extrabold tracking-[0.14em] rounded-full px-2 py-0.5" style={{ background: "rgba(15,23,42,0.06)", color: "#475569" }}>
               HISTORICAL · OLD ENGINE
@@ -89,7 +96,7 @@ export function MyCategoryA({ period, ready, months, awaiting, historical }: { p
                   </li>
                 ))}
               </ul>
-              <p className="mt-2 text-[11.5px] text-ink-subtle">Kept as recorded by the old engine, for reference. Not added to the new Category A.</p>
+              <p className="mt-2 text-[11.5px] text-ink-subtle">Kept as recorded by the old engine, for reference. Not added to the new Category {C}.</p>
             </>
           ) : (
             <p className="mt-3 text-[13.5px] text-ink-muted">None for this month.</p>
@@ -98,7 +105,7 @@ export function MyCategoryA({ period, ready, months, awaiting, historical }: { p
       </div>
       {ready && months.length > 0 && (
         <div className="mt-4 rounded-[18px] overflow-hidden" style={{ border: "1px solid rgba(15,23,42,0.08)" }}>
-          <table className="w-full text-[13px]" aria-label="Category A history">
+          <table className="w-full text-[13px]" aria-label={`Category ${C} history`}>
             <thead>
               <tr className="text-left text-ink-subtle" style={{ background: "rgba(15,23,42,0.02)" }}>
                 {["Month", "Programme", "Amount", "Status", "Released / paid"].map((h) => (

@@ -13,11 +13,18 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "review", label: "Review" },
 ];
 
-export function SubmitPanel() {
+/**
+ * Log activity (Categories D, E and F). What each item earns comes from the configuration in force when the month is
+ * calculated, so no amount is shown here. With the "Log activity for an earlier month" permission the month can be
+ * chosen (never a future one); otherwise it is the current month.
+ */
+export function SubmitPanel({ currentMonth, canPickMonth = false }: { currentMonth: string; canPickMonth?: boolean }) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("leads");
   const [pending, start] = useTransition();
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [month, setMonth] = useState(currentMonth);
+  const periodMonth = canPickMonth ? month : undefined;
 
   function run(fn: () => Promise<{ ok: boolean; error?: string }>, success: string) {
     setMsg(null);
@@ -51,11 +58,17 @@ export function SubmitPanel() {
         </div>
       </div>
 
+      {canPickMonth && (
+        <label className="mt-4 inline-flex items-center gap-2">
+          <span className="text-[12px] font-bold text-ink-subtle">Incentive month</span>
+          <input type="month" value={month} max={currentMonth} onChange={(e) => setMonth(e.target.value)} className="rounded-lg px-3 py-1.5 text-[14px]" style={inputStyle} />
+        </label>
+      )}
       <div className="mt-4">
-        {tab === "leads" && <LeadsForm pending={pending} onSubmit={(leadCount, profiled) => run(() => submitLeadBatch({ leadCount, profiled }), "Leads submitted for review.")} />}
-        {tab === "enquiries" && <EnquiriesForm pending={pending} onSubmit={(convertedCount) => run(() => submitLeadConversion({ convertedCount }), "Enquiries submitted for review.")} />}
-        {tab === "meeting" && <MeetingForm pending={pending} onSubmit={(potentialBand, justification) => run(() => submitMeeting({ potentialBand, justification }), "Meeting logged — pending admin assessment.")} />}
-        {tab === "review" && <ReviewForm pending={pending} onSubmit={(v) => run(() => submitTestimonial(v), "Review submitted for verification.")} />}
+        {tab === "leads" && <LeadsForm pending={pending} onSubmit={(leadCount, profiled) => run(() => submitLeadBatch({ leadCount, profiled, periodMonth }), "Leads submitted for review.")} />}
+        {tab === "enquiries" && <EnquiriesForm pending={pending} onSubmit={(convertedCount) => run(() => submitLeadConversion({ convertedCount, periodMonth }), "Enquiries submitted for review.")} />}
+        {tab === "meeting" && <MeetingForm pending={pending} onSubmit={(potentialBand, justification) => run(() => submitMeeting({ potentialBand, justification, periodMonth }), "Meeting logged — pending admin assessment.")} />}
+        {tab === "review" && <ReviewForm pending={pending} onSubmit={(v) => run(() => submitTestimonial({ ...v, periodMonth }), "Review submitted for verification.")} />}
       </div>
 
       {msg && (
@@ -98,7 +111,7 @@ function LeadsForm({ pending, onSubmit }: { pending: boolean; onSubmit: (n: numb
       <label className="flex items-center gap-2 text-[13px] font-semibold text-ink-muted pb-2.5">
         <input type="checkbox" checked={profiled} onChange={(e) => setProfiled(e.target.checked)} /> Profiled
       </label>
-      <SubmitBtn pending={pending}>Submit · ₹250/10</SubmitBtn>
+      <SubmitBtn pending={pending}>Submit leads</SubmitBtn>
     </form>
   );
 }
@@ -111,7 +124,7 @@ function EnquiriesForm({ pending, onSubmit }: { pending: boolean; onSubmit: (n: 
         <span className="text-[12px] font-bold text-ink-subtle">Leads converted to valid enquiry</span>
         <input value={count} onChange={(e) => setCount(e.target.value)} type="number" min={1} className={inputCls} style={inputStyle} placeholder="e.g. 10" />
       </label>
-      <SubmitBtn pending={pending}>Submit · ₹250/5</SubmitBtn>
+      <SubmitBtn pending={pending}>Submit enquiries</SubmitBtn>
     </form>
   );
 }
@@ -138,32 +151,41 @@ function MeetingForm({ pending, onSubmit }: { pending: boolean; onSubmit: (b: "l
 
 function ReviewForm({ pending, onSubmit }: { pending: boolean; onSubmit: (v: { kind: "google_review" | "email" | "letterhead"; wordCount: number; starRating?: number; namesTeamMember: boolean; evidenceUrl?: string }) => void }) {
   const [kind, setKind] = useState<"google_review" | "email" | "letterhead">("google_review");
+  const [stars, setStars] = useState("5");
   const [words, setWords] = useState("");
   const [names, setNames] = useState(false);
   const [url, setUrl] = useState("");
   return (
     <form
-      onSubmit={(e) => { e.preventDefault(); onSubmit({ kind, wordCount: Number(words), starRating: kind === "google_review" ? 5 : undefined, namesTeamMember: names, evidenceUrl: url }); }}
+      onSubmit={(e) => { e.preventDefault(); onSubmit({ kind, wordCount: Number(words), starRating: kind === "google_review" ? Number(stars) : undefined, namesTeamMember: names, evidenceUrl: url }); }}
       className="flex items-end gap-3 flex-wrap"
     >
       <label className="min-w-[130px]">
         <span className="text-[12px] font-bold text-ink-subtle">Type</span>
         <select value={kind} onChange={(e) => setKind(e.target.value as typeof kind)} className={inputCls} style={inputStyle}>
-          <option value="google_review">Google 5★ · ₹100</option>
-          <option value="email">Email · ₹100</option>
-          <option value="letterhead">Letterhead · ₹150</option>
+          <option value="google_review">Google review</option>
+          <option value="email">Email</option>
+          <option value="letterhead">Letterhead</option>
         </select>
       </label>
+      {kind === "google_review" && (
+        <label className="min-w-[90px]">
+          <span className="text-[12px] font-bold text-ink-subtle">Stars</span>
+          <select value={stars} onChange={(e) => setStars(e.target.value)} className={inputCls} style={inputStyle}>
+            {["5", "4", "3", "2", "1"].map((s) => <option key={s} value={s}>{s}★</option>)}
+          </select>
+        </label>
+      )}
       <label className="min-w-[100px]">
         <span className="text-[12px] font-bold text-ink-subtle">Words</span>
-        <input value={words} onChange={(e) => setWords(e.target.value)} type="number" min={0} className={inputCls} style={inputStyle} placeholder="50+" />
+        <input value={words} onChange={(e) => setWords(e.target.value)} type="number" min={0} className={inputCls} style={inputStyle} placeholder="e.g. 60" />
       </label>
       <label className="flex-1 min-w-[160px]">
         <span className="text-[12px] font-bold text-ink-subtle">Evidence link</span>
         <input value={url} onChange={(e) => setUrl(e.target.value)} className={inputCls} style={inputStyle} placeholder="Screenshot / doc URL" />
       </label>
       <label className="flex items-center gap-2 text-[13px] font-semibold text-ink-muted pb-2.5">
-        <input type="checkbox" checked={names} onChange={(e) => setNames(e.target.checked)} /> Names a teammate (2×)
+        <input type="checkbox" checked={names} onChange={(e) => setNames(e.target.checked)} /> Names a teammate
       </label>
       <SubmitBtn pending={pending}>Submit</SubmitBtn>
     </form>

@@ -3675,7 +3675,7 @@ export const incentiveCalcInputHistory = pgTable(
   "incentive_calc_input_history",
   {
     eventNo: bigint("event_no", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
-    entity: text("entity").notNull().$type<"attribution" | "rep-history" | "receipt-event">(),
+    entity: text("entity").notNull().$type<"attribution" | "rep-history" | "receipt-event" | "b-override" | "c-review">(),
     entityId: uuid("entity_id").notNull(),
     action: text("action").notNull().$type<"record" | "retire">(),
     before: jsonb("before"),
@@ -3735,6 +3735,141 @@ export const incentiveCalcPayoutLines = pgTable(
     amountPaise: bigint("amount_paise", { mode: "number" }).notNull(),
   },
   (t) => [uniqueIndex("incentive_calc_payout_lines_uq").on(t.payoutId, t.employeeId)],
+);
+
+/* ── 0135 — Categories C–G: each credited item, per run ── */
+
+export const incentiveCalcItems = pgTable(
+  "incentive_calc_items",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    runId: uuid("run_id").notNull().references(() => incentiveCalcRuns.id, { onDelete: "restrict" }),
+    employeeId: uuid("employee_id").references(() => employees.id, { onDelete: "set null" }),
+    lineCode: text("line_code").notNull(),
+    sourceType: text("source_type").notNull(),
+    sourceId: text("source_id").notNull(),
+    label: text("label").notNull(),
+    sharePpm: integer("share_ppm").notNull(),
+    baseExact: text("base_exact").notNull(),
+    earnedExact: text("earned_exact").notNull(),
+    payableExact: text("payable_exact").notNull(),
+    multiplierPpm: integer("multiplier_ppm"),
+    status: text("status").notNull().$type<"credited" | "pending">(),
+    explanation: jsonb("explanation").notNull().$type<string[]>(),
+  },
+  (t) => [index("incentive_calc_items_run_idx").on(t.runId, t.employeeId)],
+);
+
+/* ── 0134 — Category B: manual qualification decisions and per-run qualification evidence ── */
+
+export const incentiveCalcBOverrides = pgTable(
+  "incentive_calc_b_overrides",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orderDocumentId: uuid("order_document_id").notNull().references(() => tallyDocuments.id, { onDelete: "restrict" }),
+    decision: text("decision").notNull().$type<"qualify" | "exclude">(),
+    reason: text("reason").notNull(),
+    createdById: uuid("created_by_id").references(() => employees.id, { onDelete: "set null" }),
+    createdByName: text("created_by_name").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    retiredAt: timestamp("retired_at", { withTimezone: true }),
+    retiredById: uuid("retired_by_id").references(() => employees.id, { onDelete: "set null" }),
+    retiredReason: text("retired_reason"),
+  },
+  (t) => [index("incentive_calc_b_overrides_order_idx").on(t.orderDocumentId, t.createdAt)],
+);
+
+/* ── 0136 — Category C: decisions on unmatched records (link or exclude; never qualify) ── */
+
+export const incentiveCalcCReviews = pgTable(
+  "incentive_calc_c_reviews",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    documentId: uuid("document_id").notNull().references(() => tallyDocuments.id, { onDelete: "restrict" }),
+    caseKind: text("case_kind").notNull().$type<"order-customer" | "invoice-order" | "credit-note-invoice" | "return-credit-note" | "receipt-customer">(),
+    decision: text("decision").notNull().$type<"link" | "exclude">(),
+    targetId: uuid("target_id"),
+    reason: text("reason").notNull(),
+    createdById: uuid("created_by_id").references(() => employees.id, { onDelete: "set null" }),
+    createdByName: text("created_by_name").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    retiredAt: timestamp("retired_at", { withTimezone: true }),
+    retiredById: uuid("retired_by_id").references(() => employees.id, { onDelete: "set null" }),
+    retiredReason: text("retired_reason"),
+  },
+  (t) => [index("incentive_calc_c_reviews_document_idx").on(t.documentId, t.createdAt)],
+);
+
+/* ── 0136 — below-minimum carry-forward ledger (append-only) ── */
+
+export const incentiveCalcCarry = pgTable(
+  "incentive_calc_carry",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    programId: uuid("program_id").notNull().references(() => incentivePrograms.id, { onDelete: "restrict" }),
+    categoryCode: text("category_code").notNull(),
+    employeeId: uuid("employee_id").references(() => employees.id, { onDelete: "set null" }),
+    employeeName: text("employee_name").notNull(),
+    month: date("month").notNull(),
+    kind: text("kind").notNull().$type<"held" | "released" | "offset" | "expired" | "written-off">(),
+    amountPaise: bigint("amount_paise", { mode: "number" }).notNull(),
+    lotId: uuid("lot_id"),
+    periodId: uuid("period_id").references(() => incentiveCalcPeriods.id, { onDelete: "restrict" }),
+    runId: uuid("run_id").references(() => incentiveCalcRuns.id, { onDelete: "restrict" }),
+    reason: text("reason"),
+    createdById: uuid("created_by_id").references(() => employees.id, { onDelete: "set null" }),
+    createdByName: text("created_by_name").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("incentive_calc_carry_employee_idx").on(t.programId, t.categoryCode, t.employeeId, t.month)],
+);
+
+/* ── 0136 — a voided (abandoned, unpaid) month (append-only) ── */
+
+export const incentiveCalcPeriodVoids = pgTable(
+  "incentive_calc_period_voids",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    periodId: uuid("period_id").notNull().references(() => incentiveCalcPeriods.id, { onDelete: "restrict" }),
+    runId: uuid("run_id").references(() => incentiveCalcRuns.id, { onDelete: "restrict" }),
+    carriedToMonth: date("carried_to_month"),
+    summary: jsonb("summary").notNull().$type<Record<string, unknown>>(),
+    reason: text("reason").notNull(),
+    createdById: uuid("created_by_id").references(() => employees.id, { onDelete: "set null" }),
+    createdByName: text("created_by_name").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("incentive_calc_period_voids_period_uq").on(t.periodId)],
+);
+
+export const incentiveCalcBQualifications = pgTable(
+  "incentive_calc_b_qualifications",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    runId: uuid("run_id").notNull().references(() => incentiveCalcRuns.id, { onDelete: "restrict" }),
+    orderDocumentId: uuid("order_document_id").references(() => tallyDocuments.id, { onDelete: "set null" }),
+    orderNo: text("order_no").notNull(),
+    orderDate: date("order_date").notNull(),
+    customerMasterId: uuid("customer_master_id").references(() => customerMasters.id, { onDelete: "set null" }),
+    customerName: text("customer_name"),
+    outcome: text("outcome").notNull().$type<"qualified" | "not-qualified" | "needs-review">(),
+    automaticOutcome: text("automatic_outcome").notNull().$type<"qualified" | "not-qualified" | "needs-review">(),
+    overrideId: uuid("override_id").references(() => incentiveCalcBOverrides.id, { onDelete: "restrict" }),
+    overrideDecision: text("override_decision").$type<"qualify" | "exclude">(),
+    overrideById: uuid("override_by_id").references(() => employees.id, { onDelete: "set null" }),
+    invoiceDocumentId: uuid("invoice_document_id").references(() => tallyDocuments.id, { onDelete: "set null" }),
+    invoiceNo: text("invoice_no"),
+    invoiceDate: date("invoice_date"),
+    invoiceMonth: date("invoice_month"),
+    taxablePaise: bigint("taxable_paise", { mode: "number" }),
+    netTaxablePaise: bigint("net_taxable_paise", { mode: "number" }),
+    baseExact: text("base_exact"),
+    inMonth: boolean("in_month").notNull(),
+    pinned: boolean("pinned").notNull().default(false),
+    reasons: jsonb("reasons").notNull().$type<string[]>(),
+    evidence: jsonb("evidence").notNull().$type<Record<string, unknown>>(),
+  },
+  (t) => [index("incentive_calc_b_qualifications_order_idx").on(t.orderDocumentId)],
 );
 
 // ════════════════════════════════════════════════════════════════════════════
