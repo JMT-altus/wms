@@ -50,15 +50,15 @@ export function CalcWorkflow(p: WorkflowProps) {
 
   const s = p.period.status;
   return (
-    <section aria-label="Approval and payout" className="rounded-section bg-white p-4" style={CARD}>
-      <h2 className="text-[14px] font-bold text-ink-strong">Approval and payout</h2>
+    <section aria-label="Incentive Approval and payout" className="rounded-section bg-white p-4" style={CARD}>
+      <h2 className="text-[14px] font-bold text-ink-strong">Incentive Approval and payout</h2>
       <p className="mt-0.5 text-[12.5px] text-ink-muted">
-        {s === "open" && "Lock the month before it can be submitted for approval."}
-        {s === "locked" && (p.period.submissionNo ? "Returned to locked; it can be submitted again." : "Locked: it can be submitted for approval.")}
-        {s === "submitted" && `Submitted by ${p.period.submittedByName ?? "—"} on ${day(p.period.submittedAt)}: ${current.length} of ${p.period.approvalsRequired} approval${p.period.approvalsRequired === 1 ? "" : "s"} so far.`}
-        {s === "approved" && `Approved for ${rs(p.approvedTotalPaise)}. Released on ${day(p.period.releaseOn)}; record the payout once it has been paid (this records it — the WMS moves no money).`}
+        {s === "open" && "Review the calculation, then lock the month before it can be submitted for Incentive Approval."}
+        {s === "locked" && (p.period.submissionNo ? "Returned to locked; it can be submitted for Incentive Approval again." : "Locked: it can be submitted for Incentive Approval.")}
+        {s === "submitted" && `Submitted for Incentive Approval by ${p.period.submittedByName ?? "—"} on ${day(p.period.submittedAt)}: ${current.length} of ${p.period.approvalsRequired} approval${p.period.approvalsRequired === 1 ? "" : "s"} so far.`}
+        {s === "approved" && `Incentive Approval complete. Approved for ${rs(p.approvedTotalPaise)}. Released on ${day(p.period.releaseOn)}; record the payout once it has been paid (this records it — the WMS moves no money).`}
         {s === "paid" && `Paid — reference ${p.period.payoutReference}. A paid month is final.`}
-        {s === "voided" && "Voided — it is never submitted, approved or paid. Its calculations and approval history are kept for the record."}
+        {s === "voided" && "Voided — it is never submitted, approved or paid. Its calculations and Incentive Approval history are kept for the record."}
       </p>
       {msg && (
         <div className="mt-2">
@@ -67,8 +67,8 @@ export function CalcWorkflow(p: WorkflowProps) {
       )}
       <div className="mt-2 flex flex-wrap items-center gap-2">
         {s === "locked" && p.rights.submit && (
-          <button type="button" disabled={busy} className={BTN} style={{ background: BLUE }} onClick={() => run(() => submitCategoryAMonth(base), "Submitted for approval.")}>
-            Submit for approval
+          <button type="button" disabled={busy} className={BTN} style={{ background: BLUE }} onClick={() => run(() => submitCategoryAMonth(base), "Submitted for Incentive Approval.")}>
+            Submit for Incentive Approval
           </button>
         )}
         {s === "submitted" && p.rights.submit && iSubmitted && !current.length && (
@@ -80,12 +80,12 @@ export function CalcWorkflow(p: WorkflowProps) {
           <span className="text-[12px] text-ink-subtle">{iSubmitted ? "You submitted it, so another person approves it." : "You approved a step; the next step needs someone else."}</span>
         ) : (
           <>
-            <button type="button" disabled={busy} className={BTN} style={{ background: "#047857" }} onClick={() => run(() => decideCategoryAMonth({ ...base, decision: "approve", reason: reason.trim() || null }), "Approved.")}>
-              Approve step {current.length + 1}
+            <button type="button" disabled={busy} className={BTN} style={{ background: "#047857" }} onClick={() => run(() => decideCategoryAMonth({ ...base, decision: "approve", reason: reason.trim() || null }), "Incentive Approval step recorded.")}>
+              Approve incentives (step {current.length + 1})
             </button>
             <input className={`${FIELD} w-64`} placeholder="Reason (required to reject)" value={reason} onChange={(e) => setReason(e.target.value)} aria-label="Approval note or rejection reason" maxLength={1000} />
             <button type="button" disabled={busy || !reason.trim()} className={BTN} style={{ background: "#B91C1C" }} onClick={() => run(() => decideCategoryAMonth({ ...base, decision: "reject", reason: reason.trim() }), "Rejected: the month is back to locked.")}>
-              Reject
+              Reject incentives
             </button>
           </>
         ))}

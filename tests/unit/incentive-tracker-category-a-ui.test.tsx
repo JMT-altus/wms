@@ -12,7 +12,7 @@ const m = vi.hoisted(() => ({ monthView: vi.fn(), listApprovalPeriods: vi.fn() }
 vi.mock("server-only", () => ({}));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }) }));
 vi.mock("@/lib/toast", () => ({ fireToast: vi.fn() }));
-vi.mock("@/lib/queries/incentive-calc", () => ({ monthView: m.monthView, listApprovalPeriods: m.listApprovalPeriods, todayIST: () => "2026-11-17" }));
+vi.mock("@/lib/queries/incentive-calc", () => ({ monthView: m.monthView, listApprovalPeriods: m.listApprovalPeriods, todayIST: () => "2026-11-17", heldItemsOf: async () => [], negativeBalancesAtLock: async () => ({ ready: true, items: [] }), aSafeguardsReady: async () => true, carryBalances: async () => [] }));
 vi.mock("@/app/(masters)/master-setup/incentive-rules/calculation/actions", () => ({ calculateCategoryAMonth: vi.fn(), setCategoryAMonthLocked: vi.fn(), submitCategoryAMonth: vi.fn(), withdrawCategoryAMonth: vi.fn(), decideCategoryAMonth: vi.fn(), recordCategoryAPayout: vi.fn() }));
 
 import { MODULES } from "@/lib/nav-modules";
@@ -30,15 +30,14 @@ const NONE: IncentiveCalcRights = { view: false, run: false, lock: false, inputs
 
 describe("Incentive Tracker navigation", () => {
   const tracker = MODULES.find((x) => x.label === "Incentive Tracker")!;
-  it("has Category A and Category A Approvals, admin-only in the rail (each page checks the permissions again)", () => {
-    const a = tracker.items.find((i) => i.href === "/incentive/category-a")!;
-    const b = tracker.items.find((i) => i.href === "/incentive/category-a/approvals")!;
-    expect([a.label, a.adminOnly, b.label, b.adminOnly]).toEqual(["Category A", true, "Category A Approvals", true]);
-    expect(a.notMatch).toContain("/incentive/category-a/approvals");
-    expect(tracker.items.find((i) => i.href === "/incentive")!.notMatch).toContain("/incentive/category-a");
+  it("has one Incentive Management entry, admin-only in the rail, which Category A's screens light (each page checks the permissions again)", () => {
+    const manage = tracker.items.find((i) => i.href === "/incentive/manage")!;
+    expect([manage.label, manage.adminOnly]).toEqual(["Incentive Management", true]);
+    expect(manage.match).toContain("/incentive/category-a");
+    expect(tracker.items.find((i) => i.href === "/incentive")!.notMatch).toEqual(expect.arrayContaining(["/incentive/category-a", "/incentive/manage"]));
   });
   it("keeps every existing tracker screen", () => {
-    expect(tracker.items.map((i) => i.href)).toEqual(expect.arrayContaining(["/incentive", "/incentive/sales", "/incentive/activity", "/incentive/history", "/incentive/admin", "/outstanding"]));
+    expect(tracker.items.map((i) => i.href)).toEqual(expect.arrayContaining(["/incentive", "/incentive/sales", "/incentive/activity", "/incentive/history", "/incentive/admin", "/incentive/manage", "/outstanding"]));
   });
 });
 
@@ -88,7 +87,7 @@ describe("the shared Category A screens refuse anyone without an Incentive Calcu
     expect(m.monthView).toHaveBeenCalledWith(null, "2026-04-01");
     const nav = within(screen.getByRole("navigation", { name: "Incentive calculation sections" }));
     expect(nav.getByRole("link", { name: "Calculation" }).getAttribute("href")).toBe("/incentive/category-a");
-    expect(nav.getByRole("link", { name: "Approvals" }).getAttribute("href")).toBe("/incentive/category-a/approvals");
+    expect(nav.getByRole("link", { name: "Incentive Approvals" }).getAttribute("href")).toBe("/incentive/category-a/approvals");
     expect(nav.getByRole("link", { name: /Inputs/ }).getAttribute("href")).toBe("/master-setup/incentive-rules/calculation/salespeople");
     expect(screen.queryByRole("button", { name: /Calculate/ })).toBeNull(); // no run right, no Calculate
   });

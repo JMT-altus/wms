@@ -163,8 +163,8 @@ describe("approval and payout panel", () => {
   it("rejection needs a reason; approval names its step", async () => {
     a.decide.mockResolvedValue({ ok: true, rowVersion: 7, status: "submitted", step: 1 });
     render(<CalcWorkflow {...FLOW} />);
-    expect((screen.getByRole("button", { name: "Reject" }) as HTMLButtonElement).disabled).toBe(true);
-    fireEvent.click(screen.getByRole("button", { name: "Approve step 1" }));
+    expect((screen.getByRole("button", { name: "Reject incentives" }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Approve incentives (step 1)" }));
     await waitFor(() => expect(a.decide).toHaveBeenCalledWith({ programId: ID(11), month: "2026-04-01", rowVersion: 6, decision: "approve", reason: null }));
   });
   it("the submitter isn't offered approval", () => {
@@ -217,7 +217,7 @@ describe("Approvals screen", () => {
   it("shows the stage, who may approve next by rule, the rejection reason, payout eligibility and reference", () => {
     render(<Approvals {...MONTHS} />);
     const june = within(screen.getByRole("row", { name: "Month 2026-06" }));
-    expect(june.getByText("Awaiting approval")).toBeTruthy();
+    expect(june.getByText("Awaiting Incentive Approval")).toBeTruthy();
     expect(june.getByText(/Step 2 of 2: any approver other than Locker, Approver B/)).toBeTruthy();
     expect(june.getByText(/Rejected by Approver A .*Refund missing/)).toBeTruthy();
     expect(within(screen.getByRole("row", { name: "Month 2026-05" })).getByText(/Eligible from 01 Dec 2026/)).toBeTruthy();

@@ -1,10 +1,11 @@
 import "server-only";
 import { and, eq, inArray, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
 import type { db as Db0 } from "@/lib/db";
-import { clientMeetings, customerMasters, employees, incentiveCalcAdjustments, incentiveCalcAttributions, incentiveCalcCReviews, incentiveCalcReceiptEvents, incentiveCalcRepHistory, leadBatches, leadConversions, tallyDocuments, testimonials } from "@/db/schema";
+import { clientMeetings, customerMasters, employees, incentiveCalcAdjustments, incentiveCalcAttributions, incentiveCalcCReviews, incentiveCalcReceiptEvents, incentiveCalcRepHistory, leadBatches, leadConversions, tallyDocuments } from "@/db/schema";
 import { EMPLOYEE_ROLES } from "@/db/enums";
 import { normalizeInputX } from "@/lib/incentives/categories/hash";
-import type { CarryIn, CarryRules, CategoryXInput, ExtraCategory, OrderXIn } from "@/lib/incentives/categories/types";
+import type { CarryIn, CarryRules, CategoryXInput, ExtraCategory, FReviewIn, OrderXIn } from "@/lib/incentives/categories/types";
+import { wordsIn } from "@/lib/incentives/categories/f-url";
 import { monthsBefore } from "@/lib/incentives/shared/dates";
 import { monthEnd } from "@/lib/incentives/category-a/settle";
 import { isDay } from "@/lib/incentives/rules-config/validate";
@@ -35,6 +36,66 @@ const toOrder = (d: Doc): OrderXIn => {
 };
 
 export const CALC_X_NOT_READY = "Categories C–G need database update 0135 first, so nothing was done.";
+export const CALC_F_NOT_READY = "Category F needs database updates 0137, 0138 and 0139 first (its testimonial registry, decisions, the email / letterhead / appreciation fields and their identities), so nothing was done.";
+/**
+ * Whether 0137 (Category F's registry), 0138 (email and letterhead testimonials, F.4 appreciation) AND 0139 (the
+ * email / letterhead identity, write-off history) are applied. Every read or write of the Category F tables waits for all
+ * three: the code names 0138's and 0139's columns.
+ */
+export async function incentiveCalcFReady(q: Db): Promise<boolean> {
+  const r = await q.execute(sql`select to_regclass('public.incentive_f_decisions') is not null and to_regclass('public.incentive_f_writeoffs') is not null
+    and exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'incentive_f_decisions' and column_name = 'appreciated_employee_ids')
+    and exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'incentive_f_decisions' and column_name = 'evidence_fingerprint')
+    and exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'incentive_f_submissions' and column_name = 'claimed_kind') as ok`);
+  return rowsOf<{ ok: boolean }>(r)[0]?.ok === true;
+}
+
+/**
+ * Category F's month (0137): every review whose ACTIVE verification puts its original publication in the month, with
+ * the verified facts, its active attribution (if any), whether a second person approved its invalidation, and the
+ * customer's assigned salesperson on the publication date (the Customer Master's representative history; a customer
+ * with no history at all: its current representative). Reads only.
+ */
+export async function loadFReviews(q: Db, month: string): Promise<FReviewIn[]> {
+  const rows = rowsOf<{ review_id: string; kind: string | null; published_on: string; rating: number | null; review_text: string | null; named: string[] | string | null; appreciated: string[] | string | null; customer_master_id: string | null; credited: string | null; basis: "named" | "assigned" | "claim" | null; has_attribution: boolean; invalidated: boolean }>(
+    await q.execute(sql`
+      select r.id as review_id, v.testimonial_kind as kind, v.published_on::text as published_on, v.rating::int as rating, v.review_text, v.named_employee_ids::text[] as named,
+        v.appreciated_employee_ids::text[] as appreciated, v.customer_master_id,
+        a.credited_employee_id as credited, a.basis, (a.id is not null) as has_attribution,
+        exists (select 1 from incentive_f_decisions x where x.review_id = r.id and x.kind = 'invalidate-approve') as invalidated
+      from incentive_f_reviews r
+      join incentive_f_decisions v on v.review_id = r.id and v.kind = 'verify' and v.retired_at is null
+      left join incentive_f_decisions a on a.review_id = r.id and a.kind = 'attribute' and a.retired_at is null
+      where v.review_month = ${month}::date
+      order by r.id`),
+  );
+  const named = (x: string[] | string | null) => (Array.isArray(x) ? x : typeof x === "string" ? x.replace(/^\{|\}$/g, "").split(",").filter(Boolean) : []);
+  const custIds = [...new Set(rows.map((r) => r.customer_master_id).filter((x): x is string => !!x))];
+  const reps = custIds.length ? await q.select().from(incentiveCalcRepHistory).where(and(inArray(incentiveCalcRepHistory.customerMasterId, custIds), isNull(incentiveCalcRepHistory.retiredAt))) : [];
+  const current = custIds.length ? await q.select({ id: customerMasters.id, rep: customerMasters.salesRepId }).from(customerMasters).where(inArray(customerMasters.id, custIds)) : [];
+  const assignedOn = (cid: string | null, day: string): string | null => {
+    if (!cid) return null;
+    const mine = reps.filter((r) => r.customerMasterId === cid);
+    if (!mine.length) return current.find((c) => c.id === cid)?.rep ?? null;
+    const hit = mine.filter((r) => D(r.effectiveFrom) <= day && (!r.effectiveTo || D(r.effectiveTo) >= day)).sort((a, b) => (D(a.effectiveFrom) < D(b.effectiveFrom) ? 1 : -1))[0];
+    return hit?.employeeId ?? null;
+  };
+  return rows.map((r) => ({
+    reviewId: r.review_id,
+    label: `#${r.review_id.slice(0, 8)}`,
+    // 0138: the verified type (0137's verifications are Google reviews).
+    kind: r.kind === "email" || r.kind === "letterhead" ? r.kind : "google_review",
+    publishedOn: D(r.published_on),
+    rating: r.rating === null ? null : Number(r.rating),
+    wordCount: wordsIn(r.review_text),
+    namedEmployeeIds: named(r.named).sort(),
+    appreciatedEmployeeIds: named(r.appreciated).sort(),
+    assignedEmployeeId: assignedOn(r.customer_master_id, D(r.published_on)),
+    attribution: r.has_attribution && r.basis ? { employeeId: r.credited, basis: r.basis } : null,
+    invalidated: r.invalidated === true,
+  }));
+}
+
 export const CALC_C_NOT_READY = "Category C needs database update 0136 first (its Admin Review of unmatched records), so nothing was done.";
 
 /**
@@ -115,8 +176,9 @@ export async function loadInputX(q: Db, category: ExtraCategory, programId: stri
     const m = await q.select().from(clientMeetings).where(eq(clientMeetings.periodMonth, ym));
     base.meetings = m.map((x) => ({ id: x.id, employeeId: x.employeeId, periodMonth: x.periodMonth, awardedPaise: Number(x.awardedPaise), approved: x.reviewStatus === "approved", label: `Meeting (${x.potentialBand ?? "—"} potential)` }));
   } else if (category === "F") {
-    const t = await q.select().from(testimonials).where(eq(testimonials.periodMonth, ym));
-    base.testimonials = t.map((x) => ({ id: x.id, employeeId: x.employeeId, periodMonth: x.periodMonth, kind: x.kind, wordCount: x.wordCount, starRating: x.starRating, hasEvidence: !!x.evidenceUrl, namesTeamMember: x.namesTeamMember, approved: x.reviewStatus === "approved" }));
+    // Category F/2 reads only the Google review registry's verified reviews (0137); the old engine's testimonials
+    // (email, letterhead, unverified submissions) earn nothing here.
+    base.fReviews = (await incentiveCalcFReady(q)) ? await loadFReviews(q, month) : [];
   } else {
     // C, G: the customers with a Sales Order in the month, and their orders back far enough for the rule.
     const inMonth = await q.select({ id: tallyDocuments.id, c: tallyDocuments.customerMasterId }).from(tallyDocuments).where(and(eq(tallyDocuments.documentType, "sales-orders"), sql`${tallyDocuments.documentDate} between ${month}::date and ${end}::date`, lte(tallyDocuments.documentDate, asOf)));

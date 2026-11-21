@@ -33,6 +33,9 @@ export function normalizeInput(i: CategoryAInput): CategoryAInput {
     employees: byId(i.employees),
     // Only present for a version that leaves Category B orders out of Category A (absent: the input is as it always was).
     ...(i.categoryBOrderIds ? { categoryBOrderIds: [...i.categoryBOrderIds].sort() } : {}),
+    // category-a/2: only present when the loader found something it couldn't value or follow.
+    ...(i.preclosureProblems ? { preclosureProblems: sortBy(i.preclosureProblems, (p) => `${p.orderId}|${p.date}|${p.reason}`) } : {}),
+    ...(i.referencesIncomplete ? { referencesIncomplete: sortBy(i.referencesIncomplete, (r) => r.documentId) } : {}),
   };
 }
 

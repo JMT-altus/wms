@@ -1,7 +1,8 @@
 import type * as React from "react";
 import type { Employee } from "@/db/schema";
 import type { IncentiveCalcRights } from "@/lib/auth/incentive-calc";
-import { carryBalances, monthView, todayIST } from "@/lib/queries/incentive-calc";
+import { aSafeguardsReady, carryBalances, heldItemsOf, monthView, negativeBalancesAtLock, todayIST } from "@/lib/queries/incentive-calc";
+import { AHeldItems, ANegativeBalances } from "./a-holds";
 import { CategoryACalculation } from "./calculation";
 import { CarryLedger } from "./carry-ledger";
 import { VoidMonth } from "./void-month";
@@ -101,8 +102,10 @@ export async function CategoryACalculationScreen({
         runs={view.runs.map((r) => ({ id: r.id, computedAt: r.computedAt.toISOString(), computedByName: r.computedByName, status: r.status, adopted: r.adopted, outcome: r.outcome, configVersionNo: r.configVersionNo, asOf: r.asOf }))}
         adjustmentsIn={view.adjustmentsIn.map((a) => ({ id: a.id, employeeName: a.employeeName, kind: a.kind, amountPaise: Number(a.amountPaise), fromMonth: String(a.fromMonth), note: a.note }))}
       />
+      {category === "A" && view.ready && per?.currentRunId && <AHeldItems items={await heldItemsOf(per.currentRunId)} canReview={rights.review} ready={await aSafeguardsReady()} />}
+      {category === "A" && view.ready && programId && per?.status === "open" && per.currentRunId && (await negativeBalancesAtLock(programId, month).then((n) => <ANegativeBalances programId={programId} month={month} items={n.items} ready={n.ready} canRequest={rights.lock} canDecide={rights.approve} me={me.id} />))}
       {category === "C" && view.ready && programId && per && (view.voided || (rights.void && per.currentRunId && (per.status === "open" || per.status === "locked"))) && <VoidMonth programId={programId} month={month} rowVersion={per.rowVersion} voided={view.voided ?? null} />}
-      {category === "C" && view.ready && programId && <CarryLedger balances={await carryBalances(programId, "C")} canWriteOff={rights.pay} />}
+      {category === "C" && view.ready && programId && <CarryLedger balances={await carryBalances(programId, "C")} canWriteOff={rights.pay} me={me.id} />}
     </div>
   );
 }

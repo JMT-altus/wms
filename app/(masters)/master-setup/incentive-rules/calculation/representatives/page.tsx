@@ -5,6 +5,7 @@ import { MasterPageHead } from "@/components/admin/master/page-head";
 import { CalcTabs } from "@/components/admin/master/incentive-rules/calc-ui";
 import { Representatives } from "@/components/admin/master/incentive-rules/representatives";
 import { NoCalcAccess } from "@/components/admin/master/incentive-rules/no-calc-access";
+import { RepImport } from "@/components/admin/master/incentive-rules/rep-import";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +23,7 @@ export default async function RepresentativesPage({ searchParams }: { searchPara
     <div>
       {head}
       <CalcTabs active="Representatives" />
+      {list.ready && rights.inputs && <RepImport />}
       <Representatives ready={list.ready} canEdit={rights.inputs} rows={list.rows} truncated={list.truncated} employees={employees} filters={{ search, filter }} />
     </div>
   );

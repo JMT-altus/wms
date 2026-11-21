@@ -81,11 +81,17 @@ export const ENTITY_0136 = "CHECK ((entity = ANY (ARRAY['attribution'::text, 're
 
 export const sha256 = (b: Uint8Array | string) => createHash("sha256").update(b).digest("hex");
 
-/** The file's text if (and only if) its bytes are the pinned ones and it carries no transaction control of its own. */
+/**
+ * The file's text if (and only if) its bytes are the pinned ones and it carries no transaction control of its own. The
+ * pin is of the CANONICAL bytes — LF line endings, as Git stores the file and as production received it — so a Windows
+ * checkout (core.autocrlf) that only rewrote line endings still matches; any other difference is refused.
+ */
+export const canonicalBytes = (bytes: Uint8Array) => Buffer.from(Buffer.from(bytes).toString("utf8").replace(/\r\n/g, "\n"), "utf8");
 export function pinned(name: string, bytes: Uint8Array, sha: string): string {
-  const got = sha256(bytes);
+  const canon = canonicalBytes(bytes);
+  const got = sha256(canon);
   if (got !== sha) throw new Error(`${name} sha256 ${got} is not the pinned ${sha}`);
-  const text = Buffer.from(bytes).toString("utf8");
+  const text = canon.toString("utf8");
   // Transaction control as a statement of its own — at a line start or after another statement on the same line. (A
   // PL/pgSQL block's BEGIN / END has no semicolon right after it and isn't one; a false refusal is the safe direction.)
   const control = /(^|;)\s*(BEGIN(\s+(WORK|TRANSACTION|ISOLATION\b[^;]*))?\s*;|END(\s+(WORK|TRANSACTION))?\s*;|(COMMIT|ROLLBACK|ABORT)\b[^;]*;|START\s+TRANSACTION\b|SAVEPOINT\b|RELEASE\b|PREPARE\s+TRANSACTION\b)/im;

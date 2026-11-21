@@ -145,7 +145,8 @@ describe("rights (Field Permissions, never implied by admin status)", () => {
     const rightsOf = async (k: Who) => incentiveRuleRights({ ...(await q1(`select * from employees where id = $1`, [who[k]]))[0], id: who[k], email: `${k.toLowerCase()}@example.test`, isAdmin: k !== "staff", isActive: true } as never);
     expect(await rightsOf("plainAdmin")).toEqual({ view: false, edit: false, submit: false, approve: false, publish: false, backdate: false, history: false });
     expect(await rightsOf("editor")).toMatchObject({ view: true, edit: true, submit: true, approve: false, publish: false });
-    expect(await rightsOf("root")).toEqual({ view: true, edit: true, submit: true, approve: true, publish: true, backdate: true, history: true });
+    // A super-admin holds no Incentive Rules right of their own: every right is an explicit Field Permission grant.
+    expect(await rightsOf("root")).toEqual({ view: false, edit: false, submit: false, approve: false, publish: false, backdate: false, history: false });
   });
 
   it("the seven permissions are sensitive, off by default and not given to admins automatically", async () => {

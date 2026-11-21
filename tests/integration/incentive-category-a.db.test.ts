@@ -186,7 +186,7 @@ describe("calculating April from Forms", () => {
     const r = await act.calculateCategoryAMonth({ programId, month: "2026-04-01", asOf: "2026-09-30" });
     expect(r).toMatchObject({ ok: true, status: "computed", adopted: true, unchanged: false });
     const [run] = await q1<{ id: string; config_version_id: string; config_version_no: number; engine_version: string; adopted: boolean; computed_by_name: string }>(`select * from incentive_calc_runs`);
-    expect(run).toMatchObject({ config_version_id: v1, config_version_no: 1, engine_version: "category-a/1", adopted: true, computed_by_name: "runner" });
+    expect(run).toMatchObject({ config_version_id: v1, config_version_no: 1, engine_version: "category-a/2", adopted: true, computed_by_name: "runner" });
     const [res] = await q1(`select employee_id, earned_paise::text, payable_paise::text, sales_paise::text from incentive_calc_results where run_id = $1`, [run!.id]);
     expect(res).toMatchObject({ employee_id: who.rep, earned_paise: "92500", payable_paise: "92500", sales_paise: String(L(120)) });
     expect(await count(`select count(*)::int n from incentive_calc_order_credits where run_id = $1`, [run!.id])).toBe(12);
@@ -199,7 +199,7 @@ describe("calculating April from Forms", () => {
     expect(resultHash(calculateCategoryA(run!.inputs))).toBe(run!.result_hash);
   });
   it("calculating again with nothing changed records nothing twice", async () => {
-    signIn("root");
+    signIn("runner");
     const r = await act.calculateCategoryAMonth({ programId, month: "2026-04-01", asOf: "2026-09-30" });
     expect(r).toMatchObject({ ok: true, unchanged: true });
     expect(await count(`select count(*)::int n from incentive_calc_runs`)).toBe(1);
@@ -223,11 +223,14 @@ describe("missing configuration and effective dates", () => {
     expect((await q1<{ current_run_id: string | null }>(`select current_run_id from incentive_calc_periods where month = '2026-03-01'`))[0]!.current_run_id).toBeNull();
   });
   it("a version published from May applies to May only; April keeps version 1", async () => {
-    v2 = await publishVersion(forRep(aprilConfig({ "eligibility.threshold": L(150) })), "2026-05-01");
+    // The first slab starts at the threshold (Category A validation): ₹1.5 Cr – ₹1.6 Cr here.
+    const may = aprilConfig({ "eligibility.threshold": L(150) });
+    may.slabs = [{ ...may.slabs[2]!, fromPaise: L(150) }];
+    v2 = await publishVersion(forRep(may), "2026-05-01");
     await formsOrders("05", Array(12).fill([[1, 5]]));
     signIn("runner");
-    const may = await act.calculateCategoryAMonth({ programId, month: "2026-05-01", asOf: "2026-09-30" });
-    expect(may).toMatchObject({ ok: true, status: "computed" });
+    const mayRun = await act.calculateCategoryAMonth({ programId, month: "2026-05-01", asOf: "2026-09-30" });
+    expect(mayRun).toMatchObject({ ok: true, status: "computed" });
     const [run] = await q1<{ config_version_id: string; id: string }>(`select id, config_version_id from incentive_calc_runs where month = '2026-05-01'`);
     expect(run!.config_version_id).toBe(v2);
     expect((await q1(`select qualified, payable_paise::text from incentive_calc_results where run_id = $1`, [run!.id]))[0]).toMatchObject({ qualified: false, payable_paise: "0" });

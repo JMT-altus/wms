@@ -4,10 +4,41 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import { fireToast } from "@/lib/toast";
-import { recordCategoryBDecision, retireCategoryBDecision } from "@/app/(masters)/master-setup/incentive-rules/calculation/actions";
+import { recordCategoryBDecision, recordCategoryBInvoiceReview, retireCategoryBDecision, retireCategoryBInvoiceReview } from "@/app/(masters)/master-setup/incentive-rules/calculation/actions";
 import { BLUE, BTN, BTN_PLAIN, CARD, FIELD, Notice, NotReady, RetireButton, day, rs } from "./calc-ui";
 import { OutcomeBadge } from "./b-qualifications";
-import type { ReviewRow } from "@/lib/queries/incentive-b-qualify";
+import type { InvoiceReview, ReviewRow } from "@/lib/queries/incentive-b-qualify";
+
+/** Record that an invoice with no Sales Order isn't a Category B sale, with the reason (0140). */
+function InvoiceReviewForm({ invoiceId, invoiceNo, onDone }: { invoiceId: string; invoiceNo: string; onDone: () => void }) {
+  const [reason, setReason] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  return (
+    <div className="mt-1 flex flex-wrap items-center gap-2" aria-label={`Review ${invoiceNo}`}>
+      <input className={`${FIELD} w-80`} placeholder="Reason (required)" value={reason} onChange={(e) => setReason(e.target.value)} aria-label={`Reason for ${invoiceNo}`} maxLength={1000} />
+      <button
+        type="button"
+        className={BTN}
+        style={{ background: BLUE }}
+        disabled={busy || !reason.trim()}
+        onClick={async () => {
+          setBusy(true);
+          setError(null);
+          const r = await recordCategoryBInvoiceReview({ invoiceId, reason: reason.trim() });
+          setBusy(false);
+          if (!r.ok) return setError(r.error);
+          fireToast({ message: "Recorded: not a Category B sale.", type: "success" });
+          setReason("");
+          onDone();
+        }}
+      >
+        Not a Category B sale
+      </button>
+      {error && <span role="alert" className="text-[12.5px] font-semibold text-[#B91C1C]">{error}</span>}
+    </div>
+  );
+}
 
 /**
  * Category B → Review & decisions. The month's orders needing review (or every order), each with its evidence and
@@ -76,8 +107,13 @@ export function BReview(p: {
   source: { runId: string; adopted: boolean; asOf: string; configVersionNo: number | null } | null;
   rows: ReviewRow[];
   reviewInvoices: { invoiceId: string; invoiceNo: string; invoiceDate: string; reason: string }[];
+  /** 0140: whether invoice reviews can be recorded, and every review of the listed invoices. */
+  invoiceReviewsReady?: boolean;
+  invoiceReviews?: InvoiceReview[];
   found: Found[];
 }) {
+  const invoiceReviewsReady = p.invoiceReviewsReady ?? false;
+  const invoiceReviews = p.invoiceReviews ?? [];
   const router = useRouter();
   const [search, setSearch] = React.useState(p.search);
   const go = (patch: Record<string, string | null>) => {
@@ -90,6 +126,12 @@ export function BReview(p: {
     const r = await retireCategoryBDecision({ id, reason });
     if (!r.ok) fireToast({ message: r.error, type: "error" });
     else fireToast({ message: "Decision retired. The order returns to its automatic outcome at the next calculation.", type: "success" });
+    router.refresh();
+  };
+  const retireInvoice = async (id: string, reason: string) => {
+    const r = await retireCategoryBInvoiceReview({ id, reason });
+    if (!r.ok) fireToast({ message: r.error, type: "error" });
+    else fireToast({ message: "Review retired. The invoice needs review again before the month goes ahead.", type: "success" });
     router.refresh();
   };
   if (!p.ready) return <NotReady category="B" />;
@@ -175,13 +217,41 @@ export function BReview(p: {
       {!!p.reviewInvoices.length && (
         <section aria-label="Invoices with no Sales Order" className="rounded-section bg-white p-4 text-[12.5px]" style={CARD}>
           <h2 className="text-[14px] font-bold text-ink-strong">Invoices with no Sales Order ({p.reviewInvoices.length})</h2>
-          <p className="mt-0.5 text-ink-muted">They can&apos;t be evaluated for Category B: link them to their Sales Order in Forms, or decide the Sales Order by hand once linked.</p>
-          <ul className="mt-1 grid gap-0.5 text-ink-muted">
-            {p.reviewInvoices.map((r) => (
-              <li key={r.invoiceId}>
-                <strong className="text-ink-strong">{r.invoiceNo}</strong> · {day(r.invoiceDate)} — {r.reason}
-              </li>
-            ))}
+          <p className="mt-0.5 text-ink-muted">
+            They can&apos;t be evaluated for Category B. Link each to its Sales Order in Forms and recalculate — or, if it isn&apos;t a Category B sale, record that with the reason. Until every one is decided, the month isn&apos;t submitted, approved or paid. Whoever decides one never approves the month.
+          </p>
+          {!invoiceReviewsReady && <p className="mt-1 text-[12px] font-semibold text-[#B45309]">Recording a review needs database update 0140; until then, correct the Sales Order link in Forms and recalculate.</p>}
+          <ul className="mt-1 grid gap-2 text-ink-muted">
+            {p.reviewInvoices.map((r) => {
+              const mine = invoiceReviews.filter((x) => x.invoiceId === r.invoiceId);
+              const active = mine.find((x) => !x.retiredAt) ?? null;
+              return (
+                <li key={r.invoiceId} aria-label={`Invoice ${r.invoiceNo}`}>
+                  <strong className="text-ink-strong">{r.invoiceNo}</strong> · {day(r.invoiceDate)} — {r.reason}
+                  {active ? (
+                    <span className="mt-0.5 flex flex-wrap items-center gap-2 text-[12px]">
+                      <span className="font-semibold text-[#047857]">Reviewed: not a Category B sale</span> — {active.reason} ({active.byName}, {day(active.at)})
+                      {p.canDecide && <RetireButton label={`review of ${r.invoiceNo}`} onRetire={(why) => retireInvoice(active.id, why)} />}
+                    </span>
+                  ) : (
+                    <span className="mt-0.5 block text-[12px] font-semibold text-[#B45309]">Needs review</span>
+                  )}
+                  {mine.some((x) => x.retiredAt) && (
+                    <details className="mt-0.5 text-[11.5px]">
+                      <summary className="cursor-pointer">History ({mine.length})</summary>
+                      <ul>
+                        {mine.map((x) => (
+                          <li key={x.id}>
+                            Not Category B — {x.reason} ({x.byName}, {day(x.at)}){x.retiredAt ? `; retired ${day(x.retiredAt)}: ${x.retiredReason}` : ""}
+                          </li>
+                        ))}
+                      </ul>
+                    </details>
+                  )}
+                  {!active && p.canDecide && invoiceReviewsReady && <InvoiceReviewForm invoiceId={r.invoiceId} invoiceNo={r.invoiceNo} onDone={() => router.refresh()} />}
+                </li>
+              );
+            })}
           </ul>
         </section>
       )}

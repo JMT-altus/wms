@@ -13,6 +13,7 @@ export function normalizeInputX(i: CategoryXInput): CategoryXInput {
   if (i.repHistory) out.repHistory = sortBy(i.repHistory, (r) => `${r.customerId}|${r.from}|${r.employeeId}`);
   if (i.attributions) out.attributions = sortBy(i.attributions, (a) => `${a.documentId}|${a.employeeId}`);
   if (i.carry) out.carry = sortBy(i.carry.map((c) => ({ ...c, lots: byId(c.lots)! })), (c) => c.employeeId);
+  if (i.fReviews) out.fReviews = sortBy(i.fReviews.map((r) => ({ ...r, namedEmployeeIds: [...r.namedEmployeeIds].sort(), appreciatedEmployeeIds: [...r.appreciatedEmployeeIds].sort() })), (r) => r.reviewId);
   if (i.incompleteReferences) out.incompleteReferences = { documentIds: [...new Set(i.incompleteReferences.documentIds)].sort(), customerIds: [...new Set(i.incompleteReferences.customerIds)].sort() };
   if (i.customerPartyKeys) out.customerPartyKeys = Object.fromEntries(Object.entries(i.customerPartyKeys).sort().map(([k, v]) => [k, [...v].sort()]));
   return out;

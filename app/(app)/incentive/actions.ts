@@ -9,7 +9,10 @@ import type { Employee } from "@/db/schema";
 import { leadBatches, leadConversions, clientMeetings, testimonials, salesOrders, customers, invoices, receipts, incentivePeriods, payoutRuns, incentiveSchemes, ruleVersions, incentiveAudit } from "@/db/schema";
 import { currentPeriodIST, getPeriodPayout } from "@/lib/queries/incentives";
 import { P, CR, SALES_BH_SCHEME } from "@/lib/incentives";
-import { computePeriodForEmployee, ensurePeriod } from "@/lib/incentives/load";
+import { authoritativeCategories, computePeriodForEmployee, ensurePeriod } from "@/lib/incentives/load";
+import { wordsIn } from "@/lib/incentives/categories/f-url";
+import { incentiveCalcFReady } from "@/lib/queries/incentive-calc-x";
+import { checkClaim, registerTestimonial, screenshotRequired } from "@/lib/queries/incentive-f-review";
 
 type OrderCat = "A" | "B" | "C" | "N" | "I" | "R" | "V";
 const isDate = (s: unknown): s is string => typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s);
@@ -42,6 +45,13 @@ const clampInt = (v: unknown, lo: number, hi: number) =>
 /** The Field Permission that lets someone log their own activity for an earlier month (never a future one). */
 const ACTIVITY_ANY_MONTH = "incentive.activity.anyMonth";
 
+/** Whether a published Category F version (any programme) is in force for the month: the new engine settles it. Reads only. */
+async function fPublishedFor(month: string): Promise<boolean> {
+  const rowsOf = <T,>(r: unknown) => (Array.isArray(r) ? r : ((r as { rows?: unknown[] }).rows ?? [])) as T[];
+  const r = await db.execute(sql`select exists (select 1 from incentive_config_versions v where v.category_code = 'F' and v.status = 'published' and v.effective_from <= ${month}::date and (v.effective_to is null or v.effective_to >= ${month}::date)) as yes`);
+  return rowsOf<{ yes: boolean }>(r)[0]?.yes === true;
+}
+
 /** Whether the new engine's calculation of `category` for `month` has moved past "open" in any programme. Reads only. */
 async function newEngineMonthClosed(category: "D" | "E" | "F", month: string): Promise<boolean> {
   const rowsOf = <T,>(r: unknown) => (Array.isArray(r) ? r : ((r as { rows?: unknown[] }).rows ?? [])) as T[];
@@ -56,13 +66,17 @@ async function newEngineMonthClosed(category: "D" | "E" | "F", month: string): P
  * an earlier one. Never a future month, never a month the tracker has locked or paid, and never one whose category's
  * calculation is already locked, submitted, approved or paid (that would change a finalised month).
  */
-async function activityMonth(me: Employee, requested: unknown, category: "D" | "E" | "F"): Promise<{ ok: true; month: string } | { ok: false; error: string }> {
+async function activityMonth(me: Employee, requested: unknown, category: "D" | "E" | "F", opts: { newEngineSettles?: boolean } = {}): Promise<{ ok: true; month: string } | { ok: false; error: string }> {
   const current = currentPeriodIST();
   const month = requested === undefined || requested === null || requested === "" ? current : String(requested);
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) return { ok: false, error: "Choose the month (YYYY-MM)." };
   if (month > current) return { ok: false, error: "Activity can't be logged for a future month." };
   if (month !== current && (await getFieldAccessFor(me))[ACTIVITY_ANY_MONTH]?.allowed !== true)
     return { ok: false, error: "Logging activity for an earlier month needs the “Incentive Tracker — Log activity for an earlier month” permission." };
+  // A Google review whose month the NEW Category F already settles (a published version in force) is credited to its
+  // original month even when that month is closed: a locked month is reopened by the authorised workflow, an approved
+  // or paid one never changes and the difference is carried into a later month (0137, confirmed rule F10).
+  if (opts.newEngineSettles) return { ok: true, month };
   if (await isPeriodClosed(month)) return { ok: false, error: `${month} is locked or paid in the Incentive Tracker: nothing can be added to it.` };
   if (await newEngineMonthClosed(category, month)) return { ok: false, error: `Category ${category} for ${month} is already locked, submitted, approved or paid: nothing can be added to it.` };
   return { ok: true, month };
@@ -115,9 +129,20 @@ export async function submitMeeting(input: {
 }
 
 /**
- * A review or testimonial is recorded as it is (any 1–5★ rating for a Google review). Whether it earns — five stars
- * only, the fewest words, evidence — is decided when the month is calculated, by the configuration in force
- * (Incentive Rules: Category F; or the old engine's scheme), so it is never decided here.
+ * A review or testimonial is recorded as it is; whether it earns is decided when the month is calculated.
+ *
+ * A GOOGLE REVIEW (0137) needs its public review link and the date Google shows it was published; its month — in the
+ * old engine's record too (D1) — is that claimed publication month, under the same rules as any activity: never a
+ * future month, an earlier month only with the "earlier month" permission, never a locked or paid one. The claim alone
+ * earns nothing: the old engine still pays only an APPROVED testimonial, and the new Category F only a review an
+ * authorised verifier VERIFIED (whose verified date then decides its month). The review is registered once (a second
+ * submission of the same review is a duplicate; a short link waits for a verifier). A screenshot is required when a
+ * published Category F version in force for the month asks for one.
+ * An EMAIL or LETTERHEAD testimonial (F.2, F.3) is recorded in the old engine exactly as before (its month as chosen).
+ * Once 0138 is applied it is also registered for the new Category F: it then needs the link to its evidence (the email, or
+ * the scanned letter) and its own date, and it too earns only once a verifier has checked that it is genuinely the
+ * customer's and of its type (a document alone never earns); the same testimonial is registered once across employees
+ * and types.
  */
 export async function submitTestimonial(input: {
   kind: "google_review" | "email" | "letterhead";
@@ -126,17 +151,50 @@ export async function submitTestimonial(input: {
   namesTeamMember: boolean;
   evidenceUrl?: string;
   periodMonth?: string;
+  /** Google review (0137): the public link (required), the date published (required), a screenshot link, the text. */
+  reviewUrl?: string;
+  screenshotUrl?: string;
+  publishedOn?: string;
+  reviewText?: string;
 }): Promise<ActionResult> {
   const me = await requireUser();
   const kind = ["google_review", "email", "letterhead"].includes(input.kind) ? input.kind : "email";
+  if (kind === "google_review") {
+    const claim = { kind, url: input.reviewUrl ?? "", screenshotUrl: input.screenshotUrl?.trim() || null, publishedOn: input.publishedOn ?? "", rating: Number(input.starRating), text: input.reviewText?.trim() || null };
+    const bad = checkClaim(claim);
+    if (bad) return { ok: false, error: bad };
+    const fReady = await incentiveCalcFReady(db);
+    const m = await activityMonth(me, claim.publishedOn.slice(0, 7), "F", { newEngineSettles: fReady && (await fPublishedFor(`${claim.publishedOn.slice(0, 7)}-01`)) });
+    if (!m.ok) return m;
+    if (fReady && !claim.screenshotUrl && (await screenshotRequired(db, `${m.month}-01`))) return { ok: false, error: "Attach the review's screenshot as well: the Category F configuration in force asks for one." };
+    const wordCount = claim.text ? wordsIn(claim.text) : clampInt(input.wordCount, 0, 100000);
+    await db.transaction(async (tx) => {
+      const [t] = await tx
+        .insert(testimonials)
+        .values({ employeeId: me.id, employeeName: me.name, periodMonth: m.month, kind, wordCount, starRating: claim.rating, namesTeamMember: !!input.namesTeamMember, evidenceUrl: (claim.screenshotUrl ?? claim.url.trim()).slice(0, 500) })
+        .returning({ id: testimonials.id });
+      if (fReady) await registerTestimonial(tx, { id: me.id, name: me.name }, t!.id, claim);
+    });
+    revalidateIncentive();
+    return { ok: true };
+  }
   const wordCount = clampInt(input.wordCount, 0, 100000);
   const starRating = input.starRating != null && Number.isFinite(Number(input.starRating)) ? clampInt(input.starRating, 1, 5) : null;
-  if (kind === "google_review" && starRating === null) return { ok: false, error: "Choose the review's star rating (1–5)." };
+  // F.2 / F.3 for the new Category F (0138): the evidence link and the email's or letter's own date are required.
+  const fReady = await incentiveCalcFReady(db);
+  const claim = { kind, url: input.evidenceUrl ?? "", screenshotUrl: null, publishedOn: input.publishedOn ?? "", rating: null, text: input.reviewText?.trim() || null };
+  if (fReady) {
+    const bad = checkClaim(claim);
+    if (bad) return { ok: false, error: bad };
+  }
   const m = await activityMonth(me, input.periodMonth, "F");
   if (!m.ok) return m;
-  await db.insert(testimonials).values({
-    employeeId: me.id, periodMonth: m.month, kind, wordCount,
-    starRating, namesTeamMember: !!input.namesTeamMember, evidenceUrl: input.evidenceUrl?.slice(0, 500) ?? null,
+  await db.transaction(async (tx) => {
+    const [t] = await tx
+      .insert(testimonials)
+      .values({ employeeId: me.id, employeeName: me.name, periodMonth: m.month, kind, wordCount, starRating, namesTeamMember: !!input.namesTeamMember, evidenceUrl: input.evidenceUrl?.slice(0, 500) ?? null })
+      .returning({ id: testimonials.id });
+    if (fReady) await registerTestimonial(tx, { id: me.id, name: me.name }, t!.id, claim);
   });
   revalidateIncentive();
   return { ok: true };
@@ -322,11 +380,17 @@ export async function reviewSubmission(input: {
   const TABLE = { lead_batch: leadBatches, lead_conversion: leadConversions, meeting: clientMeetings, testimonial: testimonials } as const;
   const table = TABLE[input.queue as keyof typeof TABLE];
   if (!table) return { ok: false, error: "Unknown queue" };
-  const [owner] = await db.select({ employeeId: table.employeeId }).from(table).where(eq(table.id, input.id)).limit(1);
+  const [owner] = await db.select({ employeeId: table.employeeId, periodMonth: table.periodMonth }).from(table).where(eq(table.id, input.id)).limit(1);
   if (!owner) return { ok: false, error: "That submission no longer exists." };
   if (owner.employeeId === me.id) return { ok: false, error: "You can't review your own submission: another admin must approve or reject it." };
+  // A month the OLD engine has locked or paid is final there: its ledger is never recomputed, so a decision made or
+  // changed now would be silently ignored, or no longer match what was paid. (A category the new engine settles for the
+  // month is recalculated by its own workflow instead, where a later change is carried into an open month.)
+  const QUEUE_CATEGORY = { lead_batch: "D", lead_conversion: "D", meeting: "E", testimonial: "F" } as const;
+  if ((await isPeriodClosed(owner.periodMonth)) && !(await authoritativeCategories(owner.periodMonth)).has(QUEUE_CATEGORY[input.queue as keyof typeof QUEUE_CATEGORY]))
+    return { ok: false, error: `${owner.periodMonth} is locked or paid in the Incentive Tracker: a decision on its submissions can't be made or changed now (it would no longer match what was settled).` };
 
-  let affected: { employeeId: string; periodMonth: string } | undefined;
+  let affected: { employeeId: string | null; periodMonth: string } | undefined;
   switch (input.queue) {
     case "lead_batch":
       await db.update(leadBatches).set(base).where(eq(leadBatches.id, input.id));
@@ -338,9 +402,15 @@ export async function reviewSubmission(input: {
       break;
     case "meeting": {
       // The admin's award as given: the configuration in force (Category E's smallest and largest award, or the old
-      // engine's scheme) keeps it within its range when the month is calculated, so no amount is fixed here.
-      const rupees = Number(input.awardedRupees ?? 0);
-      if (decision === "approved" && (!Number.isFinite(rupees) || rupees < 0 || !Number.isSafeInteger(Math.round(rupees * 100)))) return { ok: false, error: "Enter the award in rupees (0 or more)." };
+      // engine's scheme) keeps it within its range when the month is calculated, so no amount is fixed here. An approval
+      // states its award explicitly: NO award (a blank box) is refused — it used to be stored as ₹0 and then paid as the
+      // smallest award — and so is ₹0, which the current scheme would also raise to its smallest award. To pay nothing,
+      // the meeting is rejected.
+      const given = input.awardedRupees;
+      if (decision === "approved" && (given === undefined || given === null)) return { ok: false, error: "Enter the award before approving: no award was given. To pay nothing, reject the meeting." };
+      const rupees = Number(given ?? 0);
+      if (decision === "approved" && (!Number.isFinite(rupees) || rupees < 0 || !Number.isSafeInteger(Math.round(rupees * 100)))) return { ok: false, error: "Enter the award in rupees (more than 0)." };
+      if (decision === "approved" && Math.round(rupees * 100) === 0) return { ok: false, error: "₹0 isn't an award: the smallest award configured would be paid instead. Enter the award to pay, or reject the meeting to pay nothing." };
       const awarded = decision === "approved" ? Math.round(rupees * 100) : 0;
       await db.update(clientMeetings).set({ ...base, awardedPaise: awarded }).where(eq(clientMeetings.id, input.id));
       [affected] = await db.select({ employeeId: clientMeetings.employeeId, periodMonth: clientMeetings.periodMonth }).from(clientMeetings).where(eq(clientMeetings.id, input.id)).limit(1);
@@ -355,7 +425,8 @@ export async function reviewSubmission(input: {
   }
   if (affected) {
     await audit(me.id, decision === "approved" ? "approved" : "rejected", "submission", input.id, affected.employeeId, { queue: input.queue });
-    await computePeriodForEmployee(affected.employeeId, affected.periodMonth, new Date());
+    // A testimonial whose employee was deleted (0137) is history: nothing to recompute.
+    if (affected.employeeId) await computePeriodForEmployee(affected.employeeId, affected.periodMonth, new Date());
   }
   revalidateIncentive();
   return { ok: true };
@@ -404,17 +475,31 @@ export async function setPeriodStatus(input: {
 }): Promise<ActionResult> {
   const me = await requireAdmin();
   const period = input.period ?? currentPeriodIST();
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(period)) return { ok: false, error: "Choose a month." };
   const status = (["open", "review", "locked", "paid"] as const).includes(input.status) ? input.status : "review";
   const periodId = await ensurePeriod(period);
 
-  await db.update(incentivePeriods)
-    .set({ status, lockedById: status === "locked" || status === "paid" ? me.id : null, lockedAt: status === "locked" || status === "paid" ? new Date() : null, updatedAt: new Date() })
-    .where(eq(incentivePeriods.id, periodId));
-
-  if (status === "paid") {
-    const payout = await getPeriodPayout(period);
-    await db.insert(payoutRuns).values({ periodId, totalPaise: payout.grandTotalPaise, createdById: me.id, pushedToPayrollAt: new Date() });
-  }
+  // Serialised per month (the row is locked): a PAID month is final — it never moves back to open, review or locked, and
+  // is never marked paid twice (one payout run per month). A month is marked paid only once it is locked, so the payout
+  // run records figures nobody can still change (a locked month's ledger is never recomputed). The status and its payout
+  // run are written together, or neither is.
+  const payout = status === "paid" ? await getPeriodPayout(period) : null;
+  const result = await db.transaction(async (tx) => {
+    const [cur] = await tx.select({ status: incentivePeriods.status }).from(incentivePeriods).where(eq(incentivePeriods.id, periodId)).for("update");
+    if (cur?.status === "paid") return { ok: false as const, error: status === "paid" ? "This month is already paid: its payout was recorded once and isn't recorded again." : "A paid month is final: it can't be reopened, unlocked or moved back to review." };
+    if (status === "paid" && cur?.status !== "locked") return { ok: false as const, error: "Lock the month before marking it paid." };
+    if (status === "paid") {
+      const [run] = await tx.select({ id: payoutRuns.id }).from(payoutRuns).where(eq(payoutRuns.periodId, periodId)).limit(1);
+      if (run) return { ok: false as const, error: "This month's payout run is already recorded; it isn't recorded twice." };
+    }
+    await tx.update(incentivePeriods)
+      .set({ status, lockedById: status === "locked" || status === "paid" ? me.id : null, lockedAt: status === "locked" || status === "paid" ? new Date() : null, updatedAt: new Date() })
+      .where(eq(incentivePeriods.id, periodId));
+    if (payout) await tx.insert(payoutRuns).values({ periodId, totalPaise: payout.grandTotalPaise, createdById: me.id, pushedToPayrollAt: new Date() });
+    return { ok: true as const };
+  });
+  if (!result.ok) return result;
+  await audit(me.id, status === "paid" ? "paid" : status === "locked" ? "locked" : status === "open" ? "reopened" : "moved-to-review", "period", periodId, null, { period, status });
   revalidateIncentive();
   return { ok: true };
 }
@@ -438,7 +523,8 @@ export async function recomputePeriod(input?: { period?: string }): Promise<{ ok
     db.selectDistinct({ id: clientMeetings.employeeId }).from(clientMeetings).where(eq(clientMeetings.periodMonth, period)),
     db.selectDistinct({ id: testimonials.employeeId }).from(testimonials).where(eq(testimonials.periodMonth, period)),
   ]);
-  for (const r of [...lb, ...lc, ...mt, ...ts]) ids.add(r.id);
+  // A testimonial whose employee was deleted (0137: kept, employee_id null) is history: nobody to recompute.
+  for (const r of [...lb, ...lc, ...mt, ...ts]) if (r.id) ids.add(r.id);
 
   const asOf = new Date();
   for (const id of ids) await computePeriodForEmployee(id, period, asOf);

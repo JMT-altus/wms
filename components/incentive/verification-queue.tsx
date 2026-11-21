@@ -42,7 +42,8 @@ function Row({ it, first }: { it: PendingItem; first: boolean }) {
     start(async () => {
       const res = await reviewSubmission({
         queue: it.queue, id: it.id, decision,
-        awardedRupees: it.needsAward ? Number(award) : undefined,
+        // A blank box is NO award (refused on approval), never ₹0.
+        awardedRupees: it.needsAward && award.trim() !== "" ? Number(award) : undefined,
         namesTeamMember: it.queue === "testimonial" ? names : undefined,
       });
       if (res.ok) router.refresh();

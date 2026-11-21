@@ -336,3 +336,119 @@ export async function orderSalespeople(documentId: string, q: Q = db) {
   const rows = await q.select({ a: incentiveCalcAttributions, employeeName: employees.name }).from(incentiveCalcAttributions).innerJoin(employees, eq(employees.id, incentiveCalcAttributions.employeeId)).where(eq(incentiveCalcAttributions.documentId, documentId)).orderBy(asc(incentiveCalcAttributions.createdAt));
   return rows.map((r) => ({ id: r.a.id, employeeName: r.employeeName, sharePpm: r.a.sharePpm, active: !r.a.retiredAt, retiredReason: r.a.retiredReason }));
 }
+
+/* ── B2. representative history: importing a file (Category A, D28) ───── */
+
+export interface RepImportRow {
+  line: number;
+  customer: string;
+  employee: string;
+  from: string;
+  to: string | null;
+  /** What it maps to, when it does. */
+  customerName: string | null;
+  employeeName: string | null;
+  problem: string | null;
+}
+export const REP_IMPORT_MAX_ROWS = 2000;
+export const REP_IMPORT_HEADER = ["customer", "employee", "from", "to", "note"] as const;
+
+/** RFC 4180-style CSV: quoted fields may hold commas, quotes ("") and line breaks. PURE. */
+export function parseCsv(text: string): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let cell = "";
+  let quoted = false;
+  const s = text.replace(/^﻿/, "");
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i]!;
+    if (quoted) {
+      if (ch === '"' && s[i + 1] === '"') {
+        cell += '"';
+        i++;
+      } else if (ch === '"') quoted = false;
+      else cell += ch;
+    } else if (ch === '"' && cell === "") quoted = true;
+    else if (ch === ",") {
+      row.push(cell);
+      cell = "";
+    } else if (ch === "\n" || ch === "\r") {
+      if (ch === "\r" && s[i + 1] === "\n") i++;
+      row.push(cell);
+      rows.push(row);
+      row = [];
+      cell = "";
+    } else cell += ch;
+  }
+  if (cell !== "" || row.length) {
+    row.push(cell);
+    rows.push(row);
+  }
+  return rows.filter((r) => r.some((c) => c.trim() !== ""));
+}
+
+/**
+ * Representative periods from a CSV file (columns: customer, employee, from, to, note — customer = the Customer
+ * Master's code, or its exact name; employee = the employee's email; dates yyyy-mm-dd; to may be blank = open). Every
+ * row is checked first — the customer and employee exist, the dates are real, no two rows of a customer overlap, and no
+ * row overlaps a period already recorded for that customer — and the report lists each row with its problem.
+ * `commit`: only when EVERY row is right are they all recorded, in ONE transaction, each with its history row exactly as
+ * one recorded by hand (the database's own checks apply too; any refusal records nothing). Otherwise nothing is.
+ */
+export async function importRepPeriods(actor: Actor, csv: string, opts: { commit: boolean }): Promise<Result<{ rows: RepImportRow[]; imported: number }>> {
+  if (csv.length > 2_000_000) return { ok: false, error: "The file is larger than 2 MB." };
+  const table = parseCsv(csv);
+  const header = (table[0] ?? []).map((h) => h.trim().toLowerCase());
+  if (REP_IMPORT_HEADER.slice(0, 4).some((h, i) => header[i] !== h)) return { ok: false, error: `The first line must be the column names: ${REP_IMPORT_HEADER.join(", ")}.` };
+  const body = table.slice(1);
+  if (!body.length) return { ok: false, error: "The file has no rows after the column names." };
+  if (body.length > REP_IMPORT_MAX_ROWS) return { ok: false, error: `At most ${REP_IMPORT_MAX_ROWS} rows at a time.` };
+  if (!(await incentiveCalcReady())) return { ok: false, error: CALC_NOT_READY };
+  const custs = await db.select({ id: customerMasters.id, name: customerMasters.name, code: customerMasters.code }).from(customerMasters);
+  const emps = await db.select({ id: employees.id, name: employees.name, email: employees.email }).from(employees);
+  const byCode = new Map<string, (typeof custs)[number][]>();
+  const byName = new Map<string, (typeof custs)[number][]>();
+  for (const c of custs) {
+    if (c.code) byCode.set(c.code.trim().toLowerCase(), [...(byCode.get(c.code.trim().toLowerCase()) ?? []), c]);
+    byName.set(c.name.trim().toLowerCase(), [...(byName.get(c.name.trim().toLowerCase()) ?? []), c]);
+  }
+  const byEmail = new Map(emps.map((e) => [e.email.trim().toLowerCase(), e]));
+  const parsed = body.map((cells, i) => {
+    const [customer = "", employee = "", from = "", to = "", note = ""] = cells.map((c) => c.trim());
+    const r: RepImportRow & { customerId: string | null; employeeId: string | null; note: string | null } = { line: i + 2, customer, employee, from, to: to || null, customerName: null, employeeName: null, problem: null, customerId: null, employeeId: null, note: note || null };
+    const key = customer.toLowerCase();
+    const found = byCode.get(key) ?? byName.get(key) ?? [];
+    if (!customer) r.problem = "No customer.";
+    else if (found.length !== 1) r.problem = found.length ? `"${customer}" names ${found.length} customers: use the Customer Master code.` : `No customer with code or name "${customer}".`;
+    else [r.customerId, r.customerName] = [found[0]!.id, found[0]!.name];
+    const emp = byEmail.get(employee.toLowerCase());
+    if (!r.problem && !emp) r.problem = employee ? `No employee with email "${employee}".` : "No employee.";
+    else if (emp) [r.employeeId, r.employeeName] = [emp.id, emp.name];
+    if (!r.problem && !isDay(from)) r.problem = `"${from}" isn't a date (yyyy-mm-dd).`;
+    if (!r.problem && r.to !== null && (!isDay(r.to) || r.to < from)) r.problem = `The end date "${r.to}" must be a date on or after ${from}, or blank.`;
+    if (!r.problem && note.length > 1000) r.problem = "The note is longer than 1,000 characters.";
+    return r;
+  });
+  // Overlaps: between rows of the file, and with the periods already in force.
+  const overlaps = (a: { from: string; to: string | null }, b: { from: string; to: string | null }) => a.from <= (b.to ?? "9999-12-31") && b.from <= (a.to ?? "9999-12-31");
+  const ids = [...new Set(parsed.map((r) => r.customerId).filter((x): x is string => !!x))];
+  const existing = ids.length ? await db.select().from(incentiveCalcRepHistory).where(and(inArray(incentiveCalcRepHistory.customerMasterId, ids), isNull(incentiveCalcRepHistory.retiredAt))) : [];
+  // Every row of an overlapping pair is flagged (judged on the rows that were otherwise right).
+  const valid = new Set(parsed.filter((r) => !r.problem));
+  for (const r of parsed) {
+    if (!valid.has(r) || !r.customerId) continue;
+    const clash = parsed.find((o) => o !== r && valid.has(o) && o.customerId === r.customerId && overlaps(o, r));
+    if (clash) r.problem = `Overlaps line ${clash.line} for the same customer.`;
+    const held = existing.find((e) => e.customerMasterId === r.customerId && overlaps({ from: D(e.effectiveFrom)!, to: D(e.effectiveTo) }, r));
+    if (!r.problem && held) r.problem = `Overlaps a period already recorded for ${r.customerName} (${D(held.effectiveFrom)} – ${D(held.effectiveTo) ?? "open"}): retire it first.`;
+  }
+  const rows: RepImportRow[] = parsed.map(({ customerId: _c, employeeId: _e, note: _n, ...r }) => r);
+  if (!opts.commit || parsed.some((r) => r.problem)) return { ok: true, rows, imported: 0 };
+  return db.transaction(async (tx) => {
+    for (const r of parsed) {
+      const [row] = await tx.insert(incentiveCalcRepHistory).values({ customerMasterId: r.customerId!, employeeId: r.employeeId!, effectiveFrom: r.from, effectiveTo: r.to, note: clean(r.note), createdById: actor.id }).returning();
+      await history(tx, actor, "rep-history", row!.id, "record", null, { customerId: r.customerId, customerName: r.customerName, employeeId: r.employeeId, employeeName: r.employeeName, from: r.from, to: r.to, imported: true }, clean(r.note));
+    }
+    return { ok: true as const, rows, imported: parsed.length };
+  });
+}

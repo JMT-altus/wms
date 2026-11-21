@@ -1,6 +1,6 @@
 "use client";
 
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { setPeriodStatus } from "@/app/(app)/incentive/actions";
 
@@ -11,15 +11,18 @@ const STEPS: { status: "open" | "review" | "locked" | "paid"; label: string }[] 
   { status: "paid", label: "Paid" },
 ];
 
-export function PeriodControls({ status }: { status: string }) {
+export function PeriodControls({ status, period }: { status: string; /** The month shown (YYYY-MM): the controls act on it, never on another. */ period?: string }) {
   const router = useRouter();
   const [pending, start] = useTransition();
+  const [error, setError] = useState<string | null>(null);
   const currentIdx = STEPS.findIndex((s) => s.status === status);
 
   function move(to: "open" | "review" | "locked" | "paid") {
+    setError(null);
     start(async () => {
-      const res = await setPeriodStatus({ status: to });
+      const res = await setPeriodStatus({ status: to, ...(period ? { period } : {}) });
       if (res.ok) router.refresh();
+      else setError(res.error);
     });
   }
 
@@ -45,6 +48,7 @@ export function PeriodControls({ status }: { status: string }) {
         {status === "review" && <><Btn pending={pending} onClick={() => move("locked")}>Lock period</Btn><GhostBtn pending={pending} onClick={() => move("open")}>Reopen</GhostBtn></>}
         {status === "locked" && <><Btn pending={pending} onClick={() => move("paid")}>Mark paid → payroll</Btn><GhostBtn pending={pending} onClick={() => move("review")}>Unlock</GhostBtn></>}
         {status === "paid" && <span className="text-[13px] font-semibold" style={{ color: "#15803d" }}>Paid &amp; pushed to payroll.</span>}
+        {error && <span role="alert" className="text-[12.5px] font-semibold" style={{ color: "#b91c1c" }}>{error}</span>}
       </div>
     </div>
   );

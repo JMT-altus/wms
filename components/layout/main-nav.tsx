@@ -32,7 +32,8 @@ export function MainNav({ activeTasks, archivedTasks, isAdmin, capabilities = []
 
   function isActive(item: ModuleNavItem): boolean {
     if (item.href === "/") return pathname === "/";
-    if (!pathname.startsWith(item.href)) return false;
+    // `match`: other routes that belong to this item (e.g. Incentive Management's category screens).
+    if (!pathname.startsWith(item.href) && !item.match?.some((m) => pathname.startsWith(m))) return false;
     if (item.notMatch?.some((n) => pathname.startsWith(n))) return false;
     return true;
   }

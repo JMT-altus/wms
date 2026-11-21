@@ -50,7 +50,7 @@ beforeAll(async () => {
   // Supabase's REST roles (0136 revokes them), then 0131–0135 exactly as production has them.
   // …with Supabase's default grants to them, so a missing REVOKE is really caught.
   await pg.exec(`create role anon nologin; create role authenticated nologin; alter default privileges in schema public grant all on tables to anon, authenticated;`);
-  for (const f of ["0131_incentive_rule_config.sql", "0132_incentive_category_a_calculation.sql", "0133_incentive_category_a_inputs_approvals.sql", "0134_incentive_category_b.sql", core.FILES.m0135]) await pg.exec(MIG(f).toString("utf8"));
+  for (const f of ["0131_incentive_rule_config.sql", "0132_incentive_category_a_calculation.sql", "0133_incentive_category_a_inputs_approvals.sql", "0134_incentive_category_b.sql", core.FILES.m0135]) await pg.exec(core.canonicalBytes(MIG(f)).toString("utf8")) // as production received it: LF (a Windows checkout has CRLF);
   // Production's ledger shape: 148 rows, 0131–0135 last; and RLS on every public table.
   await pg.exec(`create table public.__schema_applied (filename text primary key, applied_at timestamptz not null default now())`);
   const names = [...Array.from({ length: 143 }, (_, i) => `0000_earlier_${String(i).padStart(3, "0")}.sql`), "0131_incentive_rule_config.sql", "0132_incentive_category_a_calculation.sql", "0133_incentive_category_a_inputs_approvals.sql", core.FILES.m0134, core.FILES.m0135];
@@ -68,9 +68,9 @@ afterAll(async () => {
 
 describe("0136 runners: pinned files and the target", () => {
   it("the pins are exactly the files' bytes; any other bytes, or a file with its own transaction control, are refused", () => {
-    expect(core.sha256(MIG(core.FILES.migration))).toBe(core.PINS.migration);
-    expect(core.sha256(ROLLBACK)).toBe(core.PINS.rollback);
-    expect(core.sha256(MIG(core.FILES.m0135))).toBe(core.PINS.m0135);
+    expect(core.sha256(core.canonicalBytes(MIG(core.FILES.migration)))).toBe(core.PINS.migration);
+    expect(core.sha256(core.canonicalBytes(ROLLBACK))).toBe(core.PINS.rollback);
+    expect(core.sha256(core.canonicalBytes(MIG(core.FILES.m0135)))).toBe(core.PINS.m0135);
     expect(() => core.pinned("x.sql", MIG(core.FILES.migration), "0".repeat(64))).toThrow(/is not the pinned/);
     const tampered = Buffer.concat([MIG(core.FILES.migration), Buffer.from("\n-- one more line\n")]);
     expect(() => core.pinned("x.sql", tampered, core.PINS.migration)).toThrow(/is not the pinned/);

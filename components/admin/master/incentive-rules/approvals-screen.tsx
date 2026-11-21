@@ -23,7 +23,7 @@ export async function CategoryAApprovalsScreen({ rights, searchParams, basePath,
     <div>
       {head}
       {variant === "master" && <CategorySwitch category={category} />}
-      <CalcTabs active="Approvals" variant={variant} category={category} />
+      <CalcTabs active="Incentive Approvals" variant={variant} category={category} />
       <Approvals
         category={category}
         basePath={basePath}

@@ -44,10 +44,11 @@ export interface ApprovalsProps {
   }[];
 }
 
-const STATUS: Record<string, { label: string; color: string; bg: string }> = {
+/** A month's status (Incentive Approval — never the rules' approval). Shared with Incentive Management. */
+export const MONTH_STATUS: Record<string, { label: string; color: string; bg: string }> = {
   open: { label: "Open", color: "#475569", bg: "#F1F5F9" },
   locked: { label: "Locked", color: "#1E40AF", bg: "#EFF6FF" },
-  submitted: { label: "Awaiting approval", color: "#B45309", bg: "#FFFBEB" },
+  submitted: { label: "Awaiting Incentive Approval", color: "#B45309", bg: "#FFFBEB" },
   approved: { label: "Approved", color: "#047857", bg: "#ECFDF5" },
   paid: { label: "Paid", color: "#334155", bg: "#E2E8F0" },
   voided: { label: "Voided", color: "#B91C1C", bg: "#FEF2F2" },
@@ -73,7 +74,7 @@ export function Approvals(p: ApprovalsProps) {
         </select>
         <select className={FIELD} value={filter} onChange={(e) => setFilter(e.target.value as typeof filter)} aria-label="Show">
           <option value="all">All months</option>
-          <option value="action">Awaiting approval or payout</option>
+          <option value="action">Awaiting Incentive Approval or payout</option>
           <option value="paid">Paid</option>
         </select>
       </div>
@@ -81,7 +82,7 @@ export function Approvals(p: ApprovalsProps) {
         <table className="w-full text-[12.5px]" style={{ minWidth: 980 }} aria-label="Months and their approval">
           <thead>
             <tr className="text-left text-ink-subtle">
-              {["Month", "Status", "Calculation", "Submitted", "Approval", "Payout"].map((h) => (
+              {["Month", "Status", "Calculation", "Submitted", "Incentive Approval", "Payout"].map((h) => (
                 <th key={h} className="px-3 py-2 font-semibold">
                   {h}
                 </th>
@@ -97,7 +98,7 @@ export function Approvals(p: ApprovalsProps) {
               </tr>
             )}
             {shown.map((x) => {
-              const st = STATUS[x.status] ?? STATUS.open!;
+              const st = MONTH_STATUS[x.status] ?? MONTH_STATUS.open!;
               const current = x.approvals.filter((a) => a.submissionNo === x.submissionNo);
               const rejection = [...x.approvals].reverse().find((a) => a.decision === "reject");
               const eligible = x.status === "approved" && !!x.releaseOn && x.releaseOn <= p.today;

@@ -81,8 +81,14 @@ export function applyReceipts<I extends InvoiceDoc>(args: {
   /** The unit (order or invoice) a receipt part is counted under, for the report. */
   unitIdOfInvoice: (invoiceId: string) => string | null;
   held: HeldNote[];
+  /**
+   * Category A (category-a/2): a receipt with no customer in the Customer Master is never applied "oldest invoice first"
+   * — a blank customer would otherwise match every other blank-customer invoice — it is held to be allocated by hand.
+   * Absent: exactly as before (every other caller).
+   */
+  strictCustomer?: boolean;
 }): { applied: Applied[]; pieces: Piece[] } {
-  const { settings: s, receipts, events, invoices, invoiceById, invoiceDue, unitIdOfInvoice, held } = args;
+  const { settings: s, receipts, events, invoices, invoiceById, invoiceDue, unitIdOfInvoice, held, strictCustomer } = args;
   const refundRule = s["adjust.refund"] as string;
   const bounceRule = s["adjust.bouncedCheque"] as string;
   const reversedRule = s["adjust.reversedReceipt"] as string;
@@ -159,7 +165,10 @@ export function applyReceipts<I extends InvoiceDoc>(args: {
       }
       apply(r, inv, due, "the invoice it names");
       const excess = R.sub(amount, due);
-      if (multi === "oldestFirst") {
+      if (multi === "oldestFirst" && strictCustomer && !r.customerId) {
+        piece(r, excess, "held", "It pays more than the invoice it names, and it has no customer in the Customer Master: the excess waits to be allocated by hand.");
+        held.push({ documentId: r.id, documentNo: r.no, employeeId: null, message: "Pays more than its invoice and has no customer: allocate the excess by hand." });
+      } else if (multi === "oldestFirst") {
         const left = fifo(r, excess, "the customer's oldest open invoice", inv.id);
         if (!R.isZero(left)) piece(r, left, "excluded", "More than the customer's open invoices: the excess isn't applied.");
       } else {
@@ -173,7 +182,10 @@ export function applyReceipts<I extends InvoiceDoc>(args: {
       continue;
     }
     // On account.
-    if (onAccount === "allocateOldestInvoiceFirst") {
+    if (onAccount === "allocateOldestInvoiceFirst" && strictCustomer && !r.customerId) {
+      piece(r, amount, "held", "On account, with no customer in the Customer Master: it can't be matched to an invoice, so it is held until it is allocated by hand.");
+      held.push({ documentId: r.id, documentNo: r.no, employeeId: null, message: "On-account receipt with no customer: allocate it by hand." });
+    } else if (onAccount === "allocateOldestInvoiceFirst") {
       const left = fifo(r, amount, "on account: the customer's oldest open invoice");
       if (!R.isZero(left)) piece(r, left, "excluded", "On account, and more than the customer's open invoices: the excess isn't applied.");
     } else if (onAccount === "manualAllocationRequired") {

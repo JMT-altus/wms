@@ -16,7 +16,7 @@ import {
 import { EMPLOYEE_ROLES } from "@/db/enums";
 import { normalizeInputB } from "@/lib/incentives/category-b/hash";
 import type { CategoryBInput, OrderBIn } from "@/lib/incentives/category-b/types";
-import type { AllCategoriesIn, OtherCategoryAmount } from "@/lib/incentives/shared/all-categories";
+import { sharedShareOf, type AllCategoriesIn, type OtherCategoryAmount, type StoredShare } from "@/lib/incentives/shared/all-categories";
 import { monthsBefore } from "@/lib/incentives/shared/dates";
 import { monthEnd } from "@/lib/incentives/category-a/settle";
 import type { IncentiveConfig, SettingValue } from "@/lib/incentives/rules-config/spec";
@@ -86,12 +86,11 @@ export async function allCategoriesFor(q: Db, programId: string, month: string, 
     const [p] = await q.select().from(incentiveCalcPeriods).where(and(eq(incentiveCalcPeriods.programId, programId), eq(incentiveCalcPeriods.categoryCode, code), eq(incentiveCalcPeriods.month, month)));
     if (!p?.currentRunId) continue;
     const [run] = await q.select({ result: incentiveCalcRuns.result }).from(incentiveCalcRuns).where(eq(incentiveCalcRuns.id, p.currentRunId));
-    const emps = (run?.result as { employees?: { employeeId: string; earnedPaise: number; beforeAllCategoriesPaise?: number; capConsumedPaise?: number }[] } | undefined)?.employees ?? [];
-    // Only what a category RELEASES uses the shared limit: a minimum-payable month held below its minimum
-    // (capConsumedPaise 0) takes nothing from the others; every other result counts as before.
+    const emps = (run?.result as { employees?: ({ employeeId: string } & StoredShare)[] } | undefined)?.employees ?? [];
+    // Only what a category RELEASES uses the shared limit — its own amount and, since category-c/4, the balances carried
+    // forward it releases (sharedShareOf); a month held below its minimum takes nothing from the others.
     for (const e of [...emps].sort((a, b) => (a.employeeId < b.employeeId ? -1 : 1))) {
-      const held = e.capConsumedPaise === 0;
-      (others[e.employeeId] ??= []).push({ category: code, prePaise: held ? 0 : (e.beforeAllCategoriesPaise ?? e.earnedPaise), finalPaise: e.capConsumedPaise ?? e.earnedPaise, fixed: p.status !== "open" });
+      (others[e.employeeId] ??= []).push({ category: code, ...sharedShareOf(e), fixed: p.status !== "open" });
     }
   }
   return { capPaise, policy, order, others, ...(problem ? { problem } : {}) };

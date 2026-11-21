@@ -39,7 +39,7 @@ function input(category: ExtraCategory, over: Partial<CategoryXInput> = {}, sett
 }
 const order = (n: number, date: string, taxableRupees: number, customerId = CUST): OrderXIn => ({ id: id("c50", n), no: `SO ${n}`, date, customerId, partyKey: "new co", paymentTerms: null, states: { cancelled: false, optional: false, postDated: false }, lines: [], totalPaise: RS(taxableRupees * 1.18), taxablePaise: RS(taxableRupees) });
 
-describe("C · new customer acquisition (category-c/3: net, rolling, per receipt, review, carry-forward)", () => {
+describe("C · new customer acquisition (category-c/4: net, rolling, per receipt, review, carry-forward)", () => {
   // A deal: Sales Orders, each invoiced on its date (due 30 days later), credit notes / returns against an invoice, and
   // receipts as [fraction of what the invoice still asks, days after its due date].
   const due = (d: string) => addDays(d, 30);
@@ -287,7 +287,8 @@ describe("C · new customer acquisition (category-c/3: net, rolling, per receipt
     expect(below.employees[0]).toMatchObject({ earnedPaise: RS(3_000), ownPayablePaise: RS(3_000), payablePaise: 0, payableExact: "0", belowMinimumPaise: RS(3_000), netPaise: RS(3_000), capConsumedPaise: 0, carry: { lots: [], heldPaise: RS(3_000) } });
     expect(below.employees[0]!.limits.join(" ")).toMatch(/The month's total ₹3,000 is below the smallest amount paid in a month \(₹5,000\): nothing is released; it is carried forward/);
     const none = C(deal(APR_MAY_JUN()), { "payout.minimumPayable": "none" });
-    expect(none.employees[0]).toMatchObject({ payablePaise: RS(3_000), payableExact: String(RS(3_000)), capConsumedPaise: RS(3_000) });
+    expect(none.employees[0]).toMatchObject({ payablePaise: RS(3_000), payableExact: String(RS(3_000)), capConsumedPaise: RS(3_000), sharedPrePaise: RS(3_000) });
+    expect(below.employees[0]).toMatchObject({ capConsumedPaise: 0, sharedPrePaise: 0 }); // held: uses none of the shared limit
     expect(C(deal(APR_MAY_JUN()), { "payout.minimumPayable": RS(3_000) }).employees[0]!.payablePaise).toBe(RS(3_000)); // equal is paid
   });
 
@@ -297,7 +298,8 @@ describe("C · new customer acquisition (category-c/3: net, rolling, per receipt
     const L2 = { id: id("c6l", 2), month: "2026-05-01", remainingPaise: RS(1_500) };
     // ₹3,000 this month + ₹2,500 carried = ₹5,500 ≥ ₹5,000: released, both balances consumed.
     const rel = C({ ...deal(APR_MAY_JUN()), carry: carry([L1, L2]) }, { "payout.minimumPayable": RS(5_000) });
-    expect(rel.employees[0]).toMatchObject({ payablePaise: RS(5_500), carriedInPaise: RS(2_500), capConsumedPaise: RS(3_000), carry: { heldPaise: 0, lots: [{ lotId: L1.id, outcome: "released", amountPaise: RS(1_000) }, { lotId: L2.id, outcome: "released", amountPaise: RS(1_500) }] } });
+    // category-c/4: the released balances use the shared limit too (₹3,000 own + ₹2,500 released = ₹5,500).
+    expect(rel.employees[0]).toMatchObject({ payablePaise: RS(5_500), carriedInPaise: RS(2_500), capConsumedPaise: RS(5_500), sharedPrePaise: RS(5_500), carry: { heldPaise: 0, lots: [{ lotId: L1.id, outcome: "released", amountPaise: RS(1_000) }, { lotId: L2.id, outcome: "released", amountPaise: RS(1_500) }] } });
     // An adjustment carried in counts too (the minimum is on the month's total): ₹3,000 + ₹2,000 = ₹5,000.
     expect(C({ ...deal(APR_MAY_JUN()), carry: carry([], RS(2_000)) }, { "payout.minimumPayable": RS(5_000) }).employees[0]!.payablePaise).toBe(RS(5_000));
     // A month with nothing of its own: only its balances (a salesperson present only through the carry).
@@ -312,6 +314,45 @@ describe("C · new customer acquisition (category-c/3: net, rolling, per receipt
     // A recovery larger than the balances: everything offset, the negative remainder carried at lock as configured.
     const neg = C({ ...deal([]), carry: carry([L1], -RS(3_000)) }, { "payout.minimumPayable": RS(5_000) });
     expect(neg.employees[0]).toMatchObject({ payablePaise: 0, netPaise: -RS(2_000), carry: { heldPaise: 0, lots: [{ outcome: "offset", amountPaise: RS(1_000) }] } });
+  });
+
+  it("category-c/4 — the shared all-categories limit: released balances use it (once, in the month they are released); adjustments carried in are not counted again; a release that would pass the limit stops the calculation (decision pending)", () => {
+    const carry = (lots: { id: string; month: string; remainingPaise: number }[], adjustmentsPaise = 0) => [{ employeeId: EMP, name: "Rep", lots, adjustmentsPaise }];
+    const L1 = { id: id("c7l", 1), month: "2026-04-01", remainingPaise: RS(1_000) };
+    const L2 = { id: id("c7l", 2), month: "2026-05-01", remainingPaise: RS(1_500) };
+    const MIN = { "payout.minimumPayable": RS(5_000) };
+    // An adjustment carried in (a recalculation difference, already within its own month's limit) is paid but not
+    // counted against this month's limit again: ₹3,000 own + ₹2,000 adjustment released, ₹3,000 counted.
+    const adj = C({ ...deal(APR_MAY_JUN()), carry: carry([], RS(2_000)) }, MIN).employees[0]!;
+    expect(adj).toMatchObject({ payablePaise: RS(5_000), capConsumedPaise: RS(3_000), sharedPrePaise: RS(3_000) });
+    // A recovery carried in reduces what is released (₹3,000 + ₹2,500 − ₹500 = ₹5,000), not what the month uses of the
+    // limit: its own earned ₹3,000 and the ₹2,500 of balances it releases (the recovery belongs to an earlier month).
+    const rec = C({ ...deal(APR_MAY_JUN()), carry: carry([L1, L2], -RS(500)) }, MIN).employees[0]!;
+    expect(rec).toMatchObject({ payablePaise: RS(5_000), ownEarnedPaise: RS(3_000), capConsumedPaise: RS(5_500), sharedPrePaise: RS(5_500) });
+    // In Category C a month's own earned and payable are the same: with the 3rd order only half paid, both are nothing
+    // (payable once every invoice is fully collected) — so a release that month is its balances alone, and that is what
+    // it uses of the limit (₹2,500, counted once).
+    const part = C({ ...deal(APR_MAY_JUN({ pay: [[0.5, 0]] })), carry: carry([L1, L2]) }, { "payout.minimumPayable": "none" }).employees[0]!;
+    expect(part).toMatchObject({ ownEarnedPaise: 0, ownPayablePaise: 0, payablePaise: RS(2_500), capConsumedPaise: RS(2_500), sharedPrePaise: RS(2_500) });
+    // Fully collected: own earned = own payable = ₹3,000 — the release of ₹5,500 uses ₹5,500.
+    expect(C({ ...deal(APR_MAY_JUN()), carry: carry([L1, L2]) }, { "payout.minimumPayable": "none" }).employees[0]).toMatchObject({ ownEarnedPaise: RS(3_000), ownPayablePaise: RS(3_000), capConsumedPaise: RS(5_500) });
+    // Held: nothing used, whatever is earned.
+    expect(C({ ...deal(APR_MAY_JUN()), carry: carry([L1, L2]) }, { "payout.minimumPayable": RS(50_000) }).employees[0]).toMatchObject({ payablePaise: 0, capConsumedPaise: 0, sharedPrePaise: 0 });
+    // Without a shared policy, the category's own all-categories limit: ₹5,500 released fits ₹6,000 …
+    expect(C({ ...deal(APR_MAY_JUN()), carry: carry([L1, L2]) }, { ...MIN, "caps.perEmployeeAllCategoriesMonth": RS(6_000) }).employees[0]).toMatchObject({ payablePaise: RS(5_500), capConsumedPaise: RS(5_500) });
+    // … but not ₹5,000: the release would pass the limit — nothing is calculated, nothing released or lost, and the
+    // pending decision is named.
+    const over = C({ ...deal(APR_MAY_JUN()), carry: carry([L1, L2]) }, { ...MIN, "caps.perEmployeeAllCategoriesMonth": RS(5_000) });
+    expect(over.status).toBe("blocked");
+    expect(over.employees).toEqual([]);
+    expect(over.problems.join(" ")).toMatch(/this month's ₹3,000 and the ₹2,500 carried forward it would release come to ₹5,500, above the ₹5,000 the all-categories limit leaves for Category C in 2026-06\. Whether a released balance may exceed the limit, waits for room, or is cut is not decided yet/);
+    // Shared with other categories: Category A's fixed ₹14,000 leaves ₹4,250 of ₹18,250 — ₹3,000 + ₹1,000 fits …
+    const withA = { capPaise: RS(18_250), policy: "proportional" as const, order: [], others: { [EMP]: [{ category: "A", prePaise: RS(14_000), finalPaise: RS(14_000), fixed: true }] } };
+    expect(C({ ...deal(APR_MAY_JUN()), carry: carry([L1]), allCategories: withA }, { "payout.minimumPayable": RS(4_000) }).employees[0]).toMatchObject({ payablePaise: RS(4_000), capConsumedPaise: RS(4_000), sharedPrePaise: RS(4_000) });
+    // … ₹3,000 + ₹2,500 doesn't: stopped, with the reason.
+    const stop = C({ ...deal(APR_MAY_JUN()), carry: carry([L1, L2]), allCategories: withA }, MIN);
+    expect(stop.status).toBe("blocked");
+    expect(stop.problems.join(" ")).toMatch(/come to ₹5,500, above the ₹4,250 the all-categories limit leaves for Category C/);
   });
 
   it("expiry: 'never' by default; after the configured months a balance expires (recorded, not counted); 'Not released' expires at once", () => {
@@ -448,19 +489,37 @@ describe("E · client meetings", () => {
     expect(calculateCategoryX(input("E", { meetings }, { "e.maxAward": RS(2_000) })).employees[0]!.payablePaise).toBe(RS(1_500));
     expect(calculateCategoryX(input("E", { meetings }, { "e.maxAward": RS(1_000) })).employees[0]!.payablePaise).toBe(RS(1_000));
   });
+  it("category-e/2 tells the three cases apart: NO award and a ₹0 award are left out (never raised to the ₹250 smallest award); a positive award pays", () => {
+    const meetings = [
+      { id: id("e0m", 1), employeeId: EMP, periodMonth: "2026-06", awardedPaise: null, approved: true, label: "No award" },
+      { id: id("e0m", 2), employeeId: EMP, periodMonth: "2026-06", awardedPaise: 0, approved: true, label: "Zero award" },
+      { id: id("e0m", 3), employeeId: EMP, periodMonth: "2026-06", awardedPaise: RS(600), approved: true, label: "Positive award" },
+    ];
+    const r = calculateCategoryX(input("E", { meetings }));
+    expect(r.engineVersion).toBe("category-e/2");
+    expect(r.items.map((i) => [i.label, i.payableExact])).toEqual([["Positive award", String(RS(600))]]);
+    expect(r.employees[0]!.payablePaise).toBe(RS(600));
+    expect(r.excluded.map((x) => [x.documentNo, x.message])).toEqual([
+      ["No award", "Left out: no award was set when it was approved."],
+      ["Zero award", expect.stringMatching(/approved with an award of ₹0 .* never raised to the smallest award/)],
+    ]);
+    // Only a ₹0 meeting: nothing at all is paid (it used to pay ₹250).
+    const zero = calculateCategoryX(input("E", { meetings: [meetings[1]!] }));
+    expect(zero.items).toEqual([]);
+    expect(zero.employees.reduce((s, e) => s + e.payablePaise, 0)).toBe(0);
+  });
 });
 
-describe("F · reviews and testimonials", () => {
-  const t = (n: number, kind: "google_review" | "email" | "letterhead", over: Partial<{ wordCount: number; starRating: number | null; hasEvidence: boolean; namesTeamMember: boolean; approved: boolean }> = {}) => ({ id: id("f0t", n), employeeId: EMP, periodMonth: "2026-06", kind, wordCount: 60, starRating: 5, hasEvidence: true, namesTeamMember: false, approved: true, ...over });
-  it("Google ₹100, email ₹100, letterhead ₹150 × 2 when named; short, four-star or evidence-less reviews are left out", () => {
-    const r = calculateCategoryX(input("F", { testimonials: [t(1, "google_review"), t(2, "email"), t(3, "letterhead", { namesTeamMember: true }), t(4, "google_review", { wordCount: 30 }), t(5, "google_review", { starRating: 4 }), t(6, "google_review", { hasEvidence: false })] }));
-    expect(r.employees[0]!.payablePaise).toBe(RS(100 + 100 + 300));
-    expect(r.excluded.map((x) => x.message)).toEqual(expect.arrayContaining([expect.stringMatching(/30 words/), expect.stringMatching(/five-star/), expect.stringMatching(/screenshot/)]));
-  });
-  it("f.googleFiveStarOnly decides: \"no\" credits a four-star review, \"yes\" leaves it out", () => {
-    const four = [t(1, "google_review", { starRating: 4 })];
-    expect(calculateCategoryX(input("F", { testimonials: four }, { "f.googleFiveStarOnly": "no" })).employees[0]!.payablePaise).toBe(RS(100));
-    expect(calculateCategoryX(input("F", { testimonials: four }, { "f.googleFiveStarOnly": "yes" })).employees[0]?.payablePaise ?? 0).toBe(0);
+describe("F · reviews and testimonials (category-f/3; detailed rules in incentive-category-f.test.ts)", () => {
+  const t = (n: number, kind: "google_review" | "email" | "letterhead") => ({ id: id("f0t", n), employeeId: EMP, periodMonth: "2026-06", kind, wordCount: 60, starRating: 5, hasEvidence: true, namesTeamMember: true, approved: true });
+  it("the old engine's testimonials (approved Google, email and letterhead submissions) earn nothing in Category F/3: only VERIFIED registry testimonials do", () => {
+    const r = calculateCategoryX(input("F", { testimonials: [t(1, "google_review"), t(2, "email"), t(3, "letterhead")] }));
+    expect(r.engineVersion).toBe("category-f/3");
+    expect(r.items).toEqual([]);
+    const v = (kind: "google_review" | "email" | "letterhead", n: number) => ({ reviewId: id("f0v", n), label: `#${n}`, kind, publishedOn: "2026-06-10", rating: kind === "google_review" ? 5 : null, wordCount: 3, namedEmployeeIds: [EMP], appreciatedEmployeeIds: n === 3 ? [EMP] : [], assignedEmployeeId: null, attribution: null, invalidated: false });
+    const out = calculateCategoryX(input("F", { fReviews: [v("google_review", 1), v("email", 2), v("letterhead", 3)] }, { "f.googleMinWords": 0 }));
+    // F.1 ₹100 + F.2 ₹100 + F.3 ₹150 × 2 (F.4: appreciated by name) = ₹500.
+    expect(out.employees[0]!.payablePaise).toBe(RS(100 + 100 + 300));
   });
 });
 
@@ -475,6 +534,16 @@ describe("G · consecutive monthly purchases (proposed structure, TEST values)",
   it("a month below the minimum breaks the run", () => {
     const orders = months([["2026-04-05", 60_000], ["2026-05-05", 10_000], ["2026-06-05", 60_000]]);
     expect(calculateCategoryX(input("G", { orders, repHistory: [], attributions: [] })).items).toEqual([]);
+  });
+  it("category-g/2 leaves nothing out silently: an order with no customer link, or with no known amount, is listed with the reason (the reward is unchanged)", () => {
+    const orders = [...months([["2026-04-05", 60_000], ["2026-05-05", 60_000], ["2026-06-05", 60_000]]), { ...order(200, "2026-06-07", 70_000), customerId: null }, { ...order(201, "2026-06-08", 70_000), taxablePaise: null }];
+    const r = calculateCategoryX(input("G", { orders, repHistory: [], attributions: [] }));
+    expect(r.engineVersion).toBe("category-g/2");
+    expect(r.items).toEqual([expect.objectContaining({ lineCode: "G.1", payableExact: String(RS(500)) })]);
+    expect(r.excluded.map((x) => [x.documentNo, x.message])).toEqual(expect.arrayContaining([
+      ["SO 200", "Left out: it has no Customer Master link, so its customer's consecutive months can't be counted."],
+      ["SO 201", "Counted as nothing towards 2026-06: its taxable amount isn't known."],
+    ]));
   });
   it("with nothing decided, Category G can't be calculated: every value is required", () => {
     const c = completeConfig({}, elig, "G");

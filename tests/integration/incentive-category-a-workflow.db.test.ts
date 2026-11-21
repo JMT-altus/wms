@@ -7,6 +7,22 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 // server actions, the database's own guards, a calculation that reads them, approval with separate approvers,
 // rejection, payout records, negative balances at lock, automatic locking — and that Forms and the live Incentive
 // Tracker are untouched. Invented data only; only the session is mocked.
+/**
+ * Runs `fn` with the clock on a simulated day (from noon in India), for a calculation AS OF a day that hasn't come yet:
+ * the service refuses a calculation date in the future (Phase 1). Only `Date` is faked, only for the call, each call a
+ * minute later than the one before (the clock keeps moving); real time is restored afterwards, whatever happens.
+ */
+let simulatedCalls = 0;
+async function onDay<T>(day: string, fn: () => Promise<T>): Promise<T> {
+  vi.useFakeTimers({ toFake: ["Date"], shouldAdvanceTime: true });
+  vi.setSystemTime(new Date(Date.parse(`${day}T12:00:00+05:30`) + ++simulatedCalls * 60_000));
+  try {
+    return await fn();
+  } finally {
+    vi.useRealTimers();
+  }
+}
+
 const h = vi.hoisted(() => {
   process.env.DATABASE_URL = "postgres://nobody:nothing@db.invalid:1/never";
   return { db: null as unknown, me: null as null | { id: string; email: string; name: string; isActive: boolean; isAdmin: boolean; departmentId: null; role: string } };
@@ -32,6 +48,7 @@ vi.mock("@/lib/auth/current", () => ({
 import * as schema from "@/db/schema";
 import { createTestDb } from "./_pglite";
 import { aprilConfig, EXAMPLE_2, L, type Pay } from "../fixtures/category-a";
+import { monthEnd, nextMonth } from "@/lib/incentives/category-a/settle";
 
 type Pg = Awaited<ReturnType<typeof createTestDb>>["pg"];
 let pg: Pg;
@@ -176,10 +193,11 @@ describe("order salespeople", () => {
     signIn("runner");
     const r = await calcAct.calculateCategoryAMonth({ programId: WF, month: "2026-04-01", asOf: "2026-09-30" });
     expect(r).toMatchObject({ ok: true, status: "computed" });
-    const run = await one<{ result: { employees: unknown[]; excluded: { message: string }[] } }>(`select result from incentive_calc_runs where program_id = $1 order by computed_at desc limit 1`, [WF]);
+    const run = await one<{ result: { employees: unknown[]; excluded: { message: string }[]; held: { message: string }[] } }>(`select result from incentive_calc_runs where program_id = $1 order by computed_at desc limit 1`, [WF]);
     expect(run.result.employees).toEqual([]);
-    expect(run.result.excluded).toHaveLength(12);
-    expect(run.result.excluded[0]!.message).toMatch(/No salesperson is recorded for this order/);
+    // category-a/2: an order nobody is credited with because something is missing is HELD (it holds the month).
+    expect(run.result.held).toHaveLength(12);
+    expect(run.result.held[0]!.message).toMatch(/No salesperson is recorded for this order/);
   });
   it("only holders of the inputs permission record them", async () => {
     for (const k of ["viewer", "runner", "plainAdmin", "rep"] as const) {
@@ -252,7 +270,8 @@ describe("receipt events", () => {
     expect((await results(WF, "2026-04-01"))[0]).toMatchObject({ earned_paise: "75833" });
     signIn("inputter");
     const hold = await one<{ id: string }>(`select id from incentive_calc_receipt_events where kind = 'hold' and retired_at is null`);
-    expect(await inputAct.retireIncentiveInput({ entity: "receipt-event", id: hold.id, reason: "Dispute resolved" })).toMatchObject({ ok: true });
+    // Released on 15 September: a calculation as of a later day no longer sees it (as of an earlier one it would).
+    expect(await onDay("2026-09-15", () => inputAct.retireIncentiveInput({ entity: "receipt-event", id: hold.id, reason: "Dispute resolved" }))).toMatchObject({ ok: true });
     signIn("runner");
     expect(await calcAct.calculateCategoryAMonth({ programId: WF, month: "2026-04-01", asOf: "2026-09-30" })).toMatchObject({ ok: true, adopted: true });
     expect((await results(WF, "2026-04-01"))[0]).toMatchObject({ earned_paise: "92500", payable_paise: "92500" });
@@ -268,6 +287,14 @@ describe("approval and payout", () => {
     await expect(calcAct.submitCategoryAMonth({ programId: WF, month: "2026-04-01", rowVersion: await rv(WF, "2026-04-01") })).rejects.toThrow("Forbidden");
     signIn("locker");
     expect(await calcAct.submitCategoryAMonth({ programId: WF, month: "2026-04-01", rowVersion: await rv(WF, "2026-04-01") })).toMatchObject({ ok: true, approvalsRequired: 2 });
+  });
+  it("whoever recorded an input the month's calculation uses (here: its order salespeople) never approves or rejects it — even holding Approve", async () => {
+    await pg.query(`insert into field_permission_grants (field_key, subject_type, subject_id, allowed) values ('incentive.calc.approve', 'employee', $1, true)`, [who.inputter]);
+    signIn("inputter");
+    for (const decision of ["approve", "reject"] as const)
+      expect(await calcAct.decideCategoryAMonth({ programId: WF, month: "2026-04-01", rowVersion: await rv(WF, "2026-04-01"), decision, reason: "x" })).toMatchObject({ ok: false, error: expect.stringMatching(/You recorded or retired an order's salespeople used by this month's calculation, so you can't approve or reject it/) });
+    expect(await count(`select count(*)::int n from incentive_calc_approvals`)).toBe(0);
+    await pg.query(`update field_permission_grants set allowed = false where subject_id = $1 and field_key = 'incentive.calc.approve'`, [who.inputter]);
   });
   it("needs different approvers, never the submitter; a rejection with its reason returns it to locked", async () => {
     // The database refuses the submitter whatever calls it.
@@ -317,6 +344,19 @@ describe("approval and payout", () => {
   });
 });
 
+describe("the calculation date of a month that is no longer open", () => {
+  it("is never earlier than its adopted calculation's (it would take back collections already paid); an impossible or future date is refused", async () => {
+    const before = await count(`select count(*)::int n from incentive_calc_runs where program_id = $1 and month = '2026-04-01'`, [WF]);
+    signIn("runner");
+    expect(await calcAct.calculateCategoryAMonth({ programId: WF, month: "2026-04-01", asOf: "2026-09-01" })).toMatchObject({ ok: false, error: expect.stringMatching(/The month is paid and was calculated as of 2026-09-30: it is never recalculated as of an earlier day \(2026-09-01\)/) });
+    expect(await calcAct.calculateCategoryAMonth({ programId: WF, month: "2026-04-01", asOf: "2026-09-31" })).toMatchObject({ ok: false, error: expect.stringMatching(/on or after the month's first day/) });
+    expect(await calcAct.calculateCategoryAMonth({ programId: WF, month: "2026-04-01", asOf: "2099-01-01" })).toMatchObject({ ok: false, error: expect.stringMatching(/can't be in the future/) });
+    expect(await count(`select count(*)::int n from incentive_calc_runs where program_id = $1 and month = '2026-04-01'`, [WF])).toBe(before);
+    // The same day as its adopted calculation (or later) is fine: nothing changed, nothing is recorded twice.
+    expect(await calcAct.calculateCategoryAMonth({ programId: WF, month: "2026-04-01", asOf: "2026-09-30" })).toMatchObject({ ok: true, adopted: false });
+  });
+});
+
 describe("negative balances at lock", () => {
   it("a later refund on a paid month is carried, and a negative month carries forward, then is written off", async () => {
     signIn("inputter");
@@ -332,14 +372,14 @@ describe("negative balances at lock", () => {
     expect(await calcAct.setCategoryAMonthLocked({ programId: WF, month: "2026-10-01", lock: true, rowVersion: await rv(WF, "2026-10-01") })).toMatchObject({ ok: true });
     expect(await q1(`select kind, amount_paise::int a, to_month::text t, months_left m from incentive_calc_adjustments where program_id = $1 and from_month = '2026-10-01'`, [WF])).toEqual([{ kind: "negative-carry", a: -16667, t: "2026-11-01", m: 0 }]);
     signIn("runner");
-    expect(await calcAct.calculateCategoryAMonth({ programId: WF, month: "2026-11-01", asOf: "2026-11-30" })).toMatchObject({ ok: true, adopted: true });
+    expect(await onDay("2026-11-30", () => calcAct.calculateCategoryAMonth({ programId: WF, month: "2026-11-01", asOf: "2026-11-30" }))).toMatchObject({ ok: true, adopted: true });
+    // Carried for its one month, the balance is to be written off — a decision about money that a SECOND person approves
+    // (D30, migration 0142). Without 0142 nothing can be approved, so the month isn't locked and nothing is written off;
+    // the approved path (0142 applied) is in incentive-category-a-completion.db.test.ts.
     signIn("locker");
-    expect(await calcAct.setCategoryAMonthLocked({ programId: WF, month: "2026-11-01", lock: true, rowVersion: await rv(WF, "2026-11-01") })).toMatchObject({ ok: true });
-    expect(await q1(`select kind, amount_paise::int a, to_month t from incentive_calc_adjustments where program_id = $1 and from_month = '2026-11-01'`, [WF])).toEqual([{ kind: "write-off", a: 16667, t: null }]);
-    // Reopening and locking again records nothing twice.
-    expect(await calcAct.setCategoryAMonthLocked({ programId: WF, month: "2026-11-01", lock: false, rowVersion: await rv(WF, "2026-11-01") })).toMatchObject({ ok: true });
-    expect(await calcAct.setCategoryAMonthLocked({ programId: WF, month: "2026-11-01", lock: true, rowVersion: await rv(WF, "2026-11-01") })).toMatchObject({ ok: true });
-    expect(await count(`select count(*)::int n from incentive_calc_adjustments where program_id = $1 and from_month = '2026-11-01'`, [WF])).toBe(1);
+    expect(await calcAct.setCategoryAMonthLocked({ programId: WF, month: "2026-11-01", lock: true, rowVersion: await rv(WF, "2026-11-01") })).toMatchObject({ ok: false, error: expect.stringMatching(/rep's negative balance of ₹166.67 is to be written off: a second person approves that, which needs database update 0142. Nothing was locked./) });
+    expect(await count(`select count(*)::int n from incentive_calc_adjustments where program_id = $1 and from_month = '2026-11-01'`, [WF])).toBe(0);
+    expect((await one<{ status: string }>(`select status from incentive_calc_periods where program_id = $1 and month = '2026-11-01'`, [WF])).status).toBe("open");
   });
 });
 
@@ -355,6 +395,164 @@ describe("automatic locking", () => {
     expect(r).toMatchObject({ ok: true, adopted: false });
     if (r.ok) expect(r.outcome).toMatch(/locked automatically/);
     expect(await one(`select status, locked_by_id from incentive_calc_periods where program_id = $1 and month = '2026-04-01'`, [AUTO])).toEqual({ status: "locked", locked_by_id: null });
+  });
+});
+
+describe("recalculation differences (Phase 1): carried into the first open month — never dropped, never twice", () => {
+  // Each test has its own programme over the same Forms documents, and records ITS OWN refund (dated 2 October) on a
+  // receipt no other test marks — so it never depends on an earlier test. Calculated as of 5 October, April includes it
+  // (and any other event dated by then), so it differs from its first calculation (as of 30 September); the difference is
+  // read from the stored runs, never assumed.
+  const APR = "2026-04-01", OCT = "2026-10-01", NOV = "2026-11-01";
+  const refundOn = async (receipt: string) => {
+    signIn("inputter");
+    expect(await inputAct.recordReceiptEvent({ documentId: await docId(receipt), kind: "refund", invoiceId: null, amountPaise: L(2), eventDate: "2026-10-02", note: `Refund on ${receipt} (Phase 1 test)` })).toMatchObject({ ok: true });
+  };
+  /** Every month from October 2026 to September 2027 — the twelve months a carry looks at — calculated and locked. */
+  const closeTwelveMonths = async (program: string) => {
+    for (let m = OCT; m <= "2027-09-01"; m = nextMonth(m)) {
+      expect(await calcOn(program, m, monthEnd(m)), m).toMatchObject({ ok: true, adopted: true });
+      expect(await setLocked(program, m, true), m).toMatchObject({ ok: true });
+    }
+  };
+  const periodOf = async (program: string, month: string) => one<{ id: string; status: string; row_version: number; current_run_id: string | null }>(`select id, status, row_version, current_run_id from incentive_calc_periods where program_id = $1 and month = $2`, [program, month]);
+  const differences = (program: string) => q1<{ from: string; to: string; a: number; run: string }>(`select from_month::text "from", to_month::text "to", amount_paise::int a, source_run_id::text run from incentive_calc_adjustments where program_id = $1 and kind = 'recalc-difference' order by created_at`, [program]);
+  const latestRun = (program: string, month: string) => one<{ id: string; adopted: boolean }>(`select id::text, adopted from incentive_calc_runs where program_id = $1 and month = $2 order by computed_at desc limit 1`, [program, month]);
+  const runCount = async (program: string, month: string) => count(`select count(*)::int n from incentive_calc_runs where program_id = $1 and month = $2`, [program, month]);
+  const payable = async (runId: string) => Number((await one<{ p: number }>(`select coalesce(sum(payable_paise), 0)::int p from incentive_calc_results where run_id = $1`, [runId])).p);
+  const calcOn = (program: string, month: string, asOf: string) => {
+    signIn("runner");
+    return onDay(asOf, () => calcAct.calculateCategoryAMonth({ programId: program, month, asOf }));
+  };
+  const setLocked = async (program: string, month: string, lock: boolean) => {
+    signIn("locker");
+    return calcAct.setCategoryAMonthLocked({ programId: program, month, lock, rowVersion: await rv(program, month) });
+  };
+
+  it("B — the calculation date's month is closed: the difference goes to the first later OPEN month, once; the closed months never change", async () => {
+    const P = await program("CARRYB", {});
+    await refundOn("RC 6.1");
+    expect(await calcOn(P, APR, "2026-09-30")).toMatchObject({ ok: true, adopted: true });
+    expect(await setLocked(P, APR, true)).toMatchObject({ ok: true });
+    expect(await calcOn(P, OCT, "2026-10-31")).toMatchObject({ ok: true, adopted: true });
+    expect(await setLocked(P, OCT, true)).toMatchObject({ ok: true });
+    const aprBefore = await periodOf(P, APR);
+    const octBefore = await periodOf(P, OCT);
+    // Recalculated as of 5 October: October (the candidate) is locked, so the difference goes to November.
+    const r = await calcOn(P, APR, "2026-10-05");
+    expect(r).toMatchObject({ ok: true, adopted: false, unchanged: false });
+    if (r.ok) expect(r.outcome).toMatch(/The difference is carried into 2026-11 \(the first open month from 2026-10\)\./);
+    const found = await latestRun(P, APR);
+    const diff = (await payable(found.id)) - (await payable(aprBefore.current_run_id!));
+    expect(diff).not.toBe(0); // there IS a difference — and it is not dropped:
+    expect(await differences(P)).toEqual([{ from: APR, to: NOV, a: diff, run: found.id }]);
+    // The locked months are untouched; November (created by the carry) went up once.
+    expect(await periodOf(P, APR)).toEqual(aprBefore);
+    expect(await periodOf(P, OCT)).toEqual(octBefore);
+    expect(await count(`select count(*)::int n from incentive_calc_adjustments where program_id = $1 and to_month = $2`, [P, OCT])).toBe(0);
+    expect(await periodOf(P, NOV)).toMatchObject({ status: "open", row_version: 2, current_run_id: null });
+    // Again, the same day (unchanged) and a day later (a new run, the same result): nothing is carried twice.
+    expect(await calcOn(P, APR, "2026-10-05")).toMatchObject({ ok: true, unchanged: true, outcome: expect.stringMatching(/Nothing changed/) });
+    expect(await calcOn(P, APR, "2026-10-06")).toMatchObject({ ok: true, adopted: false });
+    expect(await differences(P)).toEqual([{ from: APR, to: NOV, a: diff, run: found.id }]);
+    expect((await periodOf(P, NOV)).row_version).toBe(2);
+    expect(await periodOf(P, APR)).toEqual(aprBefore);
+  });
+
+  it("A — a difference not carried when it was found (no month open) is carried by the next calculation even though nothing changed — once", async () => {
+    const P = await program("CARRYA", {});
+    await refundOn("RC 7.1");
+    expect(await calcOn(P, APR, "2026-09-30")).toMatchObject({ ok: true, adopted: true });
+    expect(await setLocked(P, APR, true)).toMatchObject({ ok: true });
+    await closeTwelveMonths(P);
+    const aprBefore = await periodOf(P, APR);
+    // Found as of 5 October: no month is open to take it — it is NOT carried, and the outcome says so (not written off).
+    const first = await calcOn(P, APR, "2026-10-05");
+    expect(first).toMatchObject({ ok: true, adopted: false, unchanged: false });
+    if (first.ok) expect(first.outcome).toMatch(/no month from 2026-10 on is open to take it, so it isn't carried yet/);
+    expect(await differences(P)).toEqual([]);
+    const found = await latestRun(P, APR);
+    const diff = (await payable(found.id)) - (await payable(aprBefore.current_run_id!));
+    expect(diff).not.toBe(0);
+    // October is reopened. The SAME calculation again — its inputs and result unchanged, so no new run — now carries the
+    // pending difference, from the run that found it.
+    expect(await setLocked(P, OCT, false)).toMatchObject({ ok: true });
+    const octOpen = await periodOf(P, OCT);
+    const runs = await runCount(P, APR);
+    const second = await calcOn(P, APR, "2026-10-05");
+    expect(second).toMatchObject({ ok: true, unchanged: true, runId: found.id, adopted: false });
+    if (second.ok) expect(second.outcome).toMatch(/The difference is carried into 2026-10/);
+    expect(await runCount(P, APR)).toBe(runs);
+    expect(await differences(P)).toEqual([{ from: APR, to: OCT, a: diff, run: found.id }]);
+    expect(await periodOf(P, OCT)).toMatchObject({ status: "open", row_version: octOpen.row_version + 1 });
+    expect(await periodOf(P, APR)).toEqual(aprBefore);
+    expect(await count(`select count(*)::int n from incentive_audit where action = 'carried-difference' and entity_id = $1`, [aprBefore.id])).toBe(1);
+    // Once more: already carried — nothing more, nothing changed.
+    expect(await calcOn(P, APR, "2026-10-05")).toMatchObject({ ok: true, unchanged: true, outcome: expect.stringMatching(/Nothing changed/) });
+    expect(await differences(P)).toEqual([{ from: APR, to: OCT, a: diff, run: found.id }]);
+    expect((await periodOf(P, OCT)).row_version).toBe(octOpen.row_version + 1);
+    expect(await periodOf(P, APR)).toEqual(aprBefore);
+  });
+
+  it("A2 — the retry's INPUTS differ (a later calculation date) but its RESULT is the same: no new run, the pending difference is carried — once", async () => {
+    const P = await program("CARRYR", {});
+    await refundOn("RC 8.1");
+    expect(await calcOn(P, APR, "2026-09-30")).toMatchObject({ ok: true, adopted: true });
+    expect(await setLocked(P, APR, true)).toMatchObject({ ok: true });
+    await closeTwelveMonths(P);
+    const aprBefore = await periodOf(P, APR);
+    const first = await calcOn(P, APR, "2026-10-05");
+    expect(first).toMatchObject({ ok: true, adopted: false, unchanged: false });
+    if (first.ok) expect(first.outcome).toMatch(/isn't carried yet/);
+    expect(await differences(P)).toEqual([]);
+    const found = await latestRun(P, APR);
+    const diff = (await payable(found.id)) - (await payable(aprBefore.current_run_id!));
+    expect(diff).not.toBe(0);
+    expect(await setLocked(P, OCT, false)).toMatchObject({ ok: true });
+    const octOpen = await periodOf(P, OCT);
+    const runs = await runCount(P, APR);
+    // As of 6 October — inputs that differ from the run that found the difference (its date) — with the same result:
+    // recognised as unchanged by its RESULT, so no new run; the pending difference is carried from the run that found it.
+    const retry = await calcOn(P, APR, "2026-10-06");
+    expect(retry).toMatchObject({ ok: true, unchanged: true, runId: found.id, adopted: false });
+    if (retry.ok) expect(retry.outcome).toMatch(/The difference is carried into 2026-10/);
+    expect((await one<{ a: string }>(`select as_of::text a from incentive_calc_runs where id = $1`, [found.id])).a).toBe("2026-10-05"); // the inputs really differed
+    expect(await runCount(P, APR)).toBe(runs);
+    expect(await differences(P)).toEqual([{ from: APR, to: OCT, a: diff, run: found.id }]);
+    expect(await periodOf(P, OCT)).toMatchObject({ status: "open", row_version: octOpen.row_version + 1 });
+    expect(await periodOf(P, APR)).toEqual(aprBefore);
+    // Once more, a day later still: already carried — nothing more.
+    expect(await calcOn(P, APR, "2026-10-07")).toMatchObject({ ok: true, unchanged: true, outcome: expect.stringMatching(/Nothing changed/) });
+    expect(await differences(P)).toEqual([{ from: APR, to: OCT, a: diff, run: found.id }]);
+    expect((await periodOf(P, OCT)).row_version).toBe(octOpen.row_version + 1);
+  });
+
+  it("REOPEN REQUIRED — a difference found while the month is locked isn't carried; reopened the SAME day, the month's recalculation is adopted (not held back by the run that found it), and nothing is carried", async () => {
+    const P = await program("REOPEN", { "period.lateReceipts": "reopenRequired" });
+    await refundOn("RC 9.1");
+    expect(await calcOn(P, APR, "2026-09-30")).toMatchObject({ ok: true, adopted: true });
+    expect(await setLocked(P, APR, true)).toMatchObject({ ok: true });
+    const adopted = (await periodOf(P, APR)).current_run_id!;
+    // Found as of 5 October while locked: kept for the record, not adopted, not carried — the month must be reopened.
+    const found = await calcOn(P, APR, "2026-10-05");
+    expect(found).toMatchObject({ ok: true, adopted: false, unchanged: false });
+    if (found.ok) expect(found.outcome).toMatch(/It differs; reopen the month to take the difference/);
+    const foundRun = await latestRun(P, APR);
+    expect((await payable(foundRun.id)) - (await payable(adopted))).not.toBe(0);
+    expect(await differences(P)).toEqual([]);
+    // Reopened the same day, as the outcome says, and recalculated with the same inputs: a new run is recorded and adopted.
+    expect(await setLocked(P, APR, false)).toMatchObject({ ok: true });
+    const before = await runCount(P, APR);
+    expect(await calcOn(P, APR, "2026-10-05")).toMatchObject({ ok: true, unchanged: false, adopted: true });
+    const now = await periodOf(P, APR);
+    expect(now.status).toBe("open");
+    expect([now.current_run_id === adopted, now.current_run_id === foundRun.id]).toEqual([false, false]);
+    expect(await runCount(P, APR)).toBe(before + 1);
+    expect(await payable(now.current_run_id!)).toBe(await payable(foundRun.id)); // the difference is taken in the month itself
+    expect(await differences(P)).toEqual([]); // … never carried
+    // A repeat now short-circuits against the adopted run.
+    expect(await calcOn(P, APR, "2026-10-05")).toMatchObject({ ok: true, unchanged: true, runId: now.current_run_id, outcome: expect.stringMatching(/Nothing changed/) });
+    expect(await runCount(P, APR)).toBe(before + 1);
   });
 });
 

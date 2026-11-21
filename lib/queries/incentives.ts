@@ -1,7 +1,7 @@
 import "server-only";
 import { and, eq, ne, desc, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { authoritativeCategories, newCategoryAAuthoritative, newEngineAuthoritative } from "@/lib/incentives/load";
+import { authoritativeCategories, newCategoryACovered, newEngineAuthoritative } from "@/lib/incentives/load";
 import { incentiveLedger, incentivePeriods, payoutRuns, leadBatches, leadConversions, clientMeetings, testimonials, employees, salesOrders, customers, invoices } from "@/db/schema";
 import { SALES_BH_SCHEME } from "@/lib/incentives";
 import { fmtMonth } from "@/lib/dates";
@@ -92,7 +92,8 @@ export interface PeriodPayout {
 export async function getPeriodPayout(period: string): Promise<PeriodPayout> {
   // Where the new Category A engine is authoritative for the month, Category A is paid through it (Incentive
   // Tracker → Category A Approvals), never here: this old payout then covers Categories B–G only — nothing twice.
-  const newA = await newCategoryAAuthoritative(period);
+  // …for the people a published Category A version covers that month (everyone else's Category A is still paid here).
+  const coveredA = [...((await newCategoryACovered(period)) ?? [])];
   // The same for Category B from its published configuration's cut-over month (Incentive Tracker → Category B).
   const newB = await newEngineAuthoritative("B", period);
   const newer = [...(await authoritativeCategories(period))].filter((c) => ["C", "D", "E", "F"].includes(c));
@@ -106,7 +107,7 @@ export async function getPeriodPayout(period: string): Promise<PeriodPayout> {
     .from(incentiveLedger)
     .innerJoin(incentivePeriods, eq(incentiveLedger.periodId, incentivePeriods.id))
     .innerJoin(employees, eq(incentiveLedger.employeeId, employees.id))
-    .where(and(eq(incentivePeriods.month, period), ...(newA ? [ne(incentiveLedger.category, "A")] : []), ...(newB ? [ne(incentiveLedger.category, "B")] : []), ...newer.map((c) => ne(incentiveLedger.category, c))))
+    .where(and(eq(incentivePeriods.month, period), ...(coveredA.length ? [sql`not (${incentiveLedger.category} = 'A' and ${incentiveLedger.employeeId} in (${sql.join(coveredA.map((id) => sql`${id}`), sql`, `)}))`] : []), ...(newB ? [ne(incentiveLedger.category, "B")] : []), ...newer.map((c) => ne(incentiveLedger.category, c))))
     .groupBy(incentiveLedger.employeeId, employees.name);
 
   const mapped = rows
@@ -159,8 +160,8 @@ export async function getPendingSubmissions(): Promise<PendingItem[]> {
     db.select({ id: clientMeetings.id, name: employees.name, period: clientMeetings.periodMonth, band: clientMeetings.potentialBand, note: clientMeetings.justification, at: clientMeetings.createdAt })
       .from(clientMeetings).innerJoin(employees, eq(clientMeetings.employeeId, employees.id))
       .where(eq(clientMeetings.reviewStatus, "pending")).orderBy(desc(clientMeetings.createdAt)),
-    db.select({ id: testimonials.id, name: employees.name, period: testimonials.periodMonth, kind: testimonials.kind, words: testimonials.wordCount, names: testimonials.namesTeamMember, url: testimonials.evidenceUrl, at: testimonials.createdAt })
-      .from(testimonials).innerJoin(employees, eq(testimonials.employeeId, employees.id))
+    db.select({ id: testimonials.id, name: sql<string>`coalesce(${employees.name}, ${testimonials.employeeName}, 'Former employee')`, period: testimonials.periodMonth, kind: testimonials.kind, words: testimonials.wordCount, names: testimonials.namesTeamMember, url: testimonials.evidenceUrl, at: testimonials.createdAt })
+      .from(testimonials).leftJoin(employees, eq(testimonials.employeeId, employees.id))
       .where(eq(testimonials.reviewStatus, "pending")).orderBy(desc(testimonials.createdAt)),
   ]);
 

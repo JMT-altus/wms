@@ -9,7 +9,7 @@ import { db } from "@/lib/db";
 import {
   salesOrders, invoices, receipts, customers,
   leadBatches, leadConversions, clientMeetings, testimonials,
-  incentivePeriods, incentiveLedger, ruleVersions,
+  incentivePeriods, incentiveLedger, ruleVersions, employees,
 } from "@/db/schema";
 import { evaluate } from "./engine";
 import { SALES_BH_SCHEME } from "./config";
@@ -254,6 +254,41 @@ export async function newCategoryAAuthoritative(period: string): Promise<boolean
 }
 
 /**
+ * The people the NEW Category A engine is authoritative for in a month — scoped to the programmes' eligibility, never
+ * global: a person is covered when a PUBLISHED Category A version in force on the month's first day includes them (by
+ * name, department or role, as the employee record reads) on at least one day of the month, and no exclude row of that
+ * version covers that day. For a covered person this old engine no longer calculates (or pays) Category A that month;
+ * for everyone else it carries on exactly as before. Null when no Category A version covers the month (or before 0131).
+ */
+export async function newCategoryACovered(period: string): Promise<Set<string> | null> {
+  const start = `${period}-01`;
+  const ready = await db.execute(sql`select to_regclass('public.incentive_config_versions') is not null and to_regclass('public.incentive_config_eligibility') is not null as ok`);
+  const okRows = (Array.isArray(ready) ? ready : ((ready as unknown as { rows?: unknown[] }).rows ?? [])) as { ok: boolean }[];
+  if (okRows[0]?.ok !== true) return null;
+  const res = await db.execute(sql`
+    select v.id::text as version_id, e.subject_type, e.subject_id::text as subject_id, e.role, e.mode, e.effective_from::text as from_day, e.effective_to::text as to_day
+    from incentive_config_versions v left join incentive_config_eligibility e on e.version_id = v.id
+    where v.category_code = 'A' and v.status = 'published' and v.effective_from <= ${start}::date and (v.effective_to is null or v.effective_to >= ${start}::date)`);
+  const rows = (Array.isArray(res) ? res : ((res as unknown as { rows?: unknown[] }).rows ?? [])) as { version_id: string; subject_type: string | null; subject_id: string | null; role: string | null; mode: string | null; from_day: string | null; to_day: string | null }[];
+  if (!rows.length) return null;
+  const [y, m] = period.split("-").map(Number) as [number, number];
+  const days = Array.from({ length: new Date(Date.UTC(y, m, 0)).getUTCDate() }, (_, i) => `${period}-${String(i + 1).padStart(2, "0")}`);
+  const people = await db.select({ id: employees.id, departmentId: employees.departmentId, role: employees.role }).from(employees);
+  const versions = new Map<string, typeof rows>();
+  for (const r of rows) versions.set(r.version_id, [...(versions.get(r.version_id) ?? []), ...(r.subject_type ? [r] : [])]);
+  const matches = (p: (typeof people)[number], r: (typeof rows)[number]) => (r.subject_type === "employee" ? r.subject_id === p.id : r.subject_type === "department" ? r.subject_id !== null && r.subject_id === p.departmentId : r.role === p.role);
+  const covers = (r: (typeof rows)[number], d: string) => r.from_day! <= d && (r.to_day === null || r.to_day >= d);
+  const out = new Set<string>();
+  for (const p of people)
+    for (const elig of versions.values())
+      if (days.some((d) => elig.some((r) => r.mode === "include" && matches(p, r) && covers(r, d)) && !elig.some((r) => r.mode === "exclude" && matches(p, r) && covers(r, d)))) {
+        out.add(p.id);
+        break;
+      }
+  return out;
+}
+
+/**
  * Whether the NEW engine of a category (Category A, or Category B — lib/incentives/category-b) is authoritative for a
  * month: a PUBLISHED configuration of that category, of any programme, covers the month's first day — that is, from
  * the published configuration's effective (cut-over) month on. From such a month this old engine no longer calculates
@@ -303,7 +338,8 @@ export async function computePeriodForEmployee(
   const input = await buildEvaluationInput(employeeId, period, asOf, scheme);
   // Where the new Category A engine is authoritative, this engine no longer calculates Category A (its sales slab is
   // the only thing `sales` feeds). B–G are unaffected.
-  const newA = await newCategoryAAuthoritative(period);
+  // Scoped to the people a published Category A version covers that month (D25): everyone else keeps the old Category A.
+  const newA = (await newCategoryACovered(period))?.has(employeeId) === true;
   if (newA) input.sales = undefined;
   // Likewise Category B (cross-sell): from the published Category B configuration's cut-over month, the new engine
   // calculates it and this one no longer does.
@@ -382,7 +418,8 @@ export async function recomputeOpenPeriod(period: string): Promise<{ employees: 
     db.selectDistinct({ id: clientMeetings.employeeId }).from(clientMeetings).where(eq(clientMeetings.periodMonth, period)),
     db.selectDistinct({ id: testimonials.employeeId }).from(testimonials).where(eq(testimonials.periodMonth, period)),
   ]);
-  for (const r of [...lb, ...lc, ...mt, ...ts]) ids.add(r.id);
+  // A testimonial whose employee was deleted (0137: kept, employee_id null) is history: nobody to recompute.
+  for (const r of [...lb, ...lc, ...mt, ...ts]) if (r.id) ids.add(r.id);
 
   const asOf = new Date();
   for (const id of ids) await computePeriodForEmployee(id, period, asOf);

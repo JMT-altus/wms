@@ -57,21 +57,27 @@ describe("whose sale it is", () => {
     expect(now.employees).toEqual([]);
     expect(now.excluded[0]!.message).toMatch(/Second isn't included/);
   });
-  it("no representative on record for the date, or two at once, leaves the order unattributed with the reason", () => {
-    expect(run(history([{ customerId: CUST, employeeId: EMP, from: "2026-05-01", to: null }])).excluded[0]!.message).toMatch(/No representative of Customer One is on record for 2026-04-05/);
+  // category-a/2: an order credited to nobody because something is missing is HELD (code "unassigned"), never only listed.
+  it("no representative on record for the date, or two at once, holds the order unattributed with the reason", () => {
+    const none = run(history([{ customerId: CUST, employeeId: EMP, from: "2026-05-01", to: null }]));
+    expect(none.held[0]!.message).toMatch(/No representative of Customer One is on record for 2026-04-05/);
+    expect(none.held[0]!.code).toBe("unassigned");
+    expect(none.excluded.some((x) => /No representative/.test(x.message))).toBe(false);
     const two = run(history([{ customerId: CUST, employeeId: EMP, from: "2026-01-01", to: null }, { customerId: CUST, employeeId: EMP2, from: "2026-04-01", to: null }]));
-    expect(two.excluded[0]!.message).toMatch(/Several representatives/);
+    expect(two.held[0]!.message).toMatch(/Several representatives/);
+    expect(two.settled).toBe(false);
   });
   it("a salesperson recorded on the order: one person at 100%, or the order is listed as needing one", () => {
     const i = set(aprilInput(ON_TIME), { "attribution.source": "orderSalesperson" });
     const none = run(i);
     expect(none.employees).toEqual([]);
-    expect(none.excluded).toHaveLength(12);
-    expect(none.excluded[0]!.message).toMatch(/No salesperson is recorded for this order/);
+    expect(none.held).toHaveLength(12);
+    expect(none.held.every((h) => h.code === "unassigned")).toBe(true);
+    expect(none.held[0]!.message).toMatch(/No salesperson is recorded for this order/);
     const recorded = { ...i, attributions: i.orders.map((o) => ({ documentId: o.id, employeeId: EMP, sharePpm: 1_000_000 })) };
     expect(emp(recorded)!.earnedPaise).toBe(2_000_00);
     const split = { ...recorded, attributions: [...recorded.attributions.slice(1), { documentId: orderId(1), employeeId: EMP, sharePpm: 500_000 }, { documentId: orderId(1), employeeId: EMP2, sharePpm: 500_000 }] };
-    expect(run(split).excluded.find((x) => x.documentId === orderId(1))!.message).toMatch(/one person at 100%/);
+    expect(run(split).held.find((x) => x.documentId === orderId(1))!.message).toMatch(/one person at 100%/);
   });
 });
 
@@ -93,10 +99,11 @@ describe("salespeople who leave (eligibility.inactiveEmployees)", () => {
     const e = emp(set(leaving("2026-05-10", pays), { "eligibility.inactiveEmployees": "payUntilLastWorkingDay" }))!;
     expect(e.earnedPaise).toBe(share(6));
   });
-  it("someone who left with no last working day recorded is left out, with the reason", () => {
+  it("someone who left with no last working day recorded is held, with the reason", () => {
     const r = run(set(leaving(null), { "eligibility.inactiveEmployees": "payUntilLastWorkingDay" }));
     expect(r.employees).toEqual([]);
-    expect(r.excluded[0]!.message).toMatch(/no last working day is recorded/);
+    expect(r.held[0]!.message).toMatch(/no last working day is recorded/);
+    expect(r.held[0]!.code).toBe("unassigned");
   });
 });
 
@@ -116,9 +123,14 @@ describe("receipts held, reversed, bounced, split and applied", () => {
     expect(r.held[0]!.message).toMatch(/Held for review by hand/);
     expect(r.employees[0]!.earnedPaise).toBe(share(11));
   });
-  it("a bounced cheque that keeps the delay running says so", () => {
-    const r = run(withEvent("bounced", { "adjust.bouncedCheque": "reverseAndRestartDelay" }));
-    expect(r.pieces.find((p) => p.receiptId === receiptId(1, 1))!.note).toMatch(/delay keeps running/);
+  // D4: "restart the delay" has no defined meaning and behaved exactly like "reverse", so Category A no longer offers it.
+  it("a bounced cheque earns nothing; \"restart the delay\" is refused for Category A with the reason", () => {
+    const r = run(withEvent("bounced", { "adjust.bouncedCheque": "reverseReceiptShare" }));
+    expect(r.pieces.find((p) => p.receiptId === receiptId(1, 1))!.status).toBe("reversed");
+    expect(r.employees[0]!.earnedPaise).toBe(share(11));
+    const restart = run(withEvent("bounced", { "adjust.bouncedCheque": "reverseAndRestartDelay" }));
+    expect(restart.status).toBe("blocked");
+    expect(restart.problems.join(" ")).toMatch(/Bounced cheques: Choose one of the listed options/);
   });
   const twoInvoices = (amount: number, invoice: string | null) => {
     const i = aprilInput(ON_TIME);

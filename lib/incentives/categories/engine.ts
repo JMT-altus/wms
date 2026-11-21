@@ -9,7 +9,7 @@ import { applyReceipts } from "@/lib/incentives/shared/receipts";
 import { collectUnit } from "@/lib/incentives/shared/collection";
 import { makePeople } from "@/lib/incentives/shared/people";
 import { allCategoriesAllowance } from "@/lib/incentives/shared/all-categories";
-import { ENGINE_VERSIONS, type CarryIn, type CarryLotIn, type CarryOutcome, type CReviewCase, type CReviewKind, type OrderXIn as OrderBIn, type CategoryXInput, type CategoryXResult, type EmployeeResultX, type ExtraCategory, type ItemResult } from "./types";
+import { ENGINE_VERSIONS, type CarryIn, type CarryLotIn, type CarryOutcome, type FReviewIn, type CReviewCase, type CReviewKind, type OrderXIn as OrderBIn, type CategoryXInput, type CategoryXResult, type EmployeeResultX, type ExtraCategory, type ItemResult } from "./types";
 
 /**
  * Categories C–G — the calculations. PURE and deterministic. One skeleton for all five (the published version, its
@@ -99,6 +99,7 @@ export function calculateCategoryX(input: CategoryXInput): CategoryXResult {
   const ids = new Set(ctx.items.map((i) => i.employeeId));
   if (carryModel) for (const c of input.carry ?? []) if (c.lots.length || c.adjustmentsPaise) ids.add(c.employeeId);
   const employees: EmployeeResultX[] = [];
+  const overLimit: string[] = [];
   for (const eid of [...ids].sort()) {
     const mine = ctx.items.filter((i) => i.employeeId === eid);
     const name = ctx.people.employeeById.get(eid)?.name ?? carryOf.get(eid)?.name ?? "Former employee";
@@ -152,6 +153,25 @@ export function calculateCategoryX(input: CategoryXInput): CategoryXResult {
       // never below zero), payable = what is released, pending = the rest — so the stored row always satisfies
       // payable ≤ earned and pending = earned − payable; the month's own figures stay beside them.
       const available = Math.max(0, earnedPaise + c.carriedIn);
+      // The shared all-categories limit (category-c/4): only a RELEASED month uses it (a held one uses none). It uses
+      // this month's own EARNED amount after its limits (as category-c/3 did, and as the other categories count theirs;
+      // in Category C earned and payable are the same — nothing until every invoice is fully collected) and the
+      // balances carried forward that it releases (they used none of the limit in the month they were held, so they are
+      // counted once, here). Adjustments carried in are not counted, either way: a positive one was kept within its own
+      // month's limit by that month's recalculation, and a recovery corrects an earlier month — it lowers what is paid,
+      // not what this month earned, so the month never reserves less than it earned (the cautious direction).
+      const lotsReleased = c.released > 0 ? c.outcome.lots.filter((l) => l.outcome === "released").reduce((a, l) => a + l.amountPaise, 0) : 0;
+      const sharedPre = c.released > 0 ? (before ?? earnedPaise) + lotsReleased : 0;
+      const consumed = c.released > 0 ? Math.max(0, earnedPaise + lotsReleased) : 0;
+      if (lotsReleased > 0) {
+        // Released balances may not take the month above the shared limit. Whether such a balance is paid anyway, waits for
+        // room, or is cut is NOT DECIDED — so the calculation stops (nothing is released or lost) until it is.
+        const room = input.allCategories ? allCategoriesAllowance({ capPaise: input.allCategories.capPaise, policy: input.allCategories.policy, order: input.allCategories.order, own: input.category, ownPrePaise: sharedPre, others: input.allCategories.others[eid] ?? [] }).allowedPaise : capAll;
+        if (room !== null && earnedPaise + lotsReleased > room)
+          overLimit.push(
+            `${name}: this month's ${rupees(earnedPaise)} and the ${rupees(lotsReleased)} carried forward it would release come to ${rupees(earnedPaise + lotsReleased)}, above the ${rupees(room)} the all-categories limit leaves for Category ${input.category} in ${ctx.month}. Whether a released balance may exceed the limit, waits for room, or is cut is not decided yet, so nothing was calculated (nothing is released or lost).`,
+          );
+      }
       Object.assign(row, {
         earnedPaise: available,
         earnedExact: R.text(R.q(available)),
@@ -165,12 +185,14 @@ export function calculateCategoryX(input: CategoryXInput): CategoryXResult {
         carriedInPaise: c.carriedIn,
         netPaise: c.net,
         carry: c.outcome,
-        capConsumedPaise: c.released > 0 ? earnedPaise : 0,
+        capConsumedPaise: consumed,
+        sharedPrePaise: sharedPre,
         ...(c.belowMinimum !== undefined ? { belowMinimumPaise: c.belowMinimum } : {}),
       });
     }
     employees.push(row);
   }
+  if (overLimit.length) return blocked(input, overLimit);
   return {
     engineVersion: ENGINE_VERSIONS[input.category],
     category: input.category,
@@ -356,6 +378,12 @@ function ruleE(ctx: Ctx) {
       ctx.excluded.push({ documentId: m.id, documentNo: m.label, employeeId: m.employeeId, message: "Left out: no award was set when it was approved." });
       continue;
     }
+    // category-e/2: an award of ₹0 (or below) is never raised to the smallest award — before awards had to be entered,
+    // an approval with a blank award was stored as ₹0, so ₹0 can't be told apart from "no award": nothing is paid.
+    if (m.awardedPaise <= 0) {
+      ctx.excluded.push({ documentId: m.id, documentNo: m.label, employeeId: m.employeeId, message: "Left out: approved with an award of ₹0 (or none) — it is never raised to the smallest award." });
+      continue;
+    }
     const e = submitterOk(ctx, m.employeeId, m.label, m.id);
     if (!e) continue;
     const amount = Math.max(lo, Math.min(hi, m.awardedPaise));
@@ -365,30 +393,99 @@ function ruleE(ctx: Ctx) {
 
 /* ── F · reviews and testimonials ────────────────────────────────────── */
 
+/**
+ * F · Reviews and testimonials (category-f/3; 0137 + 0138) — the original scheme's four parts, every amount a setting:
+ *   F.1 a Google review (f.googleReviewAmount), F.2 a testimonial on email (f.emailAmount), F.3 a testimonial on the
+ *   customer's letterhead (f.letterheadAmount); F.4 appreciation — when the testimonial appreciates the credited
+ *   salesperson or ANY team member categorically BY NAME, the applicable reward is multiplied (f.namedMultiple: 2 =
+ *   double): the TOTAL is that multiple of the base, never a bonus on top of a doubled amount, never split.
+ * Only VERIFIED, unique testimonials reach the engine (a screenshot or document alone never does), each in the month of
+ * its ORIGINAL date (a Google review's publication, an email's or a letter's own date), never the month it was
+ * submitted. Who is credited, in order: the one salesperson it clearly names; else the customer's assigned salesperson on
+ * that date; else an authorised, confirmed claim (an attribution decision also settles one naming several). An
+ * invalidated testimonial earns nothing; a Google review rated below the lowest rating, or with fewer words than
+ * configured, earns nothing (email and letterhead have no rating; the word minimum is the Google review's); nobody
+ * identified, or several named and not yet decided, is held for Admin Review. With a monthly minimum, a salesperson below
+ * it earns no Category F that month. The category's monthly limit applies to the TOTAL, F.4 included.
+ */
+const F_KIND: Record<FReviewIn["kind"], { code: string; what: string; key: string }> = {
+  google_review: { code: "F.1", what: "Google review", key: "f.googleReviewAmount" },
+  email: { code: "F.2", what: "Email testimonial", key: "f.emailAmount" },
+  letterhead: { code: "F.3", what: "Letterhead testimonial", key: "f.letterheadAmount" },
+};
 function ruleF(ctx: Ctx) {
   const s = ctx.s;
   const multiple = num(s, "f.namedMultiple");
-  for (const t of byKey((ctx.input.testimonials ?? []).filter((x) => x.periodMonth === ctx.month), (x) => `${x.employeeId}|${x.id}`)) {
-    const label = t.kind === "google_review" ? "Google review" : t.kind === "email" ? "Email testimonial" : "Letterhead testimonial";
-    const why = !t.approved
-      ? "not approved"
-      : t.kind === "google_review" && str(s, "f.googleFiveStarOnly") === "yes" && t.starRating !== 5
-        ? "not a five-star review"
-        : t.kind === "google_review" && t.wordCount < num(s, "f.googleMinWords")
-          ? `${t.wordCount} words, fewer than ${num(s, "f.googleMinWords")}`
-          : t.kind === "google_review" && str(s, "f.googleNeedsEvidence") === "yes" && !t.hasEvidence
-            ? "no screenshot recorded"
-            : null;
-    if (why) {
-      ctx.excluded.push({ documentId: t.id, documentNo: label, employeeId: t.employeeId, message: `Left out: ${why}.` });
+  const minRating = num(s, "f.minRating");
+  const minWords = num(s, "f.googleMinWords");
+  const minCount = num(s, "f.minQualifyingReviews");
+  const mine: { employeeId: string; review: FReviewIn; basis: string }[] = [];
+  const labelOf = (r: FReviewIn) => `${F_KIND[r.kind].what} ${r.label}`;
+  for (const r of byKey((ctx.input.fReviews ?? []).filter((x) => monthOf(x.publishedOn) === ctx.month), (x) => `${x.publishedOn}|${x.reviewId}`)) {
+    const label = labelOf(r);
+    const left = (message: string, employeeId: string | null = null) => ctx.excluded.push({ documentId: r.reviewId, documentNo: label, employeeId, message: `Left out: ${message}.` });
+    if (r.invalidated) {
+      left("invalidated (deleted or invalid; approved by a second person)");
       continue;
     }
-    const e = submitterOk(ctx, t.employeeId, label, t.id);
+    if (r.kind === "google_review") {
+      if (r.rating === null || r.rating < minRating) {
+        left(`${r.rating ?? "no"}★, below the lowest rating that earns (${minRating}★)`);
+        continue;
+      }
+      if (r.wordCount < minWords) {
+        left(`${r.wordCount} words, fewer than ${minWords}`);
+        continue;
+      }
+    }
+    let credited: string | null = null;
+    let basis = "";
+    if (r.attribution) {
+      credited = r.attribution.employeeId;
+      basis = r.attribution.basis;
+      if (!credited) {
+        left("its credited salesperson is no longer an employee");
+        continue;
+      }
+    } else if (r.namedEmployeeIds.length === 1) {
+      credited = r.namedEmployeeIds[0]!;
+      basis = "named";
+    } else if (r.namedEmployeeIds.length > 1) {
+      ctx.settled = false;
+      ctx.held.push({ documentId: r.reviewId, documentNo: label, employeeId: null, message: `${label} names ${r.namedEmployeeIds.length} salespeople: held for Admin Review (an authorised person attributes it to one of them; it is never split).` });
+      continue;
+    } else if (r.assignedEmployeeId) {
+      credited = r.assignedEmployeeId;
+      basis = "assigned";
+    } else {
+      ctx.settled = false;
+      ctx.held.push({ documentId: r.reviewId, documentNo: label, employeeId: null, message: `${label} names nobody and its customer has no assigned salesperson: held for Admin Review (an authorised, confirmed claim).` });
+      continue;
+    }
+    mine.push({ employeeId: credited, review: r, basis });
+  }
+  const counts = new Map<string, number>();
+  for (const m of mine) counts.set(m.employeeId, (counts.get(m.employeeId) ?? 0) + 1);
+  for (const m of mine) {
+    const r = m.review;
+    const label = labelOf(r);
+    const n = counts.get(m.employeeId)!;
+    if (minCount > 0 && n < minCount) {
+      ctx.excluded.push({ documentId: r.reviewId, documentNo: label, employeeId: m.employeeId, message: `Left out: ${n} qualifying testimonial${n === 1 ? "" : "s"} this month, fewer than the ${minCount} needed — no Category F for the month.` });
+      continue;
+    }
+    const e = submitterOk(ctx, m.employeeId, label, r.reviewId);
     if (!e) continue;
-    const base = num(s, t.kind === "google_review" ? "f.googleReviewAmount" : t.kind === "email" ? "f.emailAmount" : "f.letterheadAmount");
-    const code = t.kind === "google_review" ? "F.1" : t.kind === "email" ? "F.2" : "F.3";
-    const amount = t.namesTeamMember ? base * multiple : base;
-    flat(ctx, e.id, code, "testimonial", t.id, label, R.q(amount), [`${label}: ${rupees(base)}${t.namesTeamMember ? ` × ${multiple} (it names the salesperson or a teammate) = ${rupees(amount)}` : ""}.`]);
+    const kind = F_KIND[r.kind];
+    const base = num(s, kind.key);
+    // F.4: appreciation of the credited salesperson or any team member, categorically by name (recorded by the verifier).
+    const appreciated = r.appreciatedEmployeeIds.length > 0;
+    const amount = R.q(appreciated ? base * multiple : base);
+    const how = m.basis === "named" ? "named in it" : m.basis === "assigned" ? "the customer's assigned salesperson" : "an authorised, confirmed claim";
+    const facts = r.kind === "google_review" ? `${r.rating}★, published ${r.publishedOn}` : `dated ${r.publishedOn}`;
+    flat(ctx, e.id, kind.code, "testimonial", r.reviewId, label, amount, [
+      `${label} (${facts}), credited to ${e.name} — ${how}: ${kind.code} ${rupees(base)}${appreciated ? `; F.4 — it appreciates ${r.appreciatedEmployeeIds.length === 1 ? "a person" : `${r.appreciatedEmployeeIds.length} people`} by name: × ${multiple} = ${rupees(base * multiple)}` : ""}.`,
+    ]);
   }
 }
 
@@ -428,7 +525,8 @@ export function windowEndInclusive(start: string, months: number): string {
 }
 
 /**
- * Category C (category-c/3), as the confirmed decisions say — every value a setting of the published version:
+ * Category C (category-c/4: c/3 + released carried balances use the shared limit), as the confirmed decisions say —
+ * every value a setting of the published version:
  *   · A Sales Order is ONE transaction however many invoices it has. Cancelled orders (and the configured "Orders left
  *     out") never count; a fully returned / fully credited order (net ≤ 0) is never a transaction.
  *   · NET amounts: each order counts its invoiced value ("Net turnover counts": invoiced) or its order value (ordered),
@@ -796,6 +894,14 @@ function ruleG(ctx: Ctx) {
   const perCustomer = cap(s, "caps.perOrder");
   const customers = new Map((ctx.input.customers ?? []).map((c) => [c.id, c]));
   const prevMonth = (mm: string) => monthsBefore(`${mm}-01`, 1).slice(0, 7);
+  // category-g/2: nothing of the month is left out silently. An order with no Customer Master link can't be followed
+  // into its customer's consecutive months, and an order whose amount (on the configured basis) isn't known counts as
+  // nothing towards its month — each is listed with the reason.
+  const leftFlags = new Set([...list(s, "basis.voucherFilter"), "cancelled"]);
+  for (const o of byKey((ctx.input.orders ?? []).filter((x) => monthOf(x.date) === ctx.month && x.date <= ctx.input.asOf && !(["cancelled", "optional", "postDated"] as const).some((k) => x.states[k] && leftFlags.has(k))), docKey)) {
+    if (!o.customerId) ctx.excluded.push({ documentId: o.id, documentNo: o.no, employeeId: null, message: "Left out: it has no Customer Master link, so its customer's consecutive months can't be counted." });
+    else if (amountOf(o, basis) === null) ctx.excluded.push({ documentId: o.id, documentNo: o.no, employeeId: null, message: `Counted as nothing towards ${ctx.month}: its ${basis === "total" ? "total" : "taxable"} amount isn't known.` });
+  }
   for (const [cid, orders] of customerOrders(ctx)) {
     const inMonth = orders.filter((o) => monthOf(o.date) === ctx.month);
     if (!inMonth.length) continue;

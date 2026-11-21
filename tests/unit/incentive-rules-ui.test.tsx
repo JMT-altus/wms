@@ -46,7 +46,7 @@ describe("the version editor", () => {
     const missing = screen.getByRole("region", { name: "Not yet configured" });
     expect(missing.textContent).toMatch(/must be chosen before it can be submitted/);
     expect(within(missing).getByText(/Sales are counted from \(General Eligibility\) isn't set\./)).toBeTruthy();
-    expect((screen.getByRole("button", { name: "Submit for approval" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "Submit for Rules Approval" }) as HTMLButtonElement).disabled).toBe(true);
     expect((screen.getByRole("button", { name: "Save draft" }) as HTMLButtonElement).disabled).toBe(true); // nothing changed yet
     fireEvent.click(screen.getByRole("tab", { name: /Monthly Sales Thresholds/ }));
     expect((screen.getByLabelText("Monthly sales threshold") as HTMLInputElement).value).toBe("10000000");
@@ -84,22 +84,22 @@ describe("the version editor", () => {
     a.submit.mockResolvedValue({ ok: true, rowVersion: 5 });
     editor({ config: completeConfig() });
     expect(screen.queryByRole("region", { name: "Not yet configured" })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Submit for approval" }));
+    fireEvent.click(screen.getByRole("button", { name: "Submit for Rules Approval" }));
     await waitFor(() => expect(a.submit).toHaveBeenCalledWith({ versionId: VERSION.id, expectedRowVersion: 4 }));
   });
 
   it("someone who wrote the version can't approve or reject it; someone else approves with a note or rejects with a reason", async () => {
     const submitted = { ...VERSION, status: "submitted" as const };
     const { unmount } = editor({ version: submitted, config: completeConfig(), meIsWriter: true });
-    expect((screen.getByRole("button", { name: "Approve" }) as HTMLButtonElement).disabled).toBe(true);
-    expect((screen.getByRole("button", { name: "Reject" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "Approve rules" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "Reject rules" }) as HTMLButtonElement).disabled).toBe(true);
     expect(screen.getByText(/someone else must approve it/)).toBeTruthy();
     expect(screen.queryByLabelText("Change note")).toBeNull(); // a submitted version isn't editable
     unmount();
     a.reject.mockResolvedValue({ ok: true, rowVersion: 5 });
     editor({ version: submitted, config: completeConfig() });
-    fireEvent.click(screen.getByRole("button", { name: "Reject" }));
-    const dialogReject = screen.getAllByRole("button", { name: "Reject" }).at(-1)!;
+    fireEvent.click(screen.getByRole("button", { name: "Reject rules" }));
+    const dialogReject = screen.getAllByRole("button", { name: "Reject rules" }).at(-1)!;
     expect((dialogReject as HTMLButtonElement).disabled).toBe(true); // a reason is required
     fireEvent.change(screen.getByLabelText("Reason for rejecting"), { target: { value: "Use whole rupees" } });
     fireEvent.click(dialogReject);

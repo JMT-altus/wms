@@ -11,7 +11,15 @@ import type { AllCategoriesIn } from "@/lib/incentives/shared/all-categories";
  * Dates are yyyy-mm-dd. Amounts are integer paise; exact intermediate amounts are fractions written "n/d".
  */
 
-export const ENGINE_VERSION = "category-a/1";
+/**
+ * category-a/2 (from category-a/1): nothing that can't be worked out is passed over silently any more — a credit note
+ * with no invoice link or no amount, a pre-closure that can't be valued, an order nobody is credited with, a document
+ * whose links go further than the calculation follows, an on-account receipt with no customer: each is HELD (with a
+ * code) and holds the month until it is resolved or acknowledged. Invoices take their Sales Order's salesperson; the
+ * representative "on the order's date" is looked up on the order's date; flat slabs above the highest slab keep the
+ * highest slab's figure; "settled" counts every order of the month.
+ */
+export const ENGINE_VERSION = "category-a/2";
 
 export interface OrderIn {
   id: string;
@@ -154,7 +162,29 @@ export interface CategoryAInput {
    * is configured for the month. Absent otherwise: Category A applies its own all-categories limit exactly as before.
    */
   allCategories?: AllCategoriesIn;
+  /**
+   * Pre-closures recorded in the WMS whose value can't be worked out (the order line they name is missing, or has no
+   * quantity or amount), as the loader found them. Absent when there are none.
+   */
+  preclosureProblems?: { orderId: string; orderNo: string; date: string; reason: string }[];
+  /** Documents whose references go further than the loader follows (it may be missing linked documents). Absent when none. */
+  referencesIncomplete?: { documentId: string; documentNo: string }[];
 }
+
+/**
+ * Why something is held (category-a/2). Every hold keeps the month from being submitted, approved or paid until it is
+ * resolved at its source (and the month recalculated) or acknowledged, with a reason, by an authorised person.
+ */
+export type HoldCode = "receipt" | "unassigned" | "credit-note-unlinked" | "credit-note-no-amount" | "preclosure-incomplete" | "reference-chain";
+export const HOLD_CODES: readonly HoldCode[] = ["receipt", "unassigned", "credit-note-unlinked", "credit-note-no-amount", "preclosure-incomplete", "reference-chain"];
+export const HOLD_LABEL: Record<HoldCode, string> = {
+  receipt: "Receipt held",
+  unassigned: "Order credited to nobody",
+  "credit-note-unlinked": "Credit note not linked to an invoice",
+  "credit-note-no-amount": "Credit note with no amount",
+  "preclosure-incomplete": "Pre-closure that can't be valued",
+  "reference-chain": "Links not fully followed",
+};
 
 export interface SlabLine {
   lineCode: string;
@@ -228,6 +258,8 @@ export interface Note {
   documentNo: string | null;
   employeeId: string | null;
   message: string;
+  /** A hold's kind (category-a/2; held notes only). */
+  code?: HoldCode;
 }
 
 export interface CategoryAResult {
@@ -244,7 +276,10 @@ export interface CategoryAResult {
   pieces: ReceiptPiece[];
   held: Note[];
   excluded: Note[];
-  /** Every counted order is fully collected or past the last delay step (for "recalculated until orders settle"). */
+  /**
+   * Every order of the month — credited to a salesperson or not — is fully collected or past the last delay step, and
+   * nothing is held (for "recalculated until orders settle").
+   */
   settled: boolean;
   /** The settings the calculation read, by key (for the audit). */
   settingsUsed: Record<string, unknown>;

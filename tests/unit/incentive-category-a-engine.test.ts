@@ -236,7 +236,7 @@ describe("reproducible and auditable", () => {
   it("the result names the configuration version and every setting it read", () => {
     const r = run(EXAMPLE_1);
     expect(r.configVersionId).toBe(aprilInput(EXAMPLE_1).configVersion!.id);
-    expect(r.engineVersion).toBe("category-a/1");
+    expect(r.engineVersion).toBe("category-a/2");
     expect(r.settingsUsed["rounding.level"]).toBe("employeeMonthTotal");
     expect(r.employees[0]!.explanation.join(" ")).toMatch(/threshold/);
   });

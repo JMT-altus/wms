@@ -34,6 +34,7 @@ export interface Note {
   documentNo: string | null;
   employeeId: string | null;
   message: string;
+  code?: string;
 }
 
 /** A unit of credit: the document its attribution is recorded on, its customer, and the days that decide whose it is. */
@@ -45,6 +46,11 @@ export interface CreditUnit {
   repDay: string;
   /** The day eligibility and leaving are judged on. */
   day: string;
+  /**
+   * The document a salesperson is recorded on, when it isn't the unit itself (Category A's invoice basis: the invoice's
+   * Sales Order; null = it has none). Absent: the unit itself — exactly as before for every other caller.
+   */
+  attributionId?: string | null;
 }
 
 export function makePeople<E extends PersonIn>(args: {
@@ -82,8 +88,11 @@ export function makePeople<E extends PersonIn>(args: {
   for (const e of args.employees) if (!e.isActive) departed.set(e.id, { lastDay: lastDayOf(e) });
 
   const sharesOf = (u: CreditUnit): { shares: { employeeId: string; sharePpm: number }[] } | { why: string } => {
+    // The document the salesperson is recorded on (an invoice's Sales Order when the caller says so).
+    const onDoc = u.attributionId === undefined ? u.id : u.attributionId;
+    if ((attrSource === "attributionRecord" || attrSource === "orderSalesperson") && onDoc === null) return { why: "It has no Sales Order in Forms, and salespeople are recorded on Sales Orders." };
     if (attrSource === "attributionRecord") {
-      const rows = args.attributions.filter((a) => a.documentId === u.id);
+      const rows = args.attributions.filter((a) => a.documentId === onDoc);
       if (!rows.length) return { why: "No salesperson is assigned to it (Incentive Rules attribution)." };
       const total = rows.reduce((a, r) => a + r.sharePpm, 0);
       if (split === "single" && (rows.length !== 1 || rows[0]!.sharePpm !== 1_000_000)) return { why: "Shared credit is set to one salesperson per order, but its assignment names several or less than 100%." };
@@ -93,7 +102,7 @@ export function makePeople<E extends PersonIn>(args: {
     if (attrSource === "orderSalesperson") {
       // The salesperson recorded for the Forms order (Incentive Rules → Order Salespeople, linked from the order's page):
       // one person, 100%. Tally's import carries no salesperson, so an order without a record stays unattributed.
-      const rows = args.attributions.filter((a) => a.documentId === u.id);
+      const rows = args.attributions.filter((a) => a.documentId === onDoc);
       if (!rows.length) return { why: "No salesperson is recorded for this order yet (Order Salespeople)." };
       if (rows.length !== 1 || rows[0]!.sharePpm !== 1_000_000) return { why: "A salesperson recorded on the order must be one person at 100%; this order's record names several or less." };
       return { shares: [{ employeeId: rows[0]!.employeeId, sharePpm: 1_000_000 }] };
@@ -112,17 +121,24 @@ export function makePeople<E extends PersonIn>(args: {
    * The unit's eligible salespeople and shares. Every reason someone isn't credited is added to `excluded` when the
    * unit belongs to the month being calculated (`inMonth`). `month` is the calculated month (yyyy-mm).
    */
-  const resolve = (u: CreditUnit, inMonth: boolean, month: string, excluded: Note[]): { employee: E; sharePpm: number }[] | null => {
+  /**
+   * `held` (Category A, category-a/2): a unit credited to nobody because something is MISSING or contradictory (no
+   * salesperson, no representative, shares not adding up, a salesperson who is no longer an employee or left with no last
+   * working day) is held — with the code "unassigned" — instead of only being listed as left out. Absent: exactly as
+   * before (every other caller).
+   */
+  const resolve = (u: CreditUnit, inMonth: boolean, month: string, excluded: Note[], held?: Note[]): { employee: E; sharePpm: number }[] | null => {
+    const missing = (n: Note) => (held ? held.push({ ...n, code: "unassigned" }) : excluded.push(n));
     const r = sharesOf(u);
     if ("why" in r) {
-      if (inMonth) excluded.push({ documentId: u.id, documentNo: u.no, employeeId: null, message: `Not credited to anyone: ${r.why}` });
+      if (inMonth) missing({ documentId: u.id, documentNo: u.no, employeeId: null, message: `Not credited to anyone: ${r.why}` });
       return null;
     }
     const out: { employee: E; sharePpm: number }[] = [];
     for (const sh of r.shares) {
       const e = employeeById.get(sh.employeeId);
       if (!e) {
-        if (inMonth) excluded.push({ documentId: u.id, documentNo: u.no, employeeId: sh.employeeId, message: "Its salesperson is no longer an employee." });
+        if (inMonth) missing({ documentId: u.id, documentNo: u.no, employeeId: sh.employeeId, message: "Its salesperson is no longer an employee." });
         continue;
       }
       const notEligible = eligibleOn(e, u.day);
@@ -133,7 +149,7 @@ export function makePeople<E extends PersonIn>(args: {
       const d = departed.get(e.id);
       if (d) {
         if (!d.lastDay) {
-          if (inMonth) excluded.push({ documentId: u.id, documentNo: u.no, employeeId: e.id, message: `${e.name} has left and no last working day is recorded (end their inclusion in Salesperson Eligibility).` });
+          if (inMonth) missing({ documentId: u.id, documentNo: u.no, employeeId: e.id, message: `${e.name} has left and no last working day is recorded (end their inclusion in Salesperson Eligibility).` });
           continue;
         }
         const out1 = inactive === "excludeFromMonthLeft" ? month >= monthOf(d.lastDay) : u.day > d.lastDay;

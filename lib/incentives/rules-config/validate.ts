@@ -190,6 +190,7 @@ export function checkConfig(c: IncentiveConfig, ctx: CheckContext): { problems: 
   } else if (c.delaySteps.length) problems.push({ section: "rewards", where: "delaySteps", message: `Category ${category} isn't collected, so it has no delay steps; remove them.` });
   for (const m of eligibilityIssues(c.eligibility, ctx)) problems.push({ section: "people", where: "eligibility", message: m });
   if (!c.eligibility.some((r) => r.mode === "include")) missing.push({ section: "people", where: "eligibility", message: "Nobody is included yet (Salesperson Eligibility)." });
+  if (category === "A") for (const p of categoryAIssues(c)) problems.push(p);
   if (category === "B") for (const p of categoryBIssues(c)) problems.push(p);
   if (category === "C") {
     const vf = c.settings["basis.voucherFilter"];
@@ -198,6 +199,31 @@ export function checkConfig(c: IncentiveConfig, ctx: CheckContext): { problems: 
   if (category === "E" && typeof c.settings["e.minAward"] === "number" && typeof c.settings["e.maxAward"] === "number" && (c.settings["e.minAward"] as number) > (c.settings["e.maxAward"] as number))
     problems.push({ section: "rewards", where: "e.minAward", message: "The smallest award for a meeting is more than the largest." });
   return { problems, missing };
+}
+
+/**
+ * Category A's cross-checks: combinations the calculation can't honour are refused with the reason, never accepted and
+ * then silently ignored.
+ *   · The first slab starts exactly at the monthly sales threshold (otherwise sales just above the threshold earn
+ *     nothing, or a slab starts where nobody qualifies yet).
+ *   · A limit of ₹0 pays nothing at all: enter the amount, or choose "No limit".
+ *   · Shared credit split by shares needs credit assigned per order (the other sources name one person per order).
+ *   · With sales counted from Sales Invoices, a pre-closure changes nothing (an invoice is what was delivered).
+ */
+function categoryAIssues(c: IncentiveConfig): Issue[] {
+  const out: Issue[] = [];
+  const s = c.settings;
+  const threshold = s["eligibility.threshold"];
+  const first = c.slabs[0];
+  if (typeof threshold === "number" && first && isInt(first.fromPaise) && first.fromPaise !== threshold)
+    out.push({ section: "slabs", where: "slabs", message: `The first slab starts at ${rupees(first.fromPaise)}, but the monthly sales threshold is ${rupees(threshold)}: the first slab must start exactly at the threshold.` });
+  for (const key of ["caps.perOrder", "caps.perEmployeeCategoryMonth", "caps.perEmployeeAllCategoriesMonth"])
+    if (s[key] === 0) out.push({ section: "rounding", where: key, message: `${SETTING[key]!.label}: ₹0 would mean nothing is ever paid. Enter the amount, or choose "No limit".` });
+  if (s["attribution.split"] === "splitByShares" && s["attribution.source"] !== undefined && s["attribution.source"] !== "attributionRecord")
+    out.push({ section: "people", where: "attribution.split", message: "Shared credit: splitting by shares works only when credit is assigned per order in Incentive Rules (the customer's representative and a salesperson recorded on the order are one person per order). Choose one salesperson per order, or assign credit per order." });
+  if (s["basis.document"] === "invoice" && s["basis.preClosure"] !== undefined && s["basis.preClosure"] !== "ignore")
+    out.push({ section: "general", where: "basis.preClosure", message: "Pre-closed quantities: with sales counted from Sales Invoices a pre-closure changes nothing (an invoice is what was delivered). Choose \"Count the full ordered value\", or count sales from Sales Orders." });
+  return out;
 }
 
 /**

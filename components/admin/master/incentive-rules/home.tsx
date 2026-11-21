@@ -42,7 +42,139 @@ export interface HomeProgram {
   versions: HomeVersion[];
 }
 
-export function IncentiveRulesHome({ programs, ready, canEdit, currentMonth }: { programs: HomeProgram[]; ready: boolean; canEdit: boolean; currentMonth: string }) {
+/** How complete a version being prepared is (the check that decides whether it can be submitted and published). */
+export interface HomeCheck {
+  problems: number;
+  missing: number;
+  /** The first few messages, as the version's editor shows them. */
+  messages: string[];
+}
+
+const WORKING: readonly StatusName[] = ["draft", "submitted", "approved", "rejected"];
+const RULES_APPROVAL: Partial<Record<StatusName, string>> = {
+  draft: "Not yet submitted",
+  submitted: "Awaiting Rules Approval",
+  approved: "Rules approved — publish to apply",
+  rejected: "Rejected — edit and resubmit",
+};
+const ym = (d: string | null) => (d ? d.slice(0, 7) : "—");
+
+/** The rules' own workflow, start to finish — and what it does not do. */
+function RulesWorkflow() {
+  const steps = [
+    ["Draft", "Written and saved; may be incomplete."],
+    ["Submit for Rules Approval", "Every required setting chosen."],
+    ["Approve rules", "By another authorised person."],
+    ["Publish", "Choose the month it applies from."],
+    ["Effective from the month", "Calculations of that month onwards use it."],
+  ] as const;
+  return (
+    <section aria-label="Rules workflow" className="rounded-section bg-white p-4" style={CARD}>
+      <h2 className="text-[13px] font-bold text-ink-strong">How rules take effect</h2>
+      <ol className="mt-2 grid gap-2 sm:grid-cols-5">
+        {steps.map(([label, sub], i) => (
+          <li key={label} className="relative rounded-lg px-3 py-2" style={{ background: "#F5F8FF", border: "1px solid #DCE6FA" }}>
+            <span className="text-[11px] font-bold tabular-nums" style={{ color: MASTERS_INK }}>
+              {i + 1}
+            </span>
+            <span className="block text-[12.5px] font-bold text-ink-strong">{label}</span>
+            <span className="block text-[11.5px] text-ink-muted">{sub}</span>
+          </li>
+        ))}
+      </ol>
+      <p role="note" className="mt-2 rounded-lg px-3 py-2 text-[12.5px] text-ink-strong" style={{ background: "#EFF6FF", border: "1px solid #BFDBFE" }}>
+        <strong>Rules Approval is not Incentive Approval.</strong> Approving and publishing rules decides how incentives are worked out from a month onwards. It does not approve any employee&apos;s calculated incentive, release it or pay it — each month&apos;s calculated amounts go through Incentive Approval, category by category, in{" "}
+        <Link href={"/incentive/manage/overview" as Route} className="font-semibold underline-offset-2 hover:underline" style={{ color: MASTERS_INK }}>
+          Incentive Tracker → Incentive Management
+        </Link>
+        .
+      </p>
+    </section>
+  );
+}
+
+/** One programme's Categories A–G: what is in force this month, what is being prepared, its Rules Approval and how complete it is. */
+function CategoryOverview({ program, currentMonth, checks }: { program: HomeProgram; currentMonth: string; checks: Record<string, HomeCheck> }) {
+  return (
+    <div className="mt-2 overflow-x-auto">
+      <table className="w-full text-[12.5px]" style={{ minWidth: 940 }} aria-label={`${program.code} categories`}>
+        <thead>
+          <tr className="text-left text-ink-subtle">
+            {["Category", "In force this month", "Being prepared", "Rules Approval", "Published", "Effective month", "Configuration", ""].map((h) => (
+              <th key={h} className="px-2 py-1 font-semibold">
+                {h}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {CONFIGURABLE_CATEGORIES.map((c) => {
+            const mine = program.versions.filter((v) => v.categoryCode === c);
+            const inForce = mine.find((v) => v.status === "published" && !!v.effectiveFrom && v.effectiveFrom <= currentMonth && (!v.effectiveTo || v.effectiveTo >= currentMonth));
+            const upcoming = mine.filter((v) => v.status === "published" && !!v.effectiveFrom && v.effectiveFrom > currentMonth).sort((a, b) => a.effectiveFrom!.localeCompare(b.effectiveFrom!))[0];
+            const working = mine.find((v) => WORKING.includes(v.status));
+            const check = working ? checks[working.id] : undefined;
+            const open = working ?? inForce ?? upcoming;
+            return (
+              <tr key={c} className="border-t border-hairline align-top" aria-label={`Category ${c}`}>
+                <td className="px-2 py-1.5">
+                  <span className="font-semibold text-ink-strong">{c}</span> · {CATEGORY_LABEL[c]}
+                </td>
+                <td className="px-2 py-1.5">{inForce ? <>Version {inForce.versionNo}</> : <span className="text-ink-subtle">None</span>}</td>
+                <td className="px-2 py-1.5">
+                  {working ? (
+                    <span className="inline-flex flex-wrap items-center gap-1">
+                      v{working.versionNo} <StatusBadge status={working.status} />
+                    </span>
+                  ) : (
+                    <span className="text-ink-subtle">—</span>
+                  )}
+                </td>
+                <td className="px-2 py-1.5">{working ? RULES_APPROVAL[working.status] : inForce || upcoming ? <span className="text-ink-muted">Approved and published</span> : <span className="text-ink-subtle">—</span>}</td>
+                <td className="px-2 py-1.5">
+                  {inForce ? `Yes — v${inForce.versionNo}` : upcoming ? `Yes — v${upcoming.versionNo}, not yet in force` : <span className="text-ink-subtle">No</span>}
+                  {inForce && upcoming && <span className="block text-[11.5px] text-ink-subtle">then v{upcoming.versionNo} from {ym(upcoming.effectiveFrom)}</span>}
+                </td>
+                <td className="px-2 py-1.5 tabular-nums">{inForce ? `since ${ym(inForce.effectiveFrom)}${inForce.effectiveTo ? ` (to ${inForce.effectiveTo})` : ""}` : upcoming ? `from ${ym(upcoming.effectiveFrom)}` : "—"}</td>
+                <td className="px-2 py-1.5">
+                  {check ? (
+                    check.problems + check.missing === 0 ? (
+                      <span className="font-semibold text-[#047857]">Complete{working!.status === "draft" || working!.status === "rejected" ? " — can be submitted" : ""}</span>
+                    ) : (
+                      <>
+                        <span className="font-semibold text-[#B45309]">
+                          {[check.missing ? `${check.missing} missing` : null, check.problems ? `${check.problems} to correct` : null].filter(Boolean).join(", ")}
+                        </span>
+                        <ul className="mt-0.5 text-[11.5px] text-ink-muted">
+                          {check.messages.map((m, i) => (
+                            <li key={i}>{m}</li>
+                          ))}
+                        </ul>
+                      </>
+                    )
+                  ) : inForce || upcoming ? (
+                    <span className="text-ink-muted">Complete (published)</span>
+                  ) : (
+                    <span className="text-ink-subtle">Not configured</span>
+                  )}
+                </td>
+                <td className="px-2 py-1.5 text-right">
+                  {open && (
+                    <Link href={`/master-setup/incentive-rules/${open.id}` as Route} className="text-[12.5px] font-bold" style={{ color: MASTERS_INK }} aria-label={`Open ${program.code} Category ${c} version ${open.versionNo}`}>
+                      Open
+                    </Link>
+                  )}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+export function IncentiveRulesHome({ programs, ready, canEdit, currentMonth, checks = {} }: { programs: HomeProgram[]; ready: boolean; canEdit: boolean; currentMonth: string; checks?: Record<string, HomeCheck> }) {
   const router = useRouter();
   const [newProgram, setNewProgram] = React.useState<{ code: string; name: string; description: string } | null>(null);
   const [newDraft, setNewDraft] = React.useState<{ programId: string; category: CategoryCode; startFrom: string } | null>(null);
@@ -78,6 +210,7 @@ export function IncentiveRulesHome({ programs, ready, canEdit, currentMonth }: {
           <Plus size={15} aria-hidden /> New programme
         </button>
       </div>
+      <RulesWorkflow />
 
       {ready && programs.length === 0 && (
         <p className="rounded-section bg-white p-5 text-[13.5px] text-ink-muted" style={CARD}>
@@ -107,6 +240,9 @@ export function IncentiveRulesHome({ programs, ready, canEdit, currentMonth }: {
               </span>
             </div>
             {p.description && <p className="mt-1 text-[12.5px] text-ink-muted">{p.description}</p>}
+            <h3 className="mt-3 text-[12px] font-bold uppercase tracking-wide text-ink-subtle">Categories A–G — {currentMonth.slice(0, 7)}</h3>
+            <CategoryOverview program={p} currentMonth={currentMonth} checks={checks} />
+            <h3 className="mt-4 text-[12px] font-bold uppercase tracking-wide text-ink-subtle">All versions</h3>
             {p.versions.length === 0 ? (
               <p className="mt-2 text-[12.5px] text-ink-subtle">No version yet.</p>
             ) : (

@@ -24,7 +24,7 @@ import {
 import { EMPLOYEE_ROLES } from "@/db/enums";
 import { calculateCategoryA } from "@/lib/incentives/category-a/engine";
 import { inputsHash, normalizeInput, resultHash } from "@/lib/incentives/category-a/hash";
-import { decide, monthEnd, negativeBalance, type PeriodStatus } from "@/lib/incentives/category-a/settle";
+import { calculationDateProblem, decide, firstOpenMonth, monthEnd, negativeBalance, type Decision, type PeriodStatus } from "@/lib/incentives/category-a/settle";
 import { ENGINE_VERSION, type CategoryAInput, type CategoryAResult, type CreditNoteIn, type InvoiceIn, type OrderIn, type ReceiptIn } from "@/lib/incentives/category-a/types";
 import { loadConfig, versionInForce } from "@/lib/queries/incentive-rules";
 import { isMonthStart, isDay } from "@/lib/incentives/rules-config/validate";
@@ -33,12 +33,17 @@ import { inputsHashB, resultHashB } from "@/lib/incentives/category-b/hash";
 import { ENGINE_VERSION_B, type CategoryBInput, type CategoryBResult } from "@/lib/incentives/category-b/types";
 import { canonical } from "@/lib/incentives/category-a/hash";
 import { allCategoriesFor, categoryBOrderIds, CALC_B_NOT_READY, incentiveCalcBReady, loadInputB } from "@/lib/queries/incentive-calc-b";
-import { incentiveCalcBOverrides, incentiveCalcBQualifications, incentiveCalcCarry, incentiveCalcItems, incentiveCalcPeriodVoids } from "@/db/schema";
+import { incentiveCalcBInvoiceReviews, incentiveCalcBOverrides, incentiveCalcBQualifications, incentiveCalcCarry, incentiveCalcCarryWriteoffs, incentiveCalcItems, incentiveCalcPeriodVoids } from "@/db/schema";
 import { unattributedBlock } from "@/lib/queries/incentive-c-review";
+import { aAllCategoriesFor, aSafeguardsReady, aUnresolved, acknowledgedHeld, heldItems, staleCategoryBOrders } from "@/lib/queries/incentive-calc-a";
+export { aSafeguardsReady };
+/** A Category A run's held items with their acknowledgments (for the screen). Reads only. */
+export const heldItemsOf = (runId: string) => heldItems(db, runId);
+import { incentiveCalcNegativeDecisions } from "@/db/schema";
 import { calculateCategoryX } from "@/lib/incentives/categories/engine";
 import { inputsHashX, resultHashX } from "@/lib/incentives/categories/hash";
 import { ENGINE_VERSIONS, type CarryIn, type CarryOutcome, type CategoryXInput, type CategoryXResult, type ExtraCategory } from "@/lib/incentives/categories/types";
-import { CALC_C_NOT_READY, CALC_X_NOT_READY, incentiveCalcCReady, incentiveCalcXReady, loadCarry, loadInputX } from "@/lib/queries/incentive-calc-x";
+import { CALC_C_NOT_READY, CALC_F_NOT_READY, CALC_X_NOT_READY, incentiveCalcCReady, incentiveCalcFReady, incentiveCalcXReady, loadCarry, loadInputX } from "@/lib/queries/incentive-calc-x";
 
 /** The categories the calculation workflow handles. Every function defaults to Category A, exactly as before. */
 export type CalcCategory = "A" | "B" | "C" | "D" | "E" | "F" | "G";
@@ -66,6 +71,7 @@ async function readyFor(category: CalcCategory, q: Db = db): Promise<string | nu
   if (category !== "A" && !(await incentiveCalcBReady(q))) return CALC_B_NOT_READY;
   if (category !== "A" && category !== "B" && !(await incentiveCalcXReady(q))) return CALC_X_NOT_READY;
   if (category === "C" && !(await incentiveCalcCReady(q))) return CALC_C_NOT_READY;
+  if (category === "F" && !(await incentiveCalcFReady(q))) return CALC_F_NOT_READY;
   return null;
 }
 
@@ -141,18 +147,26 @@ export async function loadInput(q: Db, programId: string, month: string, asOf: s
   const customers = new Set([...docs.values()].map((d) => d.customerMasterId).filter((x): x is string => !!x));
   const TYPES = ["sales-orders", "sales-invoices", "customer-receipts", "credit-notes"];
   if (customers.size) for (const d of await q.select().from(tallyDocuments).where(and(inArray(tallyDocuments.documentType, TYPES), inArray(tallyDocuments.customerMasterId, [...customers]), lte(tallyDocuments.documentDate, asOf)))) docs.set(d.id, d);
-  // Follow the references both ways (documents with no customer in the master too).
-  for (let round = 0; round < 3; round++) {
+  // Follow the references both ways (documents with no customer in the master too) until nothing new is found
+  // (category-a/2: never a silent cut after a few links). Should the links still be growing after REF_ROUNDS rounds,
+  // the documents found last are held ("links not fully followed") instead of being passed over.
+  let frontier: Doc[] = [];
+  let converged = false;
+  for (let round = 0; round < REF_ROUNDS; round++) {
     const ids = [...docs.keys()];
     const refs = [...docs.values()].map((d) => d.refDocumentId).filter((x): x is string => !!x && !docs.has(x));
     const linked = await q
       .select()
       .from(tallyDocuments)
       .where(and(inArray(tallyDocuments.documentType, TYPES), lte(tallyDocuments.documentDate, asOf), or(inArray(tallyDocuments.refDocumentId, ids), refs.length ? inArray(tallyDocuments.id, refs) : sql`false`)));
-    const before = docs.size;
+    frontier = linked.filter((d) => !docs.has(d.id));
     for (const d of linked) docs.set(d.id, d);
-    if (docs.size === before) break;
+    if (!frontier.length) {
+      converged = true;
+      break;
+    }
   }
+  const referencesIncomplete = converged ? [] : frontier.sort((a, b) => (a.documentNo < b.documentNo ? -1 : a.documentNo > b.documentNo ? 1 : a.id < b.id ? -1 : 1)).slice(0, 50).map((d) => ({ documentId: d.id, documentNo: d.documentNo }));
   const all = [...docs.values()].filter((d) => D(d.documentDate) <= asOf);
   const of = (t: string) => all.filter((d) => d.documentType === t);
 
@@ -176,11 +190,16 @@ export async function loadInput(q: Db, programId: string, month: string, asOf: s
   const creditNotes: CreditNoteIn[] = of("credit-notes").map((d) => ({ id: d.id, no: d.documentNo, date: D(d.documentDate), customerId: d.customerMasterId, invoiceId: d.refDocumentId, totalPaise: d.totalPaise, taxablePaise: d.taxablePaise, itemsPaise: itemsOf(d) }));
 
   const orderDocs = new Map(of("sales-orders").map((d) => [d.id, d]));
+  // A pre-closure that can't be valued (its order line is missing, or has no quantity or amount) is reported to the
+  // engine, which holds it (category-a/2) — never dropped silently.
+  const preclosureProblems: { orderId: string; orderNo: string; date: string; reason: string }[] = [];
   const preclosures = pcs
     .filter((p) => orderDocs.has(p.documentId))
     .map((p) => {
-      const line = orderDocs.get(p.documentId)!.lines?.[p.lineNo - 1];
+      const order = orderDocs.get(p.documentId)!;
+      const line = order.lines?.[p.lineNo - 1];
       const qty = line?.quantity ?? null, amt = line?.amountPaise ?? null;
+      if (!line || !qty || !amt) preclosureProblems.push({ orderId: p.documentId, orderNo: order.documentNo, date: D(p.precloseDate), reason: !line ? `it names line ${p.lineNo}, which the order doesn't have.` : `line ${p.lineNo} has no ${!qty ? "quantity" : "amount"}.` });
       return { orderId: p.documentId, date: D(p.precloseDate), itemsValuePaise: qty && amt ? Math.round((amt * Number(p.quantity)) / qty) : 0 };
     })
     .filter((p) => p.itemsValuePaise > 0);
@@ -188,7 +207,10 @@ export async function loadInput(q: Db, programId: string, month: string, asOf: s
   const docIds = all.map((d) => d.id);
   const custIds = [...new Set(all.map((d) => d.customerMasterId).filter((x): x is string => !!x))];
   const [events, custRows, reps, attrs, emps] = await Promise.all([
-    docIds.length ? q.select().from(incentiveCalcReceiptEvents).where(and(inArray(incentiveCalcReceiptEvents.documentId, docIds), lte(incentiveCalcReceiptEvents.eventDate, asOf), inForce(incentiveCalcReceiptEvents))) : [],
+    // A receipt event in force ON the calculation date: dated on or before it, and not retired by the end of that day
+    // (India) — a hold released later still held the receipt then. (Order salespeople and representative periods are
+    // corrections: a retired one was never right, so it is never read; periods carry their own dates.)
+    docIds.length ? q.select().from(incentiveCalcReceiptEvents).where(and(inArray(incentiveCalcReceiptEvents.documentId, docIds), lte(incentiveCalcReceiptEvents.eventDate, asOf), or(isNull(incentiveCalcReceiptEvents.retiredAt), sql`${incentiveCalcReceiptEvents.retiredAt} >= ((${asOf}::date + 1)::timestamp at time zone 'Asia/Kolkata')`))) : [],
     custIds.length ? q.select({ id: customerMasters.id, name: customerMasters.name, salesRepId: customerMasters.salesRepId, creditPeriodDays: customerMasters.creditPeriodDays }).from(customerMasters).where(inArray(customerMasters.id, custIds)) : [],
     custIds.length ? q.select().from(incentiveCalcRepHistory).where(and(inArray(incentiveCalcRepHistory.customerMasterId, custIds), inForce(incentiveCalcRepHistory))) : [],
     docIds.length ? q.select().from(incentiveCalcAttributions).where(and(inArray(incentiveCalcAttributions.documentId, docIds), inForce(incentiveCalcAttributions))) : [],
@@ -213,9 +235,14 @@ export async function loadInput(q: Db, programId: string, month: string, asOf: s
     employees: emps.map((e) => ({ id: e.id, name: e.name, role: e.role, departmentId: e.departmentId, isActive: e.isActive })),
     // Only with Category B configured (0134): absent otherwise, so Category A's input is exactly what it always was.
     ...(config?.settings["basis.categoryBOrders"] === "exclude" ? { categoryBOrderIds: await categoryBOrderIds(q, programId) } : {}),
-    ...(await allCategoriesFor(q, programId, month, "A", config).then((a) => (a ? { allCategories: a } : {}))),
+    // One combined limit per salesperson across every category and every programme (and the old engine's categories).
+    ...(await aAllCategoriesFor(q, programId, month, config).then((a) => (a ? { allCategories: a } : {}))),
+    ...(preclosureProblems.length ? { preclosureProblems } : {}),
+    ...(referencesIncomplete.length ? { referencesIncomplete } : {}),
   });
 }
+/** How many rounds of links the loader follows before holding what is still unfollowed (far beyond any real chain). */
+const REF_ROUNDS = 12;
 
 /* ── calculating ─────────────────────────────────────────────────────── */
 
@@ -243,6 +270,45 @@ async function payablesOf(tx: Tx, runId: string | null): Promise<Record<string, 
   return Object.fromEntries(rows.filter((r) => r.e).map((r) => [r.e!, Number(r.p)]));
 }
 
+/** Where a recalculation's differences go: the month chosen, the differences re-targeted to it, and the outcome text. */
+interface CarryPlacement {
+  outcome: string;
+  target: string | null;
+  carries: Decision["carries"];
+}
+
+/**
+ * Where a locked, approved or paid month's differences go: the first month, from the one decide() named, that is open
+ * and not voided — at most a year ahead (a month with no period yet is open). That month's row is locked and its row
+ * version goes up (its figures change through the carried difference): a concurrent recalculation that read an older
+ * snapshot then can't lock it (serialization failure) and is retried on a fresh one, where this difference is already
+ * subtracted — so a difference is never carried twice. With no open month, nothing is carried and the outcome says so;
+ * the difference stays with the month and its next calculation carries it (nothing is written off or dropped).
+ */
+async function resolveCarries(tx: Tx, programId: string, category: CalcCategory, decision: Decision): Promise<CarryPlacement> {
+  if (!decision.carries.length) return { outcome: decision.outcome, target: null, carries: [] };
+  const from = decision.carries[0]!.toMonth;
+  const base = decision.outcome.replace(/ The difference is carried.*$/, "");
+  const notYet: CarryPlacement = { outcome: `${base} It differs, but no month from ${from.slice(0, 7)} on is open to take it, so it isn't carried yet: it stays with this month, and the month's next calculation carries it once a month is open (nothing is written off).`, target: null, carries: [] };
+  const rows = await tx.select({ id: incentiveCalcPeriods.id, month: incentiveCalcPeriods.month, status: incentiveCalcPeriods.status }).from(incentiveCalcPeriods).where(and(eq(incentiveCalcPeriods.programId, programId), eq(incentiveCalcPeriods.categoryCode, category), sql`${incentiveCalcPeriods.month} >= ${from}::date`));
+  const open = new Map<string, boolean>();
+  for (const r of rows) open.set(D(r.month), r.status === "open" && !(await voidOf(tx, r.id, category)));
+  const target = firstOpenMonth(from, (m) => open.get(m) ?? true);
+  if (!target) return notYet;
+  const p = await periodFor(tx, programId, target, category);
+  if (p.status !== "open" || (await voidOf(tx, p.id, category))) return notYet;
+  await tx.update(incentiveCalcPeriods).set({ rowVersion: p.rowVersion + 1, updatedAt: new Date() }).where(eq(incentiveCalcPeriods.id, p.id));
+  const outcome = target === from ? decision.outcome : `${base} The difference is carried into ${target.slice(0, 7)} (the first open month from ${from.slice(0, 7)}).`;
+  return { outcome, target, carries: decision.carries.map((c) => ({ ...c, toMonth: target })) };
+}
+
+/** Records the placed differences (append-only adjustments, each naming the run that found it). Returns how many. */
+async function writeCarries(tx: Tx, actor: Actor, programId: string, category: CalcCategory, month: string, placement: CarryPlacement, runId: string, nameOf: (employeeId: string) => string): Promise<number> {
+  for (const c of placement.carries)
+    await tx.insert(incentiveCalcAdjustments).values({ programId, categoryCode: category, fromMonth: month, toMonth: c.toMonth, employeeId: c.employeeId, employeeName: nameOf(c.employeeId), kind: "recalc-difference", amountPaise: c.amountPaise, sourceRunId: runId, note: placement.outcome, createdById: actor.id });
+  return placement.carries.length;
+}
+
 export interface CalculateOutcome {
   runId: string | null;
   unchanged: boolean;
@@ -259,7 +325,8 @@ export interface CalculateOutcome {
 export async function calculate(actor: Actor, programId: string, month: string, asOfIn?: string, category: CalcCategory = "A"): Promise<Result<CalculateOutcome>> {
   if (!isMonthStart(month)) return { ok: false, error: "Choose a month." };
   const asOf = asOfIn ?? todayIST();
-  if (!isDay(asOf) || asOf < month) return { ok: false, error: "The calculation date must be on or after the month's first day." };
+  const dateProblem = calculationDateProblem(month, asOf, todayIST());
+  if (dateProblem) return { ok: false, error: dateProblem };
   const notReady = await readyFor(category);
   if (notReady) return { ok: false, error: notReady };
   const [program] = await db.select({ id: incentivePrograms.id }).from(incentivePrograms).where(eq(incentivePrograms.id, programId)).limit(1);
@@ -292,6 +359,12 @@ async function calculateIn(tx: Tx, actor: Actor, programId: string, month: strin
     await lockMonth(tx, programId, month, category);
     const period = await periodFor(tx, programId, month, category);
     if (await voidOf(tx, period.id, category)) return { ok: false as const, error: VOIDED };
+    // A month that is no longer open is never recalculated as of an EARLIER day than its adopted calculation: that would
+    // take back collections already counted (and carry the difference into a later month as a recovery).
+    if (period.status !== "open" && period.currentRunId) {
+      const adoptedAsOf = await asOfRun(tx, period.currentRunId);
+      if (asOf < adoptedAsOf) return { ok: false as const, error: `The month is ${period.status} and was calculated as of ${adoptedAsOf}: it is never recalculated as of an earlier day (${asOf}). Calculate it as of ${adoptedAsOf} or later. Nothing was calculated.` };
+    }
     const input = await engine.load(tx, programId, month, asOf);
     // A month that is no longer open keeps the carry-forward it was calculated with (its payout writes exactly that to
     // the ledger); only its own amount is recalculated, and a difference is carried as configured.
@@ -303,13 +376,14 @@ async function calculateIn(tx: Tx, actor: Actor, programId: string, month: strin
     const result = engine.calculate(input as never);
     const ih = engine.inputsHash(input as never);
     const rh = engine.resultHash(result as never);
-    const [latest] = await tx.select({ id: incentiveCalcRuns.id, ih: incentiveCalcRuns.inputsHash, rh: incentiveCalcRuns.resultHash }).from(incentiveCalcRuns).where(and(eq(incentiveCalcRuns.programId, programId), eq(incentiveCalcRuns.categoryCode, category), eq(incentiveCalcRuns.month, month))).orderBy(desc(incentiveCalcRuns.computedAt)).limit(1);
-    if (latest && (latest.ih === ih || latest.rh === rh)) return { ok: true as const, runId: latest.id, unchanged: true, adopted: false, status: result.status, outcome: "Nothing changed since the last calculation: no new run was recorded.", problems: result.problems };
+    const [latest] = await tx.select({ id: incentiveCalcRuns.id, ih: incentiveCalcRuns.inputsHash, rh: incentiveCalcRuns.resultHash, engineVersion: incentiveCalcRuns.engineVersion }).from(incentiveCalcRuns).where(and(eq(incentiveCalcRuns.programId, programId), eq(incentiveCalcRuns.categoryCode, category), eq(incentiveCalcRuns.month, month))).orderBy(desc(incentiveCalcRuns.computedAt)).limit(1);
 
     let currentSettled = false;
+    let adoptedRun: { ih: string; rh: string; engineVersion: string } | null = null;
     if (period.currentRunId) {
-      const [cur] = await tx.select({ result: incentiveCalcRuns.result }).from(incentiveCalcRuns).where(eq(incentiveCalcRuns.id, period.currentRunId));
+      const [cur] = await tx.select({ result: incentiveCalcRuns.result, ih: incentiveCalcRuns.inputsHash, rh: incentiveCalcRuns.resultHash, engineVersion: incentiveCalcRuns.engineVersion }).from(incentiveCalcRuns).where(eq(incentiveCalcRuns.id, period.currentRunId));
       currentSettled = (cur?.result as CategoryAResult | undefined)?.settled === true;
+      adoptedRun = cur ?? null;
     }
     const carriedRows = await tx.select({ e: incentiveCalcAdjustments.employeeId, a: incentiveCalcAdjustments.amountPaise }).from(incentiveCalcAdjustments).where(and(eq(incentiveCalcAdjustments.programId, programId), eq(incentiveCalcAdjustments.categoryCode, category), eq(incentiveCalcAdjustments.fromMonth, month), eq(incentiveCalcAdjustments.kind, "recalc-difference")));
     const carried: Record<string, number> = {};
@@ -318,21 +392,56 @@ async function calculateIn(tx: Tx, actor: Actor, programId: string, month: strin
     // are settled through its ledger, never twice).
     const fresh = Object.fromEntries(result.employees.map((e) => [e.employeeId, (e as { ownPayablePaise?: number }).ownPayablePaise ?? e.payablePaise]));
     const settings = input.config?.settings ?? {};
-    const decision = decide(settings, { month, status: period.status as PeriodStatus, hasCurrentRun: !!period.currentRunId, currentRunSettled: currentSettled, paidAt: period.paidAt ? period.paidAt.toISOString() : null }, asOf, result.status === "computed", { adopted: await ownPayablesOf(tx, period.currentRunId), fresh, carried });
+    const state = { month, status: period.status as PeriodStatus, hasCurrentRun: !!period.currentRunId, currentRunSettled: currentSettled, paidAt: period.paidAt ? period.paidAt.toISOString() : null };
+    const pays = { adopted: await ownPayablesOf(tx, period.currentRunId), fresh, carried };
+    let decision = decide(settings, state, asOf, result.status === "computed", pays);
+    // An automatic lock is exactly a lock by hand: its negative balances are handled the same way, and one that needs a
+    // second person's approval (Category A) waits for it — the month then stays open and the outcome says why.
+    let autoNegatives: NegativeAtLock[] = [];
+    if (decision.lockFirst) {
+      autoNegatives = await negativesAtLock(tx, programId, month, period, category);
+      const waits = await secondPersonMissing(tx, period, category, autoNegatives);
+      if (waits) {
+        const open = decide({ ...settings, "period.lockMode": "manual" }, state, asOf, result.status === "computed", pays);
+        decision = { ...open, outcome: `${open.outcome} It is past its automatic lock day but isn't locked yet: ${waits}` };
+        autoNegatives = [];
+      }
+    }
+    const names = new Map(result.employees.map((e) => [e.employeeId, e.name]));
+    const nameOf = (id: string) => names.get(id) ?? input.employees.find((e) => e.id === id)?.name ?? "Former employee";
 
+    // "Nothing changed" only against a run of the CURRENT engine: the inputs hash doesn't name the engine (so stored
+    // hashes keep reproducing), so a run of an earlier engine with the same inputs — calculated earlier the same day —
+    // must not stop a run of this engine being recorded (it would otherwise stay the month's only run, and submission
+    // refuses a run of an earlier engine). Whether the new run is adopted is decided below, as for any run: a locked,
+    // submitted, approved or paid month is never adopted into.
+    const sameAs = (r: { ih: string; rh: string; engineVersion: string } | null | undefined) => !!r && r.engineVersion === engine.version && (r.ih === ih || r.rh === rh);
+    // …and never while a calculation the month would ADOPT now is held back only because the latest run (recorded while
+    // the month was locked, so not adopted) is the same: after the month is reopened, its adopted run must become this
+    // one — unless the adopted run itself already is the same. Only an open month adopts (decide), so a locked,
+    // submitted, approved or paid month keeps exactly its behaviour, its pending-carry path included.
+    const heldBackFromAdoption = decision.adopt && !!latest && latest.id !== period.currentRunId && !sameAs(adoptedRun);
+    if (latest && sameAs(latest) && !heldBackFromAdoption) {
+      // Nothing new to record. But a locked, approved or paid month may still have a difference that was never carried
+      // (no month was open to take it when it was found): carry it now, from the run that found it — once, because the
+      // differences already carried out of the month are subtracted (decide), never silently left behind.
+      if (period.status !== "open" && decision.carries.length) {
+        const placement = await resolveCarries(tx, programId, category, decision);
+        const carried = await writeCarries(tx, actor, programId, category, month, placement, latest.id, nameOf);
+        await tx.insert(incentiveAudit).values({ actorId: actor.id, action: "carried-difference", entityType: "incentive-calc-period", entityId: period.id, detail: { month, asOf, runId: latest.id, outcome: placement.outcome, carried, toMonth: placement.target, ...(category === "A" ? {} : { category }) } });
+        return { ok: true as const, runId: latest.id, unchanged: true, adopted: false, status: result.status, outcome: placement.outcome, problems: result.problems };
+      }
+      return { ok: true as const, runId: latest.id, unchanged: true, adopted: false, status: result.status, outcome: "Nothing changed since the last calculation: no new run was recorded.", problems: result.problems };
+    }
+
+    // Where the differences go (the first open month), decided BEFORE the run is recorded so its outcome says exactly that.
+    const placement = await resolveCarries(tx, programId, category, decision);
+    const outcome = placement.outcome;
     let rowVersion = period.rowVersion;
     if (decision.lockFirst) {
+      await writeNegatives(tx, actor, programId, month, period, category, autoNegatives);
       await tx.update(incentiveCalcPeriods).set({ status: "locked", lockedAt: new Date(), lockedById: null, rowVersion: ++rowVersion, updatedAt: new Date() }).where(eq(incentiveCalcPeriods.id, period.id));
     }
-    let outcome = decision.outcome;
-    const targetBlocked: string[] = [];
-    for (const c of decision.carries) {
-      const target = await periodFor(tx, programId, c.toMonth, category);
-      if (target.status !== "open" || (await voidOf(tx, target.id, category))) targetBlocked.push(c.toMonth);
-    }
-    const carries = targetBlocked.length ? [] : decision.carries;
-    if (targetBlocked.length) outcome = `${outcome.replace(/ The difference is carried.*$/, "")} It differs, but ${targetBlocked[0]!.slice(0, 7)} isn't open, so nothing was carried.`;
-
     const [run] = await tx
       .insert(incentiveCalcRuns)
       .values({ programId, categoryCode: category, month, asOf, configVersionId: result.configVersionId, configVersionNo: result.configVersionNo, engineVersion: result.engineVersion, status: result.status, adopted: decision.adopt, outcome, inputsHash: ih, resultHash: rh, inputs: input, result, computedById: actor.id, computedByName: actor.name })
@@ -359,9 +468,7 @@ async function calculateIn(tx: Tx, actor: Actor, programId: string, month: strin
     if ("pieces" in result && result.pieces.length)
       await tx.insert(incentiveCalcReceiptCredits).values(result.pieces.map((p) => ({ runId, employeeId: p.employeeId, receiptDocumentId: p.receiptId, invoiceDocumentId: p.invoiceId, unitDocumentId: p.unitId, receiptNo: p.receiptNo, receiptDate: p.receiptDate, amountPaise: p.amountPaise, referenceDate: p.referenceDate, delayDays: p.delayDays, multiplierPpm: p.multiplierPpm, earnedExact: p.earnedExact, status: p.status, note: p.note })));
     if (decision.adopt) await tx.update(incentiveCalcPeriods).set({ currentRunId: runId, rowVersion: ++rowVersion, updatedAt: new Date() }).where(eq(incentiveCalcPeriods.id, period.id));
-    const names = new Map(result.employees.map((e) => [e.employeeId, e.name]));
-    for (const c of carries)
-      await tx.insert(incentiveCalcAdjustments).values({ programId, categoryCode: category, fromMonth: month, toMonth: c.toMonth, employeeId: c.employeeId, employeeName: names.get(c.employeeId) ?? input.employees.find((e) => e.id === c.employeeId)?.name ?? "Former employee", kind: "recalc-difference", amountPaise: c.amountPaise, sourceRunId: runId, note: outcome, createdById: actor.id });
+    await writeCarries(tx, actor, programId, category, month, placement, runId, nameOf);
     await tx.insert(incentiveAudit).values({ actorId: actor.id, action: "calculated", entityType: "incentive-calc-period", entityId: period.id, detail: { month, asOf, runId, status: result.status, adopted: decision.adopt, configVersionId: result.configVersionId, inputsHash: ih, resultHash: rh, outcome, ...(category === "A" ? {} : { category }) } });
     return { ok: true as const, runId, unchanged: false, adopted: decision.adopt, status: result.status, outcome, problems: result.problems };
   }
@@ -378,34 +485,14 @@ export async function setLocked(actor: Actor, programId: string, month: string, 
     if (!p) return { ok: false as const, error: "That month hasn't been calculated yet." };
     if (p.rowVersion !== expectedRowVersion) return { ok: false as const, error: "The month was changed by someone else meanwhile. Nothing was changed; reload to see it as it is now." };
     if (await voidOf(tx, p.id, category)) return { ok: false as const, error: VOIDED };
-    const notes: string[] = [];
+    let notes: string[] = [];
     if (lock) {
       if (p.status !== "open") return { ok: false as const, error: `The month is ${p.status}, not open.` };
       if (!p.currentRunId) return { ok: false as const, error: "Calculate the month before locking it." };
-      const [run] = await tx.select({ result: incentiveCalcRuns.result }).from(incentiveCalcRuns).where(eq(incentiveCalcRuns.id, p.currentRunId));
-      const settings = ((run!.result as CategoryAResult).settingsUsed ?? {}) as Record<string, string | number | string[]>;
-      const payable = await payablesOf(tx, p.currentRunId);
-      const incoming = await tx.select().from(incentiveCalcAdjustments).where(and(eq(incentiveCalcAdjustments.programId, programId), eq(incentiveCalcAdjustments.categoryCode, category), eq(incentiveCalcAdjustments.toMonth, month)));
-      const carryRun = (run!.result as { carryModel?: boolean; employees?: { employeeId: string; netPaise?: number }[] }).carryModel ? (run!.result as { employees: { employeeId: string; netPaise?: number }[] }).employees : null;
-      // A minimum-payable run's month total already includes its carried balances and the adjustments carried in.
-      const net: Record<string, number> = carryRun ? Object.fromEntries(carryRun.map((e) => [e.employeeId, e.netPaise ?? 0])) : { ...payable };
-      const left: Record<string, number | null> = {};
-      const names: Record<string, string> = {};
-      for (const a of incoming) {
-        if (!a.employeeId) continue;
-        if (!carryRun) net[a.employeeId] = (net[a.employeeId] ?? 0) + Number(a.amountPaise);
-        names[a.employeeId] = a.employeeName;
-        if (a.kind === "negative-carry" && a.monthsLeft !== null) left[a.employeeId] = Math.min(left[a.employeeId] ?? Infinity, a.monthsLeft);
-      }
-      const resultNames = await tx.select({ e: incentiveCalcResults.employeeId, n: incentiveCalcResults.employeeName }).from(incentiveCalcResults).where(eq(incentiveCalcResults.runId, p.currentRunId));
-      for (const r of resultNames) if (r.e) names[r.e] = r.n;
-      for (const [e, n] of Object.entries(net).sort()) {
-        const nb = negativeBalance(settings, month, n, left[e] ?? null);
-        if (!nb) continue;
-        if (nb.toMonth) await periodFor(tx, programId, nb.toMonth, category);
-        await tx.insert(incentiveCalcAdjustments).values({ programId, categoryCode: category, fromMonth: month, toMonth: nb.toMonth, employeeId: e, employeeName: names[e] ?? "Former employee", kind: nb.kind, amountPaise: nb.amountPaise, monthsLeft: nb.monthsLeft, sourceRunId: p.currentRunId, note: nb.note, createdById: actor.id }).onConflictDoNothing();
-        notes.push(`${names[e] ?? e}: ${nb.note}`);
-      }
+      const negatives = await negativesAtLock(tx, programId, month, p, category);
+      const blocked = await secondPersonMissing(tx, p, category, negatives);
+      if (blocked) return { ok: false as const, error: `${blocked} Nothing was locked.` };
+      notes = await writeNegatives(tx, actor, programId, month, p, category, negatives);
       await tx.update(incentiveCalcPeriods).set({ status: "locked", lockedAt: new Date(), lockedById: actor.id, rowVersion: p.rowVersion + 1, updatedAt: new Date() }).where(eq(incentiveCalcPeriods.id, p.id));
     } else {
       if (p.status !== "locked") return { ok: false as const, error: p.status === "open" ? "The month is already open." : `An ${p.status} month can't be reopened.` };
@@ -414,6 +501,202 @@ export async function setLocked(actor: Actor, programId: string, month: string, 
     await tx.insert(incentiveAudit).values({ actorId: actor.id, action: lock ? "locked" : "reopened", entityType: "incentive-calc-period", entityId: p.id, detail: { month, notes, ...(category === "A" ? {} : { category }) } });
     return { ok: true as const, rowVersion: p.rowVersion + 1, notes };
   });
+}
+
+/* ── negative balances at lock (manual and automatic alike) ──────────── */
+
+type PeriodRowT = typeof incentiveCalcPeriods.$inferSelect;
+interface NegativeAtLock {
+  employeeId: string;
+  name: string;
+  nb: NonNullable<ReturnType<typeof negativeBalance>>;
+}
+/** A negative balance the configuration writes off or recovers from salary (Category A: only with a second person's approval). */
+const SECOND_PERSON = new Set(["write-off", "salary-recovery"]);
+
+/**
+ * What locking the month does with each salesperson's negative total (the adopted run's payable plus every adjustment
+ * carried into the month), as its configuration says. The SAME for a lock by hand and an automatic one. Reads only.
+ */
+async function negativesAtLock(tx: Tx, programId: string, month: string, p: PeriodRowT, category: CalcCategory): Promise<NegativeAtLock[]> {
+  if (!p.currentRunId) return [];
+  const [run] = await tx.select({ result: incentiveCalcRuns.result }).from(incentiveCalcRuns).where(eq(incentiveCalcRuns.id, p.currentRunId));
+  const settings = ((run!.result as CategoryAResult).settingsUsed ?? {}) as Record<string, string | number | string[]>;
+  const payable = await payablesOf(tx, p.currentRunId);
+  const incoming = await tx.select().from(incentiveCalcAdjustments).where(and(eq(incentiveCalcAdjustments.programId, programId), eq(incentiveCalcAdjustments.categoryCode, category), eq(incentiveCalcAdjustments.toMonth, month)));
+  const carryRun = (run!.result as { carryModel?: boolean; employees?: { employeeId: string; netPaise?: number }[] }).carryModel ? (run!.result as { employees: { employeeId: string; netPaise?: number }[] }).employees : null;
+  // A minimum-payable run's month total already includes its carried balances and the adjustments carried in.
+  const net: Record<string, number> = carryRun ? Object.fromEntries(carryRun.map((e) => [e.employeeId, e.netPaise ?? 0])) : { ...payable };
+  const left: Record<string, number | null> = {};
+  const names: Record<string, string> = {};
+  for (const a of incoming) {
+    if (!a.employeeId) continue;
+    if (!carryRun) net[a.employeeId] = (net[a.employeeId] ?? 0) + Number(a.amountPaise);
+    names[a.employeeId] = a.employeeName;
+    if (a.kind === "negative-carry" && a.monthsLeft !== null) left[a.employeeId] = Math.min(left[a.employeeId] ?? Infinity, a.monthsLeft);
+  }
+  const resultNames = await tx.select({ e: incentiveCalcResults.employeeId, n: incentiveCalcResults.employeeName }).from(incentiveCalcResults).where(eq(incentiveCalcResults.runId, p.currentRunId));
+  for (const r of resultNames) if (r.e) names[r.e] = r.n;
+  const out: NegativeAtLock[] = [];
+  for (const [e, n] of Object.entries(net).sort()) {
+    const nb = negativeBalance(settings, month, n, left[e] ?? null);
+    if (nb) out.push({ employeeId: e, name: names[e] ?? "Former employee", nb });
+  }
+  return out;
+}
+
+/**
+ * Category A: why the month can't be locked yet — a negative balance it would write off or recover from salary has no
+ * second person's approval of exactly that amount for the adopted run (0142) — or null. Other categories: null (as before).
+ */
+async function secondPersonMissing(tx: Tx, p: PeriodRowT, category: CalcCategory, negatives: NegativeAtLock[]): Promise<string | null> {
+  if (category !== "A") return null;
+  const need = negatives.filter((x) => SECOND_PERSON.has(x.nb.kind));
+  if (!need.length) return null;
+  const what = (x: NegativeAtLock) => `${x.name}'s negative balance of ₹${(x.nb.amountPaise / 100).toFixed(2)} is to be ${x.nb.kind === "write-off" ? "written off" : "recovered from salary"}`;
+  if (!(await aSafeguardsReady(tx))) return `${need.map(what).join("; ")}: a second person approves that, which needs database update 0142.`;
+  const approved = await tx.select().from(incentiveCalcNegativeDecisions).where(and(eq(incentiveCalcNegativeDecisions.periodId, p.id), eq(incentiveCalcNegativeDecisions.runId, p.currentRunId!), eq(incentiveCalcNegativeDecisions.kind, "approve")));
+  const missing = need.filter((x) => !approved.some((a) => a.employeeId === x.employeeId && a.outcome === x.nb.kind && Number(a.amountPaise) === x.nb.amountPaise));
+  return missing.length ? `${missing.map(what).join("; ")}: a second person must approve ${missing.length === 1 ? "it" : "each"} first (request it on the month's calculation).` : null;
+}
+
+/** Records what the lock does with each negative balance (append-only adjustments; once per run, salesperson and kind). */
+async function writeNegatives(tx: Tx, actor: Actor | null, programId: string, month: string, p: PeriodRowT, category: CalcCategory, negatives: NegativeAtLock[]): Promise<string[]> {
+  const notes: string[] = [];
+  for (const { employeeId: e, name, nb } of negatives) {
+    if (nb.toMonth) await periodFor(tx, programId, nb.toMonth, category);
+    await tx.insert(incentiveCalcAdjustments).values({ programId, categoryCode: category, fromMonth: month, toMonth: nb.toMonth, employeeId: e, employeeName: name, kind: nb.kind, amountPaise: nb.amountPaise, monthsLeft: nb.monthsLeft, sourceRunId: p.currentRunId!, note: nb.note, createdById: actor?.id ?? null }).onConflictDoNothing();
+    notes.push(`${name}: ${nb.note}`);
+  }
+  return notes;
+}
+
+export interface NegativeBalanceItem {
+  employeeId: string;
+  name: string;
+  outcome: "write-off" | "salary-recovery" | "negative-carry";
+  amountPaise: number;
+  note: string;
+  /** Write-offs and salary recoveries only (Category A): the latest request and its decision. */
+  needsSecondPerson: boolean;
+  request: { id: string; byId: string | null; byName: string; reason: string; at: string } | null;
+  decision: { kind: "approve" | "refuse"; byName: string; reason: string; at: string } | null;
+  /** The approval matches exactly what the lock would record now. */
+  approved: boolean;
+}
+
+/** What locking a Category A month would do with its negative balances, with each decision (for the screen). Reads only. */
+export async function negativeBalancesAtLock(programId: string, month: string, q: Db = db): Promise<{ ready: boolean; items: NegativeBalanceItem[] }> {
+  if (!isMonthStart(month) || !(await incentiveCalcReady(q))) return { ready: false, items: [] };
+  const [p] = await q.select().from(incentiveCalcPeriods).where(and(eq(incentiveCalcPeriods.programId, programId), eq(incentiveCalcPeriods.categoryCode, "A"), eq(incentiveCalcPeriods.month, month)));
+  if (!p || p.status !== "open" || !p.currentRunId) return { ready: await aSafeguardsReady(q), items: [] };
+  const negatives = await negativesAtLock(q as Tx, programId, month, p, "A");
+  const ready = await aSafeguardsReady(q);
+  const rows = ready ? await q.select().from(incentiveCalcNegativeDecisions).where(and(eq(incentiveCalcNegativeDecisions.periodId, p.id), eq(incentiveCalcNegativeDecisions.runId, p.currentRunId))).orderBy(asc(incentiveCalcNegativeDecisions.createdAt)) : [];
+  return {
+    ready,
+    items: negatives.map((x) => {
+      const reqs = rows.filter((r) => r.kind === "request" && r.employeeId === x.employeeId);
+      const req = reqs.at(-1) ?? null;
+      const dec = req ? (rows.find((r) => r.requestId === req.id) ?? null) : null;
+      const approvedExactly = rows.some((r) => r.kind === "approve" && r.employeeId === x.employeeId && r.outcome === x.nb.kind && Number(r.amountPaise) === x.nb.amountPaise);
+      return {
+        employeeId: x.employeeId,
+        name: x.name,
+        outcome: x.nb.kind as NegativeBalanceItem["outcome"],
+        amountPaise: x.nb.amountPaise,
+        note: x.nb.note,
+        needsSecondPerson: SECOND_PERSON.has(x.nb.kind),
+        request: req ? { id: req.id, byId: req.createdById, byName: req.createdByName, reason: req.reason, at: req.createdAt.toISOString() } : null,
+        decision: dec ? { kind: dec.kind as "approve" | "refuse", byName: dec.createdByName, reason: dec.reason, at: dec.createdAt.toISOString() } : null,
+        approved: approvedExactly,
+      };
+    }),
+  };
+}
+
+/**
+ * Ask a second person to approve the write-off or salary recovery that locking an open Category A month would make of
+ * a salesperson's negative balance — the amount and outcome are what the lock would record NOW, for the adopted run.
+ */
+export async function requestNegativeDecision(actor: Actor, input: { programId: string; month: string; employeeId: string; reason: string }): Promise<Result<{ requestId: string; amountPaise: number }>> {
+  const reason = input.reason.trim();
+  if (!isMonthStart(input.month)) return { ok: false, error: "Choose a month." };
+  if (!reason || reason.length > 1000) return { ok: false, error: "Give the reason (up to 1,000 characters)." };
+  if (!(await incentiveCalcReady()) || !(await aSafeguardsReady())) return { ok: false, error: "A second person's approval of a negative balance needs database update 0142, so nothing was requested." };
+  return db.transaction(async (tx) => {
+    const p = await periodRow(tx, input.programId, input.month, "A");
+    if (!p || p.status !== "open" || !p.currentRunId) return { ok: false as const, error: "Only an open, calculated month's negative balances are decided before it is locked." };
+    const x = (await negativesAtLock(tx, input.programId, input.month, p, "A")).find((n) => n.employeeId === input.employeeId);
+    if (!x || !SECOND_PERSON.has(x.nb.kind)) return { ok: false as const, error: "Locking the month wouldn't write off or recover from salary any balance of that salesperson." };
+    const [row] = await tx.insert(incentiveCalcNegativeDecisions).values({ kind: "request", periodId: p.id, runId: p.currentRunId, employeeId: x.employeeId, employeeName: x.name, outcome: x.nb.kind as "write-off" | "salary-recovery", amountPaise: x.nb.amountPaise, reason, createdById: actor.id, createdByName: actor.name }).returning({ id: incentiveCalcNegativeDecisions.id });
+    await tx.insert(incentiveAudit).values({ actorId: actor.id, action: "a-negative-requested", entityType: "incentive-calc-period", entityId: p.id, detail: { month: input.month, employeeId: x.employeeId, outcome: x.nb.kind, amountPaise: x.nb.amountPaise, runId: p.currentRunId, reason } });
+    return { ok: true as const, requestId: row!.id, amountPaise: x.nb.amountPaise };
+  }).catch((e: unknown) => refusedNegative<{ requestId: string; amountPaise: number }>(e));
+}
+
+/** A second person approves or refuses a request — only while it is still exactly what the lock would record. */
+export async function decideNegativeDecision(actor: Actor, requestId: string, decision: "approve" | "refuse", reasonIn: string): Promise<Result<{ amountPaise: number }>> {
+  const reason = reasonIn.trim();
+  if (!/^[0-9a-f-]{36}$/i.test(requestId)) return { ok: false, error: "That request doesn't exist." };
+  if (!reason || reason.length > 1000) return { ok: false, error: "Give the reason (up to 1,000 characters)." };
+  if (!(await incentiveCalcReady()) || !(await aSafeguardsReady())) return { ok: false, error: "A second person's approval of a negative balance needs database update 0142, so nothing was decided." };
+  return db.transaction(async (tx) => {
+    const [req] = await tx.select().from(incentiveCalcNegativeDecisions).where(eq(incentiveCalcNegativeDecisions.id, requestId));
+    if (!req || req.kind !== "request") return { ok: false as const, error: "That request doesn't exist." };
+    const [p0] = await tx.select().from(incentiveCalcPeriods).where(eq(incentiveCalcPeriods.id, req.periodId));
+    const p = p0 ? await periodRow(tx, p0.programId, D(p0.month)!, "A") : null;
+    if (!p || p.status !== "open" || p.currentRunId !== req.runId) return { ok: false as const, error: "The month was locked or recalculated since it was requested: request it again for the month as it is now." };
+    const [done] = await tx.select({ id: incentiveCalcNegativeDecisions.id }).from(incentiveCalcNegativeDecisions).where(eq(incentiveCalcNegativeDecisions.requestId, req.id));
+    if (done) return { ok: false as const, error: "That request was already decided." };
+    if (req.createdById === actor.id) return { ok: false as const, error: "You requested it, so a second person must approve or refuse it." };
+    const x = (await negativesAtLock(tx, p.programId, D(p.month)!, p, "A")).find((n) => n.employeeId === req.employeeId);
+    if (decision === "approve" && (!x || x.nb.kind !== req.outcome || x.nb.amountPaise !== Number(req.amountPaise))) return { ok: false as const, error: "The balance changed since it was requested: request it again for the amount as it is now. Nothing was approved." };
+    await tx.insert(incentiveCalcNegativeDecisions).values({ kind: decision, requestId: req.id, periodId: req.periodId, runId: req.runId, employeeId: req.employeeId, employeeName: req.employeeName, outcome: req.outcome, amountPaise: Number(req.amountPaise), reason, createdById: actor.id, createdByName: actor.name });
+    await tx.insert(incentiveAudit).values({ actorId: actor.id, action: decision === "approve" ? "a-negative-approved" : "a-negative-refused", entityType: "incentive-calc-period", entityId: p.id, detail: { month: D(p.month), requestId: req.id, employeeId: req.employeeId, outcome: req.outcome, amountPaise: Number(req.amountPaise), reason } });
+    return { ok: true as const, amountPaise: Number(req.amountPaise) };
+  }).catch((e: unknown) => refusedNegative<{ amountPaise: number }>(e));
+}
+/** The database's refusal (0142's checks) as a result, never an unhandled error. */
+function refusedNegative<T>(err: unknown): Result<T> {
+  const m = String((err as { message?: string; cause?: { message?: string } })?.cause?.message ?? (err as Error)?.message ?? err);
+  if (/negative-balance decision|second person/i.test(m)) return { ok: false, error: `${m.replace(/^.*?(A |a )/, "A ")} Nothing was saved.` };
+  throw err;
+}
+
+/**
+ * Automatic locking (Category A, "Locking a month: automatically, a number of days after the month ends"): every OPEN
+ * Category A month with an adopted calculation whose configuration locks it automatically, and whose lock day has
+ * passed, is locked now — exactly as a lock by hand, negative balances included (one that needs a second person's
+ * approval waits for it: the month stays open, and the result says why). Run daily by the scheduler
+ * (app/api/cron/incentive-auto-lock). Each month in its own transaction, under its own lock.
+ */
+export async function autoLockDueMonths(today: string = todayIST()): Promise<{ locked: { programId: string; month: string }[]; waiting: { programId: string; month: string; why: string }[] }> {
+  const out = { locked: [] as { programId: string; month: string }[], waiting: [] as { programId: string; month: string; why: string }[] };
+  if (!(await incentiveCalcReady())) return out;
+  const open = await db.select({ programId: incentiveCalcPeriods.programId, month: incentiveCalcPeriods.month, runId: incentiveCalcPeriods.currentRunId }).from(incentiveCalcPeriods).where(and(eq(incentiveCalcPeriods.categoryCode, "A"), eq(incentiveCalcPeriods.status, "open"), sql`${incentiveCalcPeriods.currentRunId} is not null`)).orderBy(asc(incentiveCalcPeriods.month));
+  for (const o of open) {
+    const month = D(o.month)!;
+    const s = await settingsOfRun(db as unknown as Tx, o.runId!);
+    if (s["period.lockMode"] !== "autoAfterDays" || typeof s["period.autoLockDays"] !== "number") continue;
+    const lockDay = new Date(Date.parse(`${monthEnd(month)}T00:00:00Z`) + (s["period.autoLockDays"] as number) * 86_400_000).toISOString().slice(0, 10);
+    if (today <= lockDay) continue;
+    const r = await db.transaction(async (tx) => {
+      const p = await periodRow(tx, o.programId, month, "A");
+      if (!p || p.status !== "open" || p.currentRunId !== o.runId) return null; // changed meanwhile: the next run looks again
+      const negatives = await negativesAtLock(tx, o.programId, month, p, "A");
+      const blocked = await secondPersonMissing(tx, p, "A", negatives);
+      if (blocked) return { why: blocked };
+      const notes = await writeNegatives(tx, null, o.programId, month, p, "A", negatives);
+      await tx.update(incentiveCalcPeriods).set({ status: "locked", lockedAt: new Date(), lockedById: null, rowVersion: p.rowVersion + 1, updatedAt: new Date() }).where(eq(incentiveCalcPeriods.id, p.id));
+      await tx.insert(incentiveAudit).values({ actorId: null, action: "locked", entityType: "incentive-calc-period", entityId: p.id, detail: { month, notes, automatic: true, lockDay } });
+      return { why: null };
+    });
+    if (!r) continue;
+    if (r.why) out.waiting.push({ programId: o.programId, month, why: r.why });
+    else out.locked.push({ programId: o.programId, month });
+  }
+  return out;
 }
 
 /* ── approval and payout ─────────────────────────────────────────────── */
@@ -488,7 +771,9 @@ async function staleAllCategories(tx: Tx, programId: string, month: string, runI
   const [run] = await tx.select({ inputs: incentiveCalcRuns.inputs, resultHash: incentiveCalcRuns.resultHash }).from(incentiveCalcRuns).where(eq(incentiveCalcRuns.id, runId));
   const used = (run?.inputs as { allCategories?: unknown; config?: never } | undefined)?.allCategories;
   if (!used) return null;
-  const now = await allCategoriesFor(tx, programId, month, category, (run!.inputs as { config: never }).config);
+  // Category A shares one limit across every programme and the old engine (aAllCategoriesFor); the others as before.
+  const cfg = (run!.inputs as { config: never }).config;
+  const now = category === "A" ? await aAllCategoriesFor(tx, programId, month, cfg) : await allCategoriesFor(tx, programId, month, category, cfg);
   if (canonical(now ?? null) === canonical(used)) return null;
   // The other categories' figures changed: stale only if they now change THIS month's result.
   const engine = ENGINES[category];
@@ -569,44 +854,121 @@ export interface CarryBalance {
   heldPaise: number;
   remainingPaise: number;
   entries: { kind: string; month: string; amountPaise: number; byName: string; reason: string | null; at: string }[];
+  /** 0141: the write-off awaiting a second person, if any. */
+  writeOffRequest?: { requestId: string; amountPaise: number; byId: string | null; byName: string; reason: string; at: string } | null;
+  /** 0141: every write-off request and decision on this balance, oldest first (history). */
+  writeOffs?: { kind: "request" | "approve" | "refuse"; amountPaise: number; byName: string; reason: string; at: string }[];
 }
 /** Every balance a programme's category ever carried forward, with what happened to it (the ledger). Reads only. */
 export async function carryBalances(programId: string, category: CalcCategory, q: Q = db): Promise<CarryBalance[]> {
   if (!(await incentiveCalcCReady(q))) return [];
   const rows = await q.select().from(incentiveCalcCarry).where(and(eq(incentiveCalcCarry.programId, programId), eq(incentiveCalcCarry.categoryCode, category))).orderBy(asc(incentiveCalcCarry.createdAt));
-  return rows
-    .filter((r) => r.kind === "held")
-    .map((h) => {
-      const used = rows.filter((r) => r.lotId === h.id);
-      return { lotId: h.id, employeeId: h.employeeId, employeeName: h.employeeName, month: D(h.month)!, heldPaise: Number(h.amountPaise), remainingPaise: Number(h.amountPaise) + used.reduce((a, r) => a + Number(r.amountPaise), 0), entries: used.map((r) => ({ kind: r.kind, month: D(r.month)!, amountPaise: Number(r.amountPaise), byName: r.createdByName, reason: r.reason, at: r.createdAt.toISOString() })) };
-    });
+  const lots = rows.filter((r) => r.kind === "held");
+  const wos = lots.length && (await carryWriteoffsReady(q)) ? await q.select().from(incentiveCalcCarryWriteoffs).where(inArray(incentiveCalcCarryWriteoffs.lotId, lots.map((l) => l.id))).orderBy(asc(incentiveCalcCarryWriteoffs.createdAt)) : [];
+  return lots.map((h) => {
+    const used = rows.filter((r) => r.lotId === h.id);
+    const mine = wos.filter((w) => w.lotId === h.id);
+    const open = mine.find((w) => w.kind === "request" && !mine.some((d) => d.requestId === w.id)) ?? null;
+    return {
+      lotId: h.id,
+      employeeId: h.employeeId,
+      employeeName: h.employeeName,
+      month: D(h.month)!,
+      heldPaise: Number(h.amountPaise),
+      remainingPaise: Number(h.amountPaise) + used.reduce((a, r) => a + Number(r.amountPaise), 0),
+      entries: used.map((r) => ({ kind: r.kind, month: D(r.month)!, amountPaise: Number(r.amountPaise), byName: r.createdByName, reason: r.reason, at: r.createdAt.toISOString() })),
+      writeOffRequest: open ? { requestId: open.id, amountPaise: Number(open.amountPaise), byId: open.createdById, byName: open.createdByName, reason: open.reason, at: open.createdAt.toISOString() } : null,
+      writeOffs: mine.map((w) => ({ kind: w.kind, amountPaise: Number(w.amountPaise), byName: w.createdByName, reason: w.reason, at: w.createdAt.toISOString() })),
+    };
+  });
+}
+
+export const CARRY_WRITEOFF_NOT_READY = "Writing off a carried-forward balance needs database update 0141 (a second person approves every write-off), so nothing was done.";
+
+/** A held lot, what remains of it, and the months awaiting payout that count it (their payout would use it). */
+async function lotState(tx: Tx, lotId: string) {
+  const [lot] = await tx.select().from(incentiveCalcCarry).where(eq(incentiveCalcCarry.id, lotId));
+  if (!lot || lot.kind !== "held") return null;
+  const [left] = rowsOf<{ r: string }>(await tx.execute(sql`select (${lot.amountPaise}::bigint + coalesce((select sum(amount_paise) from incentive_calc_carry where lot_id = ${lotId}), 0))::text as r`));
+  const pending = rowsOf<{ month: string }>(await tx.execute(sql`
+    select p.month::text as month from incentive_calc_periods p join incentive_calc_runs r on r.id = p.current_run_id
+    where p.program_id = ${lot.programId} and p.category_code = ${lot.categoryCode} and p.status in ('locked', 'submitted', 'approved')
+      and not exists (select 1 from incentive_calc_period_voids v where v.period_id = p.id)
+      and exists (select 1 from jsonb_array_elements(coalesce(r.inputs->'carry', '[]'::jsonb)) c, jsonb_array_elements(c->'lots') l where l->>'id' = ${lotId})`));
+  return { lot, remaining: Number(left?.r ?? 0), pendingMonths: pending.map((x) => x.month.slice(0, 7)) };
+}
+
+/** A database refusal (check_violation) as the message it gives; anything else is rethrown. */
+async function refusedAs<T>(fn: () => Promise<Result<T>>): Promise<Result<T>> {
+  try {
+    return await fn();
+  } catch (err) {
+    const e = err as { code?: string; message?: string; cause?: { code?: string; message?: string } };
+    const code = e?.code ?? e?.cause?.code;
+    if (code === "23514" || code === "23505") return { ok: false, error: `${(e?.cause?.message ?? e?.message ?? "Refused").replace(/^.*?error: /i, "")}. Nothing was changed.` };
+    throw err;
+  }
 }
 
 /**
- * An authorised write-off of what remains of a carried-forward balance, with its reason (recorded in the ledger; never
- * edited). Refused while a month awaiting payout counts the balance — its payout would use it.
+ * Ask for what remains of a carried-forward balance to be written off, with the reason (0141). Nothing is written off
+ * until a SECOND person approves it. Refused while a month awaiting payout counts the balance (its payout would use it),
+ * or while another request for it awaits its decision.
  */
-export async function writeOffCarry(actor: Actor, lotId: string, reason: string): Promise<Result<{ amountPaise: number }>> {
+export async function requestCarryWriteOff(actor: Actor, lotId: string, reason: string): Promise<Result<{ requestId: string; amountPaise: number }>> {
   const why = (reason ?? "").trim();
   if (!/^[0-9a-f-]{36}$/i.test(lotId)) return { ok: false, error: "That balance doesn't exist." };
   if (!why) return { ok: false, error: "Give the reason for writing it off (it is kept with it)." };
   if (why.length > 1000) return { ok: false, error: "The reason is longer than 1,000 characters." };
   if (!(await incentiveCalcCReady(db))) return { ok: false, error: CALC_C_NOT_READY };
-  return db.transaction(async (tx) => {
-    const [lot] = await tx.select().from(incentiveCalcCarry).where(eq(incentiveCalcCarry.id, lotId));
-    if (!lot || lot.kind !== "held") return { ok: false as const, error: "That balance doesn't exist." };
-    const [left] = rowsOf<{ r: string }>(await tx.execute(sql`select (${lot.amountPaise}::bigint + coalesce((select sum(amount_paise) from incentive_calc_carry where lot_id = ${lotId}), 0))::text as r`));
-    const remaining = Number(left?.r ?? 0);
-    if (remaining <= 0) return { ok: false as const, error: "Nothing of that balance is left." };
-    const pending = rowsOf<{ month: string }>(await tx.execute(sql`
-      select p.month::text as month from incentive_calc_periods p join incentive_calc_runs r on r.id = p.current_run_id
-      where p.program_id = ${lot.programId} and p.category_code = ${lot.categoryCode} and p.status in ('locked', 'submitted', 'approved')
-        and not exists (select 1 from incentive_calc_period_voids v where v.period_id = p.id)
-        and exists (select 1 from jsonb_array_elements(coalesce(r.inputs->'carry', '[]'::jsonb)) c, jsonb_array_elements(c->'lots') l where l->>'id' = ${lotId})`));
-    if (pending.length) return { ok: false as const, error: `${pending.map((x) => x.month.slice(0, 7)).join(", ")} counts this balance and awaits payout: pay or reopen it first. Nothing was written off.` };
-    await tx.insert(incentiveCalcCarry).values({ programId: lot.programId, categoryCode: lot.categoryCode, employeeId: lot.employeeId, employeeName: lot.employeeName, month: `${todayIST().slice(0, 7)}-01`, kind: "written-off", amountPaise: -remaining, lotId, reason: why, createdById: actor.id, createdByName: actor.name });
-    return { ok: true as const, amountPaise: remaining };
-  });
+  if (!(await carryWriteoffsReady(db))) return { ok: false, error: CARRY_WRITEOFF_NOT_READY };
+  return refusedAs<{ requestId: string; amountPaise: number }>(() =>
+    db.transaction(async (tx) => {
+      const s = await lotState(tx, lotId);
+      if (!s) return { ok: false as const, error: "That balance doesn't exist." };
+      if (s.remaining <= 0) return { ok: false as const, error: "Nothing of that balance is left." };
+      if (s.pendingMonths.length) return { ok: false as const, error: `${s.pendingMonths.join(", ")} counts this balance and awaits payout: pay or reopen it first. Nothing was requested.` };
+      const [row] = await tx.insert(incentiveCalcCarryWriteoffs).values({ kind: "request", lotId, employeeId: s.lot.employeeId, employeeName: s.lot.employeeName, amountPaise: s.remaining, reason: why, createdById: actor.id, createdByName: actor.name }).returning({ id: incentiveCalcCarryWriteoffs.id });
+      await tx.insert(incentiveAudit).values({ actorId: actor.id, action: "carry-write-off-requested", entityType: "incentive-calc-carry", entityId: lotId, employeeId: s.lot.employeeId, detail: { category: s.lot.categoryCode, month: D(s.lot.month), requestId: row!.id, amountPaise: s.remaining, reason: why } });
+      return { ok: true as const, requestId: row!.id, amountPaise: s.remaining };
+    }),
+  );
+}
+
+/**
+ * A SECOND person approves a write-off request (the ledger records the written-off amount, once — never more than
+ * remains) or refuses it, always with a reason. The requester never decides their own request (the database refuses it
+ * too). Approval is refused while a month awaiting payout counts the balance.
+ */
+export async function decideCarryWriteOff(actor: Actor, requestId: string, decision: "approve" | "refuse", reason: string): Promise<Result<{ amountPaise: number }>> {
+  const why = (reason ?? "").trim();
+  if (!/^[0-9a-f-]{36}$/i.test(requestId)) return { ok: false, error: "That write-off request doesn't exist." };
+  if (decision !== "approve" && decision !== "refuse") return { ok: false, error: "Approve or refuse it." };
+  if (!why) return { ok: false, error: "Give the reason for your decision (it is kept with it)." };
+  if (why.length > 1000) return { ok: false, error: "The reason is longer than 1,000 characters." };
+  if (!(await incentiveCalcCReady(db))) return { ok: false, error: CALC_C_NOT_READY };
+  if (!(await carryWriteoffsReady(db))) return { ok: false, error: CARRY_WRITEOFF_NOT_READY };
+  return refusedAs<{ amountPaise: number }>(() =>
+    db.transaction(async (tx) => {
+      const [req] = await tx.select().from(incentiveCalcCarryWriteoffs).where(eq(incentiveCalcCarryWriteoffs.id, requestId));
+      if (!req || req.kind !== "request") return { ok: false as const, error: "That write-off request doesn't exist." };
+      const [done] = await tx.select({ id: incentiveCalcCarryWriteoffs.id }).from(incentiveCalcCarryWriteoffs).where(eq(incentiveCalcCarryWriteoffs.requestId, requestId));
+      if (done) return { ok: false as const, error: "That write-off request is already decided." };
+      if (req.createdById === actor.id) return { ok: false as const, error: "You requested this write-off: a second person approves or refuses it." };
+      const s = await lotState(tx, req.lotId);
+      if (!s) return { ok: false as const, error: "That balance doesn't exist." };
+      let resultCarryId: string | null = null;
+      if (decision === "approve") {
+        if (s.pendingMonths.length) return { ok: false as const, error: `${s.pendingMonths.join(", ")} counts this balance and awaits payout: pay or reopen it first. Nothing was approved.` };
+        if (Number(req.amountPaise) > s.remaining) return { ok: false as const, error: `Only ₹${(s.remaining / 100).toFixed(2)} of this balance remains now, less than the ₹${(Number(req.amountPaise) / 100).toFixed(2)} requested: refuse this request and ask again. Nothing was approved.` };
+        const [w] = await tx.insert(incentiveCalcCarry).values({ programId: s.lot.programId, categoryCode: s.lot.categoryCode, employeeId: s.lot.employeeId, employeeName: s.lot.employeeName, month: `${todayIST().slice(0, 7)}-01`, kind: "written-off", amountPaise: -Number(req.amountPaise), lotId: req.lotId, reason: `${req.reason} (requested by ${req.createdByName}; approved by ${actor.name}: ${why})`.slice(0, 1000), createdById: actor.id, createdByName: actor.name }).returning({ id: incentiveCalcCarry.id });
+        resultCarryId = w!.id;
+      }
+      await tx.insert(incentiveCalcCarryWriteoffs).values({ kind: decision, requestId, lotId: req.lotId, resultCarryId, employeeId: req.employeeId, employeeName: req.employeeName, amountPaise: Number(req.amountPaise), reason: why, createdById: actor.id, createdByName: actor.name });
+      await tx.insert(incentiveAudit).values({ actorId: actor.id, action: decision === "approve" ? "carry-write-off-approved" : "carry-write-off-refused", entityType: "incentive-calc-carry", entityId: req.lotId, employeeId: req.employeeId, detail: { category: s.lot.categoryCode, month: D(s.lot.month), requestId, amountPaise: Number(req.amountPaise), reason: why, requestedBy: req.createdByName } });
+      return { ok: true as const, amountPaise: decision === "approve" ? Number(req.amountPaise) : 0 };
+    }),
+  );
 }
 
 /**
@@ -639,6 +1001,98 @@ async function reviewedByHand(tx: Tx, runId: string, actorId: string): Promise<b
   return rows[0]?.yes === true;
 }
 
+/**
+ * Category F separation of duties: whoever recorded or retired a decision on any Google review of the month's
+ * calculation (its stored inputs) never approves or rejects that month (the database refuses it too, 0137).
+ */
+async function decidedFReview(tx: Tx, runId: string, actorId: string): Promise<boolean> {
+  const r = await tx.execute(sql`
+    select exists (
+      select 1 from incentive_calc_runs run
+      cross join lateral jsonb_array_elements(coalesce(run.inputs->'fReviews', '[]'::jsonb)) rv
+      join incentive_f_decisions d on d.review_id::text = rv->>'reviewId'
+      where run.id = ${runId} and (d.created_by_id = ${actorId} or d.retired_by_id = ${actorId})
+    ) as yes`);
+  return rowsOf<{ yes: boolean }>(r)[0]?.yes === true;
+}
+
+/**
+ * Every category's separation of duties (maker-checker), on top of each category's own checks above: whoever RECORDED
+ * OR RETIRED an input the month's calculation uses — an order's salespeople, a customer's representative period, a
+ * receipt event (on a document of the calculation), or approved or rejected a submission it counts (leads,
+ * conversions, meetings, testimonials) — never approves or rejects that month. Read from the run's STORED inputs, so it
+ * is exactly what was calculated. What the person decided, or null. Reads only.
+ */
+async function decidedInputs(tx: Tx, runId: string, actorId: string): Promise<string | null> {
+  const r = await tx.execute(sql`
+    with run as (select inputs from incentive_calc_runs where id = ${runId}),
+    docs as (select d->>'id' as id from run, jsonb_array_elements(coalesce(run.inputs->'orders', '[]'::jsonb) || coalesce(run.inputs->'invoices', '[]'::jsonb) || coalesce(run.inputs->'creditNotes', '[]'::jsonb) || coalesce(run.inputs->'receipts', '[]'::jsonb)) d),
+    custs as (select c->>'id' as id from run, jsonb_array_elements(coalesce(run.inputs->'customers', '[]'::jsonb)) c),
+    evs as (select e->>'id' as id from run, jsonb_array_elements(coalesce(run.inputs->'events', '[]'::jsonb)) e)
+    select
+      exists (select 1 from incentive_calc_attributions a where a.document_id::text in (select id from docs) and (a.created_by_id = ${actorId} or a.retired_by_id = ${actorId})) as attribution,
+      exists (select 1 from incentive_calc_rep_history h where h.customer_master_id::text in (select id from custs) and (h.created_by_id = ${actorId} or h.retired_by_id = ${actorId})) as rep,
+      exists (select 1 from incentive_calc_receipt_events e where (e.id::text in (select id from evs) or e.document_id::text in (select id from docs)) and (e.created_by_id = ${actorId} or e.retired_by_id = ${actorId})) as event`);
+  const hit = rowsOf<{ attribution: boolean; rep: boolean; event: boolean }>(r)[0];
+  if (hit?.attribution) return "You recorded or retired an order's salespeople used by this month's calculation";
+  if (hit?.rep) return "You recorded or retired a customer's representative period used by this month's calculation";
+  if (hit?.event) return "You recorded or retired a receipt event used by this month's calculation";
+  // The tracker's submissions it counts (D, E, F's testimonials): only when the run counted any (their tables then exist).
+  const [run] = await tx.select({ inputs: incentiveCalcRuns.inputs }).from(incentiveCalcRuns).where(eq(incentiveCalcRuns.id, runId));
+  const inputs = (run?.inputs ?? {}) as Record<string, { id: string }[] | undefined>;
+  const SUBMISSIONS = [["leadBatches", "lead_batches"], ["leadConversions", "lead_conversions"], ["meetings", "client_meetings"], ["testimonials", "testimonials"]] as const;
+  for (const [key, table] of SUBMISSIONS) {
+    const ids = (inputs[key] ?? []).map((x) => x.id).filter((x) => typeof x === "string" && /^[0-9a-f-]{36}$/i.test(x));
+    if (!ids.length) continue;
+    const s = await tx.execute(sql`select exists (select 1 from ${sql.identifier(table)} t where t.id::text in (${sql.join(ids.map((i) => sql`${i}`), sql`, `)}) and t.reviewed_by_id = ${actorId}) as yes`);
+    if (rowsOf<{ yes: boolean }>(s)[0]?.yes) return "You approved or rejected a submission counted in this month's calculation";
+  }
+  return null;
+}
+
+/**
+ * Category B: what of the month's calculation is still undecided — Sales Orders whose qualification needs review, and
+ * invoices with no Sales Order that nobody has reviewed (0140). Either keeps the month from being submitted, approved or
+ * paid (it would otherwise pass silently). Why, or null. Reads only.
+ */
+async function bUnresolved(tx: Tx, runId: string, step: "submit" | "approve" | "pay"): Promise<string | null> {
+  const [run] = await tx.select({ result: incentiveCalcRuns.result }).from(incentiveCalcRuns).where(eq(incentiveCalcRuns.id, runId));
+  const res = run?.result as CategoryBResult | undefined;
+  const orders = (res?.qualifications ?? []).filter((q) => q.outcome === "needs-review");
+  const invoices = res?.reviewInvoices ?? [];
+  const what = { submit: "submitted", approve: "approved", pay: "paid" }[step];
+  const fix = step === "submit" ? "reopen the month, decide them, recalculate, then lock and submit it again" : step === "approve" ? "reject it, then decide them and recalculate" : "decide them first";
+  if (orders.length) return `${orders.length} Sales Order${orders.length === 1 ? "" : "s"} of this month (${orders.slice(0, 3).map((o) => o.orderNo).join(", ")}${orders.length > 3 ? ", …" : ""}) still need${orders.length === 1 ? "s" : ""} a Category B decision (Review & decisions): ${fix}. Nothing was ${what}.`;
+  if (!invoices.length) return null;
+  if (!(await bInvoiceReviewsReady(tx))) return `${invoices.length} invoice${invoices.length === 1 ? "" : "s"} of this month ha${invoices.length === 1 ? "s" : "ve"} no Sales Order in Forms and need${invoices.length === 1 ? "s" : ""} review. Recording that review needs database update 0140; until then, correct the Sales Order link in Forms and recalculate. Nothing was ${what}.`;
+  const decided = await tx.select({ id: incentiveCalcBInvoiceReviews.invoiceDocumentId }).from(incentiveCalcBInvoiceReviews).where(and(inArray(incentiveCalcBInvoiceReviews.invoiceDocumentId, invoices.map((i) => i.invoiceId)), isNull(incentiveCalcBInvoiceReviews.retiredAt)));
+  const done = new Set(decided.map((d) => d.id));
+  const open = invoices.filter((i) => !done.has(i.invoiceId));
+  if (!open.length) return null;
+  return `${open.length} invoice${open.length === 1 ? "" : "s"} of this month with no Sales Order (${open.slice(0, 3).map((i) => i.invoiceNo).join(", ")}${open.length > 3 ? ", …" : ""}) ${open.length === 1 ? "hasn't" : "haven't"} been reviewed (Calculation → invoices needing review): review ${open.length === 1 ? "it" : "them"}, or correct the Sales Order link in Forms and recalculate. Nothing was ${what}.`;
+}
+
+/** Category B (0140): whether the person recorded or retired a review of an invoice the month's calculation lists for review. */
+async function bInvoiceDecided(tx: Tx, runId: string, actorId: string): Promise<boolean> {
+  const r = await tx.execute(sql`
+    select exists (
+      select 1 from incentive_calc_runs run
+      cross join lateral jsonb_array_elements(coalesce(run.result->'reviewInvoices', '[]'::jsonb)) ri
+      join incentive_calc_b_invoice_reviews d on d.invoice_document_id::text = ri->>'invoiceId'
+      where run.id = ${runId} and (d.created_by_id = ${actorId} or d.retired_by_id = ${actorId})
+    ) as yes`);
+  return rowsOf<{ yes: boolean }>(r)[0]?.yes === true;
+}
+
+/** Whether 0140's Category B invoice review table exists. */
+export async function bInvoiceReviewsReady(q: Db = db): Promise<boolean> {
+  return rowsOf<{ ok: boolean }>(await q.execute(sql`select to_regclass('public.incentive_calc_b_invoice_reviews') is not null as ok`))[0]?.ok === true;
+}
+/** Whether 0141's two-person carry write-off table exists. */
+export async function carryWriteoffsReady(q: Db = db): Promise<boolean> {
+  return rowsOf<{ ok: boolean }>(await q.execute(sql`select to_regclass('public.incentive_calc_carry_writeoffs') is not null as ok`))[0]?.ok === true;
+}
+
 async function settingsOfRun(tx: Tx, runId: string) {
   const [run] = await tx.select({ result: incentiveCalcRuns.result }).from(incentiveCalcRuns).where(eq(incentiveCalcRuns.id, runId));
   return ((run?.result as CategoryAResult | undefined)?.settingsUsed ?? {}) as Record<string, unknown>;
@@ -653,6 +1107,20 @@ const nextMonthStart = (day: string) => {
   return new Date(Date.UTC(y, m, 1)).toISOString().slice(0, 10);
 };
 const withCategory = (category: CalcCategory, detail: Record<string, unknown>) => (category === "A" ? detail : { ...detail, category });
+
+/**
+ * Category A separation of duties at approval: why the person may not approve or reject the month — they calculated
+ * its adopted run, locked it, acknowledged one of its held items, or it pays them — or null. Reads only.
+ */
+async function aConflictOfInterest(tx: Tx, p: PeriodRowT, actorId: string): Promise<string | null> {
+  const [run] = await tx.select({ by: incentiveCalcRuns.computedById }).from(incentiveCalcRuns).where(eq(incentiveCalcRuns.id, p.currentRunId!));
+  if (run?.by === actorId) return "You calculated this month";
+  if (p.lockedById === actorId) return "You locked this month";
+  const [mine] = await tx.select({ payable: incentiveCalcResults.payablePaise }).from(incentiveCalcResults).where(and(eq(incentiveCalcResults.runId, p.currentRunId!), eq(incentiveCalcResults.employeeId, actorId)));
+  if (mine && Number(mine.payable) > 0) return "This month pays you";
+  if (await acknowledgedHeld(tx, p.currentRunId!, actorId)) return "You acknowledged a held item of this month";
+  return null;
+}
 
 /** Submit a locked month for approval. The number of approvals is the one its adopted calculation's configuration says. */
 export async function submitMonth(actor: Actor, programId: string, month: string, expectedRowVersion: number, category: CalcCategory = "A"): Promise<Result<{ rowVersion: number; approvalsRequired: number }>> {
@@ -679,6 +1147,17 @@ export async function submitMonth(actor: Actor, programId: string, month: string
     if (category === "C") {
       const blocked = await unattributedBlock(tx, await settingsOfRun(tx, p.currentRunId!), month, await asOfRun(tx, p.currentRunId!), "submit");
       if (blocked) return { ok: false as const, error: blocked };
+    }
+    // Category B: every order needing review, and every invoice with no Sales Order, is decided first (fail-closed).
+    if (category === "B") {
+      const open = await bUnresolved(tx, p.currentRunId!, "submit");
+      if (open) return { ok: false as const, error: open };
+    }
+    // Category A: nothing held stays unresolved or unacknowledged (fail-closed), and the Category B orders a version
+    // leaves out of Category A are still the ones it was calculated with.
+    if (category === "A") {
+      const open = (await aUnresolved(tx, p.currentRunId!, "submit")) ?? (await staleCategoryBOrders(tx, programId, p.currentRunId!));
+      if (open) return { ok: false as const, error: open };
     }
     const steps = (await settingsOfRun(tx, p.currentRunId!))["payout.approvalSteps"];
     if (typeof steps !== "number" || !Number.isInteger(steps) || steps < 1 || steps > 3) return { ok: false as const, error: "The configuration this month was calculated with doesn't say how many approvals a payout needs." };
@@ -726,12 +1205,37 @@ export async function decideMonth(actor: Actor, programId: string, month: string
     if (p.submittedById === actor.id) return { ok: false as const, error: "You submitted this month, so you can't approve or reject it." };
     if (category === "B" && p.currentRunId && (await decidedByHand(tx, p.currentRunId, actor.id))) return { ok: false as const, error: "You decided a Sales Order's Category B qualification by hand in this month, so you can't approve or reject it. Another authorised person must." };
     if (category === "C" && p.currentRunId && (await reviewedByHand(tx, p.currentRunId, actor.id))) return { ok: false as const, error: "You decided a Category C review case of this month, so you can't approve or reject it. Another authorised person must." };
+    if (category === "F" && p.currentRunId && (await decidedFReview(tx, p.currentRunId, actor.id))) return { ok: false as const, error: "You verified, attributed or invalidated a Google review of this month, so you can't approve or reject it. Another authorised person must." };
+    if (category === "B" && p.currentRunId && (await bInvoiceReviewsReady(tx)) && (await bInvoiceDecided(tx, p.currentRunId, actor.id))) return { ok: false as const, error: "You reviewed an invoice of this month that has no Sales Order, so you can't approve or reject it. Another authorised person must." };
+    // Every category: whoever recorded an input this month's calculation uses never approves or rejects it.
+    const ownInput = p.currentRunId ? await decidedInputs(tx, p.currentRunId, actor.id) : null;
+    if (ownInput) return { ok: false as const, error: `${ownInput}, so you can't approve or reject it. Another authorised person must.` };
+    // Category A: nobody approves or rejects a month they calculated, locked, acknowledged a held item of, or that pays
+    // them (the database refuses it too, 0142).
+    if (category === "A" && p.currentRunId) {
+      const conflict = await aConflictOfInterest(tx, p, actor.id);
+      if (conflict) return { ok: false as const, error: `${conflict}, so you can't approve or reject it. Another authorised person must.` };
+    }
     const prior = await tx.select().from(incentiveCalcApprovals).where(and(eq(incentiveCalcApprovals.periodId, p.id), eq(incentiveCalcApprovals.submissionNo, p.submissionNo)));
     if (prior.some((a) => a.actorId === actor.id)) return { ok: false as const, error: "You already approved a step of this submission; the next step needs someone else." };
     const step = prior.length + 1;
     if (decision === "approve") {
       const invalid = await invalidCalculation(tx, p.currentRunId);
       if (invalid) return { ok: false as const, error: `${invalid} (Reject it with that reason.)` };
+      // The all-categories limit: checked at submission, and again here — another category's figures may have changed
+      // since, and with them this month's share of the limit. (A rejection is always possible.)
+      const staleShared = await staleAllCategories(tx, programId, month, p.currentRunId!, category);
+      if (staleShared) return { ok: false as const, error: `${staleShared.replace(/: reopen and recalculate it before submitting\.$/, ".")} Reject it so it is recalculated and submitted again. Nothing was approved.` };
+      if (category === "B") {
+        const open = await bUnresolved(tx, p.currentRunId!, "approve");
+        if (open) return { ok: false as const, error: open };
+      }
+      if (category === "A") {
+        const open = await aUnresolved(tx, p.currentRunId!, "approve");
+        if (open) return { ok: false as const, error: open };
+        const staleB = await staleCategoryBOrders(tx, programId, p.currentRunId!);
+        if (staleB) return { ok: false as const, error: `${staleB.replace(/: reopen and recalculate it before it goes on.$/, ".")} Reject it so it is recalculated and submitted again. Nothing was approved.` };
+      }
       // Category C: everything checked at submission is checked again — the carry-forward must still be exactly the
       // one calculated, and every unattributed record in range decided. A rejection is always possible.
       if (category === "C") {
@@ -792,6 +1296,19 @@ export async function recordPayout(actor: Actor, programId: string, month: strin
     if (category === "C") {
       const blocked = await unattributedBlock(tx, await settingsOfRun(tx, p.currentRunId!), month, await asOfRun(tx, p.currentRunId!), "pay");
       if (blocked) return { ok: false as const, error: blocked };
+    }
+    // Category A: whoever approved a step of the submission never records its payout, and a held item whose
+    // acknowledgment was retired after the approval stops the payout until it is acknowledged again (0142 too).
+    if (category === "A") {
+      const [approver] = await tx.select({ id: incentiveCalcApprovals.id }).from(incentiveCalcApprovals).where(and(eq(incentiveCalcApprovals.periodId, p.id), eq(incentiveCalcApprovals.submissionNo, p.submissionNo), eq(incentiveCalcApprovals.decision, "approve"), eq(incentiveCalcApprovals.actorId, actor.id)));
+      if (approver) return { ok: false as const, error: "You approved a step of this month, so you can't record its payout. Another authorised person must." };
+      const open = await aUnresolved(tx, p.currentRunId!, "pay");
+      if (open) return { ok: false as const, error: open };
+    }
+    // Category B: an invoice review retired after the approval stops the payout until it is decided again.
+    if (category === "B") {
+      const open = await bUnresolved(tx, p.currentRunId!, "pay");
+      if (open) return { ok: false as const, error: open };
     }
     const out = await payoutLines(tx, programId, month, p.currentRunId!, category);
     const total = out.reduce((s, l) => s + l.amountPaise, 0);
@@ -1067,8 +1584,8 @@ export interface MyCategoryAMonth {
  * are for authorised administrators). Never another employee's figures, never a month still open, locked or awaiting
  * approval, and no order-level breakdown — only the amount, its status and the person's own explanation lines.
  */
-export async function myCategoryA(employeeId: string, q: Q = db, category: CalcCategory = "A"): Promise<{ ready: boolean; months: MyCategoryAMonth[]; awaiting: string[] }> {
-  if (await readyFor(category, q)) return { ready: false, months: [], awaiting: [] };
+export async function myCategoryA(employeeId: string, q: Q = db, category: CalcCategory = "A"): Promise<{ ready: boolean; months: MyCategoryAMonth[]; awaiting: string[]; voided: { month: string; carriedToMonth: string | null }[] }> {
+  if (await readyFor(category, q)) return { ready: false, months: [], awaiting: [], voided: [] };
   const periods = await q
     .select({ p: incentiveCalcPeriods, code: incentivePrograms.code, name: incentivePrograms.name })
     .from(incentiveCalcPeriods)
@@ -1110,11 +1627,19 @@ export async function myCategoryA(employeeId: string, q: Q = db, category: CalcC
   }
   // Months the person has a Category A result in that aren't approved yet: named, never valued.
   const pending = await q
-    .select({ month: incentiveCalcPeriods.month })
+    .select({ id: incentiveCalcPeriods.id, month: incentiveCalcPeriods.month })
     .from(incentiveCalcPeriods)
     .innerJoin(incentiveCalcResults, and(eq(incentiveCalcResults.runId, incentiveCalcPeriods.currentRunId), eq(incentiveCalcResults.employeeId, employeeId)))
     .where(and(eq(incentiveCalcPeriods.categoryCode, category), inArray(incentiveCalcPeriods.status, ["open", "locked", "submitted"])));
-  return { ready: true, months, awaiting: [...new Set(pending.map((x) => D(x.month)))].sort().reverse() };
+  // Category C: a voided month is never approved — it is shown as voided (with where its amounts went), not as awaiting.
+  const voids = category === "C" && pending.length ? await q.select().from(incentiveCalcPeriodVoids).where(inArray(incentiveCalcPeriodVoids.periodId, pending.map((x) => x.id))) : [];
+  const voidedIds = new Set(voids.map((v) => v.periodId));
+  return {
+    ready: true,
+    months,
+    awaiting: [...new Set(pending.filter((x) => !voidedIds.has(x.id)).map((x) => D(x.month)))].sort().reverse(),
+    voided: pending.filter((x) => voidedIds.has(x.id)).map((x) => ({ month: D(x.month), carriedToMonth: (() => { const v = voids.find((y) => y.periodId === x.id)?.carriedToMonth; return v ? D(v) : null; })() })).sort((a, b) => b.month.localeCompare(a.month)),
+  };
 }
 
 /** The signed-in person's OWN Category B, approved and paid months only — the same safeguards as Category A. */

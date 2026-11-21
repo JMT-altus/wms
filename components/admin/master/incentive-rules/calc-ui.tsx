@@ -20,33 +20,34 @@ const TABS = [
   { href: "/master-setup/incentive-rules/calculation/salespeople", label: "Order salespeople" },
   { href: "/master-setup/incentive-rules/calculation/representatives", label: "Representatives" },
   { href: "/master-setup/incentive-rules/calculation/receipts", label: "Receipt events" },
-  { href: "/master-setup/incentive-rules/calculation/approvals", label: "Approvals" },
+  { href: "/master-setup/incentive-rules/calculation/approvals", label: "Incentive Approvals" },
 ] as const;
 /** In the Incentive Tracker: the calculation and its approval; the inputs and rules stay in Admin & Master Setup (linked). */
 const TRACKER_TABS = [
   { href: "/incentive/category-a", label: "Calculation" },
-  { href: "/incentive/category-a/approvals", label: "Approvals" },
+  { href: "/incentive/category-a/approvals", label: "Incentive Approvals" },
 ] as const;
 
 /** Category B: its calculation, its review queue (manual decisions) and its approvals. */
 const B_TABS = [
   { href: "/master-setup/incentive-rules/calculation?category=B", label: "Calculation" },
   { href: "/master-setup/incentive-rules/calculation/qualifications", label: "Review & decisions" },
-  { href: "/master-setup/incentive-rules/calculation/approvals?category=B", label: "Approvals" },
+  { href: "/master-setup/incentive-rules/calculation/approvals?category=B", label: "Incentive Approvals" },
 ] as const;
 const TRACKER_B_TABS = [
   { href: "/incentive/category-b", label: "Calculation" },
-  { href: "/incentive/category-b/approvals", label: "Approvals" },
+  { href: "/incentive/category-b/approvals", label: "Incentive Approvals" },
 ] as const;
 
 export type CalcCat = "A" | "B" | "C" | "D" | "E" | "F" | "G";
-const SHORT: Record<CalcCat, string> = { A: "Sales Order Received", B: "Old Customer – New Product / Brand", C: "New Customer", D: "Leads & Enquiries", E: "Client Meetings", F: "Reviews & Testimonials", G: "Consecutive Purchases" };
+/** Each category's short name (also used by Incentive Tracker → Incentive Management). */
+export const CATEGORY_SHORT: Record<CalcCat, string> = { A: "Sales Order Received", B: "Old Customer – New Product / Brand", C: "New Customer", D: "Leads & Enquiries", E: "Client Meetings", F: "Reviews & Testimonials", G: "Consecutive Purchases" };
 /** Where a category's calculation lives in the Incentive Tracker. */
 export const trackerPath = (c: CalcCat) => (c === "A" ? "/incentive/category-a" : c === "B" ? "/incentive/category-b" : `/incentive/category/${c.toLowerCase()}`);
 
 /** Categories A–G, in Admin & Master Setup → Incentive Calculation. */
 export function CategorySwitch({ category }: { category: CalcCat }) {
-  const items = (["A", "B", "C", "D", "E", "F", "G"] as const).map((c) => ({ c, href: c === "A" ? "/master-setup/incentive-rules/calculation" : `/master-setup/incentive-rules/calculation?category=${c}`, label: `${c} · ${SHORT[c]}` }));
+  const items = (["A", "B", "C", "D", "E", "F", "G"] as const).map((c) => ({ c, href: c === "A" ? "/master-setup/incentive-rules/calculation" : `/master-setup/incentive-rules/calculation?category=${c}`, label: `${c} · ${CATEGORY_SHORT[c]}` }));
   return (
     <nav aria-label="Incentive category" className="mb-2 flex flex-wrap gap-1.5">
       {items.map((i) => (
@@ -61,12 +62,14 @@ export function CategorySwitch({ category }: { category: CalcCat }) {
 export function CalcTabs({ active, variant = "master", category = "A" }: { active: (typeof TABS)[number]["label"] | "Review & decisions"; variant?: "master" | "tracker"; category?: CalcCat }) {
   const other: readonly { href: string; label: string }[] =
     variant === "tracker"
-      ? [{ href: trackerPath(category), label: "Calculation" }, { href: `${trackerPath(category)}/approvals`, label: "Approvals" }]
+      ? [{ href: trackerPath(category), label: "Calculation" }, { href: `${trackerPath(category)}/approvals`, label: "Incentive Approvals" }]
       : [
           { href: `/master-setup/incentive-rules/calculation?category=${category}`, label: "Calculation" },
           // Category C: its review queue for unmatched records (0136).
           ...(category === "C" ? [{ href: "/master-setup/incentive-rules/calculation/c-review", label: "Review & decisions" }] : []),
-          { href: `/master-setup/incentive-rules/calculation/approvals?category=${category}`, label: "Approvals" },
+          // Category F: its Google review verification queue (0137).
+          ...(category === "F" ? [{ href: "/master-setup/incentive-rules/calculation/f-review", label: "Review & decisions" }] : []),
+          { href: `/master-setup/incentive-rules/calculation/approvals?category=${category}`, label: "Incentive Approvals" },
         ];
   const tabs: readonly { href: string; label: string }[] = category === "A" ? (variant === "tracker" ? TRACKER_TABS : TABS) : category === "B" ? (variant === "tracker" ? TRACKER_B_TABS : B_TABS) : other;
   return (
@@ -84,8 +87,8 @@ export function CalcTabs({ active, variant = "master", category = "A" }: { activ
       ))}
       {variant === "tracker" && (
         <span className="ml-auto flex gap-3 pb-1 text-[12px]">
-          {(category === "B" || category === "C") && (
-            <Link href={(category === "B" ? "/master-setup/incentive-rules/calculation/qualifications" : "/master-setup/incentive-rules/calculation/c-review") as Route} className="font-semibold underline-offset-2 hover:underline" style={{ color: BLUE }}>
+          {(category === "B" || category === "C" || category === "F") && (
+            <Link href={(category === "B" ? "/master-setup/incentive-rules/calculation/qualifications" : category === "C" ? "/master-setup/incentive-rules/calculation/c-review" : "/master-setup/incentive-rules/calculation/f-review") as Route} className="font-semibold underline-offset-2 hover:underline" style={{ color: BLUE }}>
               Review & decisions ↗
             </Link>
           )}
@@ -113,14 +116,18 @@ export function Notice({ tone, children }: { tone: "ok" | "bad" | "info"; childr
 
 export function NotReady({ category = "A" }: { category?: CalcCat }) {
   return category !== "A" ? (
-    <Notice tone="info">Database update {category === "B" ? "0134 is" : category === "C" ? "0134, 0135 and 0136 are" : "0134 and 0135 are"} needed before Category {category} can be calculated or reviewed. Nothing else is affected.</Notice>
+    <Notice tone="info">Database update {category === "B" ? "0134 is" : category === "C" ? "0134, 0135 and 0136 are" : category === "F" ? "0134, 0135, 0137, 0138 and 0139 are" : "0134 and 0135 are"} needed before Category {category} can be calculated or reviewed. Nothing else is affected.</Notice>
   ) : (
     <Notice tone="info">Database updates 0132 and 0133 are needed before Category A inputs and calculations can be used. The live Incentive Tracker is not affected.</Notice>
   );
 }
 
 /** A small "retire with a reason" control: a row is never edited or deleted, only retired. */
-export function RetireButton({ label, disabled, onRetire }: { label: string; disabled?: boolean; onRetire: (reason: string) => Promise<void> }) {
+/**
+ * onRetire may resolve `false` to say the retirement was refused: the box then stays open with the reason as typed.
+ * Anything else (as every existing caller does) closes it as before. The button is usable again in every case.
+ */
+export function RetireButton({ label, disabled, onRetire }: { label: string; disabled?: boolean; onRetire: (reason: string) => Promise<void | boolean> }) {
   const [open, setOpen] = React.useState(false);
   const [reason, setReason] = React.useState("");
   const [busy, setBusy] = React.useState(false);
@@ -140,8 +147,13 @@ export function RetireButton({ label, disabled, onRetire }: { label: string; dis
         style={{ background: "#B91C1C" }}
         onClick={async () => {
           setBusy(true);
-          await onRetire(reason.trim());
-          setBusy(false);
+          let kept = false;
+          try {
+            kept = (await onRetire(reason.trim())) === false;
+          } finally {
+            setBusy(false);
+          }
+          if (kept) return;
           setOpen(false);
           setReason("");
         }}

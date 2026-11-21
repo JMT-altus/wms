@@ -8,11 +8,11 @@ vi.setConfig({ testTimeout: 30_000 });
 // Category B on screen, with data access and server actions MOCKED (synthetic data): the navigation, the rules editor
 // for a Category B version, the calculation screen's qualification evidence and its requests, the review queue's
 // decision form (reason required, read-only without the permission), and a salesperson's own Category B.
-const m = vi.hoisted(() => ({ monthView: vi.fn(), listApprovalPeriods: vi.fn(), calc: vi.fn(), lock: vi.fn(), decide: vi.fn(), retire: vi.fn(), refresh: vi.fn(), push: vi.fn(), toast: vi.fn() }));
+const m = vi.hoisted(() => ({ monthView: vi.fn(), listApprovalPeriods: vi.fn(), calc: vi.fn(), lock: vi.fn(), decide: vi.fn(), retire: vi.fn(), invoiceReview: vi.fn(), refresh: vi.fn(), push: vi.fn(), toast: vi.fn() }));
 vi.mock("server-only", () => ({}));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: m.refresh, push: m.push }) }));
 vi.mock("@/lib/toast", () => ({ fireToast: m.toast }));
-vi.mock("@/lib/queries/incentive-calc", () => ({ monthView: m.monthView, listApprovalPeriods: m.listApprovalPeriods, todayIST: () => "2026-11-17" }));
+vi.mock("@/lib/queries/incentive-calc", () => ({ monthView: m.monthView, listApprovalPeriods: m.listApprovalPeriods, todayIST: () => "2026-11-17", heldItemsOf: async () => [], negativeBalancesAtLock: async () => ({ ready: true, items: [] }), aSafeguardsReady: async () => true, carryBalances: async () => [] }));
 vi.mock("@/app/(masters)/master-setup/incentive-rules/calculation/actions", () => ({
   calculateCategoryAMonth: (...x: unknown[]) => m.calc(...x),
   setCategoryAMonthLocked: (...x: unknown[]) => m.lock(...x),
@@ -22,6 +22,8 @@ vi.mock("@/app/(masters)/master-setup/incentive-rules/calculation/actions", () =
   recordCategoryAPayout: vi.fn(),
   recordCategoryBDecision: (...x: unknown[]) => m.decide(...x),
   retireCategoryBDecision: (...x: unknown[]) => m.retire(...x),
+  recordCategoryBInvoiceReview: (...x: unknown[]) => m.invoiceReview(...x),
+  retireCategoryBInvoiceReview: vi.fn(),
 }));
 vi.mock("@/app/(masters)/master-setup/incentive-rules/actions", () => ({ saveIncentiveDraft: vi.fn(), submitIncentiveVersion: vi.fn(), approveIncentiveVersion: vi.fn(), rejectIncentiveVersion: vi.fn(), publishIncentiveVersion: vi.fn(), withdrawIncentiveVersion: vi.fn(), returnIncentiveVersionToDraft: vi.fn(), discardIncentiveVersion: vi.fn(), createIncentiveDraft: vi.fn(), createIncentiveProgram: vi.fn() }));
 
@@ -43,13 +45,12 @@ const NONE: IncentiveCalcRights = { view: false, run: false, lock: false, inputs
 const PROGRAM = "22222222-2222-4222-8222-222222222222";
 
 describe("navigation", () => {
-  it("the Incentive Tracker has Category B and Category B Approvals (admin-only in the rail); My Incentives doesn't claim them", () => {
+  it("Category B's screens sit under the one Incentive Management entry (admin-only in the rail); My Incentives doesn't claim them", () => {
     const tracker = MODULES.find((x) => x.label === "Incentive Tracker")!;
-    const b = tracker.items.find((i) => i.href === "/incentive/category-b")!;
-    const ba = tracker.items.find((i) => i.href === "/incentive/category-b/approvals")!;
-    expect([b.label, b.adminOnly, ba.label, ba.adminOnly]).toEqual(["Category B", true, "Category B Approvals", true]);
-    expect(tracker.items.find((i) => i.href === "/incentive")!.notMatch).toContain("/incentive/category-b");
-    expect(tracker.items.map((i) => i.href)).toEqual(expect.arrayContaining(["/incentive/category-a", "/incentive/category-a/approvals"]));
+    const manage = tracker.items.find((i) => i.href === "/incentive/manage")!;
+    expect([manage.label, manage.adminOnly]).toEqual(["Incentive Management", true]);
+    expect(manage.match).toContain("/incentive/category-b");
+    expect(tracker.items.find((i) => i.href === "/incentive")!.notMatch).toEqual(expect.arrayContaining(["/incentive/category-b", "/incentive/manage"]));
   });
 });
 
@@ -93,7 +94,7 @@ describe("the Category B calculation screen", () => {
     expect(m.monthView).toHaveBeenCalledWith(null, "2026-04-01", undefined, "B");
     const nav = within(screen.getByRole("navigation", { name: "Incentive calculation sections" }));
     expect(nav.getByRole("link", { name: "Calculation" }).getAttribute("href")).toBe("/incentive/category-b");
-    expect(nav.getByRole("link", { name: "Approvals" }).getAttribute("href")).toBe("/incentive/category-b/approvals");
+    expect(nav.getByRole("link", { name: "Incentive Approvals" }).getAttribute("href")).toBe("/incentive/category-b/approvals");
     expect(nav.getByRole("link", { name: /Review & decisions/ }).getAttribute("href")).toBe("/master-setup/incentive-rules/calculation/qualifications");
   });
   const BASE: CalcProps = {
@@ -164,6 +165,30 @@ describe("Review & decisions", () => {
     expect(record.disabled).toBe(false);
     fireEvent.click(record);
     await waitFor(() => expect(m.decide).toHaveBeenCalledWith({ orderId: props.rows[0]!.orderId, decision: "qualify", reason: "Checked: a new spare line for this customer" }));
+  });
+  it("an invoice with no Sales Order is listed as needing review; with 0140 it is reviewed (reason required) and then shows who and why", async () => {
+    const INV = "77777777-7777-4777-8777-777777777777";
+    const invoices = [{ invoiceId: INV, invoiceNo: "INV 9", invoiceDate: "2026-04-20", reason: "It names no Sales Order: needs an admin's review." }];
+    // Before 0140: listed, needs review, and nobody can record it here (it says how to resolve it instead).
+    const before = render(<BReview {...props} canDecide reviewInvoices={invoices} invoiceReviewsReady={false} invoiceReviews={[]} />);
+    const listed = within(screen.getByRole("listitem", { name: "Invoice INV 9" }));
+    expect(listed.getByText("Needs review")).toBeTruthy();
+    expect(screen.getByText(/needs database update 0140/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Not a Category B sale" })).toBeNull();
+    before.unmount();
+    m.invoiceReview.mockResolvedValue({ ok: true, id: "r1" });
+    const open = render(<BReview {...props} canDecide reviewInvoices={invoices} invoiceReviewsReady invoiceReviews={[]} />);
+    const go = screen.getByRole("button", { name: "Not a Category B sale" }) as HTMLButtonElement;
+    expect(go.disabled).toBe(true);
+    fireEvent.change(screen.getByLabelText("Reason for INV 9"), { target: { value: "Direct counter sale" } });
+    fireEvent.click(go);
+    await waitFor(() => expect(m.invoiceReview).toHaveBeenCalledWith({ invoiceId: INV, reason: "Direct counter sale" }));
+    open.unmount();
+    render(<BReview {...props} canDecide={false} reviewInvoices={invoices} invoiceReviewsReady invoiceReviews={[{ id: "r1", invoiceId: INV, decision: "not-category-b", reason: "Direct counter sale", byName: "Admin Two", at: "2026-06-02T00:00:00Z", retiredAt: null, retiredReason: null }]} />);
+    const done = within(screen.getByRole("listitem", { name: "Invoice INV 9" }));
+    expect(done.getByText("Reviewed: not a Category B sale")).toBeTruthy();
+    expect(done.getByText(/Direct counter sale \(Admin Two/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Retire review/ })).toBeNull(); // read-only without the permission
   });
   it("an existing decision shows who and why, and can be retired (with a reason) by an authorised admin", () => {
     render(<BReview {...props} canDecide rows={[{ ...props.rows[0]!, outcome: "qualified", override: { id: "o1", decision: "qualify", reason: "Checked", byName: "Admin One", at: "2026-06-01T00:00:00Z" }, history: [{ action: "record", note: "Checked", actorName: "Admin One", at: "2026-06-01T00:00:00Z", decision: "qualify" }] }]} />);

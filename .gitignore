@@ -93,3 +93,7 @@ ai-refs/
 
 # Employee attendance workbooks (real personal data) — never committed
 attendance-files/
+
+# Markdown documents (.md) at every directory level: kept on disk, not committed.
+# Files Git already tracks stay tracked until they are removed from the index separately.
+*.md

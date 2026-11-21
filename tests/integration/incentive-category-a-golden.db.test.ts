@@ -175,6 +175,8 @@ async function flow(migrations: string[]) {
   return snapshot;
 }
 
+// Regenerated only for a deliberate engine version change: category-a/1 → category-a/2 (2026-11-21), after comparing the
+// two snapshots — identical except the engine version (and the audit trail's payout date, which follows the calendar).
 if (process.env.GOLDEN_WRITE === "1") {
   const snap = await flow(BASE);
   if (!existsSync(dirname(FILE))) mkdirSync(dirname(FILE), { recursive: true });
@@ -191,6 +193,12 @@ describe("Category A golden master — services, approval and payout", () => {
     expect(results.map((r) => String(r.payable_paise))).toContain("92500");
     expect((golden.payoutLines as { amount_paise: string | number }[]).map((l) => String(l.amount_paise))).toEqual(["92500"]);
     expect((golden.adjustments as { kind: string; amount_paise: string | number }[]).map((a) => [a.kind, String(a.amount_paise)])).toEqual([["recalc-difference", "-16667"]]);
+    // October, the month the refund is carried into: created by the carry (row version 1), raised once BY the carry
+    // (Phase 1 — a concurrent recalculation of April working from an older snapshot then can't lock October and is
+    // retried, so the difference is never carried twice) and once when its own calculation is adopted: 3. The amounts
+    // are unchanged.
+    const periods = golden.periods as { id: string; row_version: number; status: string; current_run_id: string | null }[];
+    expect(periods.find((p) => p.id === "period:2026-10-01")).toMatchObject({ row_version: 3, status: "open", current_run_id: "run:3" });
   });
   for (const [name, migrations] of VARIANTS) {
     it(`is reproduced exactly on ${name}`, async () => {

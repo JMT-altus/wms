@@ -6,12 +6,12 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 vi.setConfig({ testTimeout: 30_000 });
 
 // Categories C–G on screen, with data access and server actions MOCKED (synthetic data).
-const m = vi.hoisted(() => ({ monthView: vi.fn(), calc: vi.fn(), push: vi.fn(), cDecide: vi.fn(), cRetire: vi.fn(), writeOff: vi.fn(), voidMonth: vi.fn() }));
+const m = vi.hoisted(() => ({ monthView: vi.fn(), calc: vi.fn(), push: vi.fn(), cDecide: vi.fn(), cRetire: vi.fn(), writeOff: vi.fn(), decideWriteOff: vi.fn(), voidMonth: vi.fn() }));
 vi.mock("server-only", () => ({}));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn(), push: m.push }) }));
 vi.mock("@/lib/toast", () => ({ fireToast: vi.fn() }));
-vi.mock("@/lib/queries/incentive-calc", () => ({ monthView: m.monthView, listApprovalPeriods: vi.fn(), todayIST: () => "2026-11-18" }));
-vi.mock("@/app/(masters)/master-setup/incentive-rules/calculation/actions", () => ({ calculateCategoryAMonth: (...x: unknown[]) => m.calc(...x), setCategoryAMonthLocked: vi.fn(), submitCategoryAMonth: vi.fn(), withdrawCategoryAMonth: vi.fn(), decideCategoryAMonth: vi.fn(), recordCategoryAPayout: vi.fn(), writeOffCategoryCarry: (...x: unknown[]) => m.writeOff(...x), recordCategoryCDecision: (...x: unknown[]) => m.cDecide(...x), retireCategoryCDecision: (...x: unknown[]) => m.cRetire(...x), recordCategoryBDecision: vi.fn(), retireCategoryBDecision: vi.fn(), voidCategoryCMonth: (...x: unknown[]) => m.voidMonth(...x) }));
+vi.mock("@/lib/queries/incentive-calc", () => ({ monthView: m.monthView, listApprovalPeriods: vi.fn(), todayIST: () => "2026-11-18", heldItemsOf: async () => [], negativeBalancesAtLock: async () => ({ ready: true, items: [] }), aSafeguardsReady: async () => true, carryBalances: async () => [] }));
+vi.mock("@/app/(masters)/master-setup/incentive-rules/calculation/actions", () => ({ calculateCategoryAMonth: (...x: unknown[]) => m.calc(...x), setCategoryAMonthLocked: vi.fn(), submitCategoryAMonth: vi.fn(), withdrawCategoryAMonth: vi.fn(), decideCategoryAMonth: vi.fn(), recordCategoryAPayout: vi.fn(), writeOffCategoryCarry: (...x: unknown[]) => m.writeOff(...x), decideCategoryCarryWriteOff: (...x: unknown[]) => m.decideWriteOff(...x), recordCategoryCDecision: (...x: unknown[]) => m.cDecide(...x), retireCategoryCDecision: (...x: unknown[]) => m.cRetire(...x), recordCategoryBDecision: vi.fn(), retireCategoryBDecision: vi.fn(), voidCategoryCMonth: (...x: unknown[]) => m.voidMonth(...x) }));
 
 import { MODULES } from "@/lib/nav-modules";
 import { CategoryACalculationScreen } from "@/components/admin/master/incentive-rules/calculation-screen";
@@ -27,10 +27,11 @@ const NONE: IncentiveCalcRights = { view: false, run: false, lock: false, inputs
 const PROGRAM = "22222222-2222-4222-8222-222222222222";
 
 describe("Categories C–G on screen", () => {
-  it("the Incentive Tracker has one admin-only entry for Categories C–G; Categories A and B keep theirs", () => {
+  it("the Incentive Tracker has one admin-only Incentive Management entry, which the C–G screens (and A's and B's) light", () => {
     const items = MODULES.find((x) => x.label === "Incentive Tracker")!.items;
-    expect(items.find((i) => i.href === "/incentive/category/c")).toMatchObject({ label: "Categories C–G", adminOnly: true });
-    expect(items.map((i) => i.href)).toEqual(expect.arrayContaining(["/incentive/category-a", "/incentive/category-b"]));
+    expect(items.find((i) => i.href === "/incentive/manage")).toMatchObject({ label: "Incentive Management", adminOnly: true });
+    expect(items.find((i) => i.href === "/incentive/manage")!.match).toEqual(expect.arrayContaining(["/incentive/category-a", "/incentive/category-b", "/incentive/category/"]));
+    expect(items.filter((i) => i.href.startsWith("/incentive/category"))).toEqual([]);
   });
   it("without an Incentive Calculation right nothing is read", async () => {
     render(await CategoryACalculationScreen({ me: { id: "x" } as never, rights: NONE, searchParams: {}, basePath: "/incentive/category/d", variant: "tracker", head: <h1>D</h1>, category: "D" }));
@@ -43,7 +44,7 @@ describe("Categories C–G on screen", () => {
     expect(m.monthView).toHaveBeenCalledWith(null, "2026-06-01", undefined, "E");
     const nav = within(screen.getByRole("navigation", { name: "Incentive calculation sections" }));
     expect(nav.getByRole("link", { name: "Calculation" }).getAttribute("href")).toBe("/incentive/category/e");
-    expect(nav.getByRole("link", { name: "Approvals" }).getAttribute("href")).toBe("/incentive/category/e/approvals");
+    expect(nav.getByRole("link", { name: "Incentive Approvals" }).getAttribute("href")).toBe("/incentive/category/e/approvals");
   });
   it("shows each credited item and why others weren't credited; Calculate sends the category", async () => {
     m.calc.mockResolvedValue({ ok: true, runId: "r", unchanged: false, adopted: true, status: "computed", outcome: "Adopted", problems: [] });
@@ -124,8 +125,27 @@ describe("Categories C–G on screen", () => {
     expect(region.queryByRole("button")).toBeNull();
     ro.unmount();
     render(<CarryLedger balances={balances} canWriteOff />);
-    // Only the open balance can be written off.
-    expect(screen.getAllByRole("button")).toHaveLength(1);
+    // Only the open balance can be written off — by REQUEST (a second person decides).
+    expect(screen.getAllByRole("button").map((b) => b.textContent)).toEqual(["Request write-off"]);
+  });
+  it("a write-off takes two people: the requester only sees it awaiting a second person; someone else approves or refuses it, each with a reason", async () => {
+    const { CarryLedger } = await import("@/components/admin/master/incentive-rules/carry-ledger");
+    const REQ = "66666666-6666-4666-8666-666666666666";
+    const pending = [{ lotId: "55555555-5555-4555-8555-555555555555", employeeId: "e", employeeName: "Rep", month: "2026-12-01", heldPaise: 300000, remainingPaise: 300000, entries: [], writeOffRequest: { requestId: REQ, amountPaise: 300000, byId: "requester", byName: "Payer One", reason: "Left the company", at: "2027-01-02T00:00:00Z" }, writeOffs: [{ kind: "request" as const, amountPaise: 300000, byName: "Payer One", reason: "Left the company", at: "2027-01-02T00:00:00Z" }] }];
+    const mine = render(<CarryLedger balances={pending} canWriteOff me="requester" />);
+    expect(screen.getByText(/Write-off of ₹3,000.00 requested by Payer One .* awaiting a second person/)).toBeTruthy();
+    expect(screen.getByText(/You requested it: a second person decides/)).toBeTruthy();
+    expect(screen.queryByRole("button")).toBeNull();
+    mine.unmount();
+    m.decideWriteOff.mockResolvedValue({ ok: true, amountPaise: 300000 });
+    render(<CarryLedger balances={pending} canWriteOff me="someone-else" />);
+    expect(screen.queryByRole("button", { name: /Request write-off/ })).toBeNull(); // one open request at a time
+    fireEvent.click(screen.getByRole("button", { name: /^Approve write-off/ }));
+    const confirm = screen.getByRole("button", { name: "Confirm" }) as HTMLButtonElement;
+    expect(confirm.disabled).toBe(true); // a reason is required
+    fireEvent.change(screen.getByLabelText(/Reason — Approve write-off/), { target: { value: "Exit settlement seen" } });
+    fireEvent.click(confirm);
+    await waitFor(() => expect(m.decideWriteOff).toHaveBeenCalledWith({ requestId: REQ, decision: "approve", reason: "Exit settlement seen" }));
   });
   it("Void month: only after a REQUIRED reason and an explicit confirmation; a voided month says so, with who, why and what was carried", async () => {
     const { VoidMonth } = await import("@/components/admin/master/incentive-rules/void-month");
@@ -200,8 +220,8 @@ describe("Categories C–G on screen", () => {
     );
     expect(screen.getByLabelText("Month status").textContent).toBe("Voided");
     expect((screen.getByRole("button", { name: /Calculate/ }) as HTMLButtonElement).disabled).toBe(true);
-    for (const name of [/Lock month/, /Reopen/, /Submit for approval/, /Approve/, /Reject/, /Record payout/, /Withdraw/]) expect(screen.queryByRole("button", { name })).toBeNull();
-    expect(within(screen.getByRole("region", { name: "Approval and payout" })).getByText(/Voided — it is never submitted, approved or paid/)).toBeTruthy();
+    for (const name of [/Lock month/, /Reopen/, /Submit for Incentive Approval/, /Approve/, /Reject/, /Record payout/, /Withdraw/]) expect(screen.queryByRole("button", { name })).toBeNull();
+    expect(within(screen.getByRole("region", { name: "Incentive Approval and payout" })).getByText(/Voided — it is never submitted, approved or paid/)).toBeTruthy();
   });
   it("My Incentives: a salesperson's own approved Category D, apart from the old engine's historical D", () => {
     render(<MyCategoryA category="D" period="2026-06" ready months={[{ month: "2026-06-01", programCode: "SALES", programName: "Sales team", status: "paid", amountPaise: 1_000_00, releaseOn: "2026-07-01", paidOn: "2026-07-01", payoutReference: "PAY-D", explanation: [] }]} awaiting={[]} historical={[{ lineCode: "D.1", category: "D", amountPaise: 500_00, explanation: "D.1 · LEADS — old engine.", entryType: "accrual" }]} />);

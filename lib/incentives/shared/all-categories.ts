@@ -23,6 +23,27 @@ export interface OtherCategoryAmount {
   fixed: boolean;
 }
 
+/** What a stored per-salesperson result says about the shared limit (any engine's result row). */
+export interface StoredShare {
+  earnedPaise: number;
+  beforeAllCategoriesPaise?: number;
+  capConsumedPaise?: number;
+  sharedPrePaise?: number;
+}
+/**
+ * How one category's adopted result counts against the shared limit, for the OTHER categories' calculations — PURE.
+ * Only what a category RELEASES uses the limit: a month held below its smallest amount (capConsumedPaise 0) takes
+ * nothing; a released month takes its own earned amount and the balances carried forward it releases (category-c/4
+ * records that as sharedPrePaise / capConsumedPaise); a result from before those fields counts as before
+ * (its amount before the limit, and its final figure). Never negative.
+ */
+export function sharedShareOf(e: StoredShare): { prePaise: number; finalPaise: number } {
+  const held = e.capConsumedPaise === 0;
+  const pre = e.sharedPrePaise ?? (held ? 0 : (e.beforeAllCategoriesPaise ?? e.earnedPaise));
+  const fin = e.capConsumedPaise ?? e.earnedPaise;
+  return { prePaise: Math.max(0, pre), finalPaise: Math.max(0, fin) };
+}
+
 export interface AllCategoriesIn {
   /** The limit (paise), or null for "No limit". */
   capPaise: number | null;

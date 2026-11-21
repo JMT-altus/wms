@@ -10,7 +10,7 @@ import { EmptyState, PageHead } from "@/components/incentive/empty-state";
 import { ActivityFeed } from "@/components/incentive/activity-feed";
 import { getRepAudit } from "@/lib/queries/incentive-admin";
 import { myCategoryA, myCategoryB } from "@/lib/queries/incentive-calc";
-import { authoritativeCategories, newCategoryAAuthoritative, newEngineAuthoritative } from "@/lib/incentives/load";
+import { authoritativeCategories, newCategoryACovered, newEngineAuthoritative } from "@/lib/incentives/load";
 import { MyCategoryA } from "@/components/incentive/my-category-a";
 
 export const dynamic = "force-dynamic";
@@ -57,20 +57,22 @@ export default async function IncentiveOverviewPage({ searchParams }: PageProps)
     getMonthlySales(me.id, period),
     getRepAudit(me.id, 8),
     myCategoryA(me.id),
-    newCategoryAAuthoritative(period),
+    // Whether the NEW Category A covers this person this month (their programme's eligibility), not anyone at all.
+    newCategoryACovered(period).then((covered) => covered?.has(me.id) === true),
     myCategoryB(me.id),
     newEngineAuthoritative("B", period),
   ]);
   // Categories C–G: the person's own approved / paid figures from the new engine, category by category.
   const newer = await authoritativeCategories(period);
   const extra = await Promise.all((["C", "D", "E", "F", "G"] as const).map(async (c) => ({ c, mine: await myCategoryA(me.id, undefined, c), authoritative: newer.has(c) })));
-  // Category A is shown on its own (new authoritative engine + the old engine's historical lines); so is Category B
-  // from its cut-over month on. Everything else on the page is the old engine's. Nothing is added across them.
-  const oldA = summary.lines.filter((l) => l.category === "A");
+  // Category A is shown on its own from ITS cut-over month for this person (new authoritative engine + the old engine's
+  // earlier lines, for reference); so is Category B from its cut-over month on. Before that, the old engine's Category A
+  // IS the amount paid: it is counted with the other categories, never labelled historical. Nothing is added twice.
+  const oldA = newA ? summary.lines.filter((l) => l.category === "A") : [];
   const oldB = newB ? summary.lines.filter((l) => l.category === "B") : [];
-  const separate = new Set(["A", ...(newB ? ["B"] : []), ...[...newer].filter((c) => c !== "A")]);
+  const separate = new Set([...(newA ? ["A"] : []), ...(newB ? ["B"] : []), ...[...newer].filter((c) => c !== "A")]);
   const otherLines = summary.lines.filter((l) => !separate.has(l.category));
-  const remaining = ["B", "C", "D", "E", "F", "G"].filter((c) => !separate.has(c));
+  const remaining = ["A", "B", "C", "D", "E", "F", "G"].filter((c) => !separate.has(c));
   const others = remaining.length ? `Categories ${remaining.length > 1 ? `${remaining[0]}–${remaining[remaining.length - 1]}` : remaining[0]}` : "Other categories";
   const otherTotal = otherLines.reduce((s, l) => s + l.amountPaise, 0);
   const chip = STATUS_CHIP[summary.status] ?? STATUS_CHIP.open!;
@@ -98,7 +100,7 @@ export default async function IncentiveOverviewPage({ searchParams }: PageProps)
           <div>
             <div className="text-ink-subtle text-[12.5px] font-bold uppercase tracking-[0.18em]">Earned this month · {others}</div>
             <div className="mt-1" style={{ fontFamily: "var(--font-display), sans-serif", fontWeight: 800, fontSize: 52, lineHeight: 1, letterSpacing: "-0.03em", fontVariantNumeric: "tabular-nums" }}>{formatInrPaise(otherTotal)}</div>
-            <div className="mt-1 text-ink-subtle text-[12px] font-semibold">{newB ? "Categories A and B are shown separately below." : "Category A is shown separately below."}</div>
+            <div className="mt-1 text-ink-subtle text-[12px] font-semibold">{newA && newB ? "Categories A and B are shown separately below." : newA ? "Category A is shown separately below." : newB ? "Category B is shown separately below." : "Category A is the old engine's this month, counted here."}</div>
           </div>
           <span className="inline-flex items-center rounded-full px-3.5 py-1.5" style={{ background: chip.bg, color: chip.fg, fontSize: 11.5, fontWeight: 800, letterSpacing: "0.14em" }}>{chip.label}</span>
         </div>
@@ -124,10 +126,10 @@ export default async function IncentiveOverviewPage({ searchParams }: PageProps)
         </div>
       )}
 
-      <MyCategoryA period={period} ready={categoryA.ready} months={categoryA.months} awaiting={categoryA.awaiting} historical={oldA} />
+      <MyCategoryA period={period} ready={categoryA.ready} months={categoryA.months} awaiting={categoryA.awaiting} historical={oldA} oldEngineMonth={!newA} />
       {(newB || categoryB.months.length > 0) && <MyCategoryA category="B" period={period} ready={categoryB.ready} months={categoryB.months} awaiting={categoryB.awaiting} historical={oldB} oldEngineMonth={!newB} />}
       {extra.filter((x) => x.authoritative || x.mine.months.length > 0).map((x) => (
-        <MyCategoryA key={x.c} category={x.c} period={period} ready={x.mine.ready} months={x.mine.months} awaiting={x.mine.awaiting} historical={x.authoritative ? summary.lines.filter((l) => l.category === x.c) : []} oldEngineMonth={!x.authoritative} />
+        <MyCategoryA key={x.c} category={x.c} period={period} ready={x.mine.ready} months={x.mine.months} awaiting={x.mine.awaiting} voided={x.mine.voided} historical={x.authoritative ? summary.lines.filter((l) => l.category === x.c) : []} oldEngineMonth={!x.authoritative} />
       ))}
 
       {atRisk.length > 0 && (

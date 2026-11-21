@@ -100,7 +100,7 @@
    "as_of": "<time>",
    "config_version_id": "version:1",
    "config_version_no": 1,
-   "engine_version": "category-a/1",
+   "engine_version": "category-a/2",
    "status": "computed",
    "adopted": true,
    "outcome": "Adopted: the month's first calculation.",
@@ -1348,7 +1348,7 @@
      "eligibility.thresholdComparison": "atLeast",
      "caps.perEmployeeAllCategoriesMonth": 1825000
     },
-    "engineVersion": "category-a/1",
+    "engineVersion": "category-a/2",
     "configVersionId": "version:1",
     "configVersionNo": 1
    },
@@ -1363,7 +1363,7 @@
    "as_of": "<time>",
    "config_version_id": "version:1",
    "config_version_no": 1,
-   "engine_version": "category-a/1",
+   "engine_version": "category-a/2",
    "status": "computed",
    "adopted": false,
    "outcome": "Kept for the record, not adopted: the month is locked. The difference is carried into 2026-10.",
@@ -2621,7 +2621,7 @@
      "eligibility.thresholdComparison": "atLeast",
      "caps.perEmployeeAllCategoriesMonth": 1825000
     },
-    "engineVersion": "category-a/1",
+    "engineVersion": "category-a/2",
     "configVersionId": "version:1",
     "configVersionNo": 1
    },
@@ -2636,7 +2636,7 @@
    "as_of": "<time>",
    "config_version_id": "version:1",
    "config_version_no": 1,
-   "engine_version": "category-a/1",
+   "engine_version": "category-a/2",
    "status": "computed",
    "adopted": true,
    "outcome": "Adopted: the month's first calculation.",
@@ -2922,7 +2922,7 @@
      "eligibility.thresholdComparison": "atLeast",
      "caps.perEmployeeAllCategoriesMonth": 1825000
     },
-    "engineVersion": "category-a/1",
+    "engineVersion": "category-a/2",
     "configVersionId": "version:1",
     "configVersionNo": 1
    },
@@ -2954,7 +2954,7 @@
    "month": "<time>",
    "status": "open",
    "current_run_id": "run:3",
-   "row_version": 2,
+   "row_version": 3,
    "locked_by_id": null,
    "approved_by_id": null,
    "paid_by_id": null,
@@ -4206,7 +4206,7 @@
    "detail": {
     "month": "2026-04-01",
     "runId": "run:1",
-    "paidOn": "2026-11-17",
+    "paidOn": "2026-11-21",
     "reference": "PAY-APR",
     "totalPaise": 92500
    }

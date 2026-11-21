@@ -7,6 +7,23 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 // the tracker's approved submissions, separate monthly approval and payout per category, a salesperson's own figures
 // only once approved/paid, and the old engine's per-category cut-over. SYNTHETIC data only (the old engine's PDF values
 // used as TEST values); only the session is mocked.
+/**
+ * Runs `fn` with the clock on a simulated day (from noon in India), for a calculation AS OF that day: the service refuses
+ * a calculation date in the future (Phase 1), and these suites simulate months that haven't come yet. Only `Date` is
+ * faked, only for the call; each call starts one minute later than the one before (and the clock keeps moving), so
+ * every run's own time stays in order. Real time is restored afterwards, whatever happens.
+ */
+let simulatedCalls = 0;
+async function onDay<T>(day: string, fn: () => Promise<T>): Promise<T> {
+  vi.useFakeTimers({ toFake: ["Date"], shouldAdvanceTime: true });
+  vi.setSystemTime(new Date(Date.parse(`${day}T12:00:00+05:30`) + ++simulatedCalls * 60_000));
+  try {
+    return await fn();
+  } finally {
+    vi.useRealTimers();
+  }
+}
+
 const h = vi.hoisted(() => {
   process.env.DATABASE_URL = "postgres://nobody:nothing@db.invalid:1/never";
   return { db: null as unknown, me: null as null | { id: string; email: string; name: string; isActive: boolean; isAdmin: boolean; departmentId: null; role: string } };
@@ -34,6 +51,7 @@ import * as schema from "@/db/schema";
 import { createTestDb } from "./_pglite";
 import { completeConfig } from "../fixtures/incentive-config";
 import type { CategoryCode, SettingValue } from "@/lib/incentives/rules-config/spec";
+import { ENGINE_VERSIONS } from "@/lib/incentives/categories/types";
 
 type Pg = Awaited<ReturnType<typeof createTestDb>>["pg"];
 let pg: Pg;
@@ -42,10 +60,10 @@ let calc: typeof import("@/lib/queries/incentive-calc");
 let rules: typeof import("@/lib/queries/incentive-rules");
 let load: typeof import("@/lib/incentives/load");
 let incentives: typeof import("@/lib/queries/incentives");
-const PEOPLE = ["author", "checker", "runner", "locker", "a1", "payer", "rep", "other", "plainAdmin", "reviewer", "voider"] as const;
+const PEOPLE = ["author", "checker", "runner", "locker", "a1", "payer", "payer2", "rep", "other", "plainAdmin", "reviewer", "voider"] as const;
 type Who = (typeof PEOPLE)[number];
 const who = {} as Record<Who, string>;
-const GRANTS: Partial<Record<Who, string[]>> = { runner: ["run"], locker: ["lock", "submit"], a1: ["approve"], payer: ["pay"], reviewer: ["review", "approve"], voider: ["void"] };
+const GRANTS: Partial<Record<Who, string[]>> = { runner: ["run"], locker: ["lock", "submit"], a1: ["approve"], payer: ["pay"], payer2: ["pay"], reviewer: ["review", "approve"], voider: ["void"] };
 const actor = (k: Who) => ({ id: who[k], name: k });
 const signIn = (k: Who) => {
   h.me = { id: who[k], email: `${k}@example.test`, name: k, isActive: true, isAdmin: k !== "rep" && k !== "other", departmentId: null, role: "both" };
@@ -56,6 +74,7 @@ const fp = async (sql: string) => (await one<{ f: string }>(`select count(*)::te
 const MIG = (f: string) => readFileSync(resolve(__dirname, `../../db/migrations/${f}`), "utf8");
 const ROLLBACK = readFileSync(resolve(__dirname, "../../db/rollback/0135_incentive_categories_c_g.rollback.sql"), "utf8");
 const ROLLBACK_0136 = readFileSync(resolve(__dirname, "../../db/rollback/0136_incentive_category_c_review.rollback.sql"), "utf8");
+const ROLLBACK_0141 = readFileSync(resolve(__dirname, "../../db/rollback/0141_incentive_carry_writeoffs.rollback.sql"), "utf8");
 const RS = (r: number) => Math.round(r * 100);
 const JUN = "2026-06-01";
 let programId = "";
@@ -186,7 +205,30 @@ describe("migration 0136 (Category C corrections) and its rollback", () => {
   });
 });
 
+/** A Google review registered and verified (0137) by the reviewer — published on the 10th of `month`, 5★. */
+async function verifiedReview(month: string, n: number, words: number, named: string[], claimFor: string | null) {
+  const r = (await one<{ id: string }>(`insert into incentive_f_reviews (google_review_id, first_url, created_by_name) values ($1, $2, 'fixture') returning id`, [`ChCG${month.replace("-", "")}N${n}xxxx`, `https://www.google.com/maps/reviews/cg-${month}-${n}`])).id;
+  const text = Array.from({ length: words }, () => "good").join(" ");
+  const ids = `{${named.join(",")}}`;
+  const names = `{${named.map(() => "rep").join(",")}}`;
+  // 0138: a Google review (F.1) that appreciates the salespeople it names (F.4: the reward doubled).
+  await pg.query(`insert into incentive_f_decisions (review_id, kind, testimonial_kind, rating, published_on, review_month, review_text, named_employee_ids, named_employee_names, appreciated_employee_ids, appreciated_employee_names, reason, created_by_id, created_by_name) values ($1, 'verify', 'google_review', 5, $2::date, date_trunc('month', $2::date)::date, $3, $4::uuid[], $5::text[], $4::uuid[], $5::text[], 'fixture', $6, 'reviewer')`, [r, `${month}-10`, text, ids, names, who.reviewer]);
+  if (claimFor) await pg.query(`insert into incentive_f_decisions (review_id, kind, credited_employee_id, credited_employee_name, basis, reason, created_by_id, created_by_name) values ($1, 'attribute', $2, 'rep', 'claim', 'fixture claim', $3, 'reviewer')`, [r, claimFor, who.reviewer]);
+}
+
 describe("configuration", () => {
+  beforeAll(async () => {
+    // Category F needs 0137 (its registry and settings), 0138 (email / letterhead testimonials, F.4 appreciation) and
+    // 0139 (the email / letterhead identity, write-off history).
+    await pg.exec(MIG("0137_incentive_category_f_reviews.sql"));
+    await pg.exec(MIG("0138_incentive_category_f_testimonials.sql"));
+    await pg.exec(MIG("0139_incentive_category_f_identity.sql"));
+    // 0141 (prepared, NOT applied anywhere else): carry-forward write-offs need a second person.
+    await pg.exec(MIG("0141_incentive_carry_writeoffs.sql"));
+    await pg.exec(MIG("0141_incentive_carry_writeoffs.sql")); // safe to re-run
+    await pg.exec(ROLLBACK_0141); // nothing recorded yet: removed…
+    await pg.exec(MIG("0141_incentive_carry_writeoffs.sql")); // …and applied again
+  });
   it("a Category D draft from the reference template has the PDF values; G's template is empty and can't be submitted", async () => {
     const d = await rules.createDraft(actor("author"), { programId, category: "D", startFrom: "reference" });
     if (!d.ok) throw new Error(d.error);
@@ -211,7 +253,10 @@ describe("calculating June 2026", () => {
     await pg.query(`insert into lead_batches (employee_id, period_month, lead_count, profiled, review_status) values ($1, $2, 25, true, 'approved'), ($1, $2, 40, false, 'approved'), ($1, $2, 30, true, 'pending')`, [who.rep, m]);
     await pg.query(`insert into lead_conversions (employee_id, period_month, converted_count, review_status) values ($1, $2, 11, 'approved')`, [who.rep, m]);
     await pg.query(`insert into client_meetings (employee_id, period_month, potential_band, awarded_paise, review_status) values ($1, $2, 'high', $3, 'approved'), ($1, $2, 'low', 0, 'approved')`, [who.rep, m, RS(1_500)]);
+    // The old engine's testimonials (still recorded) earn nothing in Category F/2; verified Google reviews do (0137).
     await pg.query(`insert into testimonials (employee_id, period_month, kind, word_count, star_rating, names_team_member, evidence_url, review_status) values ($1, $2, 'google_review', 60, 5, false, 'x.png', 'approved'), ($1, $2, 'letterhead', 0, null, true, null, 'approved'), ($1, $2, 'google_review', 20, 5, false, 'y.png', 'approved')`, [who.rep, m]);
+    await verifiedReview(m, 1, 60, [who.rep], null);
+    await verifiedReview(m, 2, 20, [who.rep], null);
     // Forms: a new customer's first three orders (Apr, May, Jun 2026 — ₹1 L taxable each), invoiced and paid on time.
     const cust = (await one<{ id: string }>(`insert into customer_masters (name, sales_rep_id, credit_period_days) values ('New Co', $1, 30) returning id`, [who.rep])).id;
     const batch = (await one<{ id: string }>(`insert into tally_import_batches (category, file_name, file_hash) values ('sales-orders', 't.xlsx', 'x') returning id`)).id;
@@ -238,11 +283,13 @@ describe("calculating June 2026", () => {
       expect(r, c).toMatchObject({ ok: true, status: "computed", adopted: true });
       payable[c] = (await one<{ p: string }>(`select r.payable_paise::text p from incentive_calc_results r join incentive_calc_periods per on per.current_run_id = r.run_id where per.category_code = $1`, [c])).p;
     }
-    // C: 1% × ₹3,00,000 = ₹3,000. D: 25 profiled → 2 × ₹250 + 11 enquiries → 2 × ₹250 = ₹1,000. E: ₹1,500 → ₹1,000 and
-    // ₹0 → ₹250 = ₹1,250, limited by the template's PDF monthly limit for E to ₹1,000. F: ₹100 + letterhead ₹150 × 2 =
-    // ₹400 (the 20-word review is left out).
-    expect(payable).toEqual({ C: String(RS(3_000)), D: String(RS(1_000)), E: String(RS(1_000)), F: String(RS(400)) });
-    expect(Number((await one<{ n: number }>(`select count(*)::int n from incentive_calc_items`)).n)).toBe(1 + 2 + 2 + 2);
+    // C: 1% × ₹3,00,000 = ₹3,000. D: 25 profiled → 2 × ₹250 + 11 enquiries → 2 × ₹250 = ₹1,000. E (category-e/2):
+    // ₹1,500 → ₹1,000; the ₹0 award is LEFT OUT (it used to be raised to ₹250) = ₹1,000, within the template's PDF
+    // monthly limit for E. F (Google reviews, F/2): one verified review naming the salesperson, ₹100 (TEST base) + ₹100
+    // named = ₹200; the 20-word review is left out; the old engine's testimonials earn nothing here.
+    expect(payable).toEqual({ C: String(RS(3_000)), D: String(RS(1_000)), E: String(RS(1_000)), F: String(RS(200)) });
+    expect(Number((await one<{ n: number }>(`select count(*)::int n from incentive_calc_items`)).n)).toBe(1 + 2 + 1 + 1);
+    expect((await calc.monthView(programId, JUN, undefined, "E")).excludedNotes!.map((x) => x.message).join(" ")).toMatch(/award of ₹0 .* never raised to the smallest award/);
     const view = await calc.monthView(programId, JUN, undefined, "F");
     expect(view.excludedNotes!.map((x) => x.message).join(" ")).toMatch(/20 words/);
   });
@@ -270,9 +317,23 @@ describe("approval, payout and the salesperson's own figures", () => {
     signIn("payer");
     expect(await act.recordCategoryAPayout({ programId, month: JUN, rowVersion: await rv("D"), reference: "PAY-D-JUN", paidOn: release, amountPaise: RS(1_000), note: null, category: "D" })).toMatchObject({ ok: true });
     expect((await calc.myCategoryA(who.rep, undefined, "D")).months).toEqual([expect.objectContaining({ status: "paid", amountPaise: RS(1_000), payoutReference: "PAY-D-JUN" })]);
-    expect(await calc.myCategoryA(who.other, undefined, "D")).toEqual({ ready: true, months: [], awaiting: [] });
+    expect(await calc.myCategoryA(who.other, undefined, "D")).toEqual({ ready: true, months: [], awaiting: [], voided: [] });
     // The other categories are still open: their months haven't moved.
     expect(await q1(`select category_code, status from incentive_calc_periods where month = $1 order by 1`, [JUN])).toEqual([{ category_code: "C", status: "open" }, { category_code: "D", status: "paid" }, { category_code: "E", status: "open" }, { category_code: "F", status: "open" }]);
+  });
+  it("whoever approved a submission a month counts (here: a lead batch) never approves or rejects that month — another approver does", async () => {
+    const AUG = "2026-08-01";
+    await pg.query(`insert into lead_batches (employee_id, period_month, lead_count, profiled, review_status, reviewed_by_id, reviewed_at) values ($1, '2026-08', 10, true, 'approved', $2, now())`, [who.rep, who.reviewer]);
+    signIn("runner");
+    expect(await act.calculateCategoryAMonth({ programId, month: AUG, asOf: "2026-09-30", category: "D" })).toMatchObject({ ok: true, status: "computed", adopted: true });
+    signIn("locker");
+    expect(await act.setCategoryAMonthLocked({ programId, month: AUG, lock: true, rowVersion: await rv("D", AUG), category: "D" })).toMatchObject({ ok: true });
+    expect(await act.submitCategoryAMonth({ programId, month: AUG, rowVersion: await rv("D", AUG), category: "D" })).toMatchObject({ ok: true });
+    signIn("reviewer");
+    for (const decision of ["approve", "reject"] as const)
+      expect(await act.decideCategoryAMonth({ programId, month: AUG, rowVersion: await rv("D", AUG), decision, reason: "x", category: "D" })).toMatchObject({ ok: false, error: expect.stringMatching(/You approved or rejected a submission counted in this month's calculation, so you can't approve or reject it/) });
+    signIn("a1");
+    expect(await act.decideCategoryAMonth({ programId, month: AUG, rowVersion: await rv("D", AUG), decision: "approve", reason: null, category: "D" })).toMatchObject({ ok: true, status: "approved" });
   });
 });
 
@@ -329,7 +390,9 @@ describe("the all-categories limit shared between categories", () => {
     await publish("E", { ...TEST.E!, "caps.perEmployeeAllCategoriesMonth": RS(1_200), "caps.allCategoriesPolicy": "proportional" }, "2026-07-01");
     const JUL = "2026-07-01";
     await pg.query(`insert into client_meetings (employee_id, period_month, potential_band, awarded_paise, review_status) values ($1, '2026-07', 'high', $2, 'approved')`, [who.rep, RS(1_000)]);
-    await pg.query(`insert into testimonials (employee_id, period_month, kind, word_count, star_rating, names_team_member, evidence_url, review_status) values ($1, '2026-07', 'letterhead', 0, null, true, null, 'approved')`, [who.rep]);
+    // F: a verified review appreciating the salesperson it names (F.1 ₹100 × 2, F.4) and one credited by a confirmed claim (₹100) = ₹300.
+    await verifiedReview("2026-07", 1, 60, [who.rep], null);
+    await verifiedReview("2026-07", 2, 60, [], who.rep);
     signIn("runner");
     // E first (F not yet calculated: E keeps its ₹1,000), then F (₹300; together ₹1,300 > ₹1,200).
     expect(await act.calculateCategoryAMonth({ programId, month: JUL, asOf: "2026-08-31", category: "E" })).toMatchObject({ ok: true, adopted: true });
@@ -351,6 +414,16 @@ describe("the all-categories limit shared between categories", () => {
     signIn("locker");
     expect(await act.setCategoryAMonthLocked({ programId, month: JUL, lock: true, rowVersion: await rv("E", JUL), category: "E" })).toMatchObject({ ok: true });
     expect(await act.submitCategoryAMonth({ programId, month: JUL, rowVersion: await rv("E", JUL), category: "E" })).toMatchObject({ ok: true });
+  });
+  it("…and is checked again at APPROVAL: F changes after E was submitted, so E's approval is refused until it is rejected and recalculated", async () => {
+    const JUL = "2026-07-01";
+    await verifiedReview("2026-07", 3, 60, [who.rep], null);
+    signIn("runner");
+    expect(await act.calculateCategoryAMonth({ programId, month: JUL, asOf: "2026-08-31", category: "F" })).toMatchObject({ ok: true, adopted: true });
+    signIn("a1");
+    expect(await act.decideCategoryAMonth({ programId, month: JUL, rowVersion: await rv("E", JUL), decision: "approve", reason: null, category: "E" })).toMatchObject({ ok: false, error: expect.stringMatching(/other categories' figures .* changed .* Reject it so it is recalculated and submitted again\. Nothing was approved/) });
+    expect((await one<{ status: string }>(`select status from incentive_calc_periods where category_code = 'E' and month = $1`, [JUL])).status).toBe("submitted");
+    expect(await act.decideCategoryAMonth({ programId, month: JUL, rowVersion: await rv("E", JUL), decision: "reject", reason: "F changed: recalculate E's share", category: "E" })).toMatchObject({ ok: true, status: "locked" });
   });
 });
 
@@ -479,7 +552,7 @@ describe("Category C: below-minimum carry-forward ledger, shared limit, document
   const per = async (cat: string, month: string) => one<{ id: string; row_version: number; release_on: string | null; current_run_id: string }>(`select id, row_version, release_on::text, current_run_id from incentive_calc_periods where program_id = $1 and category_code = $2 and month = $3`, [pid, cat, month]);
   const calcIn = async (cat: string, month: string) => {
     signIn("runner");
-    const r = await act.calculateCategoryAMonth({ programId: pid, month, asOf: ASOF, category: cat as never });
+    const r = await onDay(ASOF, () => act.calculateCategoryAMonth({ programId: pid, month, asOf: ASOF, category: cat as never }));
     if (!r.ok && !/saved at the same moment/.test(r.error)) throw new Error(`calculation refused: ${r.error}`);
     return r;
   };
@@ -638,16 +711,55 @@ describe("Category C: below-minimum carry-forward ledger, shared limit, document
     await expect(use("offset", -1)).rejects.toThrow(/duplicate key|used only once/);
   });
 
-  it("an authorised write-off needs the payout right and a reason, and is recorded with both", async () => {
+  it("a write-off takes TWO people with the payout right (0141): a request with a reason, then another person's approval or refusal with a reason; every step is kept", async () => {
     const p = await per("C", JAN);
     const lot = (await one<{ id: string }>(`insert into incentive_calc_carry (program_id, category_code, employee_id, employee_name, month, kind, amount_paise, period_id, run_id, created_by_name) values ($1, 'C', $2, 'other', $3, 'held', 70000, $4, $5, 'fixture') returning id`, [pid, who.other, JAN, p.id, p.current_run_id])).id;
     signIn("runner");
     await expect(act.writeOffCategoryCarry({ lotId: lot, reason: "x" })).rejects.toThrow("Forbidden");
     signIn("payer");
     expect(await act.writeOffCategoryCarry({ lotId: lot, reason: "  " })).toEqual({ ok: false, error: expect.stringMatching(/Give the reason/) });
-    expect(await act.writeOffCategoryCarry({ lotId: lot, reason: "Left the company; balance forgone as agreed" })).toEqual({ ok: true, amountPaise: 70000 });
+    const first = await act.writeOffCategoryCarry({ lotId: lot, reason: "Left the company; balance forgone as agreed" });
+    expect(first).toEqual({ ok: true, requestId: expect.any(String), amountPaise: 70000 });
+    // Nothing is written off yet; a second request for the same balance waits for the first one's decision.
+    expect(await q1(`select kind from incentive_calc_carry where lot_id = $1`, [lot])).toEqual([]);
+    expect(await act.writeOffCategoryCarry({ lotId: lot, reason: "again" })).toEqual({ ok: false, error: expect.stringMatching(/already awaits its second approval/) });
+    const req1 = (first as { requestId: string }).requestId;
+    // The requester never decides their own request — service and database.
+    expect(await act.decideCategoryCarryWriteOff({ requestId: req1, decision: "approve", reason: "mine" })).toEqual({ ok: false, error: expect.stringMatching(/You requested this write-off: a second person/) });
+    await expect(pg.query(`insert into incentive_calc_carry_writeoffs (kind, request_id, lot_id, employee_id, employee_name, amount_paise, reason, created_by_id, created_by_name) values ('refuse', $1, $2, $3, 'other', 70000, 'self', $4, 'payer')`, [req1, lot, who.other, who.payer])).rejects.toThrow(/never whoever requested it/);
+    signIn("runner");
+    await expect(act.decideCategoryCarryWriteOff({ requestId: req1, decision: "approve", reason: "x" })).rejects.toThrow("Forbidden");
+    // A second person refuses it (with the reason): nothing is written off.
+    signIn("payer2");
+    expect(await act.decideCategoryCarryWriteOff({ requestId: req1, decision: "refuse", reason: " " })).toEqual({ ok: false, error: expect.stringMatching(/Give the reason for your decision/) });
+    expect(await act.decideCategoryCarryWriteOff({ requestId: req1, decision: "refuse", reason: "Check the exit settlement first" })).toEqual({ ok: true, amountPaise: 0 });
+    expect(await act.decideCategoryCarryWriteOff({ requestId: req1, decision: "approve", reason: "changed my mind" })).toEqual({ ok: false, error: expect.stringMatching(/already decided/) });
+    expect(await q1(`select kind from incentive_calc_carry where lot_id = $1`, [lot])).toEqual([]);
+    // Asked again (now by payer2), approved by the other person: written off once, with both reasons.
+    const second = await act.writeOffCategoryCarry({ lotId: lot, reason: "Exit settlement signed; balance forgone" });
+    expect(second).toMatchObject({ ok: true, amountPaise: 70000 });
+    signIn("payer");
+    expect(await act.decideCategoryCarryWriteOff({ requestId: (second as { requestId: string }).requestId, decision: "approve", reason: "Settlement seen" })).toEqual({ ok: true, amountPaise: 70000 });
+    expect(await q1(`select kind, amount_paise::int a, created_by_name, reason from incentive_calc_carry where lot_id = $1`, [lot])).toEqual([{ kind: "written-off", a: -70000, created_by_name: "payer", reason: "Exit settlement signed; balance forgone (requested by payer2; approved by payer: Settlement seen)" }]);
+    expect(await q1(`select kind, amount_paise::int a, created_by_name from incentive_calc_carry_writeoffs where lot_id = $1 order by created_at`, [lot])).toEqual([
+      { kind: "request", a: 70000, created_by_name: "payer" },
+      { kind: "refuse", a: 70000, created_by_name: "payer2" },
+      { kind: "request", a: 70000, created_by_name: "payer2" },
+      { kind: "approve", a: 70000, created_by_name: "payer" },
+    ]);
+    expect((await q1<{ action: string }>(`select action from incentive_audit where entity_type = 'incentive-calc-carry' and entity_id = $1 order by created_at`, [lot])).map((x) => x.action)).toEqual(["carry-write-off-requested", "carry-write-off-refused", "carry-write-off-requested", "carry-write-off-approved"]);
+    const shown = (await calc.carryBalances(pid, "C")).find((b) => b.lotId === lot)!;
+    expect(shown).toMatchObject({ remainingPaise: 0, writeOffRequest: null });
+    expect(shown.writeOffs!.map((w) => w.kind)).toEqual(["request", "refuse", "request", "approve"]);
+    signIn("payer2");
     expect(await act.writeOffCategoryCarry({ lotId: lot, reason: "again" })).toEqual({ ok: false, error: "Nothing of that balance is left." });
-    expect(await q1(`select kind, amount_paise::int a, reason, created_by_name from incentive_calc_carry where lot_id = $1`, [lot])).toEqual([{ kind: "written-off", a: -70000, reason: "Left the company; balance forgone as agreed", created_by_name: "payer" }]);
+    // History is append-only; and the ledger never takes a write-off without an approved request behind it (0141).
+    await expect(pg.query(`update incentive_calc_carry_writeoffs set reason = 'changed' where lot_id = $1`, [lot])).rejects.toThrow(/append-only/);
+    await expect(pg.query(`delete from incentive_calc_carry_writeoffs where lot_id = $1`, [lot])).rejects.toThrow(/append-only/);
+    const other = (await one<{ id: string }>(`insert into incentive_calc_carry (program_id, category_code, employee_id, employee_name, month, kind, amount_paise, period_id, run_id, created_by_name) values ($1, 'C', $2, 'plainAdmin', $3, 'held', 1000, $4, $5, 'fixture') returning id`, [pid, who.plainAdmin, JAN, p.id, p.current_run_id])).id;
+    await expect(pg.query(`insert into incentive_calc_carry (program_id, category_code, employee_id, employee_name, month, kind, amount_paise, lot_id, reason, created_by_name) values ($1, 'C', $2, 'plainAdmin', $3, 'written-off', -1000, $4, 'one person alone', 'payer')`, [pid, who.plainAdmin, JAN, other])).rejects.toThrow(/written off only with a second person's approval/);
+    expect(await q1(`select kind from incentive_calc_carry where lot_id = $1`, [other])).toEqual([]);
+    await expect(pg.exec(ROLLBACK_0141)).rejects.toThrow(/0141 rollback refused/);
   });
 
   it("documents are followed through every reference (order → invoice → credit note, whatever their customer link); an unlinked invoice of the same Tally party is proposed for review", async () => {
@@ -710,7 +822,7 @@ describe("Category C: Void month, the global unattributed-records queue, the ref
   const rvOf = async (program: string, month: string) => Number((await per(program, month)).row_version);
   const calcC = async (program: string, month: string) => {
     signIn("runner");
-    return act.calculateCategoryAMonth({ programId: program, month, asOf: ASOF, category: "C" });
+    return onDay(ASOF, () => act.calculateCategoryAMonth({ programId: program, month, asOf: ASOF, category: "C" }));
   };
   const lockC = async (program: string, month: string, on = true) => {
     signIn("locker");
@@ -769,6 +881,10 @@ describe("Category C: Void month, the global unattributed-records queue, the ref
     expect(await voidC(APR, "Abandoned: the payroll month was cancelled")).toMatchObject({ ok: true, carriedToMonth: MAY, carriedPaise: RS(3_000) });
     expect(await fp(`select * from incentive_calc_runs where program_id = '${vid}' and month = '${APR}'`)).toBe(runsBefore);
     expect((await per(vid, APR)).status).toBe("open");
+    // The salesperson sees it as VOIDED (and where its amount went), never as awaiting approval.
+    const mine = await calc.myCategoryA(who.rep, undefined, "C");
+    expect(mine.voided).toEqual(expect.arrayContaining([{ month: APR, carriedToMonth: MAY }]));
+    expect(mine.awaiting).not.toContain(APR);
     expect(await q1(`select reason, created_by_name, carried_to_month::text c, (summary->>'carriedPaise')::int paise from incentive_calc_period_voids`)).toEqual([{ reason: "Abandoned: the payroll month was cancelled", created_by_name: "voider", c: MAY, paise: RS(3_000) }]);
     expect(await q1(`select kind, from_month::text f, to_month::text t, amount_paise::int a from incentive_calc_adjustments where program_id = $1`, [vid])).toEqual([{ kind: "recalc-difference", f: APR, t: MAY, a: RS(3_000) }]);
     expect((await one<{ n: number }>(`select count(*)::int n from incentive_audit where action = 'voided'`)).n).toBe(1);
@@ -949,7 +1065,7 @@ describe("Category C: held balances keep their own rules; approval and payout re
   const rvOf = async (program: string, month: string) => Number((await per(program, month)).row_version);
   const calcC = async (program: string, month: string) => {
     signIn("runner");
-    return act.calculateCategoryAMonth({ programId: program, month, asOf: ASOF, category: "C" });
+    return onDay(ASOF, () => act.calculateCategoryAMonth({ programId: program, month, asOf: ASOF, category: "C" }));
   };
   const lockC = async (program: string, month: string, on = true) => {
     signIn("locker");
@@ -1068,5 +1184,274 @@ describe("Category C: held balances keep their own rules; approval and payout re
     const late = await doc("sales-orders", "Late SO 2", "2030-11-05", 11_800, null, null, "Late Co");
     expect(await decideC(qid, NOV, "reject", "A late record must be decided first")).toMatchObject({ ok: true, status: "locked" });
     expect(await exclude(late, "order-customer")).toMatchObject({ ok: true });
+  });
+});
+
+describe("Phase 1: a recalculation difference skips a VOIDED Category C month and goes to the next open one — once", () => {
+  // Its own programme (CVOIDC, Category C from January 2031), its own SYNTHETIC customer and documents dated 2031 —
+  // a year no other test calculates — so nothing here depends on an earlier test.
+  const APR = "2031-04-01", JUN = "2031-06-01", JUL = "2031-07-01";
+  let prog = "";
+  let batch = "";
+  const doc = async (type: string, no: string, date: string, totalRs: number, taxableRs: number, ref: string | null, customer: string, due: string | null = null) => {
+    return (await one<{ id: string }>(`insert into tally_documents (identity, document_type, document_no, document_no_key, document_date, financial_year, party_name, party_key, customer_master_id, total_paise, taxable_paise, ref_document_id, due_date, lines, import_batch_id, source_row) values ($1, $2, $3, $4, $5, '2030-31', 'Carry Void Co', 'carry void co', $6, $7, $8, $9, $10, '[]'::jsonb, $11, 1) returning id`, [`${type}|${no}`, type, no, no.toLowerCase(), date, customer, RS(totalRs), RS(taxableRs), ref, due, batch])).id;
+  };
+  const per = async (month: string) => (await q1<{ id: string; status: string; row_version: number; current_run_id: string | null }>(`select id, status, row_version, current_run_id from incentive_calc_periods where program_id = $1 and category_code = 'C' and month = $2`, [prog, month]))[0];
+  const calcOn = (month: string, asOf: string) => {
+    signIn("runner");
+    return onDay(asOf, () => act.calculateCategoryAMonth({ programId: prog, month, asOf, category: "C" }));
+  };
+  const ownPayable = async (runId: string) => Number((await one<{ p: number | null }>(`select coalesce(sum((e->>'ownPayablePaise')::bigint), 0)::int p from incentive_calc_runs r, jsonb_array_elements(r.result->'employees') e where r.id = $1`, [runId])).p);
+  const differences = () => q1<{ from: string; to: string; a: number; run: string }>(`select from_month::text "from", to_month::text "to", amount_paise::int a, source_run_id::text run from incentive_calc_adjustments where program_id = $1 and kind = 'recalc-difference' and from_month = $2 order by created_at`, [prog, APR]);
+
+  beforeAll(async () => {
+    // Category C needs 0135 and 0136, which this file's migration tests apply; when this block runs on its own they
+    // aren't, so apply them here — only when missing (re-running 0135 would undo what 0137–0139 widened).
+    if ((await one<{ ok: boolean }>(`select to_regclass('public.incentive_calc_items') is not null as ok`)).ok === false) await pg.exec(MIG("0135_incentive_categories_c_g.sql"));
+    if ((await one<{ ok: boolean }>(`select to_regclass('public.incentive_calc_c_reviews') is not null as ok`)).ok === false) await pg.exec(MIG("0136_incentive_category_c_review.sql"));
+    batch = (await one<{ id: string }>(`insert into tally_import_batches (category, file_name, file_hash) values ('sales-orders', 'carry-void.xlsx', 'carry-void') returning id`)).id;
+    const p = await rules.createProgram(actor("author"), { code: "CVOIDC", name: "Carry past a void", description: null });
+    if (!p.ok) throw new Error(p.error);
+    prog = p.programId;
+    const c = completeConfig({}, [{ subjectType: "employee", subjectId: who.rep, role: null, subjectLabel: "rep", mode: "include", effectiveFrom: "2025-01-01", effectiveTo: null }], "C");
+    const config = { ...c, settings: { ...c.settings, ...TEST.C, "payout.minimumPayable": "none", "payout.approvalSteps": 1, "payout.release": "afterApproval", "caps.perEmployeeAllCategoriesMonth": "none" } };
+    const d = await rules.createDraft(actor("author"), { programId: prog, category: "C", startFrom: "blank" });
+    if (!d.ok) throw new Error(d.error);
+    const s = await rules.saveDraft(actor("author"), d.versionId, 1, config, null);
+    if (!s.ok) throw new Error(s.error);
+    const sub = await rules.submit(actor("author"), d.versionId, s.rowVersion);
+    if (!sub.ok) throw new Error(sub.error);
+    const ap = await rules.approve(actor("checker"), d.versionId, sub.rowVersion, null);
+    if (!ap.ok) throw new Error(ap.error);
+    const pub = await rules.publish(actor("checker"), d.versionId, ap.rowVersion, "2031-01-01", { canBackdate: true });
+    if (!pub.ok) throw new Error(pub.error);
+    // A new customer's three ₹1,00,000 orders (Feb, Mar, Apr 2031): the 3rd completes the acquisition in April. The
+    // first two are paid on their due dates; the April invoice only on 20 May — after April's first calculation.
+    const cust = (await one<{ id: string }>(`insert into customer_masters (name, sales_rep_id, credit_period_days) values ('Carry Void Co', $1, 30) returning id`, [who.rep])).id;
+    for (const [k, [day, paid]] of ([["2031-02-05", "2031-03-07"], ["2031-03-05", "2031-04-04"], ["2031-04-05", "2031-05-20"]] as const).entries()) {
+      const so = await doc("sales-orders", `CVC SO ${k + 1}`, day, 1_18_000, 1_00_000, null, cust);
+      const due = new Date(Date.parse(`${day}T00:00:00Z`) + 30 * 86_400_000).toISOString().slice(0, 10);
+      const inv = await doc("sales-invoices", `CVC INV ${k + 1}`, day, 1_18_000, 1_00_000, so, cust, due);
+      await doc("customer-receipts", `CVC RC ${k + 1}`, paid, 1_18_000, 1_00_000, inv, cust);
+    }
+  }, 120_000);
+
+  it("April's difference (found as of 10 June) skips voided June and is carried into July; June, April and the void stay exactly as they were; repeated, nothing is carried twice", async () => {
+    // April as of 30 April: the April invoice isn't collected yet, so nothing is payable (C pays once all are collected).
+    expect(await calcOn(APR, "2031-04-30")).toMatchObject({ ok: true, adopted: true });
+    signIn("locker");
+    expect(await act.setCategoryAMonthLocked({ programId: prog, month: APR, lock: true, rowVersion: Number((await per(APR))!.row_version), category: "C" })).toMatchObject({ ok: true });
+    // June: calculated (nothing of its own) and VOIDED with a reason.
+    expect(await calcOn(JUN, "2031-06-10")).toMatchObject({ ok: true, adopted: true });
+    signIn("voider");
+    expect(await act.voidCategoryCMonth({ programId: prog, month: JUN, rowVersion: Number((await per(JUN))!.row_version), category: "C", reason: "Abandoned month (test)" })).toMatchObject({ ok: true });
+    const aprBefore = (await per(APR))!;
+    const junBefore = (await per(JUN))!;
+    const julBefore = await per(JUL); // may not exist yet
+    const voids = async () => (await one<{ n: number }>(`select count(*)::int n from incentive_calc_period_voids where period_id = $1`, [junBefore.id])).n;
+    expect(await voids()).toBe(1);
+    // April recalculated as of 10 June: the April invoice is now collected — a difference. June (the calculation date's
+    // month) is voided, so the first eligible month is July.
+    const r = await calcOn(APR, "2031-06-10");
+    expect(r).toMatchObject({ ok: true, adopted: false, unchanged: false });
+    if (r.ok) expect(r.outcome).toMatch(/The difference is carried into 2031-07 \(the first open month from 2031-06\)\./);
+    const found = (await one<{ id: string }>(`select id::text from incentive_calc_runs where program_id = $1 and category_code = 'C' and month = $2 order by computed_at desc limit 1`, [prog, APR])).id;
+    const diff = (await ownPayable(found)) - (await ownPayable(aprBefore.current_run_id!));
+    expect(diff).toBeGreaterThan(0); // a real difference — and it is not dropped:
+    expect(await differences()).toEqual([{ from: APR, to: JUL, a: diff, run: found }]);
+    expect((await one<{ n: number }>(`select count(*)::int n from incentive_calc_adjustments where program_id = $1 and to_month = $2`, [prog, JUN])).n).toBe(0);
+    // The voided month, the locked month and the void record are untouched; July went up once (created by the carry
+    // at row version 1 and raised to 2, or raised by one if it existed).
+    expect(await per(JUN)).toEqual(junBefore);
+    expect(await voids()).toBe(1);
+    expect(await per(APR)).toEqual(aprBefore);
+    const jul = (await per(JUL))!;
+    expect(jul.status).toBe("open");
+    expect(jul.row_version).toBe(julBefore ? julBefore.row_version + 1 : 2);
+    // Again (unchanged) and on a later day (new inputs, the same result): nothing is carried twice.
+    expect(await calcOn(APR, "2031-06-10")).toMatchObject({ ok: true, unchanged: true, outcome: expect.stringMatching(/Nothing changed/) });
+    expect(await calcOn(APR, "2031-06-11")).toMatchObject({ ok: true, adopted: false });
+    expect(await differences()).toEqual([{ from: APR, to: JUL, a: diff, run: found }]);
+    expect((await per(JUL))!.row_version).toBe(jul.row_version);
+    expect(await per(JUN)).toEqual(junBefore);
+    expect(await per(APR)).toEqual(aprBefore);
+  });
+});
+
+describe("Phase 1: after an engine change, a same-day calculation is recorded with the CURRENT engine (never short-circuited against an earlier engine's run)", () => {
+  // Four programmes (CENG1 open, CENG2 locked, CENG3 paid, CENG4 locked then reopened; Category C from January 2034), each calculating ONE month of
+  // its own, and three SYNTHETIC customers whose acquisitions complete in March, June and September 2034 — a year no
+  // other test calculates, so the unattributed-records check (about two years back) sees nothing of other tests. An
+  // "earlier engine" is simulated by stamping results with category-c/3 (the engine that preceded category-c/4) for a
+  // calculation; the registered engine stays category-c/4, as after a deployment.
+  const CURRENT = ENGINE_VERSIONS.C;
+  const EARLIER = "category-c/3";
+  const MAR = "2034-03-01", JUN = "2034-06-01", SEP = "2034-09-01";
+  const ASOF = "2034-12-31";
+  let batch = "";
+  const programs: Record<string, string> = {};
+  const doc = async (type: string, no: string, date: string, ref: string | null, customer: string, party: string, due: string | null = null) =>
+    (await one<{ id: string }>(`insert into tally_documents (identity, document_type, document_no, document_no_key, document_date, financial_year, party_name, party_key, customer_master_id, total_paise, taxable_paise, ref_document_id, due_date, lines, import_batch_id, source_row) values ($1, $2, $3, $4, $5, '2033-34', $6, $7, $8, $9, $10, $11, $12, '[]'::jsonb, $13, 1) returning id`, [`${type}|${no}`, type, no, no.toLowerCase(), date, party, party.toLowerCase(), customer, RS(1_18_000), RS(1_00_000), ref, due, batch])).id;
+  const per = async (prog: string, month: string) => (await q1<{ id: string; status: string; row_version: number; current_run_id: string | null }>(`select id, status, row_version, current_run_id from incentive_calc_periods where program_id = $1 and category_code = 'C' and month = $2`, [prog, month]))[0];
+  const runs = (prog: string, month: string) => q1<{ id: string; engine_version: string; adopted: boolean }>(`select id::text, engine_version, adopted from incentive_calc_runs where program_id = $1 and category_code = 'C' and month = $2 order by computed_at`, [prog, month]);
+  const differences = (prog: string) => q1(`select from_month::text, to_month::text, amount_paise::int from incentive_calc_adjustments where program_id = $1 and kind = 'recalc-difference'`, [prog]);
+  const calcOn = (prog: string, month: string, asOf = ASOF) => {
+    signIn("runner");
+    return onDay(asOf, () => act.calculateCategoryAMonth({ programId: prog, month, asOf, category: "C" }));
+  };
+  /** A calculation whose results are stamped by the EARLIER engine (the registered engine is unchanged). */
+  const calcEarlier = async (prog: string, month: string, asOf = ASOF) => {
+    ENGINE_VERSIONS.C = EARLIER;
+    try {
+      return await calcOn(prog, month, asOf);
+    } finally {
+      ENGINE_VERSIONS.C = CURRENT;
+    }
+  };
+  const lockC = async (prog: string, month: string, lock = true) => {
+    signIn("locker");
+    return act.setCategoryAMonthLocked({ programId: prog, month, lock, rowVersion: Number((await per(prog, month))!.row_version), category: "C" });
+  };
+  const submitC = async (prog: string, month: string) => {
+    signIn("locker");
+    return act.submitCategoryAMonth({ programId: prog, month, rowVersion: Number((await per(prog, month))!.row_version), category: "C" });
+  };
+
+  beforeAll(async () => {
+    expect(CURRENT).toBe("category-c/4");
+    // Category C needs 0135 and 0136 (applied by this file's migration tests; here only when missing, as above).
+    if ((await one<{ ok: boolean }>(`select to_regclass('public.incentive_calc_items') is not null as ok`)).ok === false) await pg.exec(MIG("0135_incentive_categories_c_g.sql"));
+    if ((await one<{ ok: boolean }>(`select to_regclass('public.incentive_calc_c_reviews') is not null as ok`)).ok === false) await pg.exec(MIG("0136_incentive_category_c_review.sql"));
+    batch = (await one<{ id: string }>(`insert into tally_import_batches (category, file_name, file_hash) values ('sales-orders', 'engine-change.xlsx', 'engine-change') returning id`)).id;
+    for (const code of ["CENG1", "CENG2", "CENG3", "CENG4"]) {
+      const p = await rules.createProgram(actor("author"), { code, name: `Engine change ${code}`, description: null });
+      if (!p.ok) throw new Error(p.error);
+      programs[code] = p.programId;
+      const c = completeConfig({}, [{ subjectType: "employee", subjectId: who.rep, role: null, subjectLabel: "rep", mode: "include", effectiveFrom: "2025-01-01", effectiveTo: null }], "C");
+      const config = { ...c, settings: { ...c.settings, ...TEST.C, "payout.minimumPayable": "none", "payout.approvalSteps": 1, "payout.release": "afterApproval", "caps.perEmployeeAllCategoriesMonth": "none" } };
+      const d = await rules.createDraft(actor("author"), { programId: p.programId, category: "C", startFrom: "blank" });
+      if (!d.ok) throw new Error(d.error);
+      const s = await rules.saveDraft(actor("author"), d.versionId, 1, config, null);
+      if (!s.ok) throw new Error(s.error);
+      const sub = await rules.submit(actor("author"), d.versionId, s.rowVersion);
+      if (!sub.ok) throw new Error(sub.error);
+      const ap = await rules.approve(actor("checker"), d.versionId, sub.rowVersion, null);
+      if (!ap.ok) throw new Error(ap.error);
+      const pub = await rules.publish(actor("checker"), d.versionId, ap.rowVersion, "2034-01-01", { canBackdate: true });
+      if (!pub.ok) throw new Error(pub.error);
+    }
+    // Three new customers, three ₹1,00,000 orders each, every invoice paid on its due date.
+    for (const [name, months] of [["Engine One", ["2034-01-05", "2034-02-05", "2034-03-05"]], ["Engine Two", ["2034-04-05", "2034-05-05", "2034-06-05"]], ["Engine Three", ["2034-07-05", "2034-08-05", "2034-09-05"]]] as const) {
+      const cust = (await one<{ id: string }>(`insert into customer_masters (name, sales_rep_id, credit_period_days) values ($1, $2, 30) returning id`, [name, who.rep])).id;
+      for (const [k, day] of months.entries()) {
+        const so = await doc("sales-orders", `${name} SO ${k + 1}`, day, null, cust, name);
+        const due = new Date(Date.parse(`${day}T00:00:00Z`) + 30 * 86_400_000).toISOString().slice(0, 10);
+        const inv = await doc("sales-invoices", `${name} INV ${k + 1}`, day, so, cust, name, due);
+        await doc("customer-receipts", `${name} RC ${k + 1}`, due, inv, cust, name);
+      }
+    }
+  }, 180_000);
+
+  it("an OPEN month: the earlier engine's run (refused at submission) is followed, the same day, by a current-engine run that is recorded and adopted; submission accepts it; a repeat under the current engine still short-circuits", async () => {
+    const P = programs.CENG1!;
+    // Calculated by the earlier engine, adopted, locked: submission refuses a run of an earlier engine.
+    expect(await calcEarlier(P, MAR)).toMatchObject({ ok: true, adopted: true });
+    const [old] = await runs(P, MAR);
+    expect(old).toMatchObject({ engine_version: EARLIER, adopted: true });
+    expect(await lockC(P, MAR)).toMatchObject({ ok: true });
+    expect(await submitC(P, MAR)).toEqual({ ok: false, error: expect.stringMatching(/calculated by an earlier engine \(category-c\/3\); reopen and recalculate it first/) });
+    // Reopened and recalculated THE SAME DAY with the same inputs: a new run of the current engine, adopted.
+    expect(await lockC(P, MAR, false)).toMatchObject({ ok: true });
+    const r = await calcOn(P, MAR);
+    expect(r).toMatchObject({ ok: true, unchanged: false, adopted: true });
+    const after = await runs(P, MAR);
+    expect(after).toHaveLength(2);
+    expect(after[1]).toMatchObject({ engine_version: CURRENT, adopted: true });
+    expect((await per(P, MAR))!.current_run_id).toBe(after[1]!.id);
+    // A repeat under the current engine: nothing changed, nothing recorded.
+    expect(await calcOn(P, MAR)).toMatchObject({ ok: true, unchanged: true, runId: after[1]!.id, outcome: expect.stringMatching(/Nothing changed/) });
+    expect(await runs(P, MAR)).toHaveLength(2);
+    // Submission now accepts the current-engine run.
+    expect(await lockC(P, MAR)).toMatchObject({ ok: true });
+    expect(await submitC(P, MAR)).toMatchObject({ ok: true });
+    const submitted = (await per(P, MAR))!;
+    expect(submitted.status).toBe("submitted");
+    // A SUBMITTED month is never adopted into: recalculated the same day, nothing changes (and nothing is recorded).
+    expect(await calcOn(P, MAR)).toMatchObject({ ok: true, unchanged: true, adopted: false });
+    expect(await per(P, MAR)).toEqual(submitted);
+    expect(await runs(P, MAR)).toHaveLength(2);
+  });
+
+  it("LOCKED with an earlier-engine run, recalculated while locked (a current-engine run recorded, NOT adopted), then REOPENED the same day: the next calculation is adopted — not held back by the non-adopted run", async () => {
+    const P = programs.CENG4!;
+    expect(await calcEarlier(P, JUN)).toMatchObject({ ok: true, adopted: true });
+    expect(await lockC(P, JUN)).toMatchObject({ ok: true });
+    expect(await calcOn(P, JUN)).toMatchObject({ ok: true, unchanged: false, adopted: false });
+    const [old, notAdopted] = await runs(P, JUN);
+    expect([old!.engine_version, old!.adopted, notAdopted!.engine_version, notAdopted!.adopted]).toEqual([EARLIER, true, CURRENT, false]);
+    expect((await per(P, JUN))!.current_run_id).toBe(old!.id);
+    // Reopened the same day; recalculated with the same inputs: a current-engine run is recorded and ADOPTED.
+    expect(await lockC(P, JUN, false)).toMatchObject({ ok: true });
+    const r = await calcOn(P, JUN);
+    expect(r).toMatchObject({ ok: true, unchanged: false, adopted: true });
+    const all = await runs(P, JUN);
+    expect(all.map((x) => [x.engine_version, x.adopted])).toEqual([[EARLIER, true], [CURRENT, false], [CURRENT, true]]);
+    expect((await per(P, JUN))!.current_run_id).toBe(all[2]!.id);
+    // Now the latest run IS the adopted one: a repeat short-circuits, nothing recorded.
+    expect(await calcOn(P, JUN)).toMatchObject({ ok: true, unchanged: true, runId: all[2]!.id, outcome: expect.stringMatching(/Nothing changed/) });
+    expect(await runs(P, JUN)).toHaveLength(3);
+    expect(await differences(P)).toEqual([]);
+    // And the month goes on: locked and submitted with the current-engine run.
+    expect(await lockC(P, JUN)).toMatchObject({ ok: true });
+    expect(await submitC(P, JUN)).toMatchObject({ ok: true });
+  });
+
+  it("a LOCKED month keeps its adopted earlier-engine run: the same-day current-engine run is recorded but never adopted, and carries no difference (the amounts are the same)", async () => {
+    const P = programs.CENG2!;
+    expect(await calcEarlier(P, JUN)).toMatchObject({ ok: true, adopted: true });
+    expect(await lockC(P, JUN)).toMatchObject({ ok: true });
+    const before = (await per(P, JUN))!;
+    const r = await calcOn(P, JUN);
+    expect(r).toMatchObject({ ok: true, unchanged: false, adopted: false });
+    if (r.ok) expect(r.outcome).toMatch(/not adopted: the month is locked\. No difference to carry\./);
+    const all = await runs(P, JUN);
+    expect(all.map((x) => [x.engine_version, x.adopted])).toEqual([[EARLIER, true], [CURRENT, false]]);
+    expect(await per(P, JUN)).toEqual(before); // the adopted run, status and row version are unchanged
+    expect(await differences(P)).toEqual([]);
+    // A repeat under the current engine short-circuits against the current-engine run.
+    expect(await calcOn(P, JUN)).toMatchObject({ ok: true, unchanged: true, outcome: expect.stringMatching(/Nothing changed/) });
+    expect(await runs(P, JUN)).toHaveLength(2);
+    expect(await per(P, JUN)).toEqual(before);
+  });
+
+  it("a PAID month keeps its paid run and payout: an earlier-engine run, then a same-day current-engine run, are recorded but never adopted, with no difference carried", async () => {
+    const P = programs.CENG3!;
+    // Paid as calculated on 30 December; the later runs are of 31 December (the simulated clock follows the calculation
+    // date, and the month's latest run is the latest by its own time — as in real life).
+    expect(await calcOn(P, SEP, "2034-12-30")).toMatchObject({ ok: true, adopted: true });
+    expect(await lockC(P, SEP)).toMatchObject({ ok: true });
+    expect(await submitC(P, SEP)).toMatchObject({ ok: true });
+    signIn("a1");
+    expect(await act.decideCategoryAMonth({ programId: P, month: SEP, rowVersion: Number((await per(P, SEP))!.row_version), decision: "approve", reason: null, category: "C" })).toMatchObject({ ok: true, status: "approved" });
+    const approved = (await one<{ id: string; row_version: number; current_run_id: string; release_on: string }>(`select id, row_version, current_run_id, release_on::text from incentive_calc_periods where program_id = $1 and category_code = 'C' and month = $2`, [P, SEP]));
+    const total = (await calc.payoutLines(h.db as never, P, SEP, approved.current_run_id, "C")).reduce((s, l) => s + l.amountPaise, 0);
+    expect(total).toBeGreaterThan(0);
+    signIn("payer");
+    expect(await act.recordCategoryAPayout({ programId: P, month: SEP, rowVersion: Number(approved.row_version), reference: "PAY-ENG-SEP", paidOn: approved.release_on, amountPaise: total, note: null, category: "C" })).toMatchObject({ ok: true });
+    const paid = (await per(P, SEP))!;
+    expect(paid.status).toBe("paid");
+    const payout = await q1(`select run_id::text, total_paise::int, reference from incentive_calc_payouts where period_id = $1`, [paid.id]);
+    // The month's latest run becomes an earlier engine's (another calculation date, so not "unchanged") …
+    expect(await calcEarlier(P, SEP)).toMatchObject({ ok: true, unchanged: false, adopted: false });
+    // … and the same day, with the same inputs, the current engine's run is recorded — not adopted, nothing carried.
+    const r = await calcOn(P, SEP);
+    expect(r).toMatchObject({ ok: true, unchanged: false, adopted: false });
+    if (r.ok) expect(r.outcome).toMatch(/not adopted: the month is paid\. No difference to carry\./);
+    expect((await runs(P, SEP)).map((x) => [x.engine_version, x.adopted])).toEqual([[CURRENT, true], [EARLIER, false], [CURRENT, false]]);
+    expect(await per(P, SEP)).toEqual(paid);
+    expect(await q1(`select run_id::text, total_paise::int, reference from incentive_calc_payouts where period_id = $1`, [paid.id])).toEqual(payout);
+    expect(await differences(P)).toEqual([]);
+    // And the paid month itself can't be changed.
+    await expect(pg.query(`update incentive_calc_periods set status = 'approved', row_version = row_version + 1 where id = $1`, [paid.id])).rejects.toThrow(/final/);
   });
 });

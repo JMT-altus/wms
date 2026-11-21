@@ -119,13 +119,24 @@ function slabPool(sales: number, threshold: number, s: S, slabs: readonly Slab[]
       }
     }
   } else {
-    // flat / flatAboveThreshold: the slab the sales fall in (or the top one, if the top rate continues).
+    // flat / flatAboveThreshold: the slab the sales fall in. Above the highest slab the highest slab is still the one
+    // reached (category-a/2: never a drop to nothing): its rate continues on all the sales ("The highest slab's rate
+    // continues"), or applies as it did at the top of the slab ("Nothing more", and before a fixed amount above it).
     let sl = slabs.find((x) => inSlab(sales, x)) ?? null;
-    if (!sl && beyondTop && aboveTop === "continueTopRate") sl = top;
+    let counted = S;
+    let atTop = false;
+    if (!sl && beyondTop) {
+      sl = top;
+      if (aboveTop !== "continueTopRate") {
+        counted = R.min(S, R.q(top.toPaise));
+        atTop = true;
+      }
+    }
     if (sl) {
-      const base = method === "flat" ? S : R.max(R.ZERO, R.sub(S, R.q(threshold)));
-      if (sl.valueType === "percent") push(sl, R.mul(base, R.ppm(sl.ratePpm ?? 0)), `${(sl.ratePpm! / 10_000).toString()}% of ${method === "flat" ? "all sales" : "the sales above the threshold"}`);
-      else push(sl, R.q(sl.fixedPaise ?? 0), `fixed ${rupees(sl.fixedPaise ?? 0)}`);
+      const base = method === "flat" ? counted : R.max(R.ZERO, R.sub(counted, R.q(threshold)));
+      const capped = atTop ? ` (as at the top of the highest slab, ${rupees(top.toPaise)})` : "";
+      if (sl.valueType === "percent") push(sl, R.mul(base, R.ppm(sl.ratePpm ?? 0)), `${(sl.ratePpm! / 10_000).toString()}% of ${method === "flat" ? "all sales" : "the sales above the threshold"}${capped}`);
+      else push(sl, R.q(sl.fixedPaise ?? 0), `fixed ${rupees(sl.fixedPaise ?? 0)}${capped}`);
     }
   }
   if (beyondTop && aboveTop === "fixedAmount") {
@@ -241,10 +252,17 @@ export function calculateCategoryA(input: CategoryAInput): CategoryAResult {
     let value = base;
     let collectible = R.q(c.doc.totalPaise);
     why.push(`${c.type === "sales-orders" ? "Order" : "Invoice"} ${c.no} of ${monthDate}: ${amountLabel} ${rupees(base)}.`);
+    const unitInMonth = monthOf(monthDate) === month;
     // Pre-closures (orders only: an invoice is what was delivered).
     if (c.type === "sales-orders" && c.order) {
       const pcs = preclosures.filter((p) => p.orderId === c.id);
       const items = c.order.itemsPaise;
+      if (pcs.length && !(items && items > 0)) {
+        // Never passed over silently (category-a/2): the pre-closed share of the order can't be worked out.
+        why.push(`Pre-closed, but the order has no product-line amounts, so the pre-closed value can't be worked out: held.`);
+        if (unitInMonth || pcs.some((p) => monthOf(p.date) === month))
+          held.push({ documentId: c.id, documentNo: c.no, employeeId: null, code: "preclosure-incomplete", message: `Order ${c.no} has a pre-closure but no product-line amounts, so the pre-closed value can't be worked out. Correct the order's lines in Forms and recalculate, or acknowledge it.` });
+      }
       if (pcs.length && items && items > 0) {
         const pcValue = pcs.reduce((a, p) => a + p.itemsValuePaise, 0);
         const fraction = R.min(ONE, R.q(pcValue, items));
@@ -261,12 +279,19 @@ export function calculateCategoryA(input: CategoryAInput): CategoryAResult {
     for (const cn of creditNotes.filter((x) => x.invoiceId && invIds.has(x.invoiceId))) {
       const rule = cnRule(cn);
       if (rule === "ignore") {
-        why.push(`${cnWord(cn)} ${cn.no} ignored (configured).`);
+        why.push(`${cnWord(cn)} ${cn.no} ignored (configured): sales and the amount to collect stay as they were, so if the customer pays only the reduced amount the order never becomes fully collected.`);
         continue;
       }
       collectible = R.sub(collectible, R.q(cn.totalPaise));
       if (rule === "reduceOriginalMonthSales") {
-        const amt = amountOf(cn) ?? 0;
+        const amt = amountOf(cn);
+        if (amt === null) {
+          // Never a silent ₹0 (category-a/2): the amount to take off isn't known.
+          why.push(`${cnWord(cn)} ${cn.no} of ${cn.date} has no ${amountLabel}: nothing could be taken off the order's month, so it is held.`);
+          if (unitInMonth || monthOf(cn.date) === month)
+            held.push({ documentId: cn.id, documentNo: cn.no, employeeId: null, code: "credit-note-no-amount", message: `${cnWord(cn)} ${cn.no} (on ${c.no}) has no ${amountLabel}, so it can't reduce sales. Correct it in Forms and recalculate, or acknowledge it.` });
+          continue;
+        }
         value -= amt;
         why.push(`${cnWord(cn)} ${cn.no} of ${cn.date}: ${rupees(amt)} off the order's month.`);
       } else why.push(`${cnWord(cn)} ${cn.no} of ${cn.date}: ${rupees(cn.totalPaise)} less to collect${rule === "reduceInIssueMonth" ? "; sales reduced in its own month" : ""}.`);
@@ -277,13 +302,40 @@ export function calculateCategoryA(input: CategoryAInput): CategoryAResult {
   const unitOfInvoice = new Map<string, Unit>();
   for (const u of allUnits) for (const i of u.invoices) unitOfInvoice.set(i.id, u);
 
+  // Never passed over silently (category-a/2). A credit note (or return) that names no Forms sales invoice can't be
+  // placed against any order: from the month's first day on, one dated in the month or on a customer with an order of
+  // the month is held. "Ignore" is a configured choice, so an ignored one isn't.
+  const monthCustomers = new Set(allUnits.filter((u) => monthOf(u.monthDate) === month && u.customerId).map((u) => u.customerId!));
+  for (const cn of creditNotes) {
+    if (cn.invoiceId && invoiceById.has(cn.invoiceId)) continue;
+    if (cnRule(cn) === "ignore" || cn.date < input.month) continue;
+    if (monthOf(cn.date) !== month && !(cn.customerId && monthCustomers.has(cn.customerId))) continue;
+    held.push({ documentId: cn.id, documentNo: cn.no, employeeId: null, code: "credit-note-unlinked", message: cn.invoiceId ? `${cnWord(cn)} ${cn.no} names a document that isn't a Forms sales invoice, so it can't reduce any order. Correct its reference in Forms and recalculate, or acknowledge it.` : `${cnWord(cn)} ${cn.no} isn't linked to a sales invoice, so it can't reduce any order. Link it in Forms and recalculate, or acknowledge it.` });
+  }
+  // What the loader couldn't value or follow (category-a/2).
+  for (const p of input.preclosureProblems ?? []) {
+    const u = unitById.get(p.orderId);
+    if ((u && monthOf(u.monthDate) === month) || monthOf(p.date) === month)
+      held.push({ documentId: p.orderId, documentNo: p.orderNo, employeeId: null, code: "preclosure-incomplete", message: `A pre-closure of order ${p.orderNo} (${p.date}) can't be valued: ${p.reason} Correct it and recalculate, or acknowledge it.` });
+  }
+  for (const r of input.referencesIncomplete ?? [])
+    held.push({ documentId: r.documentId, documentNo: r.documentNo, employeeId: null, code: "reference-chain", message: `${r.documentNo}'s links in Forms go further than the calculation follows, so documents linked to it may be missing. Check its links and recalculate, or acknowledge it.` });
+
   /* 2. Whose sale */
   const people = makePeople({ settings: s, eligibility: cfg.eligibility, employees: input.employees, customers: input.customers, repHistory: input.repHistory, attributions: input.attributions });
   const departed = people.departed;
+  const repAtOrderDate = str(s, "attribution.source") === "customerSalesRep" && str(s, "attribution.historical") === "repAtOrderDate";
   const sharesByUnit = new Map<string, Share[]>();
   for (const u of allUnits) {
     const inMonth = monthOf(u.monthDate) === month;
-    const r = people.resolve({ id: u.id, no: u.no, customerId: u.customerId, repDay: u.monthDate, day: u.monthDate }, inMonth, month, excluded);
+    // The representative "on the order's date" is the one on the Sales Order's date — never the month's date when that
+    // is another date (an invoice date, the customer's order date). An invoice with no Sales Order has no order date:
+    // its own date is used, and its explanation says so.
+    const repDay = u.order?.date ?? u.monthDate;
+    if (repAtOrderDate && !u.order) u.explanation.push(`No Sales Order: the representative on the invoice's date (${u.monthDate}) is used.`);
+    // Salespeople are recorded on Sales Orders: an invoice takes its Sales Order's.
+    const attributionId = u.type === "sales-invoices" ? (u.order?.id ?? null) : undefined;
+    const r = people.resolve({ id: u.id, no: u.no, customerId: u.customerId, repDay, day: u.monthDate, ...(attributionId !== undefined ? { attributionId } : {}) }, inMonth, month, excluded, held);
     if (!r) continue;
     sharesByUnit.set(u.id, r.map((x) => ({ unit: u, employee: x.employee, sharePpm: x.sharePpm })));
   }
@@ -302,13 +354,24 @@ export function calculateCategoryA(input: CategoryAInput): CategoryAResult {
     if (monthOf(cn.date) !== month || cnRule(cn) !== "reduceInIssueMonth" || !cn.invoiceId) continue;
     const u = unitOfInvoice.get(cn.invoiceId);
     if (!u) continue;
-    for (const sh of sharesByUnit.get(u.id) ?? []) addSales(sh.employee.id, R.mul(R.q(-(amountOf(cn) ?? 0)), R.ppm(sh.sharePpm)), `${cnWord(cn)} ${cn.no}: ${rupees(amountOf(cn) ?? 0)} off this month's sales.`);
+    const amt = amountOf(cn);
+    if (amt === null) {
+      held.push({ documentId: cn.id, documentNo: cn.no, employeeId: null, code: "credit-note-no-amount", message: `${cnWord(cn)} ${cn.no} (on ${u.no}) has no ${amountLabel}, so it can't reduce this month's sales. Correct it in Forms and recalculate, or acknowledge it.` });
+      continue;
+    }
+    for (const sh of sharesByUnit.get(u.id) ?? []) addSales(sh.employee.id, R.mul(R.q(-amt), R.ppm(sh.sharePpm)), `${cnWord(cn)} ${cn.no}: ${rupees(amt)} off this month's sales.`);
   }
   if (preClosure === "deductInMonthOfPreClosure") {
     for (const p of preclosures) {
       if (monthOf(p.date) !== month) continue;
       const u = unitById.get(p.orderId);
-      if (!u || !u.order?.itemsPaise) continue;
+      if (!u) continue;
+      if (!u.order?.itemsPaise) {
+        // Held where the order's own month is calculated too; here, because the deduction belongs to this month.
+        if (!held.some((h) => h.code === "preclosure-incomplete" && h.documentId === u.id))
+          held.push({ documentId: u.id, documentNo: u.no, employeeId: null, code: "preclosure-incomplete", message: `Order ${u.no} has a pre-closure but no product-line amounts, so the pre-closed value can't be worked out. Correct the order's lines in Forms and recalculate, or acknowledge it.` });
+        continue;
+      }
       const ded = R.mul(R.q(u.basePaise), R.min(ONE, R.q(p.itemsValuePaise, u.order.itemsPaise)));
       for (const sh of sharesByUnit.get(u.id) ?? []) addSales(sh.employee.id, R.mul(R.mul(ded, R.ppm(sh.sharePpm)), R.q(-1)), `Pre-closure on order ${u.no} (${p.date}): ${rupees(R.round(ded, "halfUp", "paise"))} off this month's sales.`);
     }
@@ -321,7 +384,9 @@ export function calculateCategoryA(input: CategoryAInput): CategoryAResult {
     for (const cn of creditNotes) if (cn.invoiceId === inv.id && cnRule(cn) !== "ignore") due = R.sub(due, R.q(cn.totalPaise));
     invoiceDue.set(inv.id, R.max(R.ZERO, due));
   }
-  const { applied, pieces } = applyReceipts({ settings: s, receipts, events, invoices, invoiceById, invoiceDue, unitIdOfInvoice: (id) => unitOfInvoice.get(id)?.id ?? null, held }) as { applied: Applied[]; pieces: ReceiptPiece[] };
+  const { applied, pieces } = applyReceipts({ settings: s, receipts, events, invoices, invoiceById, invoiceDue, unitIdOfInvoice: (id) => unitOfInvoice.get(id)?.id ?? null, held, strictCustomer: true }) as { applied: Applied[]; pieces: ReceiptPiece[] };
+  // Every hold the shared receipt rules made is a receipt's.
+  for (const h of held) h.code ??= "receipt";
 
   /* delay reference dates */
   const missingDue = str(s, "collection.missingDueDate");
@@ -394,7 +459,7 @@ export function calculateCategoryA(input: CategoryAInput): CategoryAResult {
             m = null;
             status = "held";
             note = "No due date could be found: held for review.";
-            held.push({ documentId: a.receiptId, documentNo: a.receiptNo, employeeId: eid, message: `No due date for invoice ${inv.no}: held for review.` });
+            held.push({ documentId: a.receiptId, documentNo: a.receiptNo, employeeId: eid, code: "receipt", message: `No due date for invoice ${inv.no}: held for review.` });
           } else {
             m = null;
             status = "excluded";
@@ -488,12 +553,6 @@ export function calculateCategoryA(input: CategoryAInput): CategoryAResult {
           projected = R.add(projected, R.mul(per, uninvoiced));
         }
       }
-      // Settled: fully collected, or every invoice past the last step's start.
-      const pastLast = u.invoices.length > 0 && u.invoices.every((inv) => {
-        const ref = referenceDate(inv);
-        return ref !== null && daysBetween(ref.date, asOf) >= lastStepFrom && stepFor(steps, daysBetween(ref.date, asOf), boundary).multiplierPpm === 0;
-      });
-      if (!c.full && !pastLast) settled = false;
       earnedSum = R.add(earnedSum, unitEarned);
       payableSum = R.add(payableSum, payable);
       projectedSum = R.add(projectedSum, projected);
@@ -562,6 +621,20 @@ export function calculateCategoryA(input: CategoryAInput): CategoryAResult {
     });
   }
 
+  // Settled (category-a/2): EVERY order of the month — credited to a salesperson or not, so an order still waiting for its
+  // salesperson never lets the month stop being recalculated — is fully collected, or every invoice of it is past the
+  // last step's start at 0%; and nothing of the month is held.
+  for (const u of monthUnits) {
+    const ids = new Set(u.invoices.map((i) => i.id));
+    const got = R.sum(applied.filter((a) => ids.has(a.invoiceId)).map((a) => a.amount));
+    const full = R.cmp(u.collectible, R.ZERO) > 0 && R.cmp(got, u.collectible) >= 0;
+    const pastLast = u.invoices.length > 0 && u.invoices.every((inv) => {
+      const ref = referenceDate(inv);
+      return ref !== null && daysBetween(ref.date, asOf) >= lastStepFrom && stepFor(steps, daysBetween(ref.date, asOf), boundary).multiplierPpm === 0;
+    });
+    if (!full && !pastLast) settled = false;
+  }
+
   // The receipt pieces that never reached a counted order of a salesperson are still reported (with no employee).
   const credited = new Set(pieces.filter((p) => p.employeeId).map((p) => `${p.receiptId}|${p.invoiceId}`));
   for (const a of applied) {
@@ -575,6 +648,12 @@ export function calculateCategoryA(input: CategoryAInput): CategoryAResult {
   const relevant = pieces.filter((p) => p.employeeId || (p.unitId ? monthUnitIds.has(p.unitId) : monthOf(p.receiptDate) === month));
 
   const order = (p: ReceiptPiece) => `${p.employeeId ?? "~"}|${p.unitId ?? "~"}|${p.receiptDate}|${natural(p.receiptNo)}|${p.receiptId}|${p.invoiceId ?? ""}|${p.status}`;
+  // A receipt's hold is reported when the receipt concerns this month; every other hold was made for this month.
+  const heldOut = byKey(
+    held.filter((h, i) => (h.code !== "receipt" || !h.documentId || relevant.some((p) => p.receiptId === h.documentId)) && held.findIndex((x) => x.documentId === h.documentId && x.code === h.code && x.message === h.message && x.employeeId === h.employeeId) === i),
+    (h) => `${h.documentNo}|${h.documentId}|${h.message}`,
+  );
+  if (heldOut.length) settled = false;
   return {
     engineVersion: ENGINE_VERSION,
     status: "computed",
@@ -586,7 +665,7 @@ export function calculateCategoryA(input: CategoryAInput): CategoryAResult {
     employees: employeesOut,
     units: byKey(unitsOut, (u) => `${u.employeeId}|${unitById.get(u.unitId)!.monthDate}|${natural(u.unitNo)}|${u.unitId}`),
     pieces: byKey(relevant, order),
-    held: byKey(held.filter((h) => !h.documentId || relevant.some((p) => p.receiptId === h.documentId)), (h) => `${h.documentNo}|${h.documentId}|${h.message}`),
+    held: heldOut,
     excluded: byKey(excluded, (h) => `${h.documentNo}|${h.documentId}|${h.employeeId}|${h.message}`),
     settled: settled && monthUnits.length > 0,
     settingsUsed: Object.fromEntries(Object.keys(s).sort().map((k) => [k, s[k]])),

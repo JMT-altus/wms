@@ -155,7 +155,7 @@ describe("My Incentives: a salesperson sees only their own Category A, only once
       for (const [k, [fraction, days]] of pays.entries()) await doc("customer-receipts", `RC ${i + 1}.${k + 1}`, new Date(Date.parse("2026-04-05T00:00:00Z") + days * 86_400_000).toISOString().slice(0, 10), Math.round(L(10) * fraction), inv, null);
     }
     expect(await calc.calculate(actor("runner"), programId, "2026-04-01", "2026-09-30")).toMatchObject({ ok: true, adopted: true });
-    expect(await calc.myCategoryA(who.rep!)).toEqual({ ready: true, months: [], awaiting: ["2026-04-01"] });
+    expect(await calc.myCategoryA(who.rep!)).toEqual({ ready: true, months: [], awaiting: ["2026-04-01"], voided: [] });
     const rv = async () => Number((await one<{ row_version: number }>(`select row_version from incentive_calc_periods where month = '2026-04-01'`)).row_version);
     expect(await calc.setLocked(actor("runner"), programId, "2026-04-01", true, await rv())).toMatchObject({ ok: true });
     expect(await calc.submitMonth(actor("submitter"), programId, "2026-04-01", await rv())).toMatchObject({ ok: true });
@@ -170,7 +170,7 @@ describe("My Incentives: a salesperson sees only their own Category A, only once
     expect(mine.months[0]).toMatchObject({ month: "2026-04-01", programCode: "SALES", status: "approved", amountPaise: 92500, paidOn: null, payoutReference: null });
     expect(mine.months[0]!.explanation.join(" ")).toMatch(/threshold/);
     expect(mine.awaiting).toEqual([]);
-    expect(await calc.myCategoryA(who.other!)).toEqual({ ready: true, months: [], awaiting: [] });
+    expect(await calc.myCategoryA(who.other!)).toEqual({ ready: true, months: [], awaiting: [], voided: [] });
   });
   it("paid: the amount actually paid, with its date and reference", async () => {
     const p = await one<{ row_version: number; release_on: string }>(`select row_version, release_on::text from incentive_calc_periods where month = '2026-04-01'`);

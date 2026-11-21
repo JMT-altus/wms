@@ -10,7 +10,7 @@ import { isMissingTable } from "@/lib/queries/collection-master";
 
 /**
  * Category A inputs: order salespeople, customer representative periods and receipt events. Every action needs the
- * sensitive `incentive.calc.inputs` permission (or a super-admin), checked before anything is read or written. Rows
+ * sensitive `incentive.calc.inputs` permission (Field Permissions; a super-admin too needs the grant), checked before anything is read or written. Rows
  * are recorded or retired, never edited or deleted; the database refuses overlaps and over-allocation (0133).
  */
 
@@ -69,6 +69,17 @@ export async function recordReceiptEvent(raw: unknown) {
   const p = EventInput.safeParse(raw);
   if (!p.success) return { ok: false as const, error: "That event couldn't be read." };
   return act("record receipt event", (a) => inputs.recordReceiptEvent(a, p.data));
+}
+
+const RepImportInput = z.object({ csv: z.string().max(2_000_000), commit: z.boolean() }).strict();
+/**
+ * Representative periods from a CSV file (Category A): checked row by row; recorded only with `commit` and only when
+ * every row is right, all in one transaction (see importRepPeriods). Imports nothing on its own.
+ */
+export async function importRepresentativePeriods(raw: unknown) {
+  const p = RepImportInput.safeParse(raw);
+  if (!p.success) return { ok: false as const, error: "The file couldn't be read (at most 2 MB of text)." };
+  return act("import representatives", (a) => inputs.importRepPeriods(a, p.data.csv, { commit: p.data.commit }));
 }
 
 /** The customer's Forms invoices, for allocating a receipt (needs the inputs right too). */

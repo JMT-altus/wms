@@ -1,12 +1,13 @@
 import "server-only";
 import type { Employee } from "@/db/schema";
 import { requireAdmin } from "@/lib/auth/current";
-import { isSuperAdmin } from "@/lib/auth/super-admin";
 import { getFieldAccessFor } from "@/lib/auth/field-access";
 
 /**
- * Who may see and act on Category A calculations: an ADMIN who is a super-admin, or holds the right's sensitive Field
- * Permission (granted only by a super-admin, never implied by admin status) — the same model as Incentive Rules.
+ * Who may see and act on incentive calculations: an ADMIN who holds the right's sensitive Field Permission (granted only
+ * by a super-admin, never implied by admin status) — the same model as Incentive Rules. Nobody holds a right because of
+ * who they are: a super-admin too needs the explicit grant (Field Permissions: a sensitive entry takes no bypass), so
+ * every right — and the separation of duties between them — is visible and granted in one place.
  *   view     see calculations, inputs, approvals and payouts
  *   run      calculate a month
  *   lock     lock / reopen a calculated month
@@ -17,7 +18,8 @@ import { getFieldAccessFor } from "@/lib/auth/field-access";
  *   approve  approve or reject a submitted month (never one you submitted; the database refuses it too)
  *   pay      record an approved month's payout
  *   qualify  decide by hand (with a reason) that a Sales Order qualifies for Category B or doesn't, and retire it
- *   review   decide (with a reason) a Category C review case — link an unmatched record or exclude it — and retire it
+ *   review   decide (with a reason) a Category C review case — link an unmatched record or exclude it — and retire it; and acknowledge
+ *            (with a reason) an item a Category A calculation held, and retire that
  *   void     void an abandoned, unpaid Category C month (with a reason) so it no longer blocks later months
  */
 export const INCENTIVE_CALC_RIGHTS = ["view", "run", "lock", "inputs", "approvals", "payouts", "submit", "approve", "pay", "qualify", "review", "void"] as const;
@@ -26,11 +28,9 @@ export type IncentiveCalcRights = Record<IncentiveCalcRight, boolean>;
 export const calcRightKey = (r: IncentiveCalcRight) => `incentive.calc.${r}` as const;
 
 const NONE = Object.fromEntries(INCENTIVE_CALC_RIGHTS.map((r) => [r, false])) as IncentiveCalcRights;
-const ALL = Object.fromEntries(INCENTIVE_CALC_RIGHTS.map((r) => [r, true])) as IncentiveCalcRights;
 
 export async function incentiveCalcRights(me: Employee | null | undefined): Promise<IncentiveCalcRights> {
   if (!me || !me.isAdmin || !me.isActive) return NONE;
-  if (isSuperAdmin(me.email)) return ALL;
   const access = await getFieldAccessFor(me);
   const rights = Object.fromEntries(INCENTIVE_CALC_RIGHTS.map((r) => [r, access[calcRightKey(r)]?.allowed === true])) as IncentiveCalcRights;
   // Every other right includes seeing what it acts on.

@@ -3140,7 +3140,9 @@ export const testimonials = pgTable(
   "testimonials",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    employeeId: uuid("employee_id").references(() => employees.id, { onDelete: "cascade" }).notNull(),
+    // 0137: kept (SET NULL) when the employee is deleted, with who it was (employee_name, filled on insert).
+    employeeId: uuid("employee_id").references(() => employees.id, { onDelete: "set null" }),
+    employeeName: text("employee_name"),
     customerId: uuid("customer_id").references(() => customers.id, { onDelete: "set null" }),
     periodMonth: text("period_month").notNull(),
     kind: text("kind").$type<"google_review" | "email" | "letterhead">().notNull(),
@@ -3602,7 +3604,7 @@ export const incentiveCalcAdjustments = pgTable(
     toMonth: date("to_month"),
     employeeId: uuid("employee_id").references(() => employees.id, { onDelete: "set null" }),
     employeeName: text("employee_name").notNull(),
-    kind: text("kind").notNull().$type<"recalc-difference" | "negative-carry" | "write-off" | "salary-recovery">(),
+    kind: text("kind").notNull().$type<"recalc-difference" | "negative-carry" | "write-off" | "salary-recovery" | "recovery-write-off">(),
     amountPaise: bigint("amount_paise", { mode: "number" }).notNull(),
     monthsLeft: integer("months_left"),
     sourceRunId: uuid("source_run_id").notNull().references(() => incentiveCalcRuns.id, { onDelete: "restrict" }),
@@ -3675,7 +3677,7 @@ export const incentiveCalcInputHistory = pgTable(
   "incentive_calc_input_history",
   {
     eventNo: bigint("event_no", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
-    entity: text("entity").notNull().$type<"attribution" | "rep-history" | "receipt-event" | "b-override" | "c-review">(),
+    entity: text("entity").notNull().$type<"attribution" | "rep-history" | "receipt-event" | "b-override" | "c-review" | "f-decision" | "f-writeoff">(),
     entityId: uuid("entity_id").notNull(),
     action: text("action").notNull().$type<"record" | "retire">(),
     before: jsonb("before"),
@@ -3779,6 +3781,25 @@ export const incentiveCalcBOverrides = pgTable(
   (t) => [index("incentive_calc_b_overrides_order_idx").on(t.orderDocumentId, t.createdAt)],
 );
 
+/* ── 0140 (NOT APPLIED) — Category B: a review decision on an invoice with no Sales Order ── */
+
+export const incentiveCalcBInvoiceReviews = pgTable(
+  "incentive_calc_b_invoice_reviews",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    invoiceDocumentId: uuid("invoice_document_id").notNull().references(() => tallyDocuments.id, { onDelete: "restrict" }),
+    decision: text("decision").notNull().$type<"not-category-b">(),
+    reason: text("reason").notNull(),
+    createdById: uuid("created_by_id").references(() => employees.id, { onDelete: "set null" }),
+    createdByName: text("created_by_name").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    retiredAt: timestamp("retired_at", { withTimezone: true }),
+    retiredById: uuid("retired_by_id").references(() => employees.id, { onDelete: "set null" }),
+    retiredReason: text("retired_reason"),
+  },
+  (t) => [index("incentive_calc_b_invoice_reviews_invoice_idx").on(t.invoiceDocumentId, t.createdAt)],
+);
+
 /* ── 0136 — Category C: decisions on unmatched records (link or exclude; never qualify) ── */
 
 export const incentiveCalcCReviews = pgTable(
@@ -3824,7 +3845,170 @@ export const incentiveCalcCarry = pgTable(
   (t) => [index("incentive_calc_carry_employee_idx").on(t.programId, t.categoryCode, t.employeeId, t.month)],
 );
 
+/* ── 0141 (NOT APPLIED) — a two-person write-off of a carried-forward balance (append-only) ── */
+
+export const incentiveCalcCarryWriteoffs = pgTable(
+  "incentive_calc_carry_writeoffs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    kind: text("kind").notNull().$type<"request" | "approve" | "refuse">(),
+    requestId: uuid("request_id"),
+    lotId: uuid("lot_id").notNull().references(() => incentiveCalcCarry.id, { onDelete: "restrict" }),
+    resultCarryId: uuid("result_carry_id").references(() => incentiveCalcCarry.id, { onDelete: "restrict" }),
+    employeeId: uuid("employee_id").references(() => employees.id, { onDelete: "set null" }),
+    employeeName: text("employee_name").notNull(),
+    amountPaise: bigint("amount_paise", { mode: "number" }).notNull(),
+    reason: text("reason").notNull(),
+    createdById: uuid("created_by_id").references(() => employees.id, { onDelete: "set null" }),
+    createdByName: text("created_by_name").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("incentive_calc_carry_writeoffs_lot_idx").on(t.lotId, t.createdAt)],
+);
+
+/**
+ * Category A (migration 0142): an authorised person's acknowledgment, with its reason, of something the calculation HELD
+ * (a receipt, an order credited to nobody, a credit note with no invoice link or no amount, a pre-closure that can't be
+ * valued, links not fully followed). It never changes a calculation: it records that the item was reviewed and stays as
+ * calculated, so the month can be submitted, approved and paid. Retire-only; one active acknowledgment per document and
+ * kind of hold. Whoever recorded or retired one on a month's held item never approves that month (0142).
+ */
+export const incentiveCalcAReviews = pgTable(
+  "incentive_calc_a_reviews",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    documentId: uuid("document_id").notNull().references(() => tallyDocuments.id, { onDelete: "restrict" }),
+    holdCode: text("hold_code").notNull().$type<"receipt" | "unassigned" | "credit-note-unlinked" | "credit-note-no-amount" | "preclosure-incomplete" | "reference-chain">(),
+    decision: text("decision").notNull().$type<"acknowledged">(),
+    reason: text("reason").notNull(),
+    createdById: uuid("created_by_id").references(() => employees.id, { onDelete: "set null" }),
+    createdByName: text("created_by_name").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    retiredAt: timestamp("retired_at", { withTimezone: true }),
+    retiredById: uuid("retired_by_id").references(() => employees.id, { onDelete: "set null" }),
+    retiredReason: text("retired_reason"),
+  },
+  (t) => [index("incentive_calc_a_reviews_document_idx").on(t.documentId, t.createdAt)],
+);
+
+/**
+ * Category A (migration 0142): a two-person decision on a negative balance the configuration writes off or recovers
+ * from salary when the month is locked — requested (the amount, the run and the reason) and then approved or refused by
+ * a SECOND person. The lock records the write-off or salary recovery only with an approval for exactly that run,
+ * salesperson, outcome and amount (the database refuses it otherwise). Append-only.
+ */
+export const incentiveCalcNegativeDecisions = pgTable(
+  "incentive_calc_negative_decisions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    kind: text("kind").notNull().$type<"request" | "approve" | "refuse">(),
+    requestId: uuid("request_id"),
+    periodId: uuid("period_id").notNull().references(() => incentiveCalcPeriods.id, { onDelete: "restrict" }),
+    runId: uuid("run_id").notNull().references(() => incentiveCalcRuns.id, { onDelete: "restrict" }),
+    employeeId: uuid("employee_id").references(() => employees.id, { onDelete: "set null" }),
+    employeeName: text("employee_name").notNull(),
+    outcome: text("outcome").notNull().$type<"write-off" | "salary-recovery">(),
+    amountPaise: bigint("amount_paise", { mode: "number" }).notNull(),
+    reason: text("reason").notNull(),
+    createdById: uuid("created_by_id").references(() => employees.id, { onDelete: "set null" }),
+    createdByName: text("created_by_name").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("incentive_calc_negative_decisions_period_idx").on(t.periodId, t.createdAt)],
+);
+
 /* ── 0136 — a voided (abandoned, unpaid) month (append-only) ── */
+
+/* ── 0137 — Category F: Google reviews (registry, submissions, decisions, write-offs) ── */
+
+export const incentiveFReviews = pgTable("incentive_f_reviews", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  googleReviewId: text("google_review_id"),
+  urlKey: text("url_key"),
+  firstUrl: text("first_url").notNull(),
+  placeId: text("place_id"),
+  source: text("source").notNull().$type<"manual" | "api">().default("manual"),
+  createdById: uuid("created_by_id").references(() => employees.id, { onDelete: "set null" }),
+  createdByName: text("created_by_name").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const incentiveFSubmissions = pgTable("incentive_f_submissions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  testimonialId: uuid("testimonial_id").references(() => testimonials.id, { onDelete: "set null" }),
+  reviewId: uuid("review_id").references(() => incentiveFReviews.id, { onDelete: "restrict" }),
+  linkState: text("link_state").notNull().$type<"new" | "duplicate" | "unresolved">(),
+  submittedById: uuid("submitted_by_id").references(() => employees.id, { onDelete: "set null" }),
+  submittedByName: text("submitted_by_name").notNull(),
+  submittedUrl: text("submitted_url").notNull(),
+  urlKey: text("url_key"),
+  googleReviewId: text("google_review_id"),
+  screenshotUrl: text("screenshot_url"),
+  /** 0138: the claimed testimonial type; the rating only for a Google review. */
+  claimedKind: text("claimed_kind").notNull().$type<FTestimonialKind>().default("google_review"),
+  claimedRating: smallint("claimed_rating"),
+  claimedPublishedOn: date("claimed_published_on").notNull(),
+  claimedText: text("claimed_text"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Category F's testimonial types (0138): F.1 Google review, F.2 testimonial on email, F.3 on the customer's letterhead. */
+export type FTestimonialKind = "google_review" | "email" | "letterhead";
+
+export type FDecisionKind = "verify" | "reject" | "needs-review" | "link" | "attribute" | "invalidate-request" | "invalidate-approve" | "invalidate-refuse";
+export const incentiveFDecisions = pgTable("incentive_f_decisions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  reviewId: uuid("review_id").notNull().references(() => incentiveFReviews.id, { onDelete: "restrict" }),
+  submissionId: uuid("submission_id").references(() => incentiveFSubmissions.id, { onDelete: "restrict" }),
+  kind: text("kind").notNull().$type<FDecisionKind>(),
+  requestId: uuid("request_id"),
+  rating: smallint("rating"),
+  publishedOn: date("published_on"),
+  reviewMonth: date("review_month"),
+  reviewText: text("review_text"),
+  googleReviewId: text("google_review_id"),
+  namedEmployeeIds: uuid("named_employee_ids").array().notNull().default(sql`'{}'`),
+  namedEmployeeNames: text("named_employee_names").array().notNull().default(sql`'{}'`),
+  /** 0138: the verified testimonial type; F.4 — who it appreciates by name; an email / letterhead's identity and the verifier's findings. */
+  testimonialKind: text("testimonial_kind").$type<FTestimonialKind>(),
+  appreciatedEmployeeIds: uuid("appreciated_employee_ids").array().notNull().default(sql`'{}'`),
+  appreciatedEmployeeNames: text("appreciated_employee_names").array().notNull().default(sql`'{}'`),
+  evidenceKey: text("evidence_key"),
+  /** 0139: an email's normalised Message-ID and an email's / letter's deterministic fingerprint (each unique among active verifications). */
+  evidenceMessageId: text("evidence_message_id"),
+  evidenceFingerprint: text("evidence_fingerprint"),
+  confirmedFromCustomer: boolean("confirmed_from_customer").notNull().default(false),
+  confirmedType: boolean("confirmed_type").notNull().default(false),
+  confirmedGenuine: boolean("confirmed_genuine").notNull().default(false),
+  customerMasterId: uuid("customer_master_id").references(() => customerMasters.id, { onDelete: "set null" }),
+  creditedEmployeeId: uuid("credited_employee_id").references(() => employees.id, { onDelete: "set null" }),
+  creditedEmployeeName: text("credited_employee_name"),
+  basis: text("basis").$type<"named" | "assigned" | "claim">(),
+  reason: text("reason").notNull(),
+  evidenceUrl: text("evidence_url"),
+  createdById: uuid("created_by_id").references(() => employees.id, { onDelete: "set null" }),
+  createdByName: text("created_by_name").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  retiredAt: timestamp("retired_at", { withTimezone: true }),
+  retiredById: uuid("retired_by_id").references(() => employees.id, { onDelete: "set null" }),
+  retiredReason: text("retired_reason"),
+});
+
+export const incentiveFWriteoffs = pgTable("incentive_f_writeoffs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  kind: text("kind").notNull().$type<"request" | "approve" | "refuse">(),
+  requestId: uuid("request_id"),
+  adjustmentId: uuid("adjustment_id").notNull().references(() => incentiveCalcAdjustments.id, { onDelete: "restrict" }),
+  resultAdjustmentId: uuid("result_adjustment_id").references(() => incentiveCalcAdjustments.id, { onDelete: "restrict" }),
+  employeeId: uuid("employee_id").references(() => employees.id, { onDelete: "set null" }),
+  employeeName: text("employee_name").notNull(),
+  amountPaise: bigint("amount_paise", { mode: "number" }).notNull(),
+  reason: text("reason").notNull(),
+  evidenceUrl: text("evidence_url"),
+  createdById: uuid("created_by_id").references(() => employees.id, { onDelete: "set null" }),
+  createdByName: text("created_by_name").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
 
 export const incentiveCalcPeriodVoids = pgTable(
   "incentive_calc_period_voids",

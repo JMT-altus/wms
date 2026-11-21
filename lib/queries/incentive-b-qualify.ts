@@ -1,10 +1,12 @@
 import "server-only";
 import { and, asc, desc, eq, ilike, inArray, isNull, or } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { customerMasters, incentiveCalcBOverrides, incentiveCalcBQualifications, incentiveCalcInputHistory, incentiveCalcPeriods, incentiveCalcRuns, incentivePrograms, tallyDocuments } from "@/db/schema";
+import { customerMasters, incentiveAudit, incentiveCalcBInvoiceReviews, incentiveCalcBOverrides, incentiveCalcBQualifications, incentiveCalcInputHistory, incentiveCalcPeriods, incentiveCalcRuns, incentivePrograms, tallyDocuments } from "@/db/schema";
 import type { CategoryBResult } from "@/lib/incentives/category-b/types";
 import { incentiveCalcBReady, CALC_B_NOT_READY } from "@/lib/queries/incentive-calc-b";
-import type { Actor, Result } from "@/lib/queries/incentive-calc";
+import { bInvoiceReviewsReady, type Actor, type Result } from "@/lib/queries/incentive-calc";
+
+export const B_INVOICE_REVIEWS_NOT_READY = "Reviewing an invoice with no Sales Order needs database update 0140 first, so nothing was saved. Until then, correct the Sales Order link in Forms and recalculate.";
 
 /**
  * Category B — the review queue and an authorised admin's manual qualification decisions (migration 0134).
@@ -57,11 +59,14 @@ export interface ReviewQueue {
   source: { runId: string; adopted: boolean; asOf: string; configVersionNo: number | null } | null;
   rows: ReviewRow[];
   reviewInvoices: CategoryBResult["reviewInvoices"];
+  /** 0140: whether invoice reviews can be recorded, and every review decision on the listed invoices (history included). */
+  invoiceReviewsReady: boolean;
+  invoiceReviews: InvoiceReview[];
 }
 
 /** The month's Category B orders with their qualification and evidence, review cases first. Reads only. */
 export async function reviewQueue(programId: string | null, month: string, filter: "review" | "all" = "review", q: Q = db): Promise<ReviewQueue> {
-  const empty: ReviewQueue = { ready: false, programs: [], programId: null, month, source: null, rows: [], reviewInvoices: [] };
+  const empty: ReviewQueue = { ready: false, programs: [], programId: null, month, source: null, rows: [], reviewInvoices: [], invoiceReviewsReady: false, invoiceReviews: [] };
   if (!(await incentiveCalcBReady(q))) return empty;
   const programs = await q.select({ id: incentivePrograms.id, code: incentivePrograms.code, name: incentivePrograms.name }).from(incentivePrograms).orderBy(asc(incentivePrograms.code));
   const pid = programId && programs.some((p) => p.id === programId) ? programId : (programs[0]?.id ?? null);
@@ -100,6 +105,7 @@ export async function reviewQueue(programId: string | null, month: string, filte
       };
     })
     .sort((a, b) => Number(b.outcome === "needs-review") - Number(a.outcome === "needs-review"));
+  const reviewInvoices = (run.result as CategoryBResult).reviewInvoices ?? [];
   return {
     ready: true,
     programs,
@@ -107,7 +113,9 @@ export async function reviewQueue(programId: string | null, month: string, filte
     month,
     source: { runId: run.id, adopted: period?.currentRunId === run.id, asOf: D(run.asOf)!, configVersionNo: run.configVersionNo },
     rows,
-    reviewInvoices: (run.result as CategoryBResult).reviewInvoices ?? [],
+    reviewInvoices,
+    invoiceReviewsReady: await bInvoiceReviewsReady(q),
+    invoiceReviews: await invoiceReviews(reviewInvoices.map((i) => i.invoiceId), q),
   };
 }
 
@@ -142,6 +150,66 @@ export async function recordOverride(actor: Actor, input: { orderId: string; dec
     const [row] = await tx.insert(incentiveCalcBOverrides).values({ orderDocumentId: doc.id, decision: input.decision, reason, createdById: actor.id, createdByName: actor.name }).returning();
     await history(tx, actor, row!.id, "record", null, { orderId: doc.id, orderNo: doc.documentNo, decision: input.decision, reason }, reason);
     return { ok: true as const, id: row!.id };
+  });
+}
+
+/* ── invoices with no Sales Order (0140, NOT APPLIED until approved) ── */
+
+export interface InvoiceReview {
+  id: string;
+  invoiceId: string;
+  decision: "not-category-b";
+  reason: string;
+  byName: string;
+  at: string;
+  retiredAt: string | null;
+  retiredReason: string | null;
+}
+
+/** Every review decision (active and retired, oldest first) on the given invoices; empty before 0140. Reads only. */
+export async function invoiceReviews(invoiceIds: string[], q: Q = db): Promise<InvoiceReview[]> {
+  if (!invoiceIds.length || !(await bInvoiceReviewsReady(q))) return [];
+  const rows = await q.select().from(incentiveCalcBInvoiceReviews).where(inArray(incentiveCalcBInvoiceReviews.invoiceDocumentId, invoiceIds)).orderBy(asc(incentiveCalcBInvoiceReviews.createdAt));
+  return rows.map((r) => ({ id: r.id, invoiceId: r.invoiceDocumentId, decision: r.decision, reason: r.reason, byName: r.createdByName, at: r.createdAt.toISOString(), retiredAt: r.retiredAt ? r.retiredAt.toISOString() : null, retiredReason: r.retiredReason }));
+}
+
+/**
+ * Record that an invoice with no Sales Order in Forms was reviewed and is NOT a Category B sale (it stays out, as the
+ * calculation already leaves it), with the reason. It never qualifies anything and never changes a calculation: to count
+ * the invoice, its Sales Order link is corrected in Forms and the month recalculated. One active decision per invoice;
+ * whoever decides it never approves that Category B month.
+ */
+export async function recordInvoiceReview(actor: Actor, input: { invoiceId: string; reason: string }): Promise<Result<{ id: string }>> {
+  if (!UUID.test(input.invoiceId)) return { ok: false, error: "Choose the invoice." };
+  const reason = clean(input.reason);
+  if (!reason) return { ok: false, error: "Give the reason for the decision (it is kept with it)." };
+  if ((input.reason ?? "").trim().length > 1000) return { ok: false, error: "The reason is longer than 1,000 characters." };
+  if (!(await incentiveCalcBReady(db))) return { ok: false, error: CALC_B_NOT_READY };
+  if (!(await bInvoiceReviewsReady(db))) return { ok: false, error: B_INVOICE_REVIEWS_NOT_READY };
+  return db.transaction(async (tx) => {
+    const [doc] = await tx.select().from(tallyDocuments).where(eq(tallyDocuments.id, input.invoiceId));
+    if (!doc || doc.documentType !== "sales-invoices") return { ok: false as const, error: "That isn't a Forms sales invoice." };
+    const [current] = await tx.select().from(incentiveCalcBInvoiceReviews).where(and(eq(incentiveCalcBInvoiceReviews.invoiceDocumentId, doc.id), isNull(incentiveCalcBInvoiceReviews.retiredAt)));
+    if (current) return { ok: false as const, error: `Invoice ${doc.documentNo} is already reviewed. Retire that decision first, with the reason, to record another.` };
+    const [row] = await tx.insert(incentiveCalcBInvoiceReviews).values({ invoiceDocumentId: doc.id, decision: "not-category-b", reason, createdById: actor.id, createdByName: actor.name }).returning();
+    await tx.insert(incentiveAudit).values({ actorId: actor.id, action: "b-invoice-reviewed", entityType: "tally-document", entityId: doc.id, detail: { category: "B", decisionId: row!.id, invoiceNo: doc.documentNo, decision: "not-category-b", reason } });
+    return { ok: true as const, id: row!.id };
+  });
+}
+
+/** Retire an invoice review (with the reason): the invoice needs review again before its month is submitted, approved or paid. */
+export async function retireInvoiceReview(actor: Actor, id: string, reason: string): Promise<Result> {
+  const why = clean(reason);
+  if (!UUID.test(id)) return { ok: false, error: "That decision doesn't exist." };
+  if (!why) return { ok: false, error: "Say why it is retired." };
+  if (!(await bInvoiceReviewsReady(db))) return { ok: false, error: B_INVOICE_REVIEWS_NOT_READY };
+  return db.transaction(async (tx) => {
+    const [row] = await tx.select().from(incentiveCalcBInvoiceReviews).where(eq(incentiveCalcBInvoiceReviews.id, id)).for("update");
+    if (!row) return { ok: false as const, error: "That decision doesn't exist." };
+    if (row.retiredAt) return { ok: false as const, error: "It was already retired." };
+    await tx.update(incentiveCalcBInvoiceReviews).set({ retiredAt: new Date(), retiredById: actor.id, retiredReason: why }).where(eq(incentiveCalcBInvoiceReviews.id, id));
+    await tx.insert(incentiveAudit).values({ actorId: actor.id, action: "b-invoice-review-retired", entityType: "tally-document", entityId: row.invoiceDocumentId, detail: { category: "B", decisionId: id, reason: why } });
+    return { ok: true as const };
   });
 }
 

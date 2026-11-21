@@ -13,9 +13,15 @@ import { categoryAScenarios } from "../fixtures/golden/category-a-scenarios";
  * Every later change must leave all of them byte-for-byte identical:
  *   * the engine re-run on each STORED input gives exactly the stored result (canonical JSON) and hashes;
  *   * the scenario builders still produce exactly the stored inputs (so the fixtures didn't drift either);
- *   * the engine version is still category-a/1.
+ *   * the engine version is category-a/2.
  *
- * Regenerating the snapshot (GOLDEN_WRITE=1) is only ever done before a change, never to make a failing comparison pass.
+ * Regenerating the snapshot (GOLDEN_WRITE=1) is only ever done for a deliberate engine version change, never to make a
+ * failing comparison pass. category-a/1 → category-a/2 (2026-11-21) was regenerated after a scenario-by-scenario
+ * comparison with the stored category-a/1 results: NO amount changed in any scenario. The differences were exactly the
+ * intended ones — every hold carries a code; an order credited to nobody because something is missing is held
+ * ("unassigned") instead of only listed as left out; "settled" is false while anything is held; an ignored credit note
+ * explains its consequence; and the bounce scenario uses "Reverse what it earned" (Category A no longer offers "restart
+ * the delay", which gave exactly the same figures — confirmed by that comparison).
  */
 const FILE = resolve(__dirname, "../fixtures/golden/category-a-engine.json");
 interface Golden {
@@ -35,9 +41,9 @@ if (process.env.GOLDEN_WRITE === "1") {
 const golden = JSON.parse(readFileSync(FILE, "utf8")) as Golden;
 
 describe("Category A golden master — engine", () => {
-  it("is still engine category-a/1, with every scenario present", () => {
-    expect(ENGINE_VERSION).toBe("category-a/1");
-    expect(golden.engineVersion).toBe("category-a/1");
+  it("is engine category-a/2, with every scenario present", () => {
+    expect(ENGINE_VERSION).toBe("category-a/2");
+    expect(golden.engineVersion).toBe("category-a/2");
     expect(golden.scenarios.map((s) => s.name)).toEqual(categoryAScenarios().map((s) => s.name));
     expect(golden.scenarios.length).toBeGreaterThanOrEqual(60);
   });

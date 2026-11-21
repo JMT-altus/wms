@@ -318,7 +318,8 @@ export const submit = (actor: Actor, id: string, rv: number) =>
   transition(actor, id, rv, "submit", async (v, q) => (v.status !== "draft" && v.status !== "rejected" ? `A ${v.status} version can't be submitted.` : incomplete(q, v)), () => ({ status: "submitted", submittedById: actor.id, submittedAt: new Date(), rejectedById: null, rejectedAt: null, rejectionReason: null }));
 
 export const withdraw = (actor: Actor, id: string, rv: number) =>
-  transition(actor, id, rv, "withdraw", async (v) => (v.status !== "submitted" ? "Only a submitted version can be withdrawn." : null), () => ({ status: "draft", submittedById: null, submittedAt: null }));
+  // Category A: only the person who submitted a version withdraws it (anyone else decides on it: approve or reject).
+  transition(actor, id, rv, "withdraw", async (v) => (v.status !== "submitted" ? "Only a submitted version can be withdrawn." : v.categoryCode === "A" && v.submittedById !== actor.id ? "Only the person who submitted it can withdraw it; anyone else approves or rejects it." : null), () => ({ status: "draft", submittedById: null, submittedAt: null }));
 
 export const approve = (actor: Actor, id: string, rv: number, note: string | null) =>
   transition(

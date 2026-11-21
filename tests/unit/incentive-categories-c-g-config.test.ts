@@ -22,7 +22,12 @@ describe("each category has only the settings that mean something for it", () =>
     }
     expect(keys("D").filter((k) => k.startsWith("d."))).toHaveLength(6);
     expect(keys("E").filter((k) => k.startsWith("e."))).toEqual(["e.minAward", "e.maxAward"]);
-    expect(keys("F").filter((k) => k.startsWith("f."))).toHaveLength(7);
+    // F.1–F.4 (0138): Google review, email, letterhead, appreciation multiple; lowest rating, fewest words, monthly
+    // minimum, screenshot, recovery expiry; 2 historical (five stars only, the superseded named bonus).
+    expect(keys("F").filter((k) => k.startsWith("f."))).toHaveLength(11);
+    const req = (k: string) => settingsFor("F").find((d) => d.key === k)!.required;
+    for (const k of ["f.googleReviewAmount", "f.emailAmount", "f.letterheadAmount", "f.namedMultiple"]) expect(req(k), k).toBe(true);
+    for (const k of ["f.namedBonusAmount", "f.googleFiveStarOnly"]) expect(req(k), k).toBe(false);
   });
   it("C uses Category A's receipt-based earning and credit-note / return rules — narrowed to the confirmed choices — and the minimum payable; no other category gets them", () => {
     expect(keys("C")).toEqual(expect.arrayContaining(["collection.earningBasis", "collection.payableWhen", "adjust.creditNote", "adjust.salesReturn", "c.turnoverWindowMonths", "c.turnoverBasis", "payout.minimumPayable", "payout.belowMinimum"]));
@@ -53,8 +58,20 @@ describe("templates: the old engine's PDF values only; G has none", () => {
     // No minimum amount is assumed: "No minimum" or an amount must be chosen.
     expect(CATEGORY_TEMPLATES.C!.settings["payout.minimumPayable"]).toBeUndefined();
     expect(CATEGORY_TEMPLATES.D!.settings["d.unitCounting"]).toBeUndefined();
-    expect(CATEGORY_TEMPLATES.F!.settings["f.googleNeedsEvidence"]).toBeUndefined();
+    // Category F: the original scheme (F.1 ₹100, F.2 ₹100, F.3 ₹150, F.4 double), five stars, no word or count minimum,
+    // a screenshot, recovery never lapses. The ₹750 limit is NOT in it: its scope isn't confirmed (see below).
+    expect(CATEGORY_TEMPLATES.F!.settings).toMatchObject({ "f.googleReviewAmount": 100_00, "f.emailAmount": 100_00, "f.letterheadAmount": 150_00, "f.namedMultiple": 2, "f.minRating": 5, "f.googleMinWords": 0, "f.minQualifyingReviews": 0, "f.googleNeedsEvidence": "yes", "f.recoveryExpiry": "never" });
+    for (const old of ["f.namedBonusAmount", "f.googleFiveStarOnly", "caps.perEmployeeCategoryMonth"]) expect(CATEGORY_TEMPLATES.F!.settings[old], old).toBeUndefined();
     expect(referenceTemplateFor("G")).toEqual(EMPTY_CONFIG);
+  });
+  it("Category F: the unresolved monthly limit (PDF ₹750, scope unconfirmed) blocks submission and publishing until a value is entered", () => {
+    const { problems, missing } = checkConfig(referenceTemplateFor("F"), ctx("F"));
+    expect(problems).toEqual([]);
+    expect(missing.map((m) => m.where)).toContain("caps.perEmployeeCategoryMonth");
+    expect(settingsFor("F").find((d) => d.key === "caps.perEmployeeCategoryMonth")!.help).toMatch(/₹750 for Category F\. NOT YET CONFIRMED: whether it is per salesperson per month, and whether F\.4 doubled rewards count inside it/);
+    // Once an approved value is entered (here ₹750) nothing about the limit is missing any more.
+    const c = completeConfig({}, undefined, "F");
+    expect(checkConfig({ ...c, settings: { ...c.settings, "caps.perEmployeeCategoryMonth": 750_00 } }, ctx("F"))).toEqual({ problems: [], missing: [] });
   });
   it("no template is publishable as it is: each still misses decisions", () => {
     for (const c of ["C", "D", "E", "F", "G"] as const) {

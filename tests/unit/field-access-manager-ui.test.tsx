@@ -43,7 +43,7 @@ describe("permission matrix — Collections", () => {
     // 9 Collection capabilities (incl. the Tracker's Bulk Upload, the Commitments page, Collection Done and View All Collection Person Data) + the 3 Leave approvals ones + Attendance settings + Attendance waivers + Tally import + Sales Order fields
     // + the 7 Incentive Rules rights (view, edit, submit, approve, publish, backdate, history) + the 9 Incentive
     // Calculation rights (view, calculate, lock, inputs, view approvals, view payouts, submit, approve, pay), all explicit-grant-only.
-    expect(within(screen.getByRole("table")).getAllByText("Sensitive")).toHaveLength(37); // 33 + incentive.calc.qualify (Category B) + incentive.calc.review and incentive.calc.void (Category C) + incentive.activity.anyMonth (log D/E/F activity for an earlier month)
+    expect(within(screen.getByRole("table")).getAllByText("Sensitive")).toHaveLength(40); // 33 + incentive.calc.qualify (Category B) + incentive.calc.review and incentive.calc.void (Category C) + incentive.activity.anyMonth (log D/E/F activity for an earlier month) + incentive.f.verify, .invalidate and .writeOff (Category F)
     for (const l of ["Collections — Assign Sales Coordinator", "Collection Tracker — Company Popup — Commitment Section: View", "Collection Tracker — Company Popup — Commitment Section: Record", "Collection — Commitments Page Access", "Collections — Review escalations", "Collections — Close escalations", "Collection Tracker — Bulk Upload", "Collection Tracker — Collection Done", "Collection Tracker — View All Collection Person Data"]) {
       expect(within(row(l)).getByText("Sensitive")).toBeTruthy();
     }

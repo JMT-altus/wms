@@ -29,7 +29,14 @@ export function SubmitPanel({ currentMonth, canPickMonth = false }: { currentMon
   function run(fn: () => Promise<{ ok: boolean; error?: string }>, success: string) {
     setMsg(null);
     start(async () => {
-      const res = await fn();
+      // A refusal comes back as { ok: false, error } and is shown; a call that fails without an answer (a dropped
+      // connection, a changed access) is shown too — never left as an uncaught error. What was typed stays either way.
+      let res: { ok: boolean; error?: string };
+      try {
+        res = await fn();
+      } catch {
+        res = { ok: false, error: "That couldn't be submitted — your access or the page may have changed. Reload the page, then try again." };
+      }
       if (res.ok) {
         setMsg({ ok: true, text: success });
         router.refresh();
@@ -72,7 +79,7 @@ export function SubmitPanel({ currentMonth, canPickMonth = false }: { currentMon
       </div>
 
       {msg && (
-        <p className="mt-3 text-[13px] font-semibold" style={{ color: msg.ok ? "#15803d" : "#b91c1c" }}>{msg.text}</p>
+        <p role={msg.ok ? "status" : "alert"} className="mt-3 text-[13px] font-semibold" style={{ color: msg.ok ? "#15803d" : "#b91c1c" }}>{msg.text}</p>
       )}
       {tab === "review" && (
         <p className="mt-3 text-[12px] text-ink-subtle leading-[1.5]">
@@ -149,16 +156,35 @@ function MeetingForm({ pending, onSubmit }: { pending: boolean; onSubmit: (b: "l
   );
 }
 
-function ReviewForm({ pending, onSubmit }: { pending: boolean; onSubmit: (v: { kind: "google_review" | "email" | "letterhead"; wordCount: number; starRating?: number; namesTeamMember: boolean; evidenceUrl?: string }) => void }) {
+/**
+ * A review or testimonial. A Google review (Category F, 0137) needs its PUBLIC review link and the date Google shows it
+ * was published (its month); a screenshot is supporting evidence. It earns nothing until an authorised verifier checks
+ * the public review. Email and letterhead testimonials are recorded as before.
+ */
+type ReviewValues = { kind: "google_review" | "email" | "letterhead"; wordCount: number; starRating?: number; namesTeamMember: boolean; evidenceUrl?: string; reviewUrl?: string; screenshotUrl?: string; publishedOn?: string; reviewText?: string };
+function ReviewForm({ pending, onSubmit }: { pending: boolean; onSubmit: (v: ReviewValues) => void }) {
   const [kind, setKind] = useState<"google_review" | "email" | "letterhead">("google_review");
   const [stars, setStars] = useState("5");
   const [words, setWords] = useState("");
   const [names, setNames] = useState(false);
   const [url, setUrl] = useState("");
+  const [reviewUrl, setReviewUrl] = useState("");
+  const [shot, setShot] = useState("");
+  const [published, setPublished] = useState("");
+  const [text, setText] = useState("");
+  const google = kind === "google_review";
   return (
     <form
-      onSubmit={(e) => { e.preventDefault(); onSubmit({ kind, wordCount: Number(words), starRating: kind === "google_review" ? Number(stars) : undefined, namesTeamMember: names, evidenceUrl: url }); }}
+      onSubmit={(e) => {
+        e.preventDefault();
+        onSubmit(
+          google
+            ? { kind, wordCount: 0, starRating: Number(stars), namesTeamMember: names, reviewUrl: reviewUrl.trim(), screenshotUrl: shot.trim() || undefined, publishedOn: published, reviewText: text.trim() || undefined }
+            : { kind, wordCount: Number(words), namesTeamMember: names, evidenceUrl: url.trim(), publishedOn: published, reviewText: text.trim() || undefined },
+        );
+      }}
       className="flex items-end gap-3 flex-wrap"
+      aria-label="Submit a review or testimonial"
     >
       <label className="min-w-[130px]">
         <span className="text-[12px] font-bold text-ink-subtle">Type</span>
@@ -168,25 +194,59 @@ function ReviewForm({ pending, onSubmit }: { pending: boolean; onSubmit: (v: { k
           <option value="letterhead">Letterhead</option>
         </select>
       </label>
-      {kind === "google_review" && (
-        <label className="min-w-[90px]">
-          <span className="text-[12px] font-bold text-ink-subtle">Stars</span>
-          <select value={stars} onChange={(e) => setStars(e.target.value)} className={inputCls} style={inputStyle}>
-            {["5", "4", "3", "2", "1"].map((s) => <option key={s} value={s}>{s}★</option>)}
-          </select>
-        </label>
+      {google ? (
+        <>
+          <label className="flex-1 min-w-[220px]">
+            <span className="text-[12px] font-bold text-ink-subtle">Public Google review link (required)</span>
+            <input value={reviewUrl} onChange={(e) => setReviewUrl(e.target.value)} required className={inputCls} style={inputStyle} placeholder="https://www.google.com/maps/…" aria-label="Public Google review link" />
+          </label>
+          <label className="min-w-[150px]">
+            <span className="text-[12px] font-bold text-ink-subtle">Published on (as Google shows)</span>
+            <input value={published} onChange={(e) => setPublished(e.target.value)} required type="date" className={inputCls} style={inputStyle} aria-label="Published on" />
+          </label>
+          <label className="min-w-[90px]">
+            <span className="text-[12px] font-bold text-ink-subtle">Stars</span>
+            <select value={stars} onChange={(e) => setStars(e.target.value)} className={inputCls} style={inputStyle} aria-label="Stars">
+              {["5", "4", "3", "2", "1"].map((s) => <option key={s} value={s}>{s}★</option>)}
+            </select>
+          </label>
+          <label className="flex-1 min-w-[180px]">
+            <span className="text-[12px] font-bold text-ink-subtle">Screenshot link</span>
+            <input value={shot} onChange={(e) => setShot(e.target.value)} className={inputCls} style={inputStyle} placeholder="Screenshot URL" aria-label="Screenshot link" />
+          </label>
+          <label className="basis-full">
+            <span className="text-[12px] font-bold text-ink-subtle">Review text (as published)</span>
+            <textarea value={text} onChange={(e) => setText(e.target.value)} maxLength={5000} rows={2} className={inputCls} style={inputStyle} aria-label="Review text" />
+          </label>
+          <label className="flex items-center gap-2 text-[13px] font-semibold text-ink-muted pb-2.5">
+            <input type="checkbox" checked={names} onChange={(e) => setNames(e.target.checked)} /> Names me
+          </label>
+          <span className="basis-full text-[12px] text-ink-subtle">It earns nothing until an authorised reviewer checks the public review; its month is the date it was published.</span>
+        </>
+      ) : (
+        <>
+          <label className="min-w-[100px]">
+            <span className="text-[12px] font-bold text-ink-subtle">Words</span>
+            <input value={words} onChange={(e) => setWords(e.target.value)} type="number" min={0} className={inputCls} style={inputStyle} placeholder="e.g. 60" />
+          </label>
+          <label className="flex-1 min-w-[160px]">
+            <span className="text-[12px] font-bold text-ink-subtle">{kind === "email" ? "Link to the email (required)" : "Link to the scanned letter (required)"}</span>
+            <input value={url} onChange={(e) => setUrl(e.target.value)} required className={inputCls} style={inputStyle} placeholder="Uploaded email / letter URL" aria-label="Evidence link" />
+          </label>
+          <label className="min-w-[150px]">
+            <span className="text-[12px] font-bold text-ink-subtle">{kind === "email" ? "Date of the email" : "Date of the letter"}</span>
+            <input value={published} onChange={(e) => setPublished(e.target.value)} required type="date" className={inputCls} style={inputStyle} aria-label="Dated" />
+          </label>
+          <label className="basis-full">
+            <span className="text-[12px] font-bold text-ink-subtle">Testimonial text (as written)</span>
+            <textarea value={text} onChange={(e) => setText(e.target.value)} maxLength={5000} rows={2} className={inputCls} style={inputStyle} aria-label="Testimonial text" />
+          </label>
+          <label className="flex items-center gap-2 text-[13px] font-semibold text-ink-muted pb-2.5">
+            <input type="checkbox" checked={names} onChange={(e) => setNames(e.target.checked)} /> Appreciates me or a teammate by name
+          </label>
+          <span className="basis-full text-[12px] text-ink-subtle">It earns nothing until an authorised reviewer checks that it is genuinely from the customer; its month is the date on it.</span>
+        </>
       )}
-      <label className="min-w-[100px]">
-        <span className="text-[12px] font-bold text-ink-subtle">Words</span>
-        <input value={words} onChange={(e) => setWords(e.target.value)} type="number" min={0} className={inputCls} style={inputStyle} placeholder="e.g. 60" />
-      </label>
-      <label className="flex-1 min-w-[160px]">
-        <span className="text-[12px] font-bold text-ink-subtle">Evidence link</span>
-        <input value={url} onChange={(e) => setUrl(e.target.value)} className={inputCls} style={inputStyle} placeholder="Screenshot / doc URL" />
-      </label>
-      <label className="flex items-center gap-2 text-[13px] font-semibold text-ink-muted pb-2.5">
-        <input type="checkbox" checked={names} onChange={(e) => setNames(e.target.checked)} /> Names a teammate
-      </label>
       <SubmitBtn pending={pending}>Submit</SubmitBtn>
     </form>
   );

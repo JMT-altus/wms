@@ -146,9 +146,9 @@ const CATEGORY_A_SETTINGS: readonly SettingDef[] = [
     choices: [C("equalPerOrder", "Equally per order"), C("proportionalToValue", "In proportion to each order's value"), C("proportionalToCollected", "In proportion to the amount collected on each order")] },
   { key: "allocation.eligibleOrders", section: "allocation", label: "Orders that share the incentive", kind: "choice", required: true, source: "option",
     help: "Which of the month's orders take a share.",
-    choices: [C("allInMonth", "Every counted order of the month"), C("onlyOrdersAboveMin", "Only orders above a minimum value")] },
+    choices: [C("allInMonth", "Every counted order of the month"), C("onlyOrdersAboveMin", "Only orders of at least a minimum value")] },
   { key: "allocation.minOrderAmount", section: "allocation", label: "Minimum order value to take a share", kind: "amount", required: true, requiredWhen: { key: "allocation.eligibleOrders", values: ["onlyOrdersAboveMin"] }, source: "option",
-    help: "Orders below this value take no share." },
+    help: "An order of exactly this value takes a share; orders below it take none." },
 
   // ── Collection and Payment Delay ──
   { key: "collection.delayFrom", section: "delay", label: "Delay is counted from", kind: "choice", required: true, source: "pdf",
@@ -189,10 +189,10 @@ const CATEGORY_A_SETTINGS: readonly SettingDef[] = [
   // ── Refunds and Adjustments ──
   { key: "adjust.creditNote", section: "adjustments", label: "Credit notes", kind: "choice", required: true, source: "option",
     help: "How a credit note against an invoice changes sales and incentive.",
-    choices: [C("reduceOriginalMonthSales", "Reduce the original month's sales (it may fall below the threshold)"), C("reduceInIssueMonth", "Reduce sales in the month it is issued"), C("reduceOrderCollectionOnly", "Reduce only what the order must collect"), C("ignore", "Ignore")] },
+    choices: [C("reduceOriginalMonthSales", "Reduce the original month's sales (it may fall below the threshold)"), C("reduceInIssueMonth", "Reduce sales in the month it is issued"), C("reduceOrderCollectionOnly", "Reduce only what the order must collect"), C("ignore", "Ignore (sales and the amount to collect stay as they were: an order the customer pays less on then never becomes fully collected)")] },
   { key: "adjust.salesReturn", section: "adjustments", label: "Sales returns", kind: "choice", required: true, source: "option",
     help: "How a sales return changes sales and incentive.",
-    choices: [C("reduceOriginalMonthSales", "Reduce the original month's sales"), C("reduceInIssueMonth", "Reduce sales in the month of the return"), C("reduceOrderCollectionOnly", "Reduce only what the order must collect"), C("ignore", "Ignore")] },
+    choices: [C("reduceOriginalMonthSales", "Reduce the original month's sales"), C("reduceInIssueMonth", "Reduce sales in the month of the return"), C("reduceOrderCollectionOnly", "Reduce only what the order must collect"), C("ignore", "Ignore (sales and the amount to collect stay as they were: an order the customer pays less on then never becomes fully collected)")] },
   { key: "adjust.refund", section: "adjustments", label: "Refunds", kind: "choice", required: true, source: "option",
     help: "A refund paid back to the customer.",
     choices: [C("reverseReceiptShare", "Reverse the incentive the refunded payment earned"), C("ignore", "Ignore")] },
@@ -406,14 +406,32 @@ const C_TO_G_SETTINGS: readonly SettingDef[] = [
   { key: "e.minAward", section: "rewards", label: "Smallest award for a meeting", kind: "amount", required: true, source: "pdf", categories: ["E"], help: "An approved meeting's award is raised to at least this (PDF: ₹250)." },
   { key: "e.maxAward", section: "rewards", label: "Largest award for a meeting", kind: "amount", required: true, source: "pdf", categories: ["E"], help: "…and lowered to at most this (PDF: ₹1,000). The award itself is set by the admin who approves the meeting." },
 
-  // ── F · Reviews and testimonials (old engine F.1–F.4) ──
-  { key: "f.googleReviewAmount", section: "rewards", label: "Google review", kind: "amount", required: true, source: "pdf", categories: ["F"], help: "The reward for an approved Google review that meets the conditions below (PDF: ₹100)." },
-  { key: "f.googleMinWords", section: "rewards", label: "Google review: fewest words", kind: "integer", min: 0, max: 10000, required: true, source: "pdf", categories: ["F"], help: "A Google review shorter than this earns nothing (PDF: 50 words)." },
-  { key: "f.googleFiveStarOnly", section: "rewards", label: "Google review: five stars only", kind: "choice", required: true, source: "pdf", categories: ["F"], help: "Whether only a five-star Google review earns (PDF: a 5-star review).", choices: [C("yes", "Five stars only"), C("no", "Any rating")] },
-  { key: "f.googleNeedsEvidence", section: "rewards", label: "Google review: evidence needed", kind: "choice", required: true, source: "option", categories: ["F"], help: "The old engine refuses a review recorded without its screenshot.", choices: [C("yes", "A screenshot is needed"), C("no", "Not needed")] },
-  { key: "f.emailAmount", section: "rewards", label: "Email testimonial", kind: "amount", required: true, source: "pdf", categories: ["F"], help: "The reward for an approved testimonial sent by email (PDF: ₹100)." },
-  { key: "f.letterheadAmount", section: "rewards", label: "Letterhead testimonial", kind: "amount", required: true, source: "pdf", categories: ["F"], help: "The reward for an approved testimonial on the customer's letterhead (PDF: ₹150)." },
-  { key: "f.namedMultiple", section: "rewards", label: "When it names the salesperson or a teammate", kind: "integer", min: 1, max: 10, required: true, source: "pdf", categories: ["F"], help: "The reward is multiplied by this (PDF F.4: doubled — 2)." },
+  // ── F · Reviews and testimonials — the original scheme's F.1–F.4 (confirmed; 0137 + 0138) ──
+  // A VERIFIED, unique testimonial earns its type's reward: F.1 a Google review, F.2 a testimonial on email, F.3 one on the
+  // customer's letterhead; F.4 — appreciation of the credited salesperson or any team member categorically by name —
+  // multiplies the applicable reward (the total is that multiple of it). Never split between salespeople.
+  { key: "f.googleReviewAmount", section: "rewards", label: "F.1 Google review", kind: "amount", required: true, source: "decision", categories: ["F"],
+    help: "The reward for a verified, unique, public Google review that meets the conditions below (the original scheme: ₹100)." },
+  { key: "f.emailAmount", section: "rewards", label: "F.2 Testimonial on email", kind: "amount", required: true, source: "decision", categories: ["F"],
+    help: "The reward for a verified email testimonial — verified as genuinely from the customer and as an email testimonial (the original scheme: ₹100)." },
+  { key: "f.letterheadAmount", section: "rewards", label: "F.3 Testimonial on the customer's letterhead", kind: "amount", required: true, source: "decision", categories: ["F"],
+    help: "The reward for a verified testimonial on the customer's letterhead — verified as the customer's letterhead and genuine (the original scheme: ₹150)." },
+  { key: "f.namedMultiple", section: "rewards", label: "F.4 Appreciation by name: the reward is multiplied by", kind: "integer", min: 1, max: 10, required: true, source: "decision", categories: ["F"],
+    help: "When a testimonial categorically appreciates the credited salesperson or any team member BY NAME, its F.1, F.2 or F.3 reward is multiplied by this (the original scheme: 2 — double; ₹100 becomes ₹200, ₹150 becomes ₹300, never more). Vague praise without a name doesn't count. 1 = no F.4." },
+  { key: "f.minRating", section: "rewards", label: "Google review: lowest star rating that earns", kind: "integer", min: 1, max: 5, required: true, source: "decision", categories: ["F"],
+    help: "A Google review rated below this earns nothing (confirmed default: 5 — five stars only). Email and letterhead testimonials have no rating. A change applies from the month its version is published; a calculated month keeps the settings it was calculated with." },
+  { key: "f.googleMinWords", section: "rewards", label: "Google review: fewest words", kind: "integer", min: 0, max: 10000, required: true, source: "decision", categories: ["F"],
+    help: "A verified Google review with fewer words earns nothing. 0 = no minimum (confirmed default)." },
+  { key: "f.minQualifyingReviews", section: "rewards", label: "Qualifying testimonials needed in a month", kind: "integer", min: 0, max: 100, required: true, source: "decision", categories: ["F"],
+    help: "Per salesperson per month, counting every verified testimonial type: with fewer, the month's Category F is nothing (and says why). 0 = no minimum (confirmed default)." },
+  { key: "f.googleNeedsEvidence", section: "rewards", label: "Google review: screenshot needed", kind: "choice", required: true, source: "option", categories: ["F"],
+    help: "The public review link is always required; this says whether a screenshot must be attached as well when it is submitted. (Email and letterhead testimonials always need their evidence link.)", choices: [C("yes", "A screenshot is needed"), C("no", "Not needed")] },
+  { key: "f.recoveryExpiry", section: "adjustments", label: "When recovery after payout stops", kind: "choice", required: true, source: "decision", categories: ["F"],
+    help: "A testimonial invalidated after payout is recovered from later months. Confirmed default: never lapses; choose a number of days only if an expiry has been approved.",
+    choices: [C("never", "Never: recovered whenever it is invalidated"), C("afterWindowDays", "After a number of days from payout")] },
+  // Historical: kept so earlier versions still read; Category F ignores them.
+  { key: "f.googleFiveStarOnly", section: "rewards", label: "Historical: five stars only", kind: "choice", required: false, source: "pdf", categories: ["F"], help: "Replaced by the lowest star rating that earns; ignored.", choices: [C("yes", "Five stars only"), C("no", "Any rating")] },
+  { key: "f.namedBonusAmount", section: "rewards", label: "Historical: amount added when the salesperson is named", kind: "amount", required: false, source: "decision", categories: ["F"], help: "Superseded by F.4 (the reward multiplied when the testimonial appreciates someone by name); ignored." },
 
   // ── G · Consecutive monthly customer purchases — NO rule exists yet (old engine: disabled) ──
   { key: "g.consecutiveMonths", section: "streak", label: "Consecutive months of purchases", kind: "integer", min: 2, max: 24, required: true, source: "option", categories: ["G"],
@@ -428,6 +446,13 @@ const C_TO_G_SETTINGS: readonly SettingDef[] = [
 
 /** How a shared setting reads, or is narrowed, for one category. */
 const CATEGORY_OVERRIDES: Partial<Record<CategoryCode, Record<string, Partial<SettingDef>>>> = {
+  A: {
+    // "Reverse what it earned; the delay keeps running" behaves exactly like "Reverse what it earned": a bounced cheque
+    // pays nothing, so its invoice stays unpaid and its delay keeps running until a payment clears. Restarting the delay
+    // (from the bounce, or for the replacement payment) has no defined meaning, so it isn't offered for Category A; a
+    // version that chose it can't be saved, submitted or published until "Reverse what it earned" is chosen.
+    "adjust.bouncedCheque": { help: "A payment that bounced earns nothing; its invoice stays unpaid, so its delay keeps running until a payment that clears (that payment earns at its own delay). Restarting the delay isn't offered: it has no defined meaning.", choices: [C("reverseReceiptShare", "Reverse what it earned (the delay keeps running)")] },
+  },
   B: {
     "basis.voucherFilter": { section: "qualification", label: "Orders left out", help: "Sales Orders whose Voucher Status says so are left out of Category B and of every customer's order history. Cancelled orders are always left out (confirmed decision), so Cancelled must be chosen.", source: "decision" },
     "collection.delayFrom": { help: "The qualifying invoice's receipts are measured from this date, each at its own delay (as Category A)." },
@@ -446,7 +471,7 @@ const CATEGORY_OVERRIDES: Partial<Record<CategoryCode, Record<string, Partial<Se
     (["C", "D", "E", "F", "G"] as const).map((c) => [
       c,
       {
-        "caps.perEmployeeCategoryMonth": { label: `Most a salesperson can earn from Category ${c} in a month`, help: c === "G" ? "No amount exists yet: choose \"No limit\" deliberately or enter the approved amount." : `PDF ceiling for Category ${c}: ${({ C: "₹5,000", D: "₹1,000", E: "₹1,000", F: "₹750" } as Record<string, string>)[c]}. Choose "No limit" deliberately or enter the approved amount.` },
+        "caps.perEmployeeCategoryMonth": { label: `Most a salesperson can earn from Category ${c} in a month`, help: c === "G" ? "No amount exists yet: choose \"No limit\" deliberately or enter the approved amount." : c === "F" ? "The PDF shows ₹750 for Category F. NOT YET CONFIRMED: whether it is per salesperson per month, and whether F.4 doubled rewards count inside it (as entered here they do: the limit applies to the month's Category F total). Required: publishing stays blocked until the approved value is entered — choose \"No limit\" only if that is the decision." : `PDF ceiling for Category ${c}: ${({ C: "₹5,000", D: "₹1,000", E: "₹1,000" } as Record<string, string>)[c]}. Choose "No limit" deliberately or enter the approved amount.` },
         "caps.allCategoriesPolicy": { required: true },
         "period.unit": { help: `Category ${c} is calculated per calendar month.` },
         ...(c === "C"
@@ -459,6 +484,8 @@ const CATEGORY_OVERRIDES: Partial<Record<CategoryCode, Record<string, Partial<Se
             }
           : {}),
         ...(c === "G" ? { "caps.perOrder": { label: "Most one customer's run can earn", help: "No amount exists yet." } } : {}),
+        // Category F: the recovery window applies only when recovery after payout stops after a number of days.
+        ...(c === "F" ? { "adjust.windowDays": { label: "Days after payout that recovery is allowed", help: "Used only when recovery stops after a number of days.", requiredWhen: { key: "f.recoveryExpiry", values: ["afterWindowDays"] } } } : {}),
       },
     ]),
   ),
@@ -610,7 +637,11 @@ export const CATEGORY_TEMPLATES: Partial<Record<CategoryCode, IncentiveConfig>> 
     "payout.belowMinimum": "carryForward", "payout.carryForwardExpiry": "never" }, slabs: [], delaySteps: REFERENCE_TEMPLATE.delaySteps, eligibility: [] },
   D: { settings: { ...SHARED_TEMPLATE, "d.leadsPerUnit": 10, "d.leadUnitAmount": RS(250), "d.leadsMustBeProfiled": "yes", "d.conversionsPerUnit": 5, "d.conversionUnitAmount": RS(250), "caps.perEmployeeCategoryMonth": RS(1_000) }, slabs: [], delaySteps: [], eligibility: [] },
   E: { settings: { ...SHARED_TEMPLATE, "e.minAward": RS(250), "e.maxAward": RS(1_000), "caps.perEmployeeCategoryMonth": RS(1_000) }, slabs: [], delaySteps: [], eligibility: [] },
-  F: { settings: { ...SHARED_TEMPLATE, "f.googleReviewAmount": RS(100), "f.googleMinWords": 50, "f.googleFiveStarOnly": "yes", "f.emailAmount": RS(100), "f.letterheadAmount": RS(150), "f.namedMultiple": 2, "caps.perEmployeeCategoryMonth": RS(750) }, slabs: [], delaySteps: [], eligibility: [] },
+  // Category F (the original scheme, confirmed; 0138): F.1 ₹100, F.2 ₹100, F.3 ₹150, F.4 double; five stars, no word or
+  // count minimum, recovery never lapses. The monthly limit is NOT here: the PDF shows ₹750 for Category F, but whether it
+  // is per salesperson per month (and whether F.4 doubling counts inside it) isn't confirmed — it starts empty and blocks
+  // submission and publishing until an approved value is entered. Editable starting values of a new draft only.
+  F: { settings: { ...SHARED_TEMPLATE, "f.googleReviewAmount": RS(100), "f.emailAmount": RS(100), "f.letterheadAmount": RS(150), "f.namedMultiple": 2, "f.minRating": 5, "f.googleMinWords": 0, "f.minQualifyingReviews": 0, "f.googleNeedsEvidence": "yes", "f.recoveryExpiry": "never" }, slabs: [], delaySteps: [], eligibility: [] },
   G: { settings: {}, slabs: [], delaySteps: [], eligibility: [] },
 };
 

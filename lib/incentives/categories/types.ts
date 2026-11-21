@@ -18,7 +18,7 @@ export type ExtraCategory = "C" | "D" | "E" | "F" | "G";
  * collection, review cases (incl. historical and unlinked documents, held acquisitions), the per-salesperson cap and the
  * minimum payable with its carry-forward ledger (0136).
  */
-export const ENGINE_VERSIONS: Record<ExtraCategory, string> = { C: "category-c/3", D: "category-d/1", E: "category-e/1", F: "category-f/1", G: "category-g/1" };
+export const ENGINE_VERSIONS: Record<ExtraCategory, string> = { C: "category-c/4", D: "category-d/1", E: "category-e/2", F: "category-f/3", G: "category-g/2" };
 
 /** C: what an unmatched record is missing (or what conflicts). */
 export type CReviewKind = "order-customer" | "invoice-order" | "credit-note-invoice" | "return-credit-note" | "receipt-customer" | "customer-salesperson";
@@ -117,6 +117,33 @@ export interface TestimonialIn {
   approved: boolean;
 }
 
+/**
+ * F (0137): one verified Google review of the month — as its ACTIVE verification records it (rating, original
+ * publication date, text, who is named), with its attribution (an active decision, else derived by the priority:
+ * the one named salesperson, else the customer's assigned salesperson on the publication date) and whether a second
+ * person approved its invalidation. Unverified, rejected and unresolved reviews never reach the engine.
+ */
+export interface FReviewIn {
+  reviewId: string;
+  label: string;
+  /** The VERIFIED testimonial type (0138): F.1 Google review, F.2 email, F.3 the customer's letterhead. */
+  kind: "google_review" | "email" | "letterhead";
+  /** The testimonial's original date — a Google review's publication date, an email's or a letter's own date. */
+  publishedOn: string;
+  /** A Google review's verified star rating (null for email and letterhead). */
+  rating: number | null;
+  wordCount: number;
+  /** The SALESPEOPLE the testimonial clearly names (attribution's first priority). */
+  namedEmployeeIds: string[];
+  /** F.4: the people it appreciates categorically BY NAME — the credited salesperson or any team member (vague praise: none). */
+  appreciatedEmployeeIds: string[];
+  /** The customer's assigned salesperson on the publication date (WMS Customer Master and its representative history). */
+  assignedEmployeeId: string | null;
+  /** An active attribution decision (a choice among several named, a claim, or a correction). */
+  attribution: { employeeId: string | null; basis: "named" | "assigned" | "claim" } | null;
+  invalidated: boolean;
+}
+
 export interface CategoryXInput {
   category: ExtraCategory;
   month: string;
@@ -153,6 +180,8 @@ export interface CategoryXInput {
   leadConversions?: LeadConversionIn[];
   meetings?: MeetingIn[];
   testimonials?: TestimonialIn[];
+  /** F (0137): the month's verified Google reviews (by original publication month). */
+  fReviews?: FReviewIn[];
   allCategories?: AllCategoriesIn;
 }
 
@@ -198,8 +227,15 @@ export interface EmployeeResultX {
   carriedInPaise?: number;
   netPaise?: number;
   carry?: CarryOutcome;
-  /** What this month's own amount uses of the shared all-categories limit: only what is RELEASED (0 when held). */
+  /**
+   * What the month uses of the shared all-categories limit: only a RELEASED month uses it (0 when held). Since category-c/4
+   * that is the month's own EARNED amount after its limits (as before) AND the balances carried forward that it releases
+   * (they used no limit in the month they were held); adjustments carried in are not counted (a positive one was kept
+   * within its own month's limit; a recovery lowers what is paid, not what the month earned).
+   */
   capConsumedPaise?: number;
+  /** category-c/4: the amount this month puts against the shared limit before it (own before the limit + released balances; 0 when held). */
+  sharedPrePaise?: number;
   limits: string[];
   explanation: string[];
 }

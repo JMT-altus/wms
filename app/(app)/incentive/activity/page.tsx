@@ -2,7 +2,9 @@ import { requireUser } from "@/lib/auth/current";
 import { getFieldAccessFor } from "@/lib/auth/field-access";
 import { currentPeriodIST } from "@/lib/queries/incentives";
 import { getMyActivity, type ActivityRow } from "@/lib/queries/incentive-views";
+import { myFTestimonials } from "@/lib/queries/incentive-f-review";
 import { SubmitPanel } from "@/components/incentive/submit-panel";
+import { MyTestimonialStatus } from "@/components/incentive/f-status";
 import { EmptyState, PageHead } from "@/components/incentive/empty-state";
 
 export const dynamic = "force-dynamic";
@@ -15,7 +17,8 @@ const A_STATUS: Record<ActivityRow["status"], { bg: string; fg: string }> = {
 
 export default async function ActivityPage() {
   const me = await requireUser();
-  const [activity, access] = await Promise.all([getMyActivity(me.id), getFieldAccessFor(me)]);
+  // Category F: only the signed-in employee's OWN submissions, with their verification state (none before 0137–0139).
+  const [activity, access, myF] = await Promise.all([getMyActivity(me.id), getFieldAccessFor(me), myFTestimonials(me.id)]);
   const canPickMonth = access["incentive.activity.anyMonth"]?.allowed === true;
 
   return (
@@ -36,6 +39,7 @@ export default async function ActivityPage() {
           ))}
         </div>
       )}
+      {myF.ready && <MyTestimonialStatus rows={myF.rows} />}
     </main>
   );
 }

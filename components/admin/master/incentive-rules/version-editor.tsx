@@ -219,20 +219,37 @@ function SettingInput({ def, value, onChange, disabled }: { def: SettingDef; val
       return <NumberInput aria={aria} disabled={disabled} value={typeof value === "number" ? value : null} toText={intText} parse={parseInt_} onChange={(v) => onChange(v ?? undefined)} placeholder="Not set" />;
     case "rate":
       return <NumberInput aria={aria} disabled={disabled} value={typeof value === "number" ? value : null} toText={percentText} parse={parsePercentPpm} onChange={(v) => onChange(v ?? undefined)} suffix="%" placeholder="Not set" />;
-    case "cap": {
-      const mode = value === undefined ? "" : value === "none" ? "none" : "amount";
-      return (
-        <div className="grid grid-cols-[160px_1fr] max-sm:grid-cols-1 gap-2">
-          <select aria-label={`${aria} — kind`} disabled={disabled} className={`${FIELD} ${OK}`} value={mode} onChange={(e) => onChange(e.target.value === "none" ? "none" : e.target.value === "amount" ? 0 : undefined)}>
-            <option value="">Not set</option>
-            <option value="none">{def.noneLabel ?? "No limit"}</option>
-            <option value="amount">An amount</option>
-          </select>
-          {mode === "amount" && <NumberInput aria={aria} disabled={disabled} value={typeof value === "number" ? value : null} toText={rupeesText} parse={parseRupees} onChange={(v) => onChange(v ?? 0)} suffix="₹" />}
-        </div>
-      );
-    }
+    case "cap":
+      return <CapInput def={def} aria={aria} disabled={disabled} value={value} onChange={onChange} />;
   }
+}
+
+/**
+ * A limit: "Not set", "No limit" (or "No minimum") or an amount. Choosing "An amount" never stores anything by itself —
+ * in particular never ₹0, which would mean nothing is ever paid: the setting stays NOT SET (and the version can't be
+ * submitted) until an amount is typed.
+ */
+function CapInput({ def, aria, disabled, value, onChange }: { def: SettingDef; aria: string; disabled: boolean; value: SettingValue | undefined; onChange: (v: SettingValue | undefined) => void }) {
+  const [wantAmount, setWantAmount] = React.useState(false);
+  const mode = typeof value === "number" || (value === undefined && wantAmount) ? "amount" : value === "none" ? "none" : "";
+  return (
+    <div className="grid grid-cols-[160px_1fr] max-sm:grid-cols-1 gap-2">
+      <select aria-label={`${aria} — kind`} disabled={disabled} className={`${FIELD} ${OK}`} value={mode} onChange={(e) => {
+        setWantAmount(e.target.value === "amount");
+        onChange(e.target.value === "none" ? "none" : undefined);
+      }}>
+        <option value="">Not set</option>
+        <option value="none">{def.noneLabel ?? "No limit"}</option>
+        <option value="amount">An amount</option>
+      </select>
+      {mode === "amount" && (
+        <div className="grid gap-1">
+          <NumberInput aria={aria} disabled={disabled} value={typeof value === "number" ? value : null} toText={rupeesText} parse={parseRupees} onChange={(v) => onChange(v ?? undefined)} suffix="₹" placeholder="Enter the amount" />
+          {typeof value !== "number" && <span className="text-[12px] text-ink-subtle">Not set until an amount is entered.</span>}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function SourceBadge({ source }: { source: Source }) {
@@ -619,8 +636,8 @@ export function IncentiveVersionEditor({ version, config: initial, inForce, publ
             </>
           )}
           {(version.status === "draft" || version.status === "rejected") && rights.submit && (
-            <button type="button" disabled={busy || dirty || problems.length > 0 || missing.length > 0} title={dirty ? "Save your changes first." : missing.length ? "Every required setting must be set first." : undefined} onClick={() => void act(() => submitIncentiveVersion(ids), "Submitted for approval.")} className="h-9 rounded-lg border border-hairline-strong bg-white px-4 text-[13px] font-bold text-ink-strong disabled:opacity-50">
-              Submit for approval
+            <button type="button" disabled={busy || dirty || problems.length > 0 || missing.length > 0} title={dirty ? "Save your changes first." : missing.length ? "Every required setting must be set first." : undefined} onClick={() => void act(() => submitIncentiveVersion(ids), "Submitted for Rules Approval.")} className="h-9 rounded-lg border border-hairline-strong bg-white px-4 text-[13px] font-bold text-ink-strong disabled:opacity-50">
+              Submit for Rules Approval
             </button>
           )}
           {(version.status === "draft" || version.status === "rejected") && rights.edit && (
@@ -636,10 +653,10 @@ export function IncentiveVersionEditor({ version, config: initial, inForce, publ
           {version.status === "submitted" && rights.approve && (
             <>
               <button type="button" disabled={busy || meIsWriter} title={meIsWriter ? "You created, edited or submitted this version; another authorised person must decide on it." : undefined} onClick={() => (setProblem(null), setDialog({ kind: "approve", note: "" }))} className="h-9 rounded-lg px-4 text-[13px] font-bold text-white disabled:opacity-50" style={{ background: "#047857" }}>
-                Approve
+                Approve rules
               </button>
               <button type="button" disabled={busy || meIsWriter} onClick={() => (setProblem(null), setDialog({ kind: "reject", note: "" }))} className="h-9 rounded-lg border border-[#FECACA] bg-white px-4 text-[13px] font-bold text-[#B91C1C] disabled:opacity-50">
-                Reject
+                Reject rules
               </button>
               {meIsWriter && <span className="text-[12px] text-ink-muted">You wrote or submitted this version, so someone else must approve it.</span>}
             </>
@@ -740,8 +757,8 @@ export function IncentiveVersionEditor({ version, config: initial, inForce, publ
 
       <CenterDialog
         open={dialog !== null}
-        title={dialog?.kind === "approve" ? "Approve this version" : dialog?.kind === "reject" ? "Reject this version" : "Publish this version"}
-        subtitle={dialog?.kind === "publish" ? "It applies from the first day of the month you choose. The version in force before it ends the day before." : dialog?.kind === "reject" ? "The author sees the reason and can edit and resubmit it." : "Once approved, it can be published by someone holding the publish right."}
+        title={dialog?.kind === "approve" ? "Rules Approval: approve this version" : dialog?.kind === "reject" ? "Rules Approval: reject this version" : "Publish these rules"}
+        subtitle={dialog?.kind === "publish" ? "They apply to calculations from the first day of the month you choose. The version in force before it ends the day before." : dialog?.kind === "reject" ? "The author sees the reason and can edit and resubmit it." : "This approves the rules only. Once approved, they can be published by someone holding the publish right."}
         accentBar={MASTERS_GRADIENT_BAR}
         width={520}
         onClose={() => setDialog(null)}
@@ -750,13 +767,13 @@ export function IncentiveVersionEditor({ version, config: initial, inForce, publ
             {problem && <p role="alert" className="mr-auto text-[12.5px] font-semibold text-[#B91C1C]">{problem}</p>}
             <button type="button" onClick={() => setDialog(null)} className="h-9 rounded-lg border border-hairline-strong bg-white px-4 text-[13.5px] font-semibold">Cancel</button>
             {dialog?.kind === "approve" && (
-              <button type="button" disabled={busy} onClick={() => void act(() => approveIncentiveVersion({ ...ids, note: dialog.note.trim() || null }), "Approved.")} className="h-9 rounded-lg px-4 text-[13.5px] font-semibold text-white disabled:opacity-50" style={{ background: "#047857" }}>
-                Approve
+              <button type="button" disabled={busy} onClick={() => void act(() => approveIncentiveVersion({ ...ids, note: dialog.note.trim() || null }), "Rules approved.")} className="h-9 rounded-lg px-4 text-[13.5px] font-semibold text-white disabled:opacity-50" style={{ background: "#047857" }}>
+                Approve rules
               </button>
             )}
             {dialog?.kind === "reject" && (
-              <button type="button" disabled={busy || !dialog.note.trim()} onClick={() => void act(() => rejectIncentiveVersion({ ...ids, note: dialog.note.trim() }), "Rejected.")} className="h-9 rounded-lg px-4 text-[13.5px] font-semibold text-white disabled:opacity-50" style={{ background: "#B91C1C" }}>
-                Reject
+              <button type="button" disabled={busy || !dialog.note.trim()} onClick={() => void act(() => rejectIncentiveVersion({ ...ids, note: dialog.note.trim() }), "Rules rejected.")} className="h-9 rounded-lg px-4 text-[13.5px] font-semibold text-white disabled:opacity-50" style={{ background: "#B91C1C" }}>
+                Reject rules
               </button>
             )}
             {dialog?.kind === "publish" && (
@@ -782,6 +799,9 @@ export function IncentiveVersionEditor({ version, config: initial, inForce, publ
             {`${dialog.month}-01` < currentMonth && (
               <p className="text-[12.5px] text-ink-muted">{rights.backdate ? "This is an earlier month: it is recorded as back-dated." : "Publishing from an earlier month needs the “Publish from an earlier month” permission."}</p>
             )}
+            <p role="note" className="rounded-lg px-3 py-2 text-[12.5px] text-ink-strong" style={{ background: "#EFF6FF", border: "1px solid #BFDBFE" }}>
+              Publishing makes these rules apply to calculations from that month. It does not approve, release or pay any employee&apos;s incentive: each month&apos;s calculated incentives still go through Incentive Approval in Incentive Tracker → Incentive Management.
+            </p>
           </div>
         )}
       </CenterDialog>

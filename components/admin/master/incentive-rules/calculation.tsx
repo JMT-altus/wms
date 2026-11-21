@@ -20,7 +20,7 @@ import { XItems, type XItemRow } from "./x-items";
 const CARD: React.CSSProperties = { border: "1px solid var(--color-hairline)", boxShadow: "0 2px 6px -2px rgba(15, 23, 42, 0.06)" };
 const FIELD = "h-9 rounded-lg border border-hairline-strong bg-white px-2.5 text-[13px] text-ink-strong";
 const rs = (p: number) => `₹${(p / 100).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-const STATUS_LABEL: Record<string, string> = { open: "Open", locked: "Locked", submitted: "Submitted for approval", approved: "Approved", paid: "Paid", voided: "Voided" };
+const STATUS_LABEL: Record<string, string> = { open: "Open", locked: "Locked", submitted: "Submitted for Incentive Approval", approved: "Approved", paid: "Paid", voided: "Voided" };
 
 export interface CalcProps {
   /** Where this screen lives (Admin & Master Setup or the Incentive Tracker): month and programme links stay there. */
@@ -64,6 +64,7 @@ export function CategoryACalculation(p: CalcProps) {
   const router = useRouter();
   const [busy, setBusy] = React.useState(false);
   const [message, setMessage] = React.useState<{ tone: "ok" | "bad"; text: string; list?: string[] } | null>(null);
+  const [asOf, setAsOf] = React.useState("");
   const isB = p.category === "B";
   const isX = !!p.category && p.category !== "A" && p.category !== "B";
   // Categories B–G carry their category in every request and link; Category A's are exactly as before.
@@ -75,7 +76,9 @@ export function CategoryACalculation(p: CalcProps) {
     if (!p.programId) return;
     setBusy(true);
     setMessage(null);
-    const r = await calculateCategoryAMonth({ programId: p.programId, month: p.month, ...cat });
+    // The calculation date: blank is today (in India). The server refuses a future day, an invalid date, a day before
+    // the month, and — for a month no longer open — a day before its adopted calculation's.
+    const r = await calculateCategoryAMonth({ programId: p.programId, month: p.month, ...(asOf ? { asOf } : {}), ...cat });
     setBusy(false);
     if (!r.ok) return setMessage({ tone: "bad", text: r.error });
     setMessage({ tone: r.status === "blocked" ? "bad" : "ok", text: r.status === "blocked" ? "Not calculated:" : r.outcome, list: r.problems });
@@ -120,7 +123,13 @@ export function CategoryACalculation(p: CalcProps) {
         <span className="rounded-pill px-3 py-1 text-[12px] font-bold text-ink-strong" style={{ background: "var(--color-hairline)" }} aria-label="Month status">
           {STATUS_LABEL[status] ?? status}
         </span>
-        <span className="ml-auto flex gap-2">
+        <span className="ml-auto flex flex-wrap items-end gap-2">
+          {p.canRun && status !== "paid" && status !== "voided" && (
+            <label className="grid gap-1 text-[12px] font-semibold text-ink-muted" title="The day the calculation is made as of: receipts and records up to that day count. Blank is today.">
+              As of (blank: today)
+              <input type="date" className={FIELD} value={asOf} min={p.month} onChange={(e) => setAsOf(e.target.value)} aria-label="Calculate as of" />
+            </label>
+          )}
           {p.canRun && (
             <button type="button" disabled={busy || !p.programId || status === "paid" || status === "voided"} onClick={calculate} className="inline-flex h-9 items-center gap-1.5 rounded-pill px-4 text-[13px] font-bold text-white disabled:opacity-50" style={{ background: MASTERS_GRADIENT }}>
               <Calculator size={15} aria-hidden /> Calculate

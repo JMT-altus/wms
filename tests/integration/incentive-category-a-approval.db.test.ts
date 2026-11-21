@@ -229,9 +229,12 @@ describe("single-step approval and payout", () => {
     await expect(pg.query(`delete from incentive_calc_payout_lines`)).rejects.toThrow(/append-only/);
     await expect(pg.query(`update incentive_calc_approvals set reason = 'x'`)).rejects.toThrow(/append-only/);
     signIn("runner");
+    const runsBefore = await count(`select count(*)::int n from incentive_calc_runs where program_id = $1 and month = $2`, [P.ONE, APR]);
     const r = await act.calculateCategoryAMonth({ programId: P.ONE, month: APR, asOf: "2026-10-01" });
-    expect(r).toMatchObject({ ok: true });
-    if (r.ok && !r.unchanged) expect(r.adopted).toBe(false);
+    // Test 53: unconditional. Nothing changed since its adopted calculation (as of 30 September), so nothing is recorded
+    // twice — and whatever is calculated, a paid month never adopts it.
+    expect(r).toMatchObject({ ok: true, unchanged: true, adopted: false });
+    expect(await count(`select count(*)::int n from incentive_calc_runs where program_id = $1 and month = $2`, [P.ONE, APR])).toBe(runsBefore);
     expect((await period(P.ONE)).current_run_id).toBe(p.current_run_id);
   });
 });
@@ -308,7 +311,7 @@ describe("an invalid or incomplete calculation is never approved", () => {
     (inputs as unknown as { month: string }).month = month;
     await pg.query(`insert into incentive_calc_periods (program_id, category_code, month) values ($1, 'A', $2)`, [P.CRAFT, month]);
     const run = (await one<{ id: string }>(
-      `insert into incentive_calc_runs (program_id, category_code, month, as_of, config_version_id, config_version_no, engine_version, status, adopted, outcome, inputs_hash, result_hash, inputs, result, computed_by_name) values ($1, 'A', $2, '2026-09-30', $3, 1, 'category-a/1', 'computed', true, 'crafted', $4, $5, $6, $7, 'test') returning id`,
+      `insert into incentive_calc_runs (program_id, category_code, month, as_of, config_version_id, config_version_no, engine_version, status, adopted, outcome, inputs_hash, result_hash, inputs, result, computed_by_name) values ($1, 'A', $2, '2026-09-30', $3, 1, 'category-a/2', 'computed', true, 'crafted', $4, $5, $6, $7, 'test') returning id`,
       [P.CRAFT, month, src.config_version_id, src.inputs_hash, src.result_hash, JSON.stringify(inputs), JSON.stringify(src.result)],
     )).id;
     await pg.query(`update incentive_calc_periods set current_run_id = $1, row_version = row_version + 1 where program_id = $2 and month = $3`, [run, P.CRAFT, month]);

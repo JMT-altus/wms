@@ -46,6 +46,8 @@ export default async function CategoryBReviewPage({ searchParams }: { searchPara
         source={queue.source}
         rows={queue.rows}
         reviewInvoices={queue.reviewInvoices}
+        invoiceReviewsReady={queue.invoiceReviewsReady}
+        invoiceReviews={queue.invoiceReviews}
         found={found.map((f) => ({ id: f.id, no: f.no, date: f.date, customerName: f.customerName, override: f.override ? { id: f.override.id, decision: f.override.decision, reason: f.override.reason, byName: f.override.createdByName } : null }))}
       />
     </div>

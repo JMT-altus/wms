@@ -229,5 +229,21 @@ describe.skipIf(!target)("Category A approval and payout under genuinely concurr
     await expect(pool`delete from incentive_calc_approvals where period_id = ${p.id}`).rejects.toThrow(/append-only/);
     expect(await calc.recordPayout(actor("payerB"), programId, APR, p.row_version, { reference: "AGAIN", paidOn: p.release_on, amountPaise: 92500, note: null }, p.release_on)).toMatchObject({ ok: false, error: expect.stringMatching(/already recorded/) });
   });
-});
 
+  /*
+   * Test 52 (NOT YET WRITTEN — needs real PostgreSQL; PGlite is one connection and can only interleave, never run two
+   * transactions at once). Prerequisite: TEST_PG_URL naming an APPROVED throwaway PostgreSQL 15+ server on localhost
+   * (this file refuses anything else and production's fingerprint), migrations 0131–0133 (and 0142 when it is tested).
+   * The test, on three pooled sessions at the same moment:
+   *   A  recalculates a PAID April whose new figures differ (a refund recorded after payment) — its difference is carried
+   *      into the first open month, October;
+   *   B  calculates October;
+   *   C  locks October (with a negative balance the configuration carries to the next payout).
+   * Expected: every session ends (no deadlock is left; a serialization failure is retried by the service, at most three
+   * times, then refused with CALC_BUSY); April's difference is carried EXACTLY ONCE (one recalc-difference row); if C
+   * locked October first, the difference goes to November instead (never into a locked month); October's lock reads
+   * every adjustment carried into it at its own snapshot (its negative-balance entry matches its stored run); no row is
+   * changed after the fact (append-only), and the three sessions' audit rows agree with what was recorded.
+   */
+  it.todo("Test 52 · calculate, carry and lock at the same moment on separate sessions: a difference is carried exactly once, never into a locked month");
+});

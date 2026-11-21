@@ -115,7 +115,7 @@ export function categoryAScenarios(): { name: string; input: CategoryAInput }[] 
       ev(6, "allocation", receiptId(5, 1), "2026-05-01", L(6), invoiceId(5)),
       ev(7, "allocation", receiptId(5, 1), "2026-05-01", L(4), invoiceId(6)),
     ],
-  }, { "adjust.reversedReceipt": "holdForReview", "adjust.bouncedCheque": "reverseAndRestartDelay" }));
+  }, { "adjust.reversedReceipt": "holdForReview", "adjust.bouncedCheque": "reverseReceiptShare" }));
   add("refund ignored, reversal reversed", aprilInput(EXAMPLE_2, { events: [ev(8, "refund", receiptId(1, 1), "2026-05-01", L(2)), ev(9, "reversed", receiptId(3, 1), "2026-04-22")] }, { "adjust.refund": "ignore", "adjust.reversedReceipt": "reverseReceiptShare" }));
   add("allocation by hand larger than the receipt", aprilInput(EXAMPLE_2, { events: [ev(10, "allocation", receiptId(5, 1), "2026-05-01", L(20), invoiceId(5))] }));
   add("events after as-of are not seen", aprilInput(EXAMPLE_2, { events: [ev(11, "bounced", receiptId(1, 1), "2026-12-01")] }));

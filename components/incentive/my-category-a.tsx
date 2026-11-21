@@ -31,10 +31,11 @@ const TITLE = { A: "Sales Order Received", B: "Old Customer – New Product / Ne
  * Also Category B (category="B"): the same safeguards — own figures, approved or paid months only. `oldEngineMonth`:
  * the month is before Category B's cut-over, so the old engine's Category B (in Categories B–G) is the one that counts.
  */
-export function MyCategoryA({ period, ready, months, awaiting, historical, category = "A", oldEngineMonth = false }: { period: string; ready: boolean; months: MyCategoryAMonth[]; awaiting: string[]; historical: IncentiveLine[]; category?: keyof typeof TITLE; oldEngineMonth?: boolean }) {
+export function MyCategoryA({ period, ready, months, awaiting, historical, category = "A", oldEngineMonth = false, voided = [] }: { period: string; ready: boolean; months: MyCategoryAMonth[]; awaiting: string[]; historical: IncentiveLine[]; category?: keyof typeof TITLE; oldEngineMonth?: boolean; voided?: { month: string; carriedToMonth: string | null }[] }) {
   const C = category;
   const thisMonth = months.filter((m) => m.month.slice(0, 7) === period);
   const waiting = awaiting.some((m) => m.slice(0, 7) === period);
+  const void_ = voided.find((v) => v.month.slice(0, 7) === period);
   const histTotal = historical.reduce((s, l) => s + l.amountPaise, 0);
   return (
     <section className="mb-7" aria-label={`Category ${C}`}>
@@ -74,7 +75,7 @@ export function MyCategoryA({ period, ready, months, awaiting, historical, categ
               </div>
             ))
           ) : (
-            <p className="mt-3 text-[13.5px] text-ink-muted">{waiting ? "Calculated and awaiting approval — your amount appears here once it is approved." : oldEngineMonth ? `Before Category ${C}'s new engine starts: this month's Category ${C} is the old engine's, shown with the other categories.` : `No approved Category ${C} for this month.`}</p>
+            <p className="mt-3 text-[13.5px] text-ink-muted">{void_ ? `This month was voided: it is never approved or paid.${void_.carriedToMonth ? ` Its amounts were carried into ${fmtMonth(void_.carriedToMonth.slice(0, 7))}.` : ""}` : waiting ? "Calculated and awaiting approval — your amount appears here once it is approved." : oldEngineMonth ? `Before Category ${C}'s new engine starts: this month's Category ${C} is the old engine's, shown with the other categories.` : `No approved Category ${C} for this month.`}</p>
           )}
         </div>
         <div className="rounded-[18px] p-5" style={CARD} aria-label={`Historical Category ${C}`}>

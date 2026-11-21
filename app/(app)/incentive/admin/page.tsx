@@ -94,7 +94,7 @@ async function PeriodTab({ period }: { period: string }) {
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             <a href={`/incentive/admin/export?period=${period}`} className="rounded-xl px-4 py-2 text-[13px] font-bold" style={{ background: "rgba(15,23,42,0.05)", color: "#334155" }}>Export CSV</a>
-            <PeriodControls status={payout.status} />
+            <PeriodControls status={payout.status} period={period} />
           </div>
         </div>
         <PayoutTable rows={payout.rows} ledgerByEmployee={ledgerByEmployee} />

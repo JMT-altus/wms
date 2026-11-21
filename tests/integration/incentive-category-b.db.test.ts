@@ -46,10 +46,10 @@ let rules: typeof import("@/lib/queries/incentive-rules");
 let qualify: typeof import("@/lib/queries/incentive-b-qualify");
 let load: typeof import("@/lib/incentives/load");
 let incentives: typeof import("@/lib/queries/incentives");
-const PEOPLE = ["root", "author", "checker", "runner", "locker", "a1", "a2", "payer", "qualifier", "viewer", "plainAdmin", "rep", "other"] as const;
+const PEOPLE = ["root", "author", "checker", "runner", "locker", "a1", "a2", "payer", "qualifier", "invReviewer", "viewer", "plainAdmin", "rep", "other"] as const;
 type Who = (typeof PEOPLE)[number];
 const who = {} as Record<Who, string>;
-const GRANTS: Partial<Record<Who, string[]>> = { runner: ["run"], locker: ["lock", "submit"], a1: ["approve"], a2: ["approve"], payer: ["pay"], qualifier: ["qualify", "approve"], viewer: ["view"] };
+const GRANTS: Partial<Record<Who, string[]>> = { runner: ["run"], locker: ["lock", "submit"], a1: ["approve"], a2: ["approve"], payer: ["pay"], qualifier: ["qualify", "approve"], invReviewer: ["qualify", "approve"], viewer: ["view"] };
 const actor = (k: Who) => ({ id: who[k], name: k });
 const signIn = (k: Who) => {
   h.me = { id: who[k], email: `${k}@example.test`, name: k, isActive: true, isAdmin: k !== "rep" && k !== "other", departmentId: null, role: "both" };
@@ -277,10 +277,49 @@ describe("manual decisions: Field Permissions, reason, history", () => {
 });
 
 describe("lock, submit, approval with separation of duties, payout", () => {
-  it("whoever decided an order by hand can't approve the month (service and database)", async () => {
+  it("an invoice with no Sales Order (INV 9) holds the month back until it is reviewed (0140), with a reason, by the qualify permission", async () => {
     signIn("locker");
     expect(await act.setCategoryAMonthLocked({ programId, month: APR, lock: true, rowVersion: await rv(), category: "B" })).toMatchObject({ ok: true });
+    // Before 0140 nobody can record that review: the month is refused, saying how to resolve it.
+    expect(await act.submitCategoryAMonth({ programId, month: APR, rowVersion: await rv(), category: "B" })).toMatchObject({ ok: false, error: expect.stringMatching(/1 invoice of this month has no Sales Order .* needs database update 0140/) });
+    signIn("invReviewer");
+    expect(await act.recordCategoryBInvoiceReview({ invoiceId: doc["INV 9"], reason: "Direct sale" })).toMatchObject({ ok: false, error: expect.stringMatching(/needs database update 0140/) });
+    await pg.exec(MIG("0140_incentive_category_b_invoice_reviews.sql"));
+    await pg.exec(MIG("0140_incentive_category_b_invoice_reviews.sql")); // safe to re-run
+    // Its rollback removes it while nothing is recorded (and it is applied again).
+    await pg.exec(readFileSync(resolve(__dirname, "../../db/rollback/0140_incentive_category_b_invoice_reviews.rollback.sql"), "utf8"));
+    expect(await q1(`select to_regclass('public.incentive_calc_b_invoice_reviews') is null gone`)).toEqual([{ gone: true }]);
+    await pg.exec(MIG("0140_incentive_category_b_invoice_reviews.sql"));
+    signIn("locker");
+    expect(await act.submitCategoryAMonth({ programId, month: APR, rowVersion: await rv(), category: "B" })).toMatchObject({ ok: false, error: expect.stringMatching(/invoice of this month with no Sales Order \(INV 9\) hasn't been reviewed/) });
+    for (const k of ["runner", "a1", "viewer"] as const) {
+      signIn(k);
+      await expect(act.recordCategoryBInvoiceReview({ invoiceId: doc["INV 9"], reason: "x" })).rejects.toThrow("Forbidden");
+    }
+    signIn("invReviewer");
+    expect(await act.recordCategoryBInvoiceReview({ invoiceId: doc["INV 9"], reason: "  " })).toMatchObject({ ok: false, error: expect.stringMatching(/reason/) });
+    expect(await act.recordCategoryBInvoiceReview({ invoiceId: doc["SO 1"], reason: "wrong document" })).toMatchObject({ ok: false, error: expect.stringMatching(/isn't a Forms sales invoice/) });
+    expect(await act.recordCategoryBInvoiceReview({ invoiceId: doc["INV 9"], reason: "Direct counter sale: not a Category B sale (checked with accounts)" })).toMatchObject({ ok: true });
+    expect(await act.recordCategoryBInvoiceReview({ invoiceId: doc["INV 9"], reason: "again" })).toMatchObject({ ok: false, error: expect.stringMatching(/already reviewed/) });
+    await expect(pg.query(`update incentive_calc_b_invoice_reviews set reason = 'changed'`)).rejects.toThrow(/never changes/);
+    await expect(pg.query(`delete from incentive_calc_b_invoice_reviews`)).rejects.toThrow(/never deleted/);
+    await expect(pg.query(`insert into incentive_calc_b_invoice_reviews (invoice_document_id, decision, reason, created_by_name) values ($1, 'not-category-b', 'x', 'x')`, [doc["SO 2"]])).rejects.toThrow(/recorded on a Forms sales invoice/);
+    const queue = await qualify.reviewQueue(programId, APR, "all");
+    expect(queue.invoiceReviewsReady).toBe(true);
+    expect(queue.invoiceReviews).toEqual([expect.objectContaining({ invoiceId: doc["INV 9"], decision: "not-category-b", byName: "invReviewer", retiredAt: null })]);
+    expect(await q1(`select action, entity_id from incentive_audit where action = 'b-invoice-reviewed'`)).toEqual([{ action: "b-invoice-reviewed", entity_id: doc["INV 9"] }]);
+    // Once a review exists, the rollback refuses and changes nothing.
+    await expect(pg.exec(readFileSync(resolve(__dirname, "../../db/rollback/0140_incentive_category_b_invoice_reviews.rollback.sql"), "utf8"))).rejects.toThrow(/0140 rollback refused/);
+    // It changes no calculation: INV 9 is still listed, and still out.
+    expect((await calc.monthView(programId, APR, undefined, "B")).reviewInvoices!.map((x) => x.invoiceNo)).toEqual(["INV 9"]);
+  });
+  it("whoever decided an order or reviewed an invoice by hand can't approve the month (service and database)", async () => {
+    signIn("locker");
     expect(await act.submitCategoryAMonth({ programId, month: APR, rowVersion: await rv(), category: "B" })).toMatchObject({ ok: true, approvalsRequired: 2 });
+    signIn("invReviewer");
+    expect(await act.decideCategoryAMonth({ programId, month: APR, rowVersion: await rv(), decision: "approve", reason: null, category: "B" })).toMatchObject({ ok: false, error: expect.stringMatching(/reviewed an invoice of this month that has no Sales Order/) });
+    const pp = await one<{ id: string; current_run_id: string; submission_no: number }>(`select id, current_run_id, submission_no from incentive_calc_periods where category_code = 'B' and month = $1`, [APR]);
+    await expect(pg.query(`insert into incentive_calc_approvals (period_id, run_id, submission_no, step_no, decision, actor_id, actor_name) values ($1, $2, $3, 1, 'approve', $4, 'invReviewer')`, [pp.id, pp.current_run_id, pp.submission_no, who.invReviewer])).rejects.toThrow(/invoice review never approves or rejects that month/);
     signIn("qualifier");
     expect(await act.decideCategoryAMonth({ programId, month: APR, rowVersion: await rv(), decision: "approve", reason: null, category: "B" })).toMatchObject({ ok: false, error: expect.stringMatching(/decided a Sales Order's Category B qualification by hand/) });
     const p = await one<{ id: string; current_run_id: string; submission_no: number }>(`select id, current_run_id, submission_no from incentive_calc_periods where category_code = 'B' and month = $1`, [APR]);
@@ -292,6 +331,15 @@ describe("lock, submit, approval with separation of duties, payout", () => {
     signIn("a2");
     expect(await act.decideCategoryAMonth({ programId, month: APR, rowVersion: await rv(), decision: "approve", reason: null, category: "B" })).toMatchObject({ ok: true, status: "approved" });
     const release = (await one<{ r: string }>(`select release_on::text r from incentive_calc_periods where category_code = 'B' and month = $1`, [APR])).r;
+    // A review retired after the approval holds the payout back until the invoice is decided again.
+    const review = (await one<{ id: string }>(`select id from incentive_calc_b_invoice_reviews where retired_at is null`)).id;
+    signIn("invReviewer");
+    expect(await act.retireCategoryBInvoiceReview({ id: review, reason: "Accounts found its Sales Order" })).toMatchObject({ ok: true });
+    signIn("payer");
+    expect(await act.recordCategoryAPayout({ programId, month: APR, rowVersion: await rv(), reference: "PAY-B-APR", paidOn: release, amountPaise: RS(2_700), note: null, category: "B" })).toMatchObject({ ok: false, error: expect.stringMatching(/\(INV 9\) hasn't been reviewed.* Nothing was paid/) });
+    signIn("invReviewer");
+    expect(await act.recordCategoryBInvoiceReview({ invoiceId: doc["INV 9"], reason: "Its Sales Order isn't in Forms after all: not Category B" })).toMatchObject({ ok: true });
+    expect((await qualify.reviewQueue(programId, APR, "all")).invoiceReviews.map((x) => [x.retiredAt === null, x.retiredReason])).toEqual([[false, "Accounts found its Sales Order"], [true, null]]);
     signIn("payer");
     expect(await act.recordCategoryAPayout({ programId, month: APR, rowVersion: await rv(), reference: "PAY-B-APR", paidOn: release, amountPaise: RS(2_000), note: null, category: "B" })).toMatchObject({ ok: false, error: expect.stringMatching(/doesn't match the approved amount/) });
     expect(await act.recordCategoryAPayout({ programId, month: APR, rowVersion: await rv(), reference: "PAY-B-APR", paidOn: release, amountPaise: RS(2_700), note: null, category: "B" })).toMatchObject({ ok: true, totalPaise: RS(2_700) });
@@ -300,8 +348,22 @@ describe("lock, submit, approval with separation of duties, payout", () => {
   it("the salesperson sees their own approved/paid Category B only; nobody else's", async () => {
     const mine = await calc.myCategoryB(who.rep);
     expect(mine.months).toEqual([expect.objectContaining({ month: APR, status: "paid", amountPaise: RS(2_700), payoutReference: "PAY-B-APR" })]);
-    expect(await calc.myCategoryB(who.other)).toEqual({ ready: true, months: [], awaiting: [] });
+    expect(await calc.myCategoryB(who.other)).toEqual({ ready: true, months: [], awaiting: [], voided: [] });
     expect((await calc.myCategoryA(who.rep)).months).toEqual([]); // Category A is separate
+  });
+});
+
+describe("an order still needing review never passes silently", () => {
+  it("May's SO 5 (an item not in the Product Master, undecided) keeps May from being submitted, naming it", async () => {
+    await tdoc("sales-orders", "SO 5", "2026-05-04", RS(1_77_000), { taxable: RS(1_50_000), lines: [line(null, "Unmatched gearbox", RS(1_50_000))] });
+    await tdoc("sales-invoices", "INV 5", "2026-05-06", RS(1_77_000), { taxable: RS(1_50_000), ref: doc["SO 5"], due: "2026-06-05" });
+    signIn("runner");
+    expect(await act.calculateCategoryAMonth({ programId, month: "2026-05-01", asOf: "2026-06-30", category: "B" })).toMatchObject({ ok: true, adopted: true });
+    expect((await qualify.reviewQueue(programId, "2026-05-01")).rows.map((r) => [r.orderNo, r.outcome])).toEqual([["SO 5", "needs-review"]]);
+    signIn("locker");
+    expect(await act.setCategoryAMonthLocked({ programId, month: "2026-05-01", lock: true, rowVersion: await rv("2026-05-01"), category: "B" })).toMatchObject({ ok: true });
+    expect(await act.submitCategoryAMonth({ programId, month: "2026-05-01", rowVersion: await rv("2026-05-01"), category: "B" })).toMatchObject({ ok: false, error: expect.stringMatching(/1 Sales Order of this month \(SO 5\) still needs a Category B decision .* Nothing was submitted/) });
+    expect((await one<{ status: string }>(`select status from incentive_calc_periods where category_code = 'B' and month = '2026-05-01'`)).status).toBe("locked");
   });
 });
 

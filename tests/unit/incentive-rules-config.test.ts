@@ -31,7 +31,7 @@ describe("the catalogue", () => {
     expect(a.filter((d) => !d.required).map((d) => d.key).sort()).toEqual(["basis.categoryBOrders", "caps.allCategoriesPolicy"]);
   });
 
-  it("the database accepts exactly the catalogue's settings (0131's list for Category A, widened by 0134, 0135 and 0136)", () => {
+  it("the database accepts exactly the catalogue's settings (0131's list for Category A, widened by 0134, 0135, 0136 and 0137)", () => {
     const listOf = (file: string, from: string, to: string) => {
       const sqlText = readFileSync(resolve(__dirname, `../../db/migrations/${file}`), "utf8");
       const block = sqlText.slice(sqlText.indexOf(from), sqlText.indexOf(to));
@@ -42,9 +42,13 @@ describe("the catalogue", () => {
     // 0134 accepts Categories A and B's settings; 0135 every category's as they were; 0136 adds Category C's corrections
     // (turnover window and basis, minimum payable) — exactly the catalogue.
     const ADDED_0136 = ["c.turnoverWindowMonths", "c.turnoverBasis", "payout.minimumPayable", "payout.belowMinimum", "payout.carryForwardExpiry", "payout.carryForwardExpiryMonths"];
-    expect(listOf("0134_incentive_category_b.sql", `-- settings-key-list-begin`, `-- settings-key-list-end`)).toEqual(SETTINGS.map((d) => d.key).filter((k) => !/^[c-g]\./.test(k) && !ADDED_0136.includes(k)).sort());
-    expect(listOf("0135_incentive_categories_c_g.sql", `-- settings-key-list-begin`, `-- settings-key-list-end`)).toEqual(SETTINGS.map((d) => d.key).filter((k) => !ADDED_0136.includes(k)).sort());
-    expect(listOf("0136_incentive_category_c_review.sql", `-- settings-key-list-begin`, `-- settings-key-list-end`)).toEqual(SETTINGS.map((d) => d.key).sort());
+    // 0137 adds Category F's (named bonus, lowest rating, monthly minimum, recovery expiry).
+    const ADDED_0137 = ["f.namedBonusAmount", "f.minRating", "f.minQualifyingReviews", "f.recoveryExpiry"];
+    const later = [...ADDED_0136, ...ADDED_0137];
+    expect(listOf("0134_incentive_category_b.sql", `-- settings-key-list-begin`, `-- settings-key-list-end`)).toEqual(SETTINGS.map((d) => d.key).filter((k) => !/^[c-g]\./.test(k) && !later.includes(k)).sort());
+    expect(listOf("0135_incentive_categories_c_g.sql", `-- settings-key-list-begin`, `-- settings-key-list-end`)).toEqual(SETTINGS.map((d) => d.key).filter((k) => !later.includes(k)).sort());
+    expect(listOf("0136_incentive_category_c_review.sql", `-- settings-key-list-begin`, `-- settings-key-list-end`)).toEqual(SETTINGS.map((d) => d.key).filter((k) => !ADDED_0137.includes(k)).sort());
+    expect(listOf("0137_incentive_category_f_reviews.sql", `-- settings-key-list-begin`, `-- settings-key-list-end`)).toEqual(SETTINGS.map((d) => d.key).sort());
   });
 
   it("the reference template fills only what the PDF and the April examples establish; every business decision stays empty", () => {
